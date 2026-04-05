@@ -3,15 +3,21 @@ import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';
+import { EventBus } from './event-bus.js';
 
-export type System = (world: World) => void;
+export type System<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+> = (world: World<TEventMap>) => void;
 
-export class World {
+export class World<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+> {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
-  private systems: System[] = [];
+  private systems: System<TEventMap>[] = [];
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
+  private eventBus = new EventBus<TEventMap>();
   readonly grid: SpatialGrid;
 
   constructor(config: WorldConfig) {
@@ -91,7 +97,7 @@ export class World {
     }
   }
 
-  registerSystem(system: System): void {
+  registerSystem(system: System<TEventMap>): void {
     this.systems.push(system);
   }
 
@@ -107,11 +113,37 @@ export class World {
     this.gameLoop.stop();
   }
 
+  emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
+    this.eventBus.emit(type, data);
+  }
+
+  on<K extends keyof TEventMap>(
+    type: K,
+    listener: (event: TEventMap[K]) => void,
+  ): void {
+    this.eventBus.on(type, listener);
+  }
+
+  off<K extends keyof TEventMap>(
+    type: K,
+    listener: (event: TEventMap[K]) => void,
+  ): void {
+    this.eventBus.off(type, listener);
+  }
+
+  getEvents(): ReadonlyArray<{
+    type: keyof TEventMap;
+    data: TEventMap[keyof TEventMap];
+  }> {
+    return this.eventBus.getEvents();
+  }
+
   get tick(): number {
     return this.gameLoop.tick;
   }
 
   private executeTick(): void {
+    this.eventBus.clear();
     this.syncSpatialIndex();
     for (const system of this.systems) {
       system(this);

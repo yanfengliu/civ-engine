@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { World } from '../src/world.js';
 
 describe('World', () => {
@@ -148,5 +148,75 @@ describe('World', () => {
     // Destroy — should remove from grid at (3,3) where it actually lives
     world.destroyEntity(id);
     expect(world.grid.getAt(3, 3)?.has(id) ?? false).toBe(false);
+  });
+
+  it('emits events that trigger on() listeners', () => {
+    const world = new World<{ damage: { amount: number } }>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const listener = vi.fn();
+    world.on('damage', listener);
+    world.emit('damage', { amount: 10 });
+    expect(listener).toHaveBeenCalledWith({ amount: 10 });
+  });
+
+  it('system A emits, system B listener receives in same tick', () => {
+    const world = new World<{ hit: { entity: number } }>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const received: Array<{ entity: number }> = [];
+    world.on('hit', (e) => received.push(e));
+    world.registerSystem((w) => w.emit('hit', { entity: 42 }));
+    world.registerSystem(() => {
+      /* system B exists to prove ordering */
+    });
+    world.step();
+    expect(received).toEqual([{ entity: 42 }]);
+  });
+
+  it('getEvents returns events from current tick', () => {
+    const world = new World<{ move: { dx: number } }>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerSystem((w) => w.emit('move', { dx: 1 }));
+    world.step();
+    expect(world.getEvents()).toEqual([{ type: 'move', data: { dx: 1 } }]);
+  });
+
+  it('clears events at the start of the next tick', () => {
+    const world = new World<{ ping: { n: number } }>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerSystem((w) => {
+      if (w.tick === 0) {
+        w.emit('ping', { n: 1 });
+      }
+    });
+    world.step();
+    expect(world.getEvents()).toEqual([{ type: 'ping', data: { n: 1 } }]);
+    world.step();
+    expect(world.getEvents()).toEqual([]);
+  });
+
+  it('events work independently of entity lifecycle', () => {
+    const world = new World<{ spawn: { id: number } }>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const listener = vi.fn();
+    world.on('spawn', listener);
+    const id = world.createEntity();
+    world.emit('spawn', { id });
+    world.destroyEntity(id);
+    expect(listener).toHaveBeenCalledWith({ id });
   });
 });
