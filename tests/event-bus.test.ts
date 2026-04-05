@@ -38,4 +38,47 @@ describe('EventBus', () => {
     const bus = new EventBus<TestEvents>();
     expect(() => bus.emit('damage', { target: 1, amount: 10 })).not.toThrow();
   });
+
+  it('removes listener with off', () => {
+    const bus = new EventBus<TestEvents>();
+    const listener = vi.fn();
+    bus.on('damage', listener);
+    bus.off('damage', listener);
+    bus.emit('damage', { target: 1, amount: 10 });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('off with non-registered listener is a no-op', () => {
+    const bus = new EventBus<TestEvents>();
+    const listener = vi.fn();
+    expect(() => bus.off('damage', listener)).not.toThrow();
+  });
+
+  it('pushes events to buffer on emit', () => {
+    const bus = new EventBus<TestEvents>();
+    bus.emit('damage', { target: 1, amount: 10 });
+    bus.emit('heal', { target: 2, amount: 5 });
+    const events = bus.getEvents();
+    expect(events).toEqual([
+      { type: 'damage', data: { target: 1, amount: 10 } },
+      { type: 'heal', data: { target: 2, amount: 5 } },
+    ]);
+  });
+
+  it('clear empties buffer but preserves listeners', () => {
+    const bus = new EventBus<TestEvents>();
+    const listener = vi.fn();
+    bus.on('damage', listener);
+    bus.emit('damage', { target: 1, amount: 10 });
+    bus.clear();
+
+    expect(bus.getEvents()).toEqual([]);
+    bus.emit('damage', { target: 2, amount: 20 });
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('getEvents returns empty array when no events emitted', () => {
+    const bus = new EventBus<TestEvents>();
+    expect(bus.getEvents()).toEqual([]);
+  });
 });
