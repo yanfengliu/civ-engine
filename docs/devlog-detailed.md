@@ -47,3 +47,11 @@
 **Files changed:** src/world.ts, tests/world.test.ts
 **Reasoning:** World is the integration layer: it owns EntityManager, ComponentStore registry (Map<string, ComponentStore>), SpatialGrid, and GameLoop. Public API is flat on World. `syncSpatialIndex()` runs before user systems each tick to keep the grid consistent with Position components. `destroyEntity` uses `previousPositions` (not current component data) for grid cleanup, because position may be mutated between ticks without stepping. `query()` iterates the smallest component store for efficiency.
 **Notes:** The `position` component key is special — World hardcodes it in `syncSpatialIndex()`. Users must register it under the key `'position'` for grid sync to work.
+
+## [2026-04-04 17:35, UTC] — Task 7: Documentation
+
+**Action:** Created `docs/ARCHITECTURE.md` with component map, data flow, boundaries, technology map, key architectural decisions, and drift log.
+**Result:** Success. All project documentation in place.
+**Files changed:** docs/ARCHITECTURE.md
+**Reasoning:** Required by CLAUDE.md rules for architecture tracking. Documents the initial engine foundation structure.
+**Notes:** Devlog files were created during Task 1 and maintained throughout by subagents.

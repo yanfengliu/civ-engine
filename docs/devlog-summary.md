@@ -10,3 +10,4 @@
 - 2026-04-04: Task 4 complete — SpatialGrid implemented with flat array, lazy Sets, bounds checking, and 4-directional neighbor queries; 10 tests pass, lint clean.
 - 2026-04-04: Task 5 complete — GameLoop implemented with fixed-timestep, step() for deterministic testing, start()/stop() for real-time, spiral-of-death prevention; 4 tests pass, lint clean.
 - 2026-04-04: Task 6 complete — World implemented as integration layer tying EntityManager, ComponentStore registry, SpatialGrid, and GameLoop; spatial index sync before each tick; 14 tests pass, all 45 total pass, lint clean.
+- 2026-04-04: Task 7 complete — ARCHITECTURE.md created with component map, data flow, boundaries, decisions, drift log.
