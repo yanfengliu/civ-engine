@@ -12,3 +12,4 @@
 - 2026-04-04: Task 6 complete — World implemented as integration layer tying EntityManager, ComponentStore registry, SpatialGrid, and GameLoop; spatial index sync before each tick; 14 tests pass, all 45 total pass, lint clean.
 - 2026-04-04: Task 7 complete — ARCHITECTURE.md created with component map, data flow, boundaries, decisions, drift log.
 - 2026-04-04: README rewritten with full usage guide — quick start, API reference, code examples, project structure.
+- 2026-04-05: EventBus implemented with emit/on/off/getEvents/clear; generic constraint fixed for strict-mode tsc; 4 tests pass, 49 total pass, lint and typecheck clean.

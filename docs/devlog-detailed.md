@@ -63,3 +63,11 @@
 **Files changed:** README.md
 **Reasoning:** User requested a README that teaches people and AI how to use the engine. Structured around the World API since it's the only public entry point, with progressive disclosure from quick start to full API reference.
 **Notes:** No code changes — documentation only.
+
+## [2026-04-05 10:54, UTC] — EventBus: emit and listener dispatch
+
+**Action:** Created `src/event-bus.ts` and `tests/event-bus.test.ts` using TDD. Wrote 4 tests first (verified they fail — missing module), then wrote implementation.
+**Result:** Success. All 4 EventBus tests pass, full suite 49/49 pass, ESLint and tsc report no errors, committed to main.
+**Files changed:** src/event-bus.ts, tests/event-bus.test.ts
+**Reasoning:** EventBus is a standalone generic class keyed by a typed event map. Uses a `Map<keyof TEventMap, Set<Listener>>` for O(1) dispatch per type. Also maintains a `buffer` array for `getEvents()` / `clear()` — enables replay and inspection. Generic constraint changed from `Record<string, unknown>` to `Record<keyof TEventMap, unknown>` to allow plain interfaces without an index signature (required for strict-mode tsc compatibility).
+**Notes:** The constraint change was discovered during `tsc` run after tests already passed — Vitest is lenient about generic constraints. The fix is non-breaking and more permissive (callers no longer need to add `[key: string]: unknown` to their event map interfaces).
