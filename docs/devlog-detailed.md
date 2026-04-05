@@ -39,3 +39,11 @@
 **Files changed:** src/game-loop.ts, tests/game-loop.test.ts
 **Reasoning:** Fixed-timestep design with `step()` for deterministic testing and `start()`/`stop()` for real-time execution. `performance.now()` provides sub-millisecond timing. Caps catch-up ticks to `maxTicksPerFrame = 4` to prevent spiral-of-death; resets accumulated time if cap is hit.
 **Notes:** `start()`/`stop()` are not covered by the test suite (real-time behavior is environment-dependent); only deterministic `step()` behavior is tested.
+
+## [2026-04-04 17:27, UTC] — Task 6: World
+
+**Action:** Created `src/world.ts` and `tests/world.test.ts` using TDD. Wrote tests first, verified failure (missing module), then wrote implementation.
+**Result:** Success. All 14 world tests pass, total suite 45/45 pass, ESLint and tsc report no errors, committed to main.
+**Files changed:** src/world.ts, tests/world.test.ts
+**Reasoning:** World is the integration layer: it owns EntityManager, ComponentStore registry (Map<string, ComponentStore>), SpatialGrid, and GameLoop. Public API is flat on World. `syncSpatialIndex()` runs before user systems each tick to keep the grid consistent with Position components. `destroyEntity` uses `previousPositions` (not current component data) for grid cleanup, because position may be mutated between ticks without stepping. `query()` iterates the smallest component store for efficiency.
+**Notes:** The `position` component key is special — World hardcodes it in `syncSpatialIndex()`. Users must register it under the key `'position'` for grid sync to work.
