@@ -11,12 +11,11 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Spatial grid | `spatial-grid.ts` | 2026-04-04 | Flat 2D array, lazy Sets, 4-dir neighbors |
 | Game loop | `game-loop.ts` | 2026-04-04 | Fixed-timestep 60 TPS, spiral-of-death guard |
 | World integration | `world.ts` | 2026-04-04 | Ties all subsystems, auto spatial sync, system pipeline |
+| Event / messaging system | `event-bus.ts` | 2026-04-05 | Typed pub/sub, per-tick buffer, auto-clear, immediate dispatch |
 
 ## In Progress
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Event / messaging system | Not started | Internal pub/sub for system-to-system and engine-to-client communication |
+None currently.
 
 ## Planned — Engine Core
 

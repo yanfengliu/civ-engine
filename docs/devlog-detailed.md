@@ -87,3 +87,11 @@
 **Files changed:** src/world.ts, tests/world.test.ts
 **Reasoning:** EventBus is owned by World as a private subsystem, consistent with how GameLoop, SpatialGrid, and EntityManager are owned. Making World generic (defaulting to `Record<string, never>`) allows callers to opt into a typed event map without breaking existing no-param usage. Making `System` generic with the same default keeps the registered-system array fully type-safe.
 **Notes:** The `System` type needed to become `System<TEventMap>` (not `System<any>`) to allow systems that call `w.emit(...)` to be properly typed. Existing tests that pass plain `() => ...` arrow functions still compile because TypeScript infers the system's world parameter from the array type, which is `System<Record<string, never>>` when no type param is given.
+
+## [2026-04-05, UTC] — EventBus implementation complete
+
+**Action:** Implemented EventBus class and integrated into World as a subsystem
+**Result:** Success — 59 tests pass (9 event-bus unit + 5 world integration + 45 existing), lint clean, typecheck clean
+**Files changed:** src/event-bus.ts (new), src/world.ts (modified), tests/event-bus.test.ts (new), tests/world.test.ts (modified), docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** Event system needed for system-to-system communication and future engine-to-client state output. Chose standalone class to match existing subsystem pattern.
+**Notes:** World is now generic over TEventMap. Default is Record<string, never> so existing non-event code is unaffected. System type also made generic to match.

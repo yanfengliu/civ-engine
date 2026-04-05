@@ -13,6 +13,7 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 | ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection |
 | SpatialGrid | `src/spatial-grid.ts` | 2D flat array grid, lazy Set allocation per cell, 4-directional neighbor queries |
 | GameLoop | `src/game-loop.ts` | Fixed-timestep loop (60 TPS default), step() for testing, start()/stop() for real-time |
+| EventBus | `src/event-bus.ts` | Typed pub/sub event bus, per-tick buffer, listener registry |
 | Types | `src/types.ts` | Shared type definitions (EntityId, Position, WorldConfig) |
 
 ## Data Flow
@@ -21,6 +22,7 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 World.step()
   -> GameLoop.step()
     -> World.executeTick()
+      -> World.eventBus.clear()    [reset buffer from previous tick]
       -> World.syncSpatialIndex()  [sync grid with Position components]
       -> System A(world)           [user systems in registration order]
       -> System B(world)
@@ -50,6 +52,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **Components** are pure data interfaces. No methods, no inheritance.
 - **SpatialGrid** is synced automatically by World's internal spatial index routine. User systems should read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` but should not call `grid.insert/remove/move` directly.
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
+- **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 
 ## Technology Map
 
@@ -77,3 +80,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | Date | Change | Reason |
 |------|--------|--------|
 | 2026-04-04 | Initial architecture | Core engine foundation implementation |
+| 2026-04-05 | Added EventBus as World subsystem | System-to-system and engine-to-client event communication |
