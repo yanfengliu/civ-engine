@@ -55,3 +55,11 @@
 **Files changed:** docs/ARCHITECTURE.md
 **Reasoning:** Required by CLAUDE.md rules for architecture tracking. Documents the initial engine foundation structure.
 **Notes:** Devlog files were created during Task 1 and maintained throughout by subagents.
+
+## [2026-04-04 17:46, UTC] — README: comprehensive usage guide
+
+**Action:** Rewrote README.md with full engine documentation: quick start, core concepts, entities, components, querying, systems, spatial grid, simulation control, full example, entity destruction, project structure, API reference table, and design decisions.
+**Result:** Success. README covers both human and AI audiences with runnable code examples.
+**Files changed:** README.md
+**Reasoning:** User requested a README that teaches people and AI how to use the engine. Structured around the World API since it's the only public entry point, with progressive disclosure from quick start to full API reference.
+**Notes:** No code changes — documentation only.
