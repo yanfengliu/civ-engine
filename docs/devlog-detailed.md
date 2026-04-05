@@ -31,3 +31,11 @@
 **Files changed:** src/spatial-grid.ts, tests/spatial-grid.test.ts
 **Reasoning:** Flat array of nullable Sets provides O(1) cell lookup by index (y * width + x). Lazy Set allocation avoids memory overhead for sparse grids. 4-directional neighbor queries skip diagonals by design. Bounds checking via shared `assertBounds` prevents silent index wrap-around.
 **Notes:** `getAt` returns `ReadonlySet<EntityId> | null` — callers cannot mutate the internal Set. `move` is composed from `remove` + `insert`, keeping logic DRY.
+
+## [2026-04-04 17:23, UTC] — Task 5: GameLoop
+
+**Action:** Created `src/game-loop.ts` and `tests/game-loop.test.ts` using TDD. Wrote tests first, verified failure (missing module), then wrote implementation.
+**Result:** Success. All 4 tests pass, ESLint reports no errors, committed to main.
+**Files changed:** src/game-loop.ts, tests/game-loop.test.ts
+**Reasoning:** Fixed-timestep design with `step()` for deterministic testing and `start()`/`stop()` for real-time execution. `performance.now()` provides sub-millisecond timing. Caps catch-up ticks to `maxTicksPerFrame = 4` to prevent spiral-of-death; resets accumulated time if cap is hit.
+**Notes:** `start()`/`stop()` are not covered by the test suite (real-time behavior is environment-dependent); only deterministic `step()` behavior is tested.
