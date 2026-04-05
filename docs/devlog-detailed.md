@@ -71,3 +71,19 @@
 **Files changed:** src/event-bus.ts, tests/event-bus.test.ts
 **Reasoning:** EventBus is a standalone generic class keyed by a typed event map. Uses a `Map<keyof TEventMap, Set<Listener>>` for O(1) dispatch per type. Also maintains a `buffer` array for `getEvents()` / `clear()` — enables replay and inspection. Generic constraint changed from `Record<string, unknown>` to `Record<keyof TEventMap, unknown>` to allow plain interfaces without an index signature (required for strict-mode tsc compatibility).
 **Notes:** The constraint change was discovered during `tsc` run after tests already passed — Vitest is lenient about generic constraints. The fix is non-breaking and more permissive (callers no longer need to add `[key: string]: unknown` to their event map interfaces).
+
+## [2026-04-05 11:01, UTC] — EventBus: remaining unit tests (off, clear, getEvents)
+
+**Action:** Appended 5 new tests to `tests/event-bus.test.ts` covering `off` (removes listener), `off` with non-registered listener (no-op), `getEvents` buffer population, `clear` emptying buffer while preserving listeners, and `getEvents` on empty bus.
+**Result:** Success. All 9 EventBus tests pass (54 total), ESLint reports no errors, committed to main.
+**Files changed:** tests/event-bus.test.ts
+**Reasoning:** Tests exercise already-implemented methods; no implementation changes needed. Each test isolates a single behavior.
+**Notes:** None.
+
+## [2026-04-05 11:22, UTC] — World integration: generic param and event methods
+
+**Action:** Added `EventBus` import to `src/world.ts`. Made `World` and `System` generic with `TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>`. Added private `eventBus` field. Added public `emit`, `on`, `off`, `getEvents` methods delegating to the bus. Added `this.eventBus.clear()` as the first line of `executeTick()`. Added 5 new tests to `tests/world.test.ts` (plus `vi` import) covering listener dispatch, system-to-system event delivery in same tick, `getEvents` during a tick, event clearing between ticks, and event independence from entity lifecycle.
+**Result:** Success. All 59 tests pass (19 world, 9 event-bus, 10 spatial-grid, 10 component-store, 7 entity-manager, 4 game-loop), ESLint reports no errors, tsc reports no errors, committed to main.
+**Files changed:** src/world.ts, tests/world.test.ts
+**Reasoning:** EventBus is owned by World as a private subsystem, consistent with how GameLoop, SpatialGrid, and EntityManager are owned. Making World generic (defaulting to `Record<string, never>`) allows callers to opt into a typed event map without breaking existing no-param usage. Making `System` generic with the same default keeps the registered-system array fully type-safe.
+**Notes:** The `System` type needed to become `System<TEventMap>` (not `System<any>`) to allow systems that call `w.emit(...)` to be properly typed. Existing tests that pass plain `() => ...` arrow functions still compile because TypeScript infers the system's world parameter from the array type, which is `System<Record<string, never>>` when no type param is given.
