@@ -255,6 +255,53 @@ world.onDiff((diff) => {
 });
 ```
 
+## Client Protocol
+
+The `ClientAdapter` bridges the World to any transport (WebSocket, postMessage, stdin/stdout). It sends typed messages via a `send` callback — you wire it to whatever transport you need.
+
+```typescript
+import { ClientAdapter } from './src/client-adapter.js';
+import type { ServerMessage, ClientMessage } from './src/client-adapter.js';
+
+type Events = { unitDied: { entityId: number } };
+type Commands = { moveUnit: { entityId: number; targetX: number; targetY: number } };
+
+const world = new World<Events, Commands>({
+  gridWidth: 32, gridHeight: 32, tps: 10,
+});
+
+// Create an adapter with a send callback
+const adapter = new ClientAdapter<Events, Commands>({
+  world,
+  send: (message: ServerMessage<Events>) => {
+    // Send to your transport — WebSocket, postMessage, etc.
+    console.log('Server ->', message.type);
+  },
+});
+
+// Start streaming: sends a snapshot immediately, then tick diffs after each step
+adapter.connect();
+
+world.step();
+// send callback fires with: { type: 'tick', data: { diff, events } }
+
+// Handle incoming client messages
+adapter.handleMessage({ type: 'requestSnapshot' });
+// send callback fires with: { type: 'snapshot', data: worldSnapshot }
+
+adapter.handleMessage({
+  type: 'command',
+  data: { id: 'cmd-1', commandType: 'moveUnit', payload: { entityId: 0, targetX: 5, targetY: 3 } },
+});
+// If validation fails, send callback fires with: { type: 'commandRejected', data: { id: 'cmd-1' } }
+
+// Stop streaming
+adapter.disconnect();
+```
+
+Server messages: `snapshot` (full state), `tick` (diff + events), `commandRejected` (failed validation).
+Client messages: `command` (submit a game command), `requestSnapshot` (request full state).
+
 ## Next Steps
 
 - [Building a Complete Game](./building-a-game.md) — Step-by-step tutorial building a colony survival simulation

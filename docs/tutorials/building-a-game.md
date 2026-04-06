@@ -1,6 +1,6 @@
 # Building a Complete Game: Colony Survival
 
-This tutorial walks through building a small but complete real-time colony survival simulation using every major engine feature. By the end, you'll have a working game with map generation, resource gathering, unit movement, pathfinding, events, commands, save/load, and speed control.
+This tutorial walks through building a small but complete real-time colony survival simulation using every major engine feature. By the end, you'll have a working game with map generation, resource gathering, unit movement, pathfinding, events, commands, save/load, speed control, and client streaming.
 
 **What we're building:** A 32x32 grid world where colonists gather food from berry bushes and bring it back to a settlement. Colonists consume food each tick. If the settlement runs out of food, colonists starve.
 
@@ -17,7 +17,8 @@ This tutorial walks through building a small but complete real-time colony survi
 9. [Diffs (Observing State)](#9-diffs-observing-state)
 10. [Save / Load](#10-save--load)
 11. [Speed Control](#11-speed-control)
-12. [Putting It All Together](#12-putting-it-all-together)
+12. [Client Protocol](#12-client-protocol)
+13. [Putting It All Together](#13-putting-it-all-together)
 
 ---
 
@@ -476,7 +477,59 @@ world.step();
 world.resume();
 ```
 
-## 12. Putting It All Together
+## 12. Client Protocol
+
+Wire your game to an external client (browser, another process, AI agent) using the `ClientAdapter`. It sends typed messages — you provide the transport.
+
+```typescript
+import { ClientAdapter } from './src/client-adapter.js';
+import type { ServerMessage, ClientMessage } from './src/client-adapter.js';
+
+// Example: wire to a WebSocket
+function attachClient(ws: WebSocket, world: World<GameEvents, GameCommands>): ClientAdapter<GameEvents, GameCommands> {
+  const adapter = new ClientAdapter<GameEvents, GameCommands>({
+    world,
+    send: (message: ServerMessage<GameEvents>) => {
+      ws.send(JSON.stringify(message));
+    },
+  });
+
+  ws.addEventListener('message', (event) => {
+    const msg: ClientMessage<GameCommands> = JSON.parse(event.data);
+    adapter.handleMessage(msg);
+  });
+
+  ws.addEventListener('close', () => {
+    adapter.disconnect();
+  });
+
+  adapter.connect(); // sends snapshot, then streams tick diffs
+  return adapter;
+}
+```
+
+The client receives:
+- A `snapshot` message on connect (full world state)
+- A `tick` message after each step (diff + events from that tick)
+- A `commandRejected` message if a submitted command fails validation
+
+The client sends:
+- `command` messages to submit game commands (e.g., `moveColonist`)
+- `requestSnapshot` to request a full state resync
+
+```typescript
+// Example: client-side command submission
+const clientMessage: ClientMessage<GameCommands> = {
+  type: 'command',
+  data: {
+    id: crypto.randomUUID(),
+    commandType: 'moveColonist',
+    payload: { entityId: 1, targetX: 20, targetY: 10 },
+  },
+};
+```
+
+## 13. Putting It All Together
 
 Here's the complete game loop:
 
@@ -527,6 +580,7 @@ for (const id of world.query('colonist')) {
 | Diffs | Observing per-tick changes for rendering |
 | Save/Load | `serialize()`/`deserialize()` with system re-registration |
 | Speed Control | `setSpeed()`, `pause()`/`resume()` |
+| Client Protocol | `ClientAdapter` streaming state to external clients |
 
 ## Tips for AI Agents
 
