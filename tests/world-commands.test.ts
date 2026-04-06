@@ -1,0 +1,180 @@
+import { describe, it, expect } from 'vitest';
+import { World } from '../src/world.js';
+
+describe('World commands', () => {
+  it('submit with no validators queues and returns true', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', () => {});
+    const result = world.submit('move', { x: 1, y: 2 });
+    expect(result).toBe(true);
+  });
+
+  it('submit with passing validator queues and returns true', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', (data) => data.x >= 0 && data.y >= 0);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+  });
+
+  it('submit with failing validator rejects and returns false', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', (data) => data.x >= 0 && data.y >= 0);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: -1, y: 2 })).toBe(false);
+  });
+
+  it('all validators must pass for submit to accept', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', () => true);
+    world.registerValidator('move', () => false);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(false);
+  });
+
+  it('handler runs on step and receives correct data', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const received: Array<{ x: number; y: number }> = [];
+    world.registerHandler('move', (data) => received.push(data));
+    world.submit('move', { x: 3, y: 4 });
+    world.step();
+    expect(received).toEqual([{ x: 3, y: 4 }]);
+  });
+
+  it('handler can emit events and modify components', () => {
+    type Events = { moved: { entityId: number } };
+    type Cmds = { move: { entityId: number; x: number; y: number } };
+    const world = new World<Events, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.addComponent(id, 'position', { x: 0, y: 0 });
+
+    world.registerHandler('move', (data, w) => {
+      const pos = w.getComponent<{ x: number; y: number }>(
+        data.entityId,
+        'position',
+      )!;
+      pos.x = data.x;
+      pos.y = data.y;
+      w.emit('moved', { entityId: data.entityId });
+    });
+
+    world.submit('move', { entityId: id, x: 5, y: 5 });
+    world.step();
+
+    expect(world.getComponent(id, 'position')).toEqual({ x: 5, y: 5 });
+    expect(world.getEvents()).toEqual([
+      { type: 'moved', data: { entityId: id } },
+    ]);
+  });
+
+  it('throws when registering duplicate handler', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', () => {});
+    expect(() => world.registerHandler('move', () => {})).toThrow(
+      "Handler already registered for command 'move'",
+    );
+  });
+
+  it('throws when no handler registered at drain time', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+    expect(() => world.step()).toThrow(
+      "No handler registered for command 'move'",
+    );
+  });
+
+  it('commands submitted by a system during tick are processed next tick', () => {
+    type Cmds = { ping: { n: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const handled: number[] = [];
+    world.registerHandler('ping', (data) => handled.push(data.n));
+
+    // System submits a command during its tick
+    world.registerSystem((w) => {
+      if (w.tick === 0) {
+        w.submit('ping', { n: 42 });
+      }
+    });
+
+    world.step(); // tick 0: system submits, but drain already happened
+    expect(handled).toEqual([]);
+
+    world.step(); // tick 1: command from previous tick is processed
+    expect(handled).toEqual([42]);
+  });
+
+  it('commands drain before spatial sync so handler position changes appear in grid', () => {
+    type Cmds = { spawn: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+
+    let spawnedId: number | undefined;
+    world.registerHandler('spawn', (data, w) => {
+      spawnedId = w.createEntity();
+      w.addComponent(spawnedId, 'position', { x: data.x, y: data.y });
+    });
+
+    // System checks grid — entity should be there because spatial sync
+    // runs after processCommands
+    let foundInGrid = false;
+    world.registerSystem((w) => {
+      if (spawnedId !== undefined) {
+        const cell = w.grid.getAt(3, 4);
+        foundInGrid = cell !== null && cell.has(spawnedId);
+      }
+    });
+
+    world.submit('spawn', { x: 3, y: 4 });
+    world.step();
+
+    expect(spawnedId).toBeDefined();
+    expect(foundInGrid).toBe(true);
+  });
+});

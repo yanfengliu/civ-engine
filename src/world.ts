@@ -40,6 +40,7 @@ export class World<
   private currentDiff: TickDiff | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
+  private destroyCallbacks: Array<(id: EntityId, world: World<TEventMap, TCommandMap>) => void> = [];
 
   constructor(config: WorldConfig) {
     this.entityManager = new EntityManager();
@@ -57,7 +58,12 @@ export class World<
   }
 
   destroyEntity(id: EntityId): void {
-    // Use previousPositions for grid cleanup (reflects actual grid state)
+    if (!this.entityManager.isAlive(id)) return;
+
+    for (const callback of this.destroyCallbacks) {
+      callback(id, this);
+    }
+
     const prev = this.previousPositions.get(id);
     if (prev) {
       this.grid.remove(id, prev.x, prev.y);
@@ -72,6 +78,21 @@ export class World<
 
   isAlive(id: EntityId): boolean {
     return this.entityManager.isAlive(id);
+  }
+
+  onDestroy(
+    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+  ): void {
+    this.destroyCallbacks.push(callback);
+  }
+
+  offDestroy(
+    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+  ): void {
+    const index = this.destroyCallbacks.indexOf(callback);
+    if (index !== -1) {
+      this.destroyCallbacks.splice(index, 1);
+    }
   }
 
   registerComponent<T>(key: string): void {
