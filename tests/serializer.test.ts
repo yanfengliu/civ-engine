@@ -85,4 +85,100 @@ describe('Serialization', () => {
       'Invalid entity state: array length mismatch',
     );
   });
+
+  it('preserves dead entities and free-list across round-trip', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+
+    const e0 = world.createEntity();
+    world.createEntity(); // e1
+    world.addComponent(e0, 'health', { hp: 100 });
+    world.destroyEntity(e0);
+
+    const snapshot = world.serialize();
+    const restored = World.deserialize(snapshot);
+
+    expect(restored.isAlive(0)).toBe(false);
+    expect(restored.isAlive(1)).toBe(true);
+    // New entity should reuse recycled id 0
+    const recycled = restored.createEntity();
+    expect(recycled).toBe(0);
+  });
+
+  it('round-trips components with nested object data', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ items: string[]; stats: { str: number; dex: number } }>('inventory');
+
+    const e = world.createEntity();
+    world.addComponent(e, 'inventory', {
+      items: ['sword', 'shield'],
+      stats: { str: 10, dex: 5 },
+    });
+
+    const snapshot = world.serialize();
+    const restored = World.deserialize(snapshot);
+
+    expect(restored.getComponent(e, 'inventory')).toEqual({
+      items: ['sword', 'shield'],
+      stats: { str: 10, dex: 5 },
+    });
+  });
+
+  it('deserialized world can continue stepping with systems', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+
+    const e = world.createEntity();
+    world.addComponent(e, 'position', { x: 0, y: 0 });
+
+    const moveRight = (w: World) => {
+      for (const id of w.query('position')) {
+        const pos = w.getComponent<{ x: number; y: number }>(id, 'position')!;
+        pos.x += 1;
+      }
+    };
+    world.registerSystem(moveRight);
+    world.step(); // tick 1, x = 1
+
+    const snapshot = world.serialize();
+    const restored = World.deserialize(snapshot, [moveRight]);
+
+    restored.step(); // tick 2, x = 2
+    expect(restored.tick).toBe(2);
+    expect(restored.getComponent(e, 'position')).toEqual({ x: 2, y: 0 });
+  });
+
+  it('deserialized world syncs spatial grid on first step', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+
+    const e = world.createEntity();
+    world.addComponent(e, 'position', { x: 3, y: 4 });
+    world.step(); // sync grid
+
+    const snapshot = world.serialize();
+    const restored = World.deserialize(snapshot);
+
+    // Grid is empty before first step
+    expect(restored.grid.getAt(3, 4)?.has(e) ?? false).toBe(false);
+
+    restored.step();
+    // Grid is populated after step
+    expect(restored.grid.getAt(3, 4)!.has(e)).toBe(true);
+  });
+
+  it('deserialize with no systems produces a world with empty pipeline', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+    const e = world.createEntity();
+    world.addComponent(e, 'health', { hp: 100 });
+
+    const snapshot = world.serialize();
+    const restored = World.deserialize(snapshot);
+
+    // Can step without error (no systems to run)
+    restored.step();
+    expect(restored.tick).toBe(1);
+    expect(restored.getComponent(e, 'health')).toEqual({ hp: 100 });
+  });
 });
