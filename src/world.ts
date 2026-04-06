@@ -1,4 +1,5 @@
 import type { EntityId, Position, WorldConfig } from './types.js';
+import type { WorldSnapshot } from './serializer.js';
 import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
@@ -191,6 +192,24 @@ export class World<
     data: TEventMap[keyof TEventMap];
   }> {
     return this.eventBus.getEvents();
+  }
+
+  serialize(): WorldSnapshot {
+    const components: Record<string, Array<[EntityId, unknown]>> = {};
+    for (const [key, store] of this.componentStores) {
+      components[key] = [...store.entries()];
+    }
+    return {
+      version: 1,
+      config: {
+        gridWidth: this.grid.width,
+        gridHeight: this.grid.height,
+        tps: this.gameLoop.tps,
+      },
+      tick: this.gameLoop.tick,
+      entities: this.entityManager.getState(),
+      components,
+    };
   }
 
   get tick(): number {
