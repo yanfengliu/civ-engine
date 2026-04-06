@@ -29,4 +29,6 @@
 - 2026-04-06: Pathfinding module complete — generic A* findPath<T> with internal min-heap, PathConfig/PathResult types, maxCost/maxIterations/trackExplored options; standalone utility with no World dependency; 11 new tests, 175 total pass, lint and typecheck clean.
 - 2026-04-06: Pathfinding complex scenario tests added — 8 tests: diamond graph, 100x100 grid, winding maze, equal-cost paths, directed edges, inadmissible heuristic, diagonal costs, node revisit; 19 total pathfinding tests pass, lint and typecheck clean.
 - 2026-04-06: Pathfinding docs update — ARCHITECTURE.md and ROADMAP.md updated; 183 total tests pass; pathfinding feature complete.
-- 2026-04-06: GameLoop speed control — setSpeed/getSpeed, pause/resume, isPaused added; 10 new TDD tests; 14 total GameLoop tests pass; lint and typecheck clean.
+- 2026-04-06: GameLoop speed control — setSpeed/getSpeed, pause/resume, isPaused added; NaN/Infinity guard; 12 new tests; 16 total GameLoop tests pass.
+- 2026-04-06: World speed control proxies — 5 proxy methods (setSpeed/getSpeed/pause/resume/isPaused); 3 new tests; 34 total World tests pass.
+- 2026-04-06: Simulation speed control docs — ARCHITECTURE.md and ROADMAP.md updated; "Turn / phase management" removed from roadmap; 198 total tests pass; feature complete.
