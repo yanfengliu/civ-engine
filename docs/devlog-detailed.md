@@ -151,3 +151,11 @@
 **Files changed:** src/serializer.ts (new), src/world.ts, src/entity-manager.ts, src/component-store.ts, src/game-loop.ts, tests/serializer.test.ts (new), tests/entity-manager.test.ts, tests/component-store.test.ts, docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** State serialization is needed for save/load and client sync. JSON format chosen for debuggability, zero-dependency simplicity, and wire-readiness.
 **Notes:** Spatial grid is not serialized — it rebuilds from position components on first step. Systems, event listeners, validators, and handlers are not serialized (runtime-only). Snapshot includes version field for future format evolution.
+
+## [2026-04-05 23:11, UTC] — Task 2: EntityManager dirty tracking
+
+**Action:** Added `createdThisTick` and `destroyedThisTick` private fields to `EntityManager`. Modified `create()` to push to `createdThisTick` in both branches. Modified `destroy()` to push to `destroyedThisTick` after the free-list push. Added `getDirty()` (returns shallow copies) and `clearDirty()` methods. Added 3 new tests covering create tracking, destroy tracking, and clearDirty.
+**Result:** Success. 12/12 tests pass, ESLint clean, tsc clean, committed to main (838cd1e).
+**Files changed:** src/entity-manager.ts, tests/entity-manager.test.ts
+**Reasoning:** Dirty tracking on EntityManager mirrors the pattern established in ComponentStore (Task 1), enabling World to collect a per-tick diff of entity lifecycle events for State Diff Output.
+**Notes:** getDirty returns copies so callers cannot mutate internal state. clearDirty uses `.length = 0` to truncate in place rather than reassigning arrays.
