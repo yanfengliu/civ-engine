@@ -43,6 +43,10 @@ export class GameLoop {
     return this._tps;
   }
 
+  setTick(value: number): void {
+    this._tick = value;
+  }
+
   private loop(): void {
     if (!this.running) return;
 
