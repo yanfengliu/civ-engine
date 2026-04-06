@@ -104,4 +104,44 @@ describe('ComponentStore', () => {
     expect(restored.has(1)).toBe(false);
     expect(restored.size).toBe(2);
   });
+
+  it('set marks entity as dirty', () => {
+    const store = new ComponentStore<{ x: number }>();
+    store.set(0, { x: 1 });
+    const dirty = store.getDirty();
+    expect(dirty.set).toEqual([[0, { x: 1 }]]);
+    expect(dirty.removed).toEqual([]);
+  });
+
+  it('remove marks entity as removed and clears from dirty', () => {
+    const store = new ComponentStore<{ x: number }>();
+    store.set(0, { x: 1 });
+    store.remove(0);
+    const dirty = store.getDirty();
+    expect(dirty.set).toEqual([]);
+    expect(dirty.removed).toEqual([0]);
+  });
+
+  it('clearDirty resets both sets', () => {
+    const store = new ComponentStore<{ x: number }>();
+    store.set(0, { x: 1 });
+    store.set(1, { x: 2 });
+    store.remove(1);
+    store.clearDirty();
+    const dirty = store.getDirty();
+    expect(dirty.set).toEqual([]);
+    expect(dirty.removed).toEqual([]);
+  });
+
+  it('getDirty returns set entries with current data', () => {
+    const store = new ComponentStore<{ x: number }>();
+    store.set(0, { x: 1 });
+    store.set(0, { x: 99 });
+    store.set(3, { x: 3 });
+    const dirty = store.getDirty();
+    expect(dirty.set).toEqual([
+      [0, { x: 99 }],
+      [3, { x: 3 }],
+    ]);
+  });
 });
