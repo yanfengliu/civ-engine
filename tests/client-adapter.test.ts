@@ -71,4 +71,71 @@ describe('ClientAdapter', () => {
     const { adapter } = setup();
     expect(() => adapter.disconnect()).not.toThrow();
   });
+
+  it('handleMessage with command calls world.submit() successfully', () => {
+    const { adapter, messages, world } = setup();
+    world.registerHandler('move', () => {});
+
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-1',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+
+    const rejected = messages.filter((m) => m.type === 'commandRejected');
+    expect(rejected).toHaveLength(0);
+  });
+
+  it('handleMessage with command sends commandRejected when validation fails', () => {
+    const { adapter, messages, world } = setup();
+    world.registerValidator('move', () => false);
+    world.registerHandler('move', () => {});
+
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-42',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toEqual({
+      type: 'commandRejected',
+      data: { id: 'cmd-42' },
+    });
+  });
+
+  it('handleMessage with requestSnapshot sends a fresh snapshot', () => {
+    const { adapter, messages, world } = setup();
+    adapter.handleMessage({ type: 'requestSnapshot' });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].type).toBe('snapshot');
+    if (messages[0].type === 'snapshot') {
+      expect(messages[0].data).toEqual(world.serialize());
+    }
+  });
+
+  it('tick message includes events emitted by systems', () => {
+    const { adapter, messages, world } = setup();
+    world.registerSystem((w) => {
+      w.emit('unitMoved', { id: 1, x: 5, y: 5 });
+    });
+    adapter.connect();
+    messages.length = 0;
+
+    world.step();
+    expect(messages).toHaveLength(1);
+    expect(messages[0].type).toBe('tick');
+    if (messages[0].type === 'tick') {
+      expect(messages[0].data.events).toEqual([
+        { type: 'unitMoved', data: { id: 1, x: 5, y: 5 } },
+      ]);
+    }
+  });
 });
