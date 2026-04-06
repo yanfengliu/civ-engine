@@ -223,3 +223,11 @@
 **Files changed:** docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** Documentation maintenance required after completing pathfinding module across Tasks 1–3.
 **Notes:** ARCHITECTURE.md boundary rule confirms pathfinding is a standalone utility with no World or tick-loop coupling.
+
+## [2026-04-06 13:26, UTC] — GameLoop speed control: setSpeed/getSpeed, pause/resume
+
+**Action:** Added 10 new tests (TDD) for speed control to tests/game-loop.test.ts. Verified 8 tests failed. Replaced src/game-loop.ts with updated implementation adding speedMultiplier field, setSpeed/getSpeed methods, paused field, pause/resume methods, isPaused getter, and pause-aware loop logic. Verified all 14 tests pass. Ran ESLint and tsc --noEmit — both clean. Committed.
+**Result:** Success — 14/14 tests pass, lint clean, typecheck clean, committed to main (44a7d8a).
+**Files changed:** src/game-loop.ts, tests/game-loop.test.ts
+**Reasoning:** TDD approach — tests written first to confirm failure before implementation. Speed multiplier scales accumulated time delta so tick rate adjusts without changing tickDuration. Pause freezes lastTime to prevent accumulated drift when the loop resumes.
+**Notes:** No World changes in this task — World proxy methods are Task 2. The loop still runs (setTimeout continues) while paused; ticks are simply suppressed and lastTime is reset each frame to prevent burst-catch-up on resume.
