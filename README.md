@@ -229,39 +229,39 @@ docs/
 
 ### `new World(config)`
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `config.gridWidth` | `number` | Width of the spatial grid |
-| `config.gridHeight` | `number` | Height of the spatial grid |
-| `config.tps` | `number` | Ticks per second (e.g., 60) |
+| Parameter           | Type     | Description                 |
+| ------------------- | -------- | --------------------------- |
+| `config.gridWidth`  | `number` | Width of the spatial grid   |
+| `config.gridHeight` | `number` | Height of the spatial grid  |
+| `config.tps`        | `number` | Ticks per second (e.g., 60) |
 
 ### World Methods
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `createEntity()` | `EntityId` | Create a new entity |
-| `destroyEntity(id)` | `void` | Destroy entity and all its components |
-| `isAlive(id)` | `boolean` | Check if entity exists |
-| `registerComponent<T>(key)` | `void` | Register a component type |
-| `addComponent<T>(id, key, data)` | `void` | Attach component to entity |
-| `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
-| `removeComponent(id, key)` | `void` | Detach component from entity |
-| `query(...keys)` | `IterableIterator<EntityId>` | Find entities with all listed components |
-| `registerSystem(fn)` | `void` | Add a system to the pipeline |
-| `step()` | `void` | Advance one tick (deterministic) |
-| `start()` | `void` | Begin real-time loop |
-| `stop()` | `void` | Stop real-time loop |
-| `tick` | `number` | Current tick count |
-| `grid` | `SpatialGrid` | Spatial index (read-only access) |
+| Method                           | Returns                      | Description                              |
+| -------------------------------- | ---------------------------- | ---------------------------------------- |
+| `createEntity()`                 | `EntityId`                   | Create a new entity                      |
+| `destroyEntity(id)`              | `void`                       | Destroy entity and all its components    |
+| `isAlive(id)`                    | `boolean`                    | Check if entity exists                   |
+| `registerComponent<T>(key)`      | `void`                       | Register a component type                |
+| `addComponent<T>(id, key, data)` | `void`                       | Attach component to entity               |
+| `getComponent<T>(id, key)`       | `T \| undefined`             | Read component data                      |
+| `removeComponent(id, key)`       | `void`                       | Detach component from entity             |
+| `query(...keys)`                 | `IterableIterator<EntityId>` | Find entities with all listed components |
+| `registerSystem(fn)`             | `void`                       | Add a system to the pipeline             |
+| `step()`                         | `void`                       | Advance one tick (deterministic)         |
+| `start()`                        | `void`                       | Begin real-time loop                     |
+| `stop()`                         | `void`                       | Stop real-time loop                      |
+| `tick`                           | `number`                     | Current tick count                       |
+| `grid`                           | `SpatialGrid`                | Spatial index (read-only access)         |
 
 ### SpatialGrid Methods
 
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `getAt(x, y)` | `ReadonlySet<EntityId> \| null` | Entities at cell |
-| `getNeighbors(x, y)` | `EntityId[]` | Entities in 4 adjacent cells |
-| `width` | `number` | Grid width |
-| `height` | `number` | Grid height |
+| Method               | Returns                         | Description                  |
+| -------------------- | ------------------------------- | ---------------------------- |
+| `getAt(x, y)`        | `ReadonlySet<EntityId> \| null` | Entities at cell             |
+| `getNeighbors(x, y)` | `EntityId[]`                    | Entities in 4 adjacent cells |
+| `width`              | `number`                        | Grid width                   |
+| `height`             | `number`                        | Grid height                  |
 
 ## Design Decisions
 
