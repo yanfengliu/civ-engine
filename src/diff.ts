@@ -1,9 +1,7 @@
 import type { EntityId } from './types.js';
+import type { ResourcePool } from './resource-store.js';
 
-export interface ResourcePool {
-  current: number;
-  max: number;
-}
+export type { ResourcePool };
 
 export interface TickDiff {
   tick: number;
