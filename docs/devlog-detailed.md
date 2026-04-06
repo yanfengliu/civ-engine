@@ -119,3 +119,11 @@
 **Reasoning:** submit validates data through all registered validator functions (short-circuit on first failure), then pushes to commandQueue only if all pass. registerValidator appends to a per-type array allowing multiple validators. registerHandler stores a single handler per type, throwing on duplicate registration. Handlers are stored but not called yet — that is Task 4's responsibility.
 **Notes:** Used `never` cast in private map types to avoid excessive generic propagation while keeping public APIs fully typed.
 **Notes:** drain() clears the internal buffer using `this.buffer.length = 0` (avoids reallocation). push uses a constrained generic `K extends keyof TCommandMap` for precise type inference per command.
+
+## [2026-04-05 20:20, UTC] — World: processCommands wired into executeTick
+
+**Action:** Added private `processCommands()` method to World that drains the CommandQueue and dispatches each command to its registered handler (throwing if none found). Wired it into `executeTick()` between `eventBus.clear()` and `syncSpatialIndex()`. Added 4 new tests following TDD (tests-first, verified 3 fail as expected, then implemented).
+**Result:** Success — 4 new tests pass; 71 total pass (all test files), lint and typecheck clean.
+**Files changed:** src/world.ts, tests/world.test.ts
+**Reasoning:** Ordering `processCommands()` before `syncSpatialIndex()` ensures entity mutations made by command handlers (e.g. position changes) are picked up by spatial sync in the same tick. The error on missing handler is a safety guard that surfaces bugs early rather than silently dropping commands.
+**Notes:** The "throws when registering duplicate handler" test was already passing (registerHandler guard existed from Task 3); only the 3 execution tests were truly new failures.

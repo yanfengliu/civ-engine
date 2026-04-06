@@ -17,3 +17,4 @@
 - 2026-04-05: World integration complete — World and System made generic with TEventMap; EventBus owned as private field; emit/on/off/getEvents methods added; events cleared at start of each tick; 5 new tests, 59 total pass, lint and typecheck clean.
 - 2026-04-05: CommandQueue implemented — typed push/drain buffer with pending getter; TDD (tests-first); 4 new tests, 63 total pass, lint clean.
 - 2026-04-05: World submit/registerValidator/registerHandler added — CommandQueue owned as private field; multi-validator support with short-circuit; duplicate handler guard; TDD; 4 new tests, 67 total pass, lint and typecheck clean.
+- 2026-04-05: World processCommands wired into executeTick — drains CommandQueue and dispatches to handlers; ordered before syncSpatialIndex; error thrown on missing handler; TDD; 4 new tests, 71 total pass, lint and typecheck clean.
