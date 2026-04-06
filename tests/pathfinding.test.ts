@@ -155,4 +155,199 @@ describe('findPath', () => {
     expect(result!.path).toEqual([5]);
     expect(result!.cost).toBe(0);
   });
+
+  it('chooses cheaper path in diamond graph', () => {
+    // Graph: 0 --(1)--> 1 --(1)--> 3
+    //        0 --(5)--> 2 --(1)--> 3
+    // Cheap path: 0 -> 1 -> 3 (cost 2)
+    // Expensive path: 0 -> 2 -> 3 (cost 6)
+    const result = findPath<number>({
+      start: 0,
+      goal: 3,
+      neighbors: (n) => {
+        if (n === 0) return [1, 2];
+        if (n === 1) return [3];
+        if (n === 2) return [3];
+        return [];
+      },
+      cost: (from, to) => {
+        if (from === 0 && to === 2) return 5;
+        return 1;
+      },
+      heuristic: () => 0,
+      hash: (n) => n,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.path).toEqual([0, 1, 3]);
+    expect(result!.cost).toBe(2);
+  });
+
+  it('handles large grid (100x100)', () => {
+    const config = { ...gridConfig(100, 100), maxIterations: 50_000 };
+    const result = findPath(config);
+    expect(result).not.toBeNull();
+    expect(result!.path[0]).toBe(0);
+    expect(result!.path[result!.path.length - 1]).toBe(9999);
+    expect(result!.cost).toBe(198); // Manhattan distance on 100x100
+  });
+
+  it('navigates a winding maze', () => {
+    // 5x5 grid maze:
+    // S . # . .
+    // # . # . .
+    // # . . . #
+    // . # # . .
+    // . . . . G
+    // S=0, G=24, walls = {2, 5, 7, 10, 16, 17, 22}
+    const walls = new Set([2, 5, 7, 10, 16, 17, 22]);
+    const config = { ...gridConfig(5, 5, walls) };
+    const result = findPath(config);
+    expect(result).not.toBeNull();
+    expect(result!.path[0]).toBe(0);
+    expect(result!.path[result!.path.length - 1]).toBe(24);
+    // Path must avoid all walls
+    for (const node of result!.path) {
+      expect(walls.has(node)).toBe(false);
+    }
+    // Verify cost equals path length - 1 (uniform cost 1)
+    expect(result!.cost).toBe(result!.path.length - 1);
+  });
+
+  it('finds optimal cost when multiple equal-cost paths exist', () => {
+    // 3x3 grid, no walls — multiple shortest paths of cost 4
+    const config = gridConfig(3, 3);
+    const result = findPath(config);
+    expect(result).not.toBeNull();
+    expect(result!.cost).toBe(4);
+    expect(result!.path).toHaveLength(5);
+  });
+
+  it('handles one-way (directed) edges', () => {
+    // 0 -> 1 -> 2 (one-way only)
+    const result = findPath<number>({
+      start: 0,
+      goal: 2,
+      neighbors: (n) => {
+        if (n === 0) return [1];
+        if (n === 1) return [2];
+        return [];
+      },
+      cost: () => 1,
+      heuristic: () => 0,
+      hash: (n) => n,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.path).toEqual([0, 1, 2]);
+
+    // Reverse direction should fail
+    const reverse = findPath<number>({
+      start: 2,
+      goal: 0,
+      neighbors: (n) => {
+        if (n === 0) return [1];
+        if (n === 1) return [2];
+        return [];
+      },
+      cost: () => 1,
+      heuristic: () => 0,
+      hash: (n) => n,
+    });
+    expect(reverse).toBeNull();
+  });
+
+  it('handles inadmissible heuristic without crashing', () => {
+    const config = {
+      ...gridConfig(5, 5),
+      heuristic: (node: number, goal: number) => {
+        const nx = node % 5;
+        const ny = Math.floor(node / 5);
+        const gx = goal % 5;
+        const gy = Math.floor(goal / 5);
+        return (Math.abs(nx - gx) + Math.abs(ny - gy)) * 10; // overestimates 10x
+      },
+    };
+    const result = findPath(config);
+    expect(result).not.toBeNull();
+    expect(result!.path[0]).toBe(0);
+    expect(result!.path[result!.path.length - 1]).toBe(24);
+    // Path may not be optimal, but must be valid
+    expect(result!.cost).toBeGreaterThanOrEqual(8);
+  });
+
+  it('handles diagonal movement with varying costs', () => {
+    // 5x5 grid with 8-directional movement
+    // Cardinal moves cost 1, diagonal moves cost sqrt(2)
+    const width = 5;
+    const height = 5;
+    const result = findPath<number>({
+      start: 0,
+      goal: 24,
+      neighbors: (node) => {
+        const x = node % width;
+        const y = Math.floor(node / width);
+        const result: number[] = [];
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              result.push(ny * width + nx);
+            }
+          }
+        }
+        return result;
+      },
+      cost: (from, to) => {
+        const fx = from % width;
+        const fy = Math.floor(from / width);
+        const tx = to % width;
+        const ty = Math.floor(to / width);
+        const dx = Math.abs(fx - tx);
+        const dy = Math.abs(fy - ty);
+        return dx + dy === 2 ? Math.SQRT2 : 1;
+      },
+      heuristic: (node, goal) => {
+        const nx = node % width;
+        const ny = Math.floor(node / width);
+        const gx = goal % width;
+        const gy = Math.floor(goal / width);
+        const dx = Math.abs(nx - gx);
+        const dy = Math.abs(ny - gy);
+        return Math.min(dx, dy) * Math.SQRT2 + Math.abs(dx - dy);
+      },
+      hash: (n) => n,
+    });
+    expect(result).not.toBeNull();
+    // Diagonal path from (0,0) to (4,4): 4 diagonal moves = 4*sqrt(2)
+    expect(result!.cost).toBeCloseTo(4 * Math.SQRT2, 5);
+    expect(result!.path).toHaveLength(5); // 5 nodes for 4 moves
+  });
+
+  it('revisits a node when a cheaper route is found', () => {
+    // Graph where node 2 is first reached expensively, then cheaply:
+    // 0 --(10)--> 2 --(1)--> 3
+    // 0 --(1)-->  1 --(1)--> 2
+    // Cheap: 0->1->2->3 (cost 3)
+    // Expensive first discovery of 2: 0->2 (cost 10)
+    const result = findPath<number>({
+      start: 0,
+      goal: 3,
+      neighbors: (n) => {
+        if (n === 0) return [1, 2];
+        if (n === 1) return [2];
+        if (n === 2) return [3];
+        return [];
+      },
+      cost: (from, to) => {
+        if (from === 0 && to === 2) return 10;
+        return 1;
+      },
+      heuristic: () => 0,
+      hash: (n) => n,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.path).toEqual([0, 1, 2, 3]);
+    expect(result!.cost).toBe(3);
+  });
 });
