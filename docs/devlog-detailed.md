@@ -239,3 +239,11 @@
 **Files changed:** README.md, CLAUDE.md, docs/tutorials/getting-started.md (new), docs/tutorials/building-a-game.md (new)
 **Reasoning:** User requested better guidance for humans and AI agents learning to use the engine. Tutorials demonstrate real usage patterns; API reference provides complete method listing; CLAUDE.md rules ensure docs stay current as the engine evolves.
 **Notes:** Tutorials are not executable code — they are documentation showing patterns. The building-a-game tutorial covers a colony survival sim that exercises all 11 engine features.
+
+## [2026-04-06 15:45, UTC] — Client protocol: ClientAdapter with typed messages
+
+**Action:** Implemented transport-agnostic client protocol via subagent-driven development (3 tasks). Created src/client-adapter.ts with GameEvent, ServerMessage, ClientMessage types and ClientAdapter class (connect/disconnect/handleMessage). Created tests/client-adapter.test.ts with 9 tests. Updated ARCHITECTURE.md, ROADMAP.md, and README.md. Each task passed spec compliance and code quality review.
+**Result:** Success — 9 new tests, 207 total pass, lint and typecheck clean. Client protocol moved from Planned to Built in roadmap. All planned features now complete.
+**Files changed:** src/client-adapter.ts (new), tests/client-adapter.test.ts (new), docs/ARCHITECTURE.md, docs/ROADMAP.md, README.md
+**Reasoning:** Last remaining roadmap item. ClientAdapter bridges World API to typed messages via a send callback, allowing any transport (WebSocket, postMessage, stdin/stdout) to be wired by the consumer. One deviation from spec: removed unused TCommandMap generic from ServerMessage to satisfy ESLint.
+**Notes:** No World changes — ClientAdapter uses only the public API (serialize, onDiff/offDiff, getEvents, submit). handleMessage works whether or not connect() has been called (commands and snapshots don't require streaming connection).
