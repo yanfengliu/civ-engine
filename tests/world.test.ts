@@ -268,4 +268,75 @@ describe('World', () => {
     world.registerHandler('move', () => {});
     expect(world.submit('move', { x: 1, y: 2 })).toBe(false);
   });
+
+  it('handler runs on step and receives correct data', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const received: Array<{ x: number; y: number }> = [];
+    world.registerHandler('move', (data) => received.push(data));
+    world.submit('move', { x: 3, y: 4 });
+    world.step();
+    expect(received).toEqual([{ x: 3, y: 4 }]);
+  });
+
+  it('handler can emit events and modify components', () => {
+    type Events = { moved: { entityId: number } };
+    type Cmds = { move: { entityId: number; x: number; y: number } };
+    const world = new World<Events, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.addComponent(id, 'position', { x: 0, y: 0 });
+
+    world.registerHandler('move', (data, w) => {
+      const pos = w.getComponent<{ x: number; y: number }>(
+        data.entityId,
+        'position',
+      )!;
+      pos.x = data.x;
+      pos.y = data.y;
+      w.emit('moved', { entityId: data.entityId });
+    });
+
+    world.submit('move', { entityId: id, x: 5, y: 5 });
+    world.step();
+
+    expect(world.getComponent(id, 'position')).toEqual({ x: 5, y: 5 });
+    expect(world.getEvents()).toEqual([
+      { type: 'moved', data: { entityId: id } },
+    ]);
+  });
+
+  it('throws when registering duplicate handler', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', () => {});
+    expect(() => world.registerHandler('move', () => {})).toThrow(
+      "Handler already registered for command 'move'",
+    );
+  });
+
+  it('throws when no handler registered at drain time', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+    expect(() => world.step()).toThrow(
+      "No handler registered for command 'move'",
+    );
+  });
 });

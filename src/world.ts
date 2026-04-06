@@ -197,8 +197,22 @@ export class World<
     return this.gameLoop.tick;
   }
 
+  private processCommands(): void {
+    const commands = this.commandQueue.drain();
+    for (const command of commands) {
+      const handler = this.handlers.get(command.type);
+      if (!handler) {
+        throw new Error(
+          `No handler registered for command '${String(command.type)}'`,
+        );
+      }
+      handler(command.data as never, this);
+    }
+  }
+
   private executeTick(): void {
     this.eventBus.clear();
+    this.processCommands();
     this.syncSpatialIndex();
     for (const system of this.systems) {
       system(this);
