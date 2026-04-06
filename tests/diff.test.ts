@@ -80,4 +80,55 @@ describe('State Diff', () => {
     expect(diff.components['health'].set).toEqual([]);
     expect(diff.components['health'].removed).toEqual([e]);
   });
+
+  it('onDiff callback fires each tick with correct diff', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+
+    const diffs: Array<{ tick: number }> = [];
+    world.onDiff((diff) => diffs.push({ tick: diff.tick }));
+
+    world.step();
+    world.step();
+    world.step();
+
+    expect(diffs).toEqual([{ tick: 1 }, { tick: 2 }, { tick: 3 }]);
+  });
+
+  it('offDiff removes the callback', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const diffs: number[] = [];
+    const fn = (diff: { tick: number }) => diffs.push(diff.tick);
+    world.onDiff(fn);
+
+    world.step();
+    world.offDiff(fn);
+    world.step();
+
+    expect(diffs).toEqual([1]);
+  });
+
+  it('command handler mutations appear in diff', () => {
+    type Cmds = { heal: { entityId: number; amount: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerComponent<{ hp: number }>('health');
+    const e = world.createEntity();
+    world.addComponent(e, 'health', { hp: 50 });
+    world.step(); // clear pre-tick dirty
+
+    world.registerHandler('heal', (data, w) => {
+      const hp = w.getComponent<{ hp: number }>(data.entityId, 'health')!;
+      hp.hp += data.amount;
+      w.addComponent(data.entityId, 'health', hp);
+    });
+    world.submit('heal', { entityId: e, amount: 30 });
+    world.step();
+
+    const diff = world.getDiff()!;
+    expect(diff.components['health'].set).toEqual([[e, { hp: 80 }]]);
+  });
 });
