@@ -212,6 +212,44 @@ export class World<
     };
   }
 
+  static deserialize<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  >(
+    snapshot: WorldSnapshot,
+    systems?: System<TEventMap, TCommandMap>[],
+  ): World<TEventMap, TCommandMap> {
+    if (snapshot.version !== 1) {
+      throw new Error(`Unsupported snapshot version: ${snapshot.version}`);
+    }
+    if (
+      snapshot.entities.generations.length !== snapshot.entities.alive.length
+    ) {
+      throw new Error('Invalid entity state: array length mismatch');
+    }
+
+    const world = new World<TEventMap, TCommandMap>(snapshot.config);
+    world.entityManager = EntityManager.fromState(snapshot.entities);
+
+    world.componentStores.clear();
+    for (const [key, entries] of Object.entries(snapshot.components)) {
+      world.componentStores.set(
+        key,
+        ComponentStore.fromEntries(entries as Array<[number, unknown]>),
+      );
+    }
+
+    world.gameLoop.setTick(snapshot.tick);
+
+    if (systems) {
+      for (const system of systems) {
+        world.systems.push(system);
+      }
+    }
+
+    return world;
+  }
+
   get tick(): number {
     return this.gameLoop.tick;
   }
