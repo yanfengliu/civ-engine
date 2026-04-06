@@ -26,3 +26,4 @@
 - 2026-04-06: Docs updated — clarified AI-native engine scope; removed game-specific planned features from roadmap; added map infrastructure design spec.
 - 2026-04-06: Map infrastructure complete — noise.ts (simplex + octave), cellular.ts (CellGrid + stepCellGrid), map-gen.ts (MapGenerator interface + createTileGrid); all standalone utilities, no World changes; 20 new tests, 154 total pass, lint and typecheck clean.
 - 2026-04-06: Configurability audit — made positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets, createTileGrid positionKey all configurable with backward-compatible defaults; 10 new tests, 164 total pass.
+- 2026-04-06: Pathfinding module complete — generic A* findPath<T> with internal min-heap, PathConfig/PathResult types, maxCost/maxIterations/trackExplored options; standalone utility with no World dependency; 11 new tests, 175 total pass, lint and typecheck clean.

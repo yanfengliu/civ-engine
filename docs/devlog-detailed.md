@@ -199,3 +199,11 @@
 **Files changed:** src/types.ts, src/world.ts, src/game-loop.ts, src/spatial-grid.ts, src/cellular.ts, src/map-gen.ts, tests/world.test.ts, tests/serializer.test.ts, tests/spatial-grid.test.ts, tests/cellular.test.ts, tests/map-gen.test.ts, README.md, docs/ARCHITECTURE.md
 **Reasoning:** A general-purpose engine should not force naming conventions or limit neighbor topologies. All defaults are sensible but every hardcoded choice now has an override.
 **Notes:** ARCHITECTURE.md updated.
+
+## [2026-04-06 12:31, UTC] — Add generic A* pathfinding module
+
+**Action:** Implemented `src/pathfinding.ts` with `findPath<T>` — a generic A* search with internal binary min-heap, `PathConfig<T>` interface (neighbors, cost, heuristic, hash callbacks), and `PathResult<T>` output (path, cost, optional explored count). Created `tests/pathfinding.test.ts` with 11 tests covering: shortest path on 3x3 grid, disconnected graph returns null, routes around blocked cells, impassable Infinity-cost edges, maxCost guard, maxIterations guard, explored tracking, heuristic guidance (fewer explored with Manhattan vs zero), custom object nodes, and start-equals-goal early exit.
+**Result:** Success — 11 new tests, 175 total pass, lint and typecheck clean.
+**Files changed:** src/pathfinding.ts (new), tests/pathfinding.test.ts (new)
+**Reasoning:** Standalone module with no World or engine dependencies; game code wires topology via callbacks. Internal min-heap avoids external dependencies (zero runtime deps policy). Generic type parameter supports any node type via hash function.
+**Notes:** Module is not integrated into World — it is a standalone utility like noise.ts/cellular.ts/map-gen.ts. ARCHITECTURE.md update deferred until pathfinding integration is designed in a subsequent task.
