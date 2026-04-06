@@ -339,4 +339,60 @@ describe('World', () => {
       "No handler registered for command 'move'",
     );
   });
+
+  it('commands submitted by a system during tick are processed next tick', () => {
+    type Cmds = { ping: { n: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const handled: number[] = [];
+    world.registerHandler('ping', (data) => handled.push(data.n));
+
+    // System submits a command during its tick
+    world.registerSystem((w) => {
+      if (w.tick === 0) {
+        w.submit('ping', { n: 42 });
+      }
+    });
+
+    world.step(); // tick 0: system submits, but drain already happened
+    expect(handled).toEqual([]);
+
+    world.step(); // tick 1: command from previous tick is processed
+    expect(handled).toEqual([42]);
+  });
+
+  it('commands drain before spatial sync so handler position changes appear in grid', () => {
+    type Cmds = { spawn: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+
+    let spawnedId: number | undefined;
+    world.registerHandler('spawn', (data, w) => {
+      spawnedId = w.createEntity();
+      w.addComponent(spawnedId, 'position', { x: data.x, y: data.y });
+    });
+
+    // System checks grid — entity should be there because spatial sync
+    // runs after processCommands
+    let foundInGrid = false;
+    world.registerSystem((w) => {
+      if (spawnedId !== undefined) {
+        const cell = w.grid.getAt(3, 4);
+        foundInGrid = cell !== null && cell.has(spawnedId);
+      }
+    });
+
+    world.submit('spawn', { x: 3, y: 4 });
+    world.step();
+
+    expect(spawnedId).toBeDefined();
+    expect(foundInGrid).toBe(true);
+  });
 });
