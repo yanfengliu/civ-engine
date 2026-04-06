@@ -6,15 +6,16 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 
 ## Component Map
 
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| World | `src/world.ts` | Top-level API, owns all subsystems, system pipeline, spatial index sync |
-| EntityManager | `src/entity-manager.ts` | Entity creation/destruction, ID recycling via free-list, generation counters |
-| ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection |
-| SpatialGrid | `src/spatial-grid.ts` | 2D flat array grid, lazy Set allocation per cell, 4-directional neighbor queries |
-| GameLoop | `src/game-loop.ts` | Fixed-timestep loop (60 TPS default), step() for testing, start()/stop() for real-time |
-| EventBus | `src/event-bus.ts` | Typed pub/sub event bus, per-tick buffer, listener registry |
-| Types | `src/types.ts` | Shared type definitions (EntityId, Position, WorldConfig) |
+| Component      | File                     | Responsibility                                                                         |
+| -------------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| World          | `src/world.ts`           | Top-level API, owns all subsystems, system pipeline, spatial index sync                |
+| EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
+| ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
+| SpatialGrid    | `src/spatial-grid.ts`    | 2D flat array grid, lazy Set allocation per cell, 4-directional neighbor queries       |
+| GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop (60 TPS default), step() for testing, start()/stop() for real-time |
+| EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
+| CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
+| Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
 
@@ -23,6 +24,7 @@ World.step()
   -> GameLoop.step()
     -> World.executeTick()
       -> World.eventBus.clear()    [reset buffer from previous tick]
+      -> World.processCommands()   [drain queue, run handlers]
       -> World.syncSpatialIndex()  [sync grid with Position components]
       -> System A(world)           [user systems in registration order]
       -> System B(world)
@@ -53,31 +55,33 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **SpatialGrid** is synced automatically by World's internal spatial index routine. User systems should read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` but should not call `grid.insert/remove/move` directly.
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
+- **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 
 ## Technology Map
 
-| Technology | Purpose |
-|------------|---------|
-| TypeScript 5.7+ | Language (strict mode, ES2022, ESM, Node16 module resolution) |
-| Vitest 3 | Test framework |
-| ESLint 9 + typescript-eslint 8 | Linting (flat config) |
-| Node.js 18+ | Runtime |
+| Technology                     | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| TypeScript 5.7+                | Language (strict mode, ES2022, ESM, Node16 module resolution) |
+| Vitest 3                       | Test framework                                                |
+| ESLint 9 + typescript-eslint 8 | Linting (flat config)                                         |
+| Node.js 18+                    | Runtime                                                       |
 
 ## Key Architectural Decisions
 
-| # | Date | Decision | Rationale |
-|---|------|----------|-----------|
-| 1 | 2026-04-04 | Sparse arrays for component storage | Simple, O(1) lookup, sufficient for expected entity density |
-| 2 | 2026-04-04 | Fixed system pipeline (no scheduler) | Deterministic, easy to test and debug |
-| 3 | 2026-04-04 | Monolithic World object | Simple API surface, avoids premature decoupling |
-| 4 | 2026-04-04 | Generation counters for change detection | Minimal cost now, enables future diff/output layer |
-| 5 | 2026-04-04 | Zero runtime dependencies | Performance and simplicity for a game engine |
-| 6 | 2026-04-04 | Spatial index as internal World routine | Non-bypassable, invisible to user systems, runs before all systems |
-| 7 | 2026-04-04 | destroyEntity uses previousPositions for grid cleanup | Handles the case where position was mutated between ticks without stepping |
+| #   | Date       | Decision                                              | Rationale                                                                  |
+| --- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | 2026-04-04 | Sparse arrays for component storage                   | Simple, O(1) lookup, sufficient for expected entity density                |
+| 2   | 2026-04-04 | Fixed system pipeline (no scheduler)                  | Deterministic, easy to test and debug                                      |
+| 3   | 2026-04-04 | Monolithic World object                               | Simple API surface, avoids premature decoupling                            |
+| 4   | 2026-04-04 | Generation counters for change detection              | Minimal cost now, enables future diff/output layer                         |
+| 5   | 2026-04-04 | Zero runtime dependencies                             | Performance and simplicity for a game engine                               |
+| 6   | 2026-04-04 | Spatial index as internal World routine               | Non-bypassable, invisible to user systems, runs before all systems         |
+| 7   | 2026-04-04 | destroyEntity uses previousPositions for grid cleanup | Handles the case where position was mutated between ticks without stepping |
 
 ## Drift Log
 
-| Date | Change | Reason |
-|------|--------|--------|
-| 2026-04-04 | Initial architecture | Core engine foundation implementation |
-| 2026-04-05 | Added EventBus as World subsystem | System-to-system and engine-to-client event communication |
+| Date       | Change                                | Reason                                                           |
+| ---------- | ------------------------------------- | ---------------------------------------------------------------- |
+| 2026-04-04 | Initial architecture                  | Core engine foundation implementation                            |
+| 2026-04-05 | Added EventBus as World subsystem     | System-to-system and engine-to-client event communication        |
+| 2026-04-05 | Added CommandQueue as World subsystem | Input command layer for player command validation and processing |
