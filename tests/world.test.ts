@@ -434,4 +434,57 @@ describe('World', () => {
     world.step();
     expect(world.tick).toBe(1);
   });
+
+  describe('getComponents', () => {
+    it('returns all requested components as a tuple', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      world.registerComponent<{ x: number; y: number }>('position');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 100 });
+      world.addComponent(id, 'position', { x: 5, y: 5 });
+
+      const [hp, pos] = world.getComponents<[{ hp: number }, { x: number; y: number }]>(
+        id, ['health', 'position']
+      );
+      expect(hp).toEqual({ hp: 100 });
+      expect(pos).toEqual({ x: 5, y: 5 });
+    });
+
+    it('returns undefined for missing components', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      world.registerComponent<{ x: number; y: number }>('position');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 50 });
+
+      const [hp, pos] = world.getComponents<[{ hp: number }, { x: number; y: number }]>(
+        id, ['health', 'position']
+      );
+      expect(hp).toEqual({ hp: 50 });
+      expect(pos).toBeUndefined();
+    });
+
+    it('returns all undefined for nonexistent entity', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      world.registerComponent<{ x: number; y: number }>('position');
+
+      const [hp, pos] = world.getComponents<[{ hp: number }, { x: number; y: number }]>(
+        999, ['health', 'position']
+      );
+      expect(hp).toBeUndefined();
+      expect(pos).toBeUndefined();
+    });
+
+    it('works with a single key', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 75 });
+
+      const [hp] = world.getComponents<[{ hp: number }]>(id, ['health']);
+      expect(hp).toEqual({ hp: 75 });
+    });
+  });
 });

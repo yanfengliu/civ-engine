@@ -14,6 +14,8 @@ export type System<
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > = (world: World<TEventMap, TCommandMap>) => void;
 
+type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
+
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
@@ -89,6 +91,16 @@ export class World<
       | ComponentStore<T>
       | undefined;
     return store?.get(entity);
+  }
+
+  getComponents<T extends unknown[]>(
+    entity: EntityId,
+    keys: string[],
+  ): ComponentTuple<T> {
+    return keys.map((key) => {
+      const store = this.componentStores.get(key);
+      return store?.get(entity);
+    }) as ComponentTuple<T>;
   }
 
   removeComponent(entity: EntityId, key: string): void {
