@@ -1,5 +1,6 @@
 import type { EntityId, Position, WorldConfig } from './types.js';
 import type { WorldSnapshot } from './serializer.js';
+import type { TickDiff } from './diff.js';
 import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
@@ -32,6 +33,8 @@ export class World<
     (data: never, world: World<TEventMap, TCommandMap>) => void
   >();
   readonly grid: SpatialGrid;
+  private currentDiff: TickDiff | null = null;
+  private diffListeners = new Set<(diff: TickDiff) => void>();
 
   constructor(config: WorldConfig) {
     this.entityManager = new EntityManager();
@@ -254,6 +257,18 @@ export class World<
     return this.gameLoop.tick;
   }
 
+  getDiff(): TickDiff | null {
+    return this.currentDiff;
+  }
+
+  onDiff(fn: (diff: TickDiff) => void): void {
+    this.diffListeners.add(fn);
+  }
+
+  offDiff(fn: (diff: TickDiff) => void): void {
+    this.diffListeners.delete(fn);
+  }
+
   private processCommands(): void {
     const commands = this.commandQueue.drain();
     for (const command of commands) {
@@ -267,12 +282,43 @@ export class World<
     }
   }
 
+  private clearComponentDirty(): void {
+    for (const store of this.componentStores.values()) {
+      store.clearDirty();
+    }
+  }
+
+  private buildDiff(): void {
+    const entities = this.entityManager.getDirty();
+    const components: Record<
+      string,
+      { set: Array<[EntityId, unknown]>; removed: EntityId[] }
+    > = {};
+    for (const [key, store] of this.componentStores) {
+      const dirty = store.getDirty();
+      if (dirty.set.length > 0 || dirty.removed.length > 0) {
+        components[key] = dirty;
+      }
+    }
+    this.currentDiff = {
+      tick: this.gameLoop.tick + 1,
+      entities,
+      components,
+    };
+  }
+
   private executeTick(): void {
     this.eventBus.clear();
+    this.entityManager.clearDirty();
+    this.clearComponentDirty();
     this.processCommands();
     this.syncSpatialIndex();
     for (const system of this.systems) {
       system(this);
+    }
+    this.buildDiff();
+    for (const listener of this.diffListeners) {
+      listener(this.currentDiff!);
     }
   }
 
