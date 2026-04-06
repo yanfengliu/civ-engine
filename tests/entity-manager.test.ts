@@ -51,4 +51,34 @@ describe('EntityManager', () => {
     em.destroy(id);
     expect(em.getGeneration(id)).toBe(1);
   });
+
+  it('getState returns internal state as copies', () => {
+    const em = new EntityManager();
+    em.create(); // id 0
+    em.create(); // id 1
+    em.destroy(0);
+    const state = em.getState();
+    expect(state.generations).toEqual([1, 0]);
+    expect(state.alive).toEqual([false, true]);
+    expect(state.freeList).toEqual([0]);
+    // Verify they are copies, not references
+    state.alive[1] = false;
+    expect(em.isAlive(1)).toBe(true);
+  });
+
+  it('fromState restores entity manager and resumes correctly', () => {
+    const em = new EntityManager();
+    em.create(); // id 0
+    em.create(); // id 1
+    em.destroy(0);
+    const state = em.getState();
+
+    const restored = EntityManager.fromState(state);
+    expect(restored.isAlive(0)).toBe(false);
+    expect(restored.isAlive(1)).toBe(true);
+    expect(restored.getGeneration(0)).toBe(1);
+    // Creating a new entity should reuse the free-listed id 0
+    const recycled = restored.create();
+    expect(recycled).toBe(0);
+  });
 });

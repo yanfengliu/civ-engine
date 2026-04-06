@@ -31,4 +31,28 @@ export class EntityManager {
   getGeneration(id: EntityId): number {
     return this.generations[id] ?? 0;
   }
+
+  getState(): {
+    generations: number[];
+    alive: boolean[];
+    freeList: number[];
+  } {
+    return {
+      generations: [...this.generations],
+      alive: [...this.alive],
+      freeList: [...this.freeList],
+    };
+  }
+
+  static fromState(state: {
+    generations: number[];
+    alive: boolean[];
+    freeList: number[];
+  }): EntityManager {
+    const em = new EntityManager();
+    em.generations = [...state.generations];
+    em.alive = [...state.alive];
+    em.freeList = [...state.freeList];
+    return em;
+  }
 }
