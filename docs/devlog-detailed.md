@@ -127,3 +127,19 @@
 **Files changed:** src/world.ts, tests/world.test.ts
 **Reasoning:** Ordering `processCommands()` before `syncSpatialIndex()` ensures entity mutations made by command handlers (e.g. position changes) are picked up by spatial sync in the same tick. The error on missing handler is a safety guard that surfaces bugs early rather than silently dropping commands.
 **Notes:** The "throws when registering duplicate handler" test was already passing (registerHandler guard existed from Task 3); only the 3 execution tests were truly new failures.
+
+## [2026-04-05 20:30, UTC] — Tick-boundary and spatial sync ordering tests
+
+**Action:** Added 2 integration tests verifying command tick-boundary behavior and processCommands-before-syncSpatialIndex ordering.
+**Result:** Success — 73 total tests pass, lint clean.
+**Files changed:** tests/world.test.ts
+**Reasoning:** These tests lock in two critical ordering guarantees: (1) commands submitted by systems during a tick are not processed until the next tick, (2) handler-created entities with positions appear in the spatial grid by the time systems run.
+**Notes:** No implementation changes; test-only task.
+
+## [2026-04-05 20:35, UTC] — Architecture and roadmap docs updated for input command layer
+
+**Action:** Updated ARCHITECTURE.md (component map, data flow, boundaries, drift log) and ROADMAP.md (moved input command layer from Planned to Built).
+**Result:** Success — docs reflect current architecture.
+**Files changed:** docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** Architecture maintenance per CLAUDE.md rules — structural changes require doc updates.
+**Notes:** Input command layer feature is now complete: CommandQueue buffer, World integration (submit/validate/handle/process), 14 new tests (73 total), all docs updated.
