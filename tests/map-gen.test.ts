@@ -30,6 +30,17 @@ describe('createTileGrid', () => {
     const world = new World({ gridWidth: 4, gridHeight: 3, tps: 60 });
     expect(() => createTileGrid(world)).toThrow();
   });
+
+  it('uses custom positionKey when provided', () => {
+    const world = new World({ gridWidth: 3, gridHeight: 2, tps: 60, positionKey: 'coords' });
+    world.registerComponent<Position>('coords');
+    const tiles = createTileGrid(world, 'coords');
+
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]).toHaveLength(3);
+    const pos = world.getComponent<Position>(tiles[1][2], 'coords');
+    expect(pos).toEqual({ x: 2, y: 1 });
+  });
 });
 
 describe('MapGenerator interface', () => {
