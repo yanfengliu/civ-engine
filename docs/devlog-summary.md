@@ -23,3 +23,5 @@
 - 2026-04-05: State serialization complete — WorldSnapshot type, World.serialize/deserialize, EntityManager getState/fromState, ComponentStore entries/fromEntries, GameLoop setTick; JSON round-trip tested; 13 new tests, 86 total pass, lint and typecheck clean.
 - 2026-04-05: State diff output complete — TickDiff type, dirty tracking on ComponentStore/EntityManager, World.getDiff/onDiff/offDiff; 16 new tests, 102 total pass, lint and typecheck clean.
 - 2026-04-05: Resource system complete — ResourceStore with pools, rates, transfers; World integration with 13 proxy methods; TickDiff resources field; 32 new tests, 134 total pass, lint and typecheck clean.
+- 2026-04-06: Docs updated — clarified AI-native engine scope; removed game-specific planned features from roadmap; added map infrastructure design spec.
+- 2026-04-06: Map infrastructure complete — noise.ts (simplex + octave), cellular.ts (CellGrid + stepCellGrid), map-gen.ts (MapGenerator interface + createTileGrid); all standalone utilities, no World changes; 20 new tests, 154 total pass, lint and typecheck clean.

@@ -175,3 +175,19 @@
 **Files changed:** src/resource-store.ts (new), src/diff.ts (modified), src/world.ts (modified), tests/resource-store.test.ts (new), tests/resource.test.ts (new), docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** Dedicated ResourceStore chosen over component-based approach for clean boundaries and first-class transfer support. Built-in system runs after user systems so manual adjustments take effect before rate processing.
 **Notes:** Resource rates processed in order: production, consumption, transfers. Transfers compete for available resources in registration order. ResourcePool type shared between resource-store.ts and diff.ts via re-export.
+
+## [2026-04-06 10:00, UTC] — Docs: clarify AI-native engine scope
+
+**Action:** Updated README, ARCHITECTURE.md, ROADMAP.md to clarify civ-engine is a general-purpose, AI-native game engine. Removed game-specific "Planned — Game Systems" section from roadmap. Added AI-native definition. Committed map infrastructure design spec.
+**Result:** Success — docs consistently frame the project as an engine, not a game.
+**Files changed:** README.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/superpowers/specs/2026-04-06-map-infrastructure-design.md (new)
+**Reasoning:** User clarified that game-specific logic (combat, diplomacy, tech trees, cities, AI) belongs in a separate game project, not the engine.
+**Notes:** ARCHITECTURE.md updated.
+
+## [2026-04-06 10:30, UTC] — Map infrastructure implementation
+
+**Action:** Implemented three standalone map generation utility modules: seedable 2D simplex noise with octave layering (noise.ts), cellular automata with immutable CellGrid stepping (cellular.ts), and MapGenerator interface with createTileGrid bulk tile-entity helper (map-gen.ts). All modules are standalone — no changes to World.
+**Result:** Success — 20 new tests (9 noise + 8 cellular + 3 map-gen), 154 total pass, lint and typecheck clean.
+**Files changed:** src/noise.ts (new), src/cellular.ts (new), src/map-gen.ts (new), tests/noise.test.ts (new), tests/cellular.test.ts (new), tests/map-gen.test.ts (new), docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** Standalone utility approach chosen over World-integrated subsystem to keep the engine lean and composable. Game code imports and composes these primitives as needed.
+**Notes:** Noise uses mulberry32 PRNG for seeding, standard 2D simplex algorithm, output clamped to [-1,1]. Cellular automata uses Moore neighborhood (8-directional) with boundary omission. createTileGrid validates position component registration before creating entities. ARCHITECTURE.md updated.
