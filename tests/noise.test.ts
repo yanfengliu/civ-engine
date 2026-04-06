@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createNoise2D } from '../src/noise.js';
+import { createNoise2D, octaveNoise2D } from '../src/noise.js';
 
 describe('createNoise2D', () => {
   it('returns a function', () => {
@@ -46,5 +46,41 @@ describe('createNoise2D', () => {
       }
     }
     expect(values.size).toBeGreaterThan(1);
+  });
+});
+
+describe('octaveNoise2D', () => {
+  it('output is always in [-1, 1]', () => {
+    const noise = createNoise2D(42);
+    for (let x = -20; x <= 20; x += 1.3) {
+      for (let y = -20; y <= 20; y += 1.3) {
+        const v = octaveNoise2D(noise, x, y, 6);
+        expect(v).toBeGreaterThanOrEqual(-1);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('result differs from single-octave noise', () => {
+    const noise = createNoise2D(42);
+    let same = 0;
+    for (let i = 0; i < 10; i++) {
+      const x = i * 1.1;
+      const y = i * 0.7;
+      if (noise(x, y) === octaveNoise2D(noise, x, y, 4)) same++;
+    }
+    expect(same).toBeLessThan(10);
+  });
+
+  it('respects persistence and lacunarity parameters', () => {
+    const noise = createNoise2D(42);
+    const a = octaveNoise2D(noise, 5, 5, 4, 0.3, 3.0);
+    const b = octaveNoise2D(noise, 5, 5, 4, 0.7, 1.5);
+    expect(a).not.toBe(b);
+  });
+
+  it('single octave matches base noise', () => {
+    const noise = createNoise2D(42);
+    expect(octaveNoise2D(noise, 3.5, 7.2, 1)).toBe(noise(3.5, 7.2));
   });
 });

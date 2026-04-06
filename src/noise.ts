@@ -90,3 +90,26 @@ export function createNoise2D(seed: number): (x: number, y: number) => number {
     return Math.max(-1, Math.min(1, raw));
   };
 }
+
+export function octaveNoise2D(
+  noise: (x: number, y: number) => number,
+  x: number,
+  y: number,
+  octaves: number,
+  persistence = 0.5,
+  lacunarity = 2.0,
+): number {
+  let total = 0;
+  let amplitude = 1;
+  let frequency = 1;
+  let maxAmplitude = 0;
+
+  for (let i = 0; i < octaves; i++) {
+    total += noise(x * frequency, y * frequency) * amplitude;
+    maxAmplitude += amplitude;
+    amplitude *= persistence;
+    frequency *= lacunarity;
+  }
+
+  return total / maxAmplitude;
+}
