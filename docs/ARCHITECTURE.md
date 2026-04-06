@@ -22,6 +22,9 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
+| Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
+| Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
+| MapGen         | `src/map-gen.ts`         | MapGenerator interface, createTileGrid bulk tile-entity helper                         |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
@@ -72,6 +75,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
+- **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
 
 ## Technology Map
 
@@ -104,3 +108,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-05 | Added state serialization             | JSON snapshot save/load via World.serialize() and World.deserialize() |
 | 2026-04-05 | Added state diff output               | Per-tick dirty tracking and TickDiff via getDiff/onDiff/offDiff       |
 | 2026-04-05 | Added resource system                  | ResourceStore with pools, rates, transfers, diff integration          |
+| 2026-04-06 | Added map infrastructure utilities     | Standalone noise, cellular automata, and tile-creation primitives for map generation |

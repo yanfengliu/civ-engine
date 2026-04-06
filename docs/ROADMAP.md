@@ -19,6 +19,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Query system             | `world.ts`           | 2026-04-04 | Multi-component queries, smallest-store optimization           |
 | State diff output        | `diff.ts`            | 2026-04-05 | Per-tick dirty tracking, getDiff/onDiff/offDiff, TickDiff type |
 | Resource system          | `resource-store.ts`  | 2026-04-05 | Pools, production/consumption rates, transfers, diff integration |
+| Map infrastructure       | `noise.ts`, `cellular.ts`, `map-gen.ts` | 2026-04-06 | Simplex noise, cellular automata, MapGenerator interface, createTileGrid |
 
 ## In Progress
 
@@ -28,7 +29,6 @@ None currently.
 
 | Feature                 | Priority | Description                                                                                  |
 | ----------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| Map infrastructure      | Medium   | Tile entity creation, MapGenerator interface, composable noise/automata utilities             |
 | Pathfinding             | Medium   | Generic A* over the spatial grid with user-defined cost functions                             |
 | Turn / phase management | Medium   | Generic turn structure and phase pipeline (game defines its own phases)                       |
 
