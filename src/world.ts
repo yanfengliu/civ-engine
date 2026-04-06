@@ -135,6 +135,26 @@ export class World<
     this.gameLoop.stop();
   }
 
+  setSpeed(multiplier: number): void {
+    this.gameLoop.setSpeed(multiplier);
+  }
+
+  getSpeed(): number {
+    return this.gameLoop.getSpeed();
+  }
+
+  pause(): void {
+    this.gameLoop.pause();
+  }
+
+  resume(): void {
+    this.gameLoop.resume();
+  }
+
+  get isPaused(): boolean {
+    return this.gameLoop.isPaused;
+  }
+
   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
     this.eventBus.emit(type, data);
   }

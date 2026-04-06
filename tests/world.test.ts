@@ -411,4 +411,27 @@ describe('World', () => {
     expect(spawnedId).toBeDefined();
     expect(foundInGrid).toBe(true);
   });
+
+  it('setSpeed and getSpeed proxy to game loop', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    expect(world.getSpeed()).toBe(1);
+    world.setSpeed(3);
+    expect(world.getSpeed()).toBe(3);
+  });
+
+  it('pause, resume, and isPaused proxy to game loop', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    expect(world.isPaused).toBe(false);
+    world.pause();
+    expect(world.isPaused).toBe(true);
+    world.resume();
+    expect(world.isPaused).toBe(false);
+  });
+
+  it('step works while paused', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.pause();
+    world.step();
+    expect(world.tick).toBe(1);
+  });
 });
