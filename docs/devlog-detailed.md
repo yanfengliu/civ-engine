@@ -110,4 +110,12 @@
 **Result:** Success — 4 new tests pass; 63 total pass, lint clean.
 **Files changed:** src/command-queue.ts (new), tests/command-queue.test.ts (new)
 **Reasoning:** Standalone typed buffer class following the same subsystem pattern as EventBus. World will own it as a private field in a later task.
+
+## [2026-04-05 20:13, UTC] — World: submit, registerValidator, registerHandler
+
+**Action:** Added CommandQueue import, private commandQueue/validators/handlers fields, and submit/registerValidator/registerHandler methods to World; added 4 new tests following TDD (tests-first, verified failing, then implemented).
+**Result:** Success — 4 new tests pass; 67 total pass, lint and typecheck clean.
+**Files changed:** src/world.ts, tests/world.test.ts
+**Reasoning:** submit validates data through all registered validator functions (short-circuit on first failure), then pushes to commandQueue only if all pass. registerValidator appends to a per-type array allowing multiple validators. registerHandler stores a single handler per type, throwing on duplicate registration. Handlers are stored but not called yet — that is Task 4's responsibility.
+**Notes:** Used `never` cast in private map types to avoid excessive generic propagation while keeping public APIs fully typed.
 **Notes:** drain() clears the internal buffer using `this.buffer.length = 0` (avoids reallocation). push uses a constrained generic `K extends keyof TCommandMap` for precise type inference per command.
