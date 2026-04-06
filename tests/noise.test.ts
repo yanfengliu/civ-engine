@@ -1,0 +1,50 @@
+import { describe, it, expect } from 'vitest';
+import { createNoise2D } from '../src/noise.js';
+
+describe('createNoise2D', () => {
+  it('returns a function', () => {
+    const noise = createNoise2D(42);
+    expect(typeof noise).toBe('function');
+  });
+
+  it('is deterministic — same seed produces same values', () => {
+    const a = createNoise2D(42);
+    const b = createNoise2D(42);
+    expect(a(1.5, 2.3)).toBe(b(1.5, 2.3));
+    expect(a(0, 0)).toBe(b(0, 0));
+    expect(a(100.7, -50.2)).toBe(b(100.7, -50.2));
+  });
+
+  it('different seeds produce different values', () => {
+    const a = createNoise2D(1);
+    const b = createNoise2D(2);
+    const sameCount = [
+      a(1, 1) === b(1, 1),
+      a(5.5, 3.2) === b(5.5, 3.2),
+      a(10, 20) === b(10, 20),
+    ].filter(Boolean).length;
+    expect(sameCount).toBeLessThan(3);
+  });
+
+  it('output is always in [-1, 1]', () => {
+    const noise = createNoise2D(123);
+    for (let x = -50; x <= 50; x += 0.73) {
+      for (let y = -50; y <= 50; y += 0.73) {
+        const v = noise(x, y);
+        expect(v).toBeGreaterThanOrEqual(-1);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('nearby coordinates produce different values (not degenerate)', () => {
+    const noise = createNoise2D(99);
+    const values = new Set<number>();
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        values.add(noise(x * 0.5, y * 0.5));
+      }
+    }
+    expect(values.size).toBeGreaterThan(1);
+  });
+});
