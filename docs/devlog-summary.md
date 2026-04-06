@@ -21,3 +21,4 @@
 - 2026-04-05: Tick-boundary and spatial sync ordering tests added — 2 new tests, 73 total pass.
 - 2026-04-05: Architecture and roadmap docs updated for input command layer — feature complete.
 - 2026-04-05: State serialization complete — WorldSnapshot type, World.serialize/deserialize, EntityManager getState/fromState, ComponentStore entries/fromEntries, GameLoop setTick; JSON round-trip tested; 13 new tests, 86 total pass, lint and typecheck clean.
+- 2026-04-05: State diff output complete — TickDiff type, dirty tracking on ComponentStore/EntityManager, World.getDiff/onDiff/offDiff; 16 new tests, 102 total pass, lint and typecheck clean.

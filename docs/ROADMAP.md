@@ -15,6 +15,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Input command layer      | `command-queue.ts`   | 2026-04-05 | Typed buffer, validators, handlers, tick-start processing      |
 | State serialization      | `serializer.ts`      | 2026-04-05 | JSON snapshot, World.serialize/deserialize, round-trip tested  |
 | Query system             | `world.ts`           | 2026-04-04 | Multi-component queries, smallest-store optimization           |
+| State diff output        | `diff.ts`            | 2026-04-05 | Per-tick dirty tracking, getDiff/onDiff/offDiff, TickDiff type |
 
 ## In Progress
 
@@ -44,7 +45,6 @@ None currently.
 
 | Feature           | Priority | Description                                                                      |
 | ----------------- | -------- | -------------------------------------------------------------------------------- |
-| State diff output | High     | Emit minimal change sets each tick for client consumption                        |
 | Client protocol   | Medium   | Define the wire format between engine and client (JSON, binary, WebSocket, etc.) |
 | Client (renderer) | Future   | Separate project — could be web (Canvas/WebGL), terminal, or Godot               |
 | Sound events      | Future   | Engine emits sound cue events; client maps them to audio                         |

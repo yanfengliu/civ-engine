@@ -16,6 +16,7 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
 | Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
+| Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
@@ -24,12 +25,16 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 World.step()
   -> GameLoop.step()
     -> World.executeTick()
-      -> World.eventBus.clear()    [reset buffer from previous tick]
-      -> World.processCommands()   [drain queue, run handlers]
-      -> World.syncSpatialIndex()  [sync grid with Position components]
-      -> System A(world)           [user systems in registration order]
+      -> World.eventBus.clear()       [reset buffer from previous tick]
+      -> World.entityManager.clearDirty()
+      -> World.clearComponentDirty()   [clear dirty flags on all stores]
+      -> World.processCommands()       [drain queue, run handlers]
+      -> World.syncSpatialIndex()      [sync grid with Position components]
+      -> System A(world)               [user systems in registration order]
       -> System B(world)
       -> ...
+      -> World.buildDiff()             [collect dirty state into TickDiff]
+      -> notify onDiff listeners
     -> tick++
 ```
 
@@ -58,6 +63,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
+- **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction and component mutations per tick.
 
 ## Technology Map
 
@@ -88,3 +94,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-05 | Added EventBus as World subsystem     | System-to-system and engine-to-client event communication        |
 | 2026-04-05 | Added CommandQueue as World subsystem | Input command layer for player command validation and processing |
 | 2026-04-05 | Added state serialization             | JSON snapshot save/load via World.serialize() and World.deserialize() |
+| 2026-04-05 | Added state diff output               | Per-tick dirty tracking and TickDiff via getDiff/onDiff/offDiff       |

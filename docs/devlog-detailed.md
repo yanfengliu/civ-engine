@@ -159,3 +159,11 @@
 **Files changed:** src/entity-manager.ts, tests/entity-manager.test.ts
 **Reasoning:** Dirty tracking on EntityManager mirrors the pattern established in ComponentStore (Task 1), enabling World to collect a per-tick diff of entity lifecycle events for State Diff Output.
 **Notes:** getDirty returns copies so callers cannot mutate internal state. clearDirty uses `.length = 0` to truncate in place rather than reassigning arrays.
+
+## [2026-04-05 23:30, UTC] — State diff output
+
+**Action:** Implemented per-tick dirty tracking on ComponentStore (dirtySet, removedSet, getDirty, clearDirty) and EntityManager (createdThisTick, destroyedThisTick, getDirty, clearDirty). Created TickDiff type in src/diff.ts. Added getDiff, onDiff, offDiff, buildDiff, clearComponentDirty to World. Updated executeTick to clear dirty state at tick start and build diff at tick end.
+**Result:** Success — 16 new tests (4 component-store, 3 entity-manager, 9 diff integration), 102 total pass, lint and typecheck clean.
+**Files changed:** src/diff.ts (new), src/component-store.ts, src/entity-manager.ts, src/world.ts, tests/diff.test.ts (new), tests/component-store.test.ts, tests/entity-manager.test.ts, docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** State diff output enables efficient client sync without full-state polling. Dirty-flag approach chosen for O(1) mutation tracking with zero scanning overhead. buildDiff uses tick+1 because GameLoop increments tick after onTick returns.
+**Notes:** Diffs only include stores that had changes (empty stores omitted from components record). getDiff returns null before first tick. onDiff listeners fire synchronously at tick end.
