@@ -257,6 +257,8 @@ docs/
 | `submit(type, data)`             | `boolean`                    | Submit a command (validated, queued)      |
 | `registerValidator(type, fn)`    | `void`                       | Add a validator for a command type       |
 | `registerHandler(type, fn)`      | `void`                       | Set the handler for a command type       |
+| `serialize()`                    | `WorldSnapshot`              | Capture current state as JSON snapshot   |
+| `World.deserialize(snapshot)`    | `World`                      | Restore world from snapshot (static)     |
 | `grid`                           | `SpatialGrid`                | Spatial index (read-only access)         |
 
 ### SpatialGrid Methods
