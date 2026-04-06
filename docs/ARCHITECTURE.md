@@ -17,6 +17,7 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
 | Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
+| ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
@@ -33,6 +34,7 @@ World.step()
       -> System A(world)               [user systems in registration order]
       -> System B(world)
       -> ...
+      -> World.resourceStore.processTick()  [production, consumption, transfers]
       -> World.buildDiff()             [collect dirty state into TickDiff]
       -> notify onDiff listeners
     -> tick++
@@ -51,6 +53,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 `destroyEntity(id)` performs immediate cleanup:
 - Removes entity from grid using `previousPositions` (not current component data, which may have been mutated since last sync)
 - Removes all components from all stores
+- Removes all resource pools, rates, and transfers for the entity
 - Marks entity as dead in EntityManager (ID available for recycling)
 
 ## Boundaries
@@ -63,7 +66,8 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
-- **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction and component mutations per tick.
+- **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
+- **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 
 ## Technology Map
 
@@ -95,3 +99,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-05 | Added CommandQueue as World subsystem | Input command layer for player command validation and processing |
 | 2026-04-05 | Added state serialization             | JSON snapshot save/load via World.serialize() and World.deserialize() |
 | 2026-04-05 | Added state diff output               | Per-tick dirty tracking and TickDiff via getDiff/onDiff/offDiff       |
+| 2026-04-05 | Added resource system                  | ResourceStore with pools, rates, transfers, diff integration          |

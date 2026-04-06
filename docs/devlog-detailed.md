@@ -167,3 +167,11 @@
 **Files changed:** src/diff.ts (new), src/component-store.ts, src/entity-manager.ts, src/world.ts, tests/diff.test.ts (new), tests/component-store.test.ts, tests/entity-manager.test.ts, docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** State diff output enables efficient client sync without full-state polling. Dirty-flag approach chosen for O(1) mutation tracking with zero scanning overhead. buildDiff uses tick+1 because GameLoop increments tick after onTick returns.
 **Notes:** Diffs only include stores that had changes (empty stores omitted from components record). getDiff returns null before first tick. onDiff listeners fire synchronously at tick end.
+
+## [2026-04-05 23:50, UTC] — Resource system
+
+**Action:** Implemented ResourceStore with registered resource types, per-entity pools (current/max), production/consumption rates, automatic transfers (supply lines), entity destruction cleanup, and dirty tracking. Wired into World with 13 proxy methods. Updated TickDiff to include resources field. Built-in processTick runs after user systems in executeTick.
+**Result:** Success — 32 new tests (25 resource-store unit + 7 resource integration), 134 total pass, lint and typecheck clean.
+**Files changed:** src/resource-store.ts (new), src/diff.ts (modified), src/world.ts (modified), tests/resource-store.test.ts (new), tests/resource.test.ts (new), docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** Dedicated ResourceStore chosen over component-based approach for clean boundaries and first-class transfer support. Built-in system runs after user systems so manual adjustments take effect before rate processing.
+**Notes:** Resource rates processed in order: production, consumption, transfers. Transfers compete for available resources in registration order. ResourcePool type shared between resource-store.ts and diff.ts via re-export.

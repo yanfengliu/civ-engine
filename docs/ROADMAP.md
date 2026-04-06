@@ -16,6 +16,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | State serialization      | `serializer.ts`      | 2026-04-05 | JSON snapshot, World.serialize/deserialize, round-trip tested  |
 | Query system             | `world.ts`           | 2026-04-04 | Multi-component queries, smallest-store optimization           |
 | State diff output        | `diff.ts`            | 2026-04-05 | Per-tick dirty tracking, getDiff/onDiff/offDiff, TickDiff type |
+| Resource system          | `resource-store.ts`  | 2026-04-05 | Pools, production/consumption rates, transfers, diff integration |
 
 ## In Progress
 
@@ -33,7 +34,6 @@ None currently.
 
 | Feature                  | Priority | Description                                       |
 | ------------------------ | -------- | ------------------------------------------------- |
-| Resource system          | High     | Production, storage, consumption, trade           |
 | Unit movement            | High     | Movement points, terrain cost, fog of war         |
 | Combat system            | Medium   | Attack, defense, health, damage resolution        |
 | City / settlement system | Medium   | Founding, building, population, production queues |
