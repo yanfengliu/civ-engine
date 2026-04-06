@@ -15,6 +15,7 @@ Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization
 | GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop (60 TPS default), step() for testing, start()/stop() for real-time |
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
+| Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
@@ -56,6 +57,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
+- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 
 ## Technology Map
 
@@ -85,3 +87,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-04 | Initial architecture                  | Core engine foundation implementation                            |
 | 2026-04-05 | Added EventBus as World subsystem     | System-to-system and engine-to-client event communication        |
 | 2026-04-05 | Added CommandQueue as World subsystem | Input command layer for player command validation and processing |
+| 2026-04-05 | Added state serialization             | JSON snapshot save/load via World.serialize() and World.deserialize() |

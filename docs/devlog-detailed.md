@@ -143,3 +143,11 @@
 **Files changed:** docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** Architecture maintenance per CLAUDE.md rules — structural changes require doc updates.
 **Notes:** Input command layer feature is now complete: CommandQueue buffer, World integration (submit/validate/handle/process), 14 new tests (73 total), all docs updated.
+
+## [2026-04-05 22:30, UTC] — State serialization
+
+**Action:** Implemented JSON state serialization with World.serialize() and World.deserialize(). Added getState/fromState to EntityManager, entries/fromEntries to ComponentStore, setTick to GameLoop, and WorldSnapshot type in serializer.ts.
+**Result:** Success — 13 new tests, 86 total pass, lint and typecheck clean.
+**Files changed:** src/serializer.ts (new), src/world.ts, src/entity-manager.ts, src/component-store.ts, src/game-loop.ts, tests/serializer.test.ts (new), tests/entity-manager.test.ts, tests/component-store.test.ts, docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** State serialization is needed for save/load and client sync. JSON format chosen for debuggability, zero-dependency simplicity, and wire-readiness.
+**Notes:** Spatial grid is not serialized — it rebuilds from position components on first step. Systems, event listeners, validators, and handlers are not serialized (runtime-only). Snapshot includes version field for future format evolution.

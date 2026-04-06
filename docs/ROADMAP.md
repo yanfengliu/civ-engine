@@ -13,6 +13,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | World integration        | `world.ts`           | 2026-04-04 | Ties all subsystems, auto spatial sync, system pipeline        |
 | Event / messaging system | `event-bus.ts`       | 2026-04-05 | Typed pub/sub, per-tick buffer, auto-clear, immediate dispatch |
 | Input command layer      | `command-queue.ts`   | 2026-04-05 | Typed buffer, validators, handlers, tick-start processing      |
+| State serialization      | `serializer.ts`      | 2026-04-05 | JSON snapshot, World.serialize/deserialize, round-trip tested  |
 
 ## In Progress
 
@@ -23,7 +24,6 @@ None currently.
 | Feature                 | Priority | Description                                                                                  |
 | ----------------------- | -------- | -------------------------------------------------------------------------------------------- |
 | Query system            | High     | Efficient entity queries by component combination (e.g. all entities with Position + Health) |
-| State serialization     | High     | Save/load game state, snapshots for client sync                                              |
 | Map generation          | Medium   | Procedural terrain, biomes, resource placement                                               |
 | Pathfinding             | Medium   | A* or similar over the spatial grid                                                          |
 | Turn / phase management | Medium   | Player turns, tick phases (move phase, combat phase, etc.)                                   |
