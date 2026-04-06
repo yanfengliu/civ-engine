@@ -17,211 +17,70 @@ npm run typecheck
 
 Requires Node.js 18+.
 
-## Core Concepts
+## Tutorials
 
-Everything flows through a single `World` object.
+- **[Getting Started](docs/tutorials/getting-started.md)** — Core concepts, minimal example, and feature walkthrough
+- **[Building a Complete Game](docs/tutorials/building-a-game.md)** — Step-by-step tutorial building a colony survival simulation using every engine feature
 
-- **Entities** are plain numeric IDs.
-- **Components** are plain data objects attached to entities by string key.
-- **Systems** are functions `(world: World) => void` that run each tick.
-- **Spatial grid** tracks entities with a `'position'` component automatically.
-
-```typescript
-import { World } from './src/world.js';
-
-const world = new World({ gridWidth: 64, gridHeight: 64, tps: 60 });
-```
-
-## Entities
-
-```typescript
-const entity = world.createEntity();
-
-world.isAlive(entity);    // true
-world.destroyEntity(entity);
-world.isAlive(entity);    // false
-```
-
-Destroyed entity IDs are recycled via a free-list. Generation counters prevent stale references.
-
-## Components
-
-Register a component type before using it. Components are pure data — no methods, no inheritance.
-
-```typescript
-interface Health { hp: number; maxHp: number }
-interface Velocity { dx: number; dy: number }
-
-world.registerComponent<Health>('health');
-world.registerComponent<Velocity>('velocity');
-```
-
-Attach, read, and remove components on entities:
-
-```typescript
-world.addComponent(entity, 'health', { hp: 100, maxHp: 100 });
-
-const hp = world.getComponent<Health>(entity, 'health');
-// hp is Health | undefined
-
-world.removeComponent(entity, 'health');
-```
-
-### The Position Component
-
-The engine automatically syncs any entity with the configured position component into the spatial grid before each tick. The default key is `'position'`, but it can be changed via `positionKey` in `WorldConfig`:
-
-```typescript
-import type { Position } from './src/types.js';
-
-// Default: uses 'position'
-world.registerComponent<Position>('position');
-
-// Or use a custom key:
-const world = new World({ gridWidth: 64, gridHeight: 64, tps: 60, positionKey: 'coords' });
-world.registerComponent<Position>('coords');
-```
-
-## Querying Entities
-
-Query returns an iterator over entity IDs that have **all** specified components:
-
-```typescript
-for (const id of world.query('position', 'health')) {
-  const pos = world.getComponent<Position>(id, 'position')!;
-  const hp = world.getComponent<Health>(id, 'health')!;
-  // ...
-}
-
-// Collect into array if needed
-const soldiers = [...world.query('position', 'health', 'attack')];
-```
-
-Internally, the query scans the smallest component store first for efficiency.
-
-## Systems
-
-Systems are plain functions registered in the order they should run:
-
-```typescript
-function movementSystem(world: World): void {
-  for (const id of world.query('position', 'velocity')) {
-    const pos = world.getComponent<Position>(id, 'position')!;
-    const vel = world.getComponent<Velocity>(id, 'velocity')!;
-    pos.x += vel.dx;
-    pos.y += vel.dy;
-  }
-}
-
-function damageSystem(world: World): void {
-  for (const id of world.query('health')) {
-    const hp = world.getComponent<Health>(id, 'health')!;
-    if (hp.hp <= 0) {
-      world.destroyEntity(id);
-    }
-  }
-}
-
-world.registerSystem(movementSystem);
-world.registerSystem(damageSystem);
-```
-
-Each tick, the engine runs spatial index sync first, then all registered systems in order.
-
-## Spatial Grid
-
-The grid is a 2D flat array of `Set<EntityId>`. Multiple entities can occupy the same cell. Access it via `world.grid`:
-
-```typescript
-import { ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
-
-// Get all entities at a cell
-const entities = world.grid.getAt(5, 3);  // ReadonlySet<EntityId> | null
-
-// Get entities in the 4 orthogonal neighbors (default)
-const neighbors = world.grid.getNeighbors(5, 3);  // EntityId[]
-
-// Get entities in all 8 directions (orthogonal + diagonal)
-const allNeighbors = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
-
-// Use custom offsets
-const knightMoves: [number, number][] = [[1, 2], [2, 1], [-1, 2], [-2, 1]];
-const knightReach = world.grid.getNeighbors(5, 3, knightMoves);
-```
-
-The grid syncs automatically — do not call `grid.insert/remove/move` directly. Just mutate position components and the engine handles it on the next `step()`.
-
-## Running the Simulation
-
-### Deterministic stepping (for tests and AI)
-
-```typescript
-world.step();  // advance exactly one tick
-world.step();
-world.tick;    // 2
-```
-
-### Real-time loop
-
-```typescript
-world.start();   // begins fixed-timestep loop at configured TPS
-// ...later
-world.stop();
-```
-
-The real-time loop caps at 4 catch-up ticks per frame to prevent spiral-of-death when the host falls behind.
-
-## Full Example
+## What You Can Build
 
 ```typescript
 import { World } from './src/world.js';
 import type { Position } from './src/types.js';
 
-interface Velocity { dx: number; dy: number }
-
-// Create world
-const world = new World({ gridWidth: 32, gridHeight: 32, tps: 60 });
+const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 world.registerComponent<Position>('position');
-world.registerComponent<Velocity>('velocity');
+world.registerComponent<{ hp: number }>('health');
 
-// Movement system
+// Create entities, attach data
+const unit = world.createEntity();
+world.addComponent(unit, 'position', { x: 0, y: 0 });
+world.addComponent(unit, 'health', { hp: 100 });
+
+// Game logic is pure functions that run each tick
 world.registerSystem((w) => {
-  for (const id of w.query('position', 'velocity')) {
+  for (const id of w.query('position', 'health')) {
     const pos = w.getComponent<Position>(id, 'position')!;
-    const vel = w.getComponent<Velocity>(id, 'velocity')!;
-    pos.x = Math.max(0, Math.min(31, pos.x + vel.dx));
-    pos.y = Math.max(0, Math.min(31, pos.y + vel.dy));
+    const hp = w.getComponent<{ hp: number }>(id, 'health')!;
+    // your logic here
   }
 });
 
-// Spawn entity
-const unit = world.createEntity();
-world.addComponent(unit, 'position', { x: 0, y: 0 });
-world.addComponent(unit, 'velocity', { dx: 1, dy: 0 });
-
-// Simulate 10 ticks
-for (let i = 0; i < 10; i++) {
-  world.step();
-}
-
-// Entity is now at (10, 0)
-const pos = world.getComponent<Position>(unit, 'position')!;
-console.log(pos.x, pos.y); // 10 0
-
-// Query the grid
-const atCell = world.grid.getAt(10, 0);
-console.log(atCell?.has(unit)); // true
+// Step the simulation
+world.step();
 ```
 
-## Entity Destruction
+## Feature Overview
 
-`destroyEntity` performs immediate cleanup in one call:
+| Feature | What it does |
+|---|---|
+| **Entities & Components** | Create entities (numeric IDs), attach typed data objects by key |
+| **Systems** | Pure functions `(world) => void` that run each tick in order |
+| **Spatial Grid** | 2D grid auto-synced with position components, neighbor queries |
+| **Commands** | Typed input buffer with validators and handlers — how AI agents send instructions |
+| **Events** | Typed pub/sub — how systems communicate and how observers read what happened |
+| **Resources** | Numeric pools (current/max) per entity with production, consumption, transfers |
+| **Map Generation** | Seedable simplex noise, octave layering, cellular automata, tile grid helper |
+| **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
+| **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
+| **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()` |
+| **State Diffs** | Per-tick change sets: what entities/components/resources changed |
 
-1. Removes entity from the spatial grid (using its last-synced position, not current component data)
-2. Removes all components from all stores
-3. Marks the entity as dead (ID becomes available for recycling)
+## Architecture
 
-This means it's safe to destroy entities mid-system — even if their position was mutated since the last tick.
+Everything flows through a single `World` object:
+
+```
+World.step()
+  -> process commands     (drain queue, run handlers)
+  -> sync spatial grid    (match grid to position components)
+  -> run systems          (your game logic, in registration order)
+  -> process resources    (production, consumption, transfers)
+  -> build diff           (collect changes for observers)
+  -> tick++
+```
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
 ## Project Structure
 
@@ -231,15 +90,23 @@ src/
   entity-manager.ts   Entity creation/destruction, ID recycling, generations
   component-store.ts  Sparse array storage per component type
   spatial-grid.ts     2D flat array grid, neighbor queries
-  game-loop.ts        Fixed-timestep loop, spiral-of-death prevention
+  game-loop.ts        Fixed-timestep loop, speed control, pause/resume
   event-bus.ts        Typed pub/sub event bus
   command-queue.ts    Typed command buffer
+  serializer.ts       WorldSnapshot type
+  diff.ts             TickDiff type
+  resource-store.ts   Resource pools, rates, transfers
+  noise.ts            Seedable 2D simplex noise
+  cellular.ts         Cellular automata
+  map-gen.ts          MapGenerator interface, createTileGrid helper
+  pathfinding.ts      Generic A* pathfinding
   types.ts            Shared types (EntityId, Position, WorldConfig)
 tests/
-  world.test.ts       Integration tests
-  *.test.ts           Unit tests per module
+  *.test.ts           Unit and integration tests per module
 docs/
   ARCHITECTURE.md     Detailed architecture documentation
+  ROADMAP.md          Feature tracker
+  tutorials/          Getting started guide and game-building tutorial
 ```
 
 ## API Reference
@@ -250,42 +117,85 @@ docs/
 | ------------------------ | -------- | -------------- | ------------------------------------- |
 | `config.gridWidth`       | `number` | (required)     | Width of the spatial grid             |
 | `config.gridHeight`      | `number` | (required)     | Height of the spatial grid            |
-| `config.tps`             | `number` | (required)     | Ticks per second (e.g., 60)           |
+| `config.tps`             | `number` | (required)     | Ticks per second (e.g., 10 for sims)  |
 | `config.positionKey`     | `string` | `'position'`   | Component key used for spatial sync   |
 | `config.maxTicksPerFrame`| `number` | `4`            | Spiral-of-death cap for real-time loop|
 
 ### World Methods
 
-| Method                           | Returns                      | Description                              |
-| -------------------------------- | ---------------------------- | ---------------------------------------- |
-| `createEntity()`                 | `EntityId`                   | Create a new entity                      |
-| `destroyEntity(id)`              | `void`                       | Destroy entity and all its components    |
-| `isAlive(id)`                    | `boolean`                    | Check if entity exists                   |
-| `registerComponent<T>(key)`      | `void`                       | Register a component type                |
-| `addComponent<T>(id, key, data)` | `void`                       | Attach component to entity               |
-| `getComponent<T>(id, key)`       | `T \| undefined`             | Read component data                      |
-| `removeComponent(id, key)`       | `void`                       | Detach component from entity             |
-| `query(...keys)`                 | `IterableIterator<EntityId>` | Find entities with all listed components |
-| `registerSystem(fn)`             | `void`                       | Add a system to the pipeline             |
-| `step()`                         | `void`                       | Advance one tick (deterministic)         |
-| `start()`                        | `void`                       | Begin real-time loop                     |
-| `stop()`                         | `void`                       | Stop real-time loop                      |
-| `tick`                           | `number`                     | Current tick count                       |
-| `submit(type, data)`             | `boolean`                    | Submit a command (validated, queued)      |
-| `registerValidator(type, fn)`    | `void`                       | Add a validator for a command type       |
-| `registerHandler(type, fn)`      | `void`                       | Set the handler for a command type       |
-| `serialize()`                    | `WorldSnapshot`              | Capture current state as JSON snapshot   |
-| `World.deserialize(snapshot)`    | `World`                      | Restore world from snapshot (static)     |
-| `grid`                           | `SpatialGrid`                | Spatial index (read-only access)         |
+| Method | Returns | Description |
+|---|---|---|
+| **Entity Management** | | |
+| `createEntity()` | `EntityId` | Create a new entity |
+| `destroyEntity(id)` | `void` | Destroy entity and all its components |
+| `isAlive(id)` | `boolean` | Check if entity exists |
+| **Components** | | |
+| `registerComponent<T>(key)` | `void` | Register a component type |
+| `addComponent<T>(id, key, data)` | `void` | Attach component to entity |
+| `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
+| `removeComponent(id, key)` | `void` | Detach component from entity |
+| `query(...keys)` | `IterableIterator<EntityId>` | Find entities with all listed components |
+| **Systems & Simulation** | | |
+| `registerSystem(fn)` | `void` | Add a system to the pipeline |
+| `step()` | `void` | Advance one tick (deterministic, ignores pause/speed) |
+| `start()` | `void` | Begin real-time loop |
+| `stop()` | `void` | Stop real-time loop |
+| **Speed Control** | | |
+| `setSpeed(multiplier)` | `void` | Set simulation speed (any positive float) |
+| `getSpeed()` | `number` | Get current speed multiplier |
+| `pause()` | `void` | Freeze simulation (preserves speed) |
+| `resume()` | `void` | Unfreeze at current speed |
+| `isPaused` | `boolean` | Whether simulation is paused |
+| **Commands** | | |
+| `submit(type, data)` | `boolean` | Submit a command (validated, queued) |
+| `registerValidator(type, fn)` | `void` | Add a validator for a command type |
+| `registerHandler(type, fn)` | `void` | Set the handler for a command type |
+| **Events** | | |
+| `emit(type, data)` | `void` | Emit an event (from systems) |
+| `on(type, listener)` | `void` | Subscribe to event type |
+| `off(type, listener)` | `void` | Unsubscribe from event type |
+| `getEvents()` | `ReadonlyArray` | Get all events from current tick |
+| **Resources** | | |
+| `registerResource(key, options?)` | `void` | Register a resource type |
+| `addResource(entity, key, amount)` | `number` | Add to resource pool (returns amount added) |
+| `removeResource(entity, key, amount)` | `number` | Remove from pool (returns amount removed) |
+| `getResource(entity, key)` | `{current, max} \| undefined` | Read resource pool |
+| `setResourceMax(entity, key, max)` | `void` | Set pool maximum |
+| `setProduction(entity, key, rate)` | `void` | Set production rate per tick |
+| `setConsumption(entity, key, rate)` | `void` | Set consumption rate per tick |
+| `getProduction(entity, key)` | `number` | Get production rate |
+| `getConsumption(entity, key)` | `number` | Get consumption rate |
+| `addTransfer(from, to, resource, rate)` | `number` | Create a resource transfer (returns ID) |
+| `removeTransfer(id)` | `void` | Remove a transfer |
+| `getTransfers(entity)` | `Array` | Get all transfers for an entity |
+| `getResourceEntities(key)` | `IterableIterator<EntityId>` | All entities with this resource |
+| **State** | | |
+| `tick` | `number` | Current tick count |
+| `grid` | `SpatialGrid` | Spatial index (read-only access) |
+| `serialize()` | `WorldSnapshot` | Capture current state as JSON snapshot |
+| `World.deserialize(snapshot, systems?)` | `World` | Restore world from snapshot (static) |
+| `getDiff()` | `TickDiff \| null` | Get last tick's diff |
+| `onDiff(fn)` | `void` | Subscribe to per-tick diffs |
+| `offDiff(fn)` | `void` | Unsubscribe from diffs |
+
+### Standalone Utilities (import directly, not via World)
+
+| Module | Exports | Description |
+|---|---|---|
+| `pathfinding.ts` | `findPath<T>(config)` | Generic A* pathfinding |
+| `noise.ts` | `createNoise2D(seed)`, `octaveNoise2D(...)` | Seedable simplex noise |
+| `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
+| `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
+| `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
 
 ### SpatialGrid Methods
 
-| Method                        | Returns                         | Description                                          |
-| ----------------------------- | ------------------------------- | ---------------------------------------------------- |
-| `getAt(x, y)`                 | `ReadonlySet<EntityId> \| null` | Entities at cell                                     |
-| `getNeighbors(x, y, offsets?)` | `EntityId[]`                   | Entities in neighbor cells (default: 4 orthogonal)   |
-| `width`                       | `number`                        | Grid width                                           |
-| `height`                      | `number`                        | Grid height                                          |
+| Method | Returns | Description |
+|---|---|---|
+| `getAt(x, y)` | `ReadonlySet<EntityId> \| null` | Entities at cell |
+| `getNeighbors(x, y, offsets?)` | `EntityId[]` | Entities in neighbor cells |
+| `width` | `number` | Grid width |
+| `height` | `number` | Grid height |
 
 ## Design Decisions
 
@@ -293,7 +203,8 @@ docs/
 - **Fixed system pipeline** — deterministic execution, no scheduler overhead
 - **Monolithic World** — flat API, internals are hidden
 - **Zero runtime deps** — pure TypeScript, nothing to break
-- **Generation counters** — minimal change detection for future diff/serialization layer
+- **Generation counters** — minimal change detection for diff/serialization
+- **Standalone utilities** — noise, cellular, map-gen, pathfinding are not World subsystems
 
 ## License
 
