@@ -200,6 +200,14 @@
 **Reasoning:** A general-purpose engine should not force naming conventions or limit neighbor topologies. All defaults are sensible but every hardcoded choice now has an override.
 **Notes:** ARCHITECTURE.md updated.
 
+## [2026-04-06 12:40, UTC] — Pathfinding: complex scenario tests
+
+**Action:** Appended 8 complex scenario tests to `tests/pathfinding.test.ts` inside the existing `describe('findPath', ...)` block: diamond graph (cheaper path selection), large 100x100 grid, winding 5x5 maze, multiple equal-cost paths, one-way directed edges, inadmissible heuristic (no crash), diagonal movement with sqrt(2) cost, and node revisit on cheaper route discovery.
+**Result:** Success — 19/19 tests pass (11 existing + 8 new), ESLint clean, tsc clean, committed to main.
+**Files changed:** tests/pathfinding.test.ts
+**Reasoning:** Complex scenarios validate correctness of A* properties beyond basic grid traversal: optimal path selection in weighted graphs, scalability, maze navigation, directed graph support, robustness to inadmissible heuristics, non-uniform edge costs, and priority queue update correctness.
+**Notes:** No implementation changes — test-only task. All 8 tests pass against the existing `src/pathfinding.ts` implementation.
+
 ## [2026-04-06 12:31, UTC] — Add generic A* pathfinding module
 
 **Action:** Implemented `src/pathfinding.ts` with `findPath<T>` — a generic A* search with internal binary min-heap, `PathConfig<T>` interface (neighbors, cost, heuristic, hash callbacks), and `PathResult<T>` output (path, cost, optional explored count). Created `tests/pathfinding.test.ts` with 11 tests covering: shortest path on 3x3 grid, disconnected graph returns null, routes around blocked cells, impassable Infinity-cost edges, maxCost guard, maxIterations guard, explored tracking, heuristic guidance (fewer explored with Manhattan vs zero), custom object nodes, and start-equals-goal early exit.
