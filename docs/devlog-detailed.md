@@ -215,3 +215,11 @@
 **Files changed:** src/pathfinding.ts (new), tests/pathfinding.test.ts (new)
 **Reasoning:** Standalone module with no World or engine dependencies; game code wires topology via callbacks. Internal min-heap avoids external dependencies (zero runtime deps policy). Generic type parameter supports any node type via hash function.
 **Notes:** Module is not integrated into World — it is a standalone utility like noise.ts/cellular.ts/map-gen.ts. ARCHITECTURE.md update deferred until pathfinding integration is designed in a subsequent task.
+
+## [2026-04-06 12:45, UTC] — Pathfinding: full test suite pass and docs update
+
+**Action:** Ran full test suite (183 tests across 15 files), ran ESLint and tsc --noEmit. Updated ARCHITECTURE.md: added Pathfinding row to Component Map, added Pathfinding boundary rule, added Drift Log entry. Updated ROADMAP.md: moved Pathfinding from Planned to Built table. Committed docs changes.
+**Result:** Success — 183/183 tests pass, lint clean, typecheck clean, committed to main (d455e69).
+**Files changed:** docs/ARCHITECTURE.md, docs/ROADMAP.md
+**Reasoning:** Documentation maintenance required after completing pathfinding module across Tasks 1–3.
+**Notes:** ARCHITECTURE.md boundary rule confirms pathfinding is a standalone utility with no World or tick-loop coupling.
