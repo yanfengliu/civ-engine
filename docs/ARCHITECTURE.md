@@ -50,10 +50,9 @@ World.step()
 ### Spatial Index Sync
 
 Each tick, before user systems run, `syncSpatialIndex()`:
-1. Iterates all entities with a `'position'` component
+1. Iterates all entities with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`)
 2. Compares current position to `previousPositions` map
 3. Inserts new entities into grid, moves changed ones, removes stale ones
-4. The `'position'` component key is hardcoded — users must register Position under this key
 
 ### Entity Destruction
 
@@ -109,3 +108,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-05 | Added state diff output               | Per-tick dirty tracking and TickDiff via getDiff/onDiff/offDiff       |
 | 2026-04-05 | Added resource system                  | ResourceStore with pools, rates, transfers, diff integration          |
 | 2026-04-06 | Added map infrastructure utilities     | Standalone noise, cellular automata, and tile-creation primitives for map generation |
+| 2026-04-06 | Made hardcoded defaults configurable   | positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets now have overridable defaults |

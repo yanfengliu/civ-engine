@@ -67,15 +67,19 @@ const hp = world.getComponent<Health>(entity, 'health');
 world.removeComponent(entity, 'health');
 ```
 
-### The `'position'` Component
+### The Position Component
 
-Position is special. The engine automatically syncs any entity with a `'position'` component into the spatial grid before each tick. You must register it under exactly this key:
+The engine automatically syncs any entity with the configured position component into the spatial grid before each tick. The default key is `'position'`, but it can be changed via `positionKey` in `WorldConfig`:
 
 ```typescript
 import type { Position } from './src/types.js';
 
+// Default: uses 'position'
 world.registerComponent<Position>('position');
-world.addComponent(entity, 'position', { x: 10, y: 5 });
+
+// Or use a custom key:
+const world = new World({ gridWidth: 64, gridHeight: 64, tps: 60, positionKey: 'coords' });
+world.registerComponent<Position>('coords');
 ```
 
 ## Querying Entities
@@ -129,11 +133,20 @@ Each tick, the engine runs spatial index sync first, then all registered systems
 The grid is a 2D flat array of `Set<EntityId>`. Multiple entities can occupy the same cell. Access it via `world.grid`:
 
 ```typescript
+import { ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
+
 // Get all entities at a cell
 const entities = world.grid.getAt(5, 3);  // ReadonlySet<EntityId> | null
 
-// Get entities in the 4 orthogonal neighbors (up/down/left/right)
+// Get entities in the 4 orthogonal neighbors (default)
 const neighbors = world.grid.getNeighbors(5, 3);  // EntityId[]
+
+// Get entities in all 8 directions (orthogonal + diagonal)
+const allNeighbors = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
+
+// Use custom offsets
+const knightMoves: [number, number][] = [[1, 2], [2, 1], [-1, 2], [-2, 1]];
+const knightReach = world.grid.getNeighbors(5, 3, knightMoves);
 ```
 
 The grid syncs automatically — do not call `grid.insert/remove/move` directly. Just mutate position components and the engine handles it on the next `step()`.
@@ -233,11 +246,13 @@ docs/
 
 ### `new World(config)`
 
-| Parameter           | Type     | Description                 |
-| ------------------- | -------- | --------------------------- |
-| `config.gridWidth`  | `number` | Width of the spatial grid   |
-| `config.gridHeight` | `number` | Height of the spatial grid  |
-| `config.tps`        | `number` | Ticks per second (e.g., 60) |
+| Parameter                | Type     | Default        | Description                           |
+| ------------------------ | -------- | -------------- | ------------------------------------- |
+| `config.gridWidth`       | `number` | (required)     | Width of the spatial grid             |
+| `config.gridHeight`      | `number` | (required)     | Height of the spatial grid            |
+| `config.tps`             | `number` | (required)     | Ticks per second (e.g., 60)           |
+| `config.positionKey`     | `string` | `'position'`   | Component key used for spatial sync   |
+| `config.maxTicksPerFrame`| `number` | `4`            | Spiral-of-death cap for real-time loop|
 
 ### World Methods
 
@@ -265,12 +280,12 @@ docs/
 
 ### SpatialGrid Methods
 
-| Method               | Returns                         | Description                  |
-| -------------------- | ------------------------------- | ---------------------------- |
-| `getAt(x, y)`        | `ReadonlySet<EntityId> \| null` | Entities at cell             |
-| `getNeighbors(x, y)` | `EntityId[]`                    | Entities in 4 adjacent cells |
-| `width`              | `number`                        | Grid width                   |
-| `height`             | `number`                        | Grid height                  |
+| Method                        | Returns                         | Description                                          |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------- |
+| `getAt(x, y)`                 | `ReadonlySet<EntityId> \| null` | Entities at cell                                     |
+| `getNeighbors(x, y, offsets?)` | `EntityId[]`                   | Entities in neighbor cells (default: 4 orthogonal)   |
+| `width`                       | `number`                        | Grid width                                           |
+| `height`                      | `number`                        | Grid height                                          |
 
 ## Design Decisions
 
