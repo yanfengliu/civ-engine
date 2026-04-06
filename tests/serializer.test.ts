@@ -20,7 +20,7 @@ describe('Serialization', () => {
     const snapshot = world.serialize();
 
     expect(snapshot.version).toBe(1);
-    expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30 });
+    expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
     expect(snapshot.entities.generations).toEqual([0, 0]);

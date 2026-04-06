@@ -121,6 +121,22 @@ describe('World', () => {
     expect(world.grid.getAt(5, 5)?.has(id) ?? false).toBe(false);
   });
 
+  it('uses custom positionKey for spatial index sync', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'coords' });
+    world.registerComponent<{ x: number; y: number }>('coords');
+    const id = world.createEntity();
+    world.addComponent(id, 'coords', { x: 5, y: 5 });
+    world.step();
+    const cell = world.grid.getAt(5, 5);
+    expect(cell).not.toBeNull();
+    expect(cell!.has(id)).toBe(true);
+  });
+
+  it('defaults positionKey to "position"', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    expect(world.positionKey).toBe('position');
+  });
+
   it('throws when registering duplicate component', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     world.registerComponent('position');

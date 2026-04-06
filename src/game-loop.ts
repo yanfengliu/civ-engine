@@ -3,16 +3,21 @@ export class GameLoop {
   private readonly _tps: number;
   private readonly tickDuration: number;
   private readonly onTick: () => void;
-  private readonly maxTicksPerFrame = 4;
+  private readonly maxTicksPerFrame: number;
   private running = false;
   private lastTime = 0;
   private accumulated = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(config: { tps: number; onTick: () => void }) {
+  constructor(config: {
+    tps: number;
+    onTick: () => void;
+    maxTicksPerFrame?: number;
+  }) {
     this._tps = config.tps;
     this.tickDuration = 1000 / config.tps;
     this.onTick = config.onTick;
+    this.maxTicksPerFrame = config.maxTicksPerFrame ?? 4;
   }
 
   step(): void {

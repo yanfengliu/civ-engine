@@ -34,6 +34,7 @@ export class World<
     (data: never, world: World<TEventMap, TCommandMap>) => void
   >();
   readonly grid: SpatialGrid;
+  readonly positionKey: string;
   private currentDiff: TickDiff | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
@@ -41,9 +42,11 @@ export class World<
   constructor(config: WorldConfig) {
     this.entityManager = new EntityManager();
     this.grid = new SpatialGrid(config.gridWidth, config.gridHeight);
+    this.positionKey = config.positionKey ?? 'position';
     this.gameLoop = new GameLoop({
       tps: config.tps,
       onTick: () => this.executeTick(),
+      maxTicksPerFrame: config.maxTicksPerFrame,
     });
   }
 
@@ -211,6 +214,7 @@ export class World<
         gridWidth: this.grid.width,
         gridHeight: this.grid.height,
         tps: this.gameLoop.tps,
+        positionKey: this.positionKey,
       },
       tick: this.gameLoop.tick,
       entities: this.entityManager.getState(),
@@ -397,7 +401,7 @@ export class World<
   }
 
   private syncSpatialIndex(): void {
-    const posStore = this.componentStores.get('position') as
+    const posStore = this.componentStores.get(this.positionKey) as
       | ComponentStore<Position>
       | undefined;
     if (!posStore) return;

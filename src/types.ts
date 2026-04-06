@@ -9,4 +9,6 @@ export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
   tps: number;
+  positionKey?: string;
+  maxTicksPerFrame?: number;
 }
