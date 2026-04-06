@@ -52,5 +52,5 @@ None currently.
 ## Notes
 
 - The engine is headless by design. Rendering, audio, and input capture belong to a separate client.
-- The event system (in progress) is the foundation for both system-to-system communication and engine-to-client output.
+- The event system is the foundation for both system-to-system communication and engine-to-client output.
 - Priorities are relative within each section and will shift as the project evolves.

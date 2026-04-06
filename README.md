@@ -217,6 +217,8 @@ src/
   component-store.ts  Sparse array storage per component type
   spatial-grid.ts     2D flat array grid, neighbor queries
   game-loop.ts        Fixed-timestep loop, spiral-of-death prevention
+  event-bus.ts        Typed pub/sub event bus
+  command-queue.ts    Typed command buffer
   types.ts            Shared types (EntityId, Position, WorldConfig)
 tests/
   world.test.ts       Integration tests
@@ -252,6 +254,9 @@ docs/
 | `start()`                        | `void`                       | Begin real-time loop                     |
 | `stop()`                         | `void`                       | Stop real-time loop                      |
 | `tick`                           | `number`                     | Current tick count                       |
+| `submit(type, data)`             | `boolean`                    | Submit a command (validated, queued)      |
+| `registerValidator(type, fn)`    | `void`                       | Add a validator for a command type       |
+| `registerHandler(type, fn)`      | `void`                       | Set the handler for a command type       |
 | `grid`                           | `SpatialGrid`                | Spatial index (read-only access)         |
 
 ### SpatialGrid Methods

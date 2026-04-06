@@ -14,8 +14,8 @@ export class CommandQueue<
     type: keyof TCommandMap;
     data: TCommandMap[keyof TCommandMap];
   }> {
-    const commands = [...this.buffer];
-    this.buffer.length = 0;
+    const commands = this.buffer;
+    this.buffer = [];
     return commands;
   }
 
