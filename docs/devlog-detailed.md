@@ -96,7 +96,15 @@
 **Reasoning:** Event system needed for system-to-system communication and future engine-to-client state output. Chose standalone class to match existing subsystem pattern.
 **Notes:** World is now generic over TEventMap. Default is Record<string, never> so existing non-event code is unaffected. System type also made generic to match.
 
-## [2026-04-05, UTC] — CommandQueue: typed push/drain buffer
+## [2026-04-05 20:05, UTC] — Task 2 (Input Command Layer): add TCommandMap generic to World and System
+
+**Action:** Added second generic parameter `TCommandMap` to `System` type and `World` class; updated `systems` field and `registerSystem` parameter to use `System<TEventMap, TCommandMap>`.
+**Result:** Success — all 63 tests pass, lint and typecheck clean.
+**Files changed:** src/world.ts
+**Reasoning:** Pure generic extension needed as groundwork for World owning a CommandQueue and exposing submit/drain APIs. Default `Record<string, never>` preserves backward compatibility for all existing code.
+**Notes:** No behaviour change. Only type-level change.
+
+## [2026-04-05 20:00, UTC] — CommandQueue: typed push/drain buffer
 
 **Action:** Implemented CommandQueue<TCommandMap> with push, drain, and pending getter; created tests following TDD (tests written first, verified failing, then implemented).
 **Result:** Success — 4 new tests pass; 63 total pass, lint clean.

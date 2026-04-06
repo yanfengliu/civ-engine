@@ -7,14 +7,16 @@ import { EventBus } from './event-bus.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
-> = (world: World<TEventMap>) => void;
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+> = (world: World<TEventMap, TCommandMap>) => void;
 
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
-  private systems: System<TEventMap>[] = [];
+  private systems: System<TEventMap, TCommandMap>[] = [];
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
   private eventBus = new EventBus<TEventMap>();
@@ -97,7 +99,7 @@ export class World<
     }
   }
 
-  registerSystem(system: System<TEventMap>): void {
+  registerSystem(system: System<TEventMap, TCommandMap>): void {
     this.systems.push(system);
   }
 
