@@ -15,3 +15,4 @@
 - 2026-04-05: EventBus implemented with emit/on/off/getEvents/clear; generic constraint fixed for strict-mode tsc; 4 tests pass, 49 total pass, lint and typecheck clean.
 - 2026-04-05: EventBus remaining unit tests added (off, clear, getEvents); 9 tests pass (54 total), lint clean.
 - 2026-04-05: World integration complete — World and System made generic with TEventMap; EventBus owned as private field; emit/on/off/getEvents methods added; events cleared at start of each tick; 5 new tests, 59 total pass, lint and typecheck clean.
+- 2026-04-05: CommandQueue implemented — typed push/drain buffer with pending getter; TDD (tests-first); 4 new tests, 63 total pass, lint clean.

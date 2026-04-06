@@ -95,3 +95,11 @@
 **Files changed:** src/event-bus.ts (new), src/world.ts (modified), tests/event-bus.test.ts (new), tests/world.test.ts (modified), docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** Event system needed for system-to-system communication and future engine-to-client state output. Chose standalone class to match existing subsystem pattern.
 **Notes:** World is now generic over TEventMap. Default is Record<string, never> so existing non-event code is unaffected. System type also made generic to match.
+
+## [2026-04-05, UTC] — CommandQueue: typed push/drain buffer
+
+**Action:** Implemented CommandQueue<TCommandMap> with push, drain, and pending getter; created tests following TDD (tests written first, verified failing, then implemented).
+**Result:** Success — 4 new tests pass; 63 total pass, lint clean.
+**Files changed:** src/command-queue.ts (new), tests/command-queue.test.ts (new)
+**Reasoning:** Standalone typed buffer class following the same subsystem pattern as EventBus. World will own it as a private field in a later task.
+**Notes:** drain() clears the internal buffer using `this.buffer.length = 0` (avoids reallocation). push uses a constrained generic `K extends keyof TCommandMap` for precise type inference per command.
