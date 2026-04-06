@@ -2,7 +2,11 @@
 
 ## Overview
 
-Civ-engine is a headless, AI-native game engine for a 2D grid-based civilization-scale simulation. Built in Node.js/TypeScript with a strict ECS (Entity-Component-System) architecture. The engine outputs state changes that a separate client can consume; it has no rendering or UI code.
+Civ-engine is a general-purpose, headless, AI-native 2D grid-based game engine. Built in Node.js/TypeScript with a strict ECS (Entity-Component-System) architecture.
+
+**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state. Every design decision prioritizes machine-readability: deterministic tick execution, JSON-serializable state, structured diffs, typed command/event interfaces, and a purely programmatic API with no interactive UI.
+
+The engine provides reusable infrastructure (entities, components, spatial indexing, events, commands, resources, serialization) that game projects consume. It outputs state changes that a separate client can render; it contains no game-specific logic, rendering, or UI code.
 
 ## Component Map
 

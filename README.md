@@ -1,8 +1,10 @@
 # civ-engine
 
-A headless, AI-native game engine for 2D grid-based civilization-scale simulation. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
+A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
-The engine outputs state changes that a separate client can consume — it has no rendering or UI code.
+**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces.
+
+The engine provides reusable infrastructure that game projects consume — it has no game-specific logic, rendering, or UI code.
 
 ## Quick Start
 

@@ -2,6 +2,8 @@
 
 Feature tracker for civ-engine. Tracks what's built, what's in progress, and what's planned.
 
+**Scope:** civ-engine is a general-purpose, headless, AI-native 2D grid-based game engine. It provides ECS infrastructure, spatial indexing, event/command plumbing, and reusable engine primitives — all designed for AI agents to operate programmatically. Game-specific logic (combat, diplomacy, tech trees, etc.) belongs in game projects that consume this engine — not here.
+
 ## Built
 
 | Feature                  | Module(s)            | Date       | Notes                                                          |
@@ -22,35 +24,23 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 
 None currently.
 
-## Planned — Engine Core
+## Planned — Engine Primitives
 
 | Feature                 | Priority | Description                                                                                  |
 | ----------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| Map generation          | Medium   | Procedural terrain, biomes, resource placement                                               |
-| Pathfinding             | Medium   | A* or similar over the spatial grid                                                          |
-| Turn / phase management | Medium   | Player turns, tick phases (move phase, combat phase, etc.)                                   |
+| Map infrastructure      | Medium   | Tile entity creation, MapGenerator interface, composable noise/automata utilities             |
+| Pathfinding             | Medium   | Generic A* over the spatial grid with user-defined cost functions                             |
+| Turn / phase management | Medium   | Generic turn structure and phase pipeline (game defines its own phases)                       |
 
-## Planned — Game Systems
-
-| Feature                  | Priority | Description                                       |
-| ------------------------ | -------- | ------------------------------------------------- |
-| Unit movement            | High     | Movement points, terrain cost, fog of war         |
-| Combat system            | Medium   | Attack, defense, health, damage resolution        |
-| City / settlement system | Medium   | Founding, building, population, production queues |
-| Tech tree                | Low      | Research, unlocks, prerequisites                  |
-| Diplomacy                | Low      | Relations, treaties, trade agreements             |
-| AI players               | Low      | Decision-making for non-human players             |
-
-## Planned — Output / Client Integration
+## Planned — Client Integration
 
 | Feature           | Priority | Description                                                                      |
 | ----------------- | -------- | -------------------------------------------------------------------------------- |
 | Client protocol   | Medium   | Define the wire format between engine and client (JSON, binary, WebSocket, etc.) |
-| Client (renderer) | Future   | Separate project — could be web (Canvas/WebGL), terminal, or Godot               |
-| Sound events      | Future   | Engine emits sound cue events; client maps them to audio                         |
 
 ## Notes
 
 - The engine is headless by design. Rendering, audio, and input capture belong to a separate client.
 - The event system is the foundation for both system-to-system communication and engine-to-client output.
+- Game-specific systems (combat, cities, tech trees, diplomacy, AI) are out of scope — they belong in game projects that import this engine.
 - Priorities are relative within each section and will shift as the project evolves.
