@@ -81,4 +81,31 @@ describe('EntityManager', () => {
     const recycled = restored.create();
     expect(recycled).toBe(0);
   });
+
+  it('create tracks created entities', () => {
+    const em = new EntityManager();
+    const id0 = em.create();
+    const id1 = em.create();
+    const dirty = em.getDirty();
+    expect(dirty.created).toEqual([id0, id1]);
+    expect(dirty.destroyed).toEqual([]);
+  });
+
+  it('destroy tracks destroyed entities', () => {
+    const em = new EntityManager();
+    const id = em.create();
+    em.destroy(id);
+    const dirty = em.getDirty();
+    expect(dirty.created).toEqual([id]);
+    expect(dirty.destroyed).toEqual([id]);
+  });
+
+  it('clearDirty resets both arrays', () => {
+    const em = new EntityManager();
+    em.create();
+    em.clearDirty();
+    const dirty = em.getDirty();
+    expect(dirty.created).toEqual([]);
+    expect(dirty.destroyed).toEqual([]);
+  });
 });

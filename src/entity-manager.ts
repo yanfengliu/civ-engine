@@ -4,16 +4,20 @@ export class EntityManager {
   private generations: number[] = [];
   private alive: boolean[] = [];
   private freeList: number[] = [];
+  private createdThisTick: EntityId[] = [];
+  private destroyedThisTick: EntityId[] = [];
 
   create(): EntityId {
     if (this.freeList.length > 0) {
       const id = this.freeList.pop()!;
       this.alive[id] = true;
+      this.createdThisTick.push(id);
       return id;
     }
     const id = this.generations.length;
     this.generations.push(0);
     this.alive.push(true);
+    this.createdThisTick.push(id);
     return id;
   }
 
@@ -22,6 +26,7 @@ export class EntityManager {
     this.alive[id] = false;
     this.generations[id]++;
     this.freeList.push(id);
+    this.destroyedThisTick.push(id);
   }
 
   isAlive(id: EntityId): boolean {
@@ -42,6 +47,18 @@ export class EntityManager {
       alive: [...this.alive],
       freeList: [...this.freeList],
     };
+  }
+
+  getDirty(): { created: EntityId[]; destroyed: EntityId[] } {
+    return {
+      created: [...this.createdThisTick],
+      destroyed: [...this.destroyedThisTick],
+    };
+  }
+
+  clearDirty(): void {
+    this.createdThisTick.length = 0;
+    this.destroyedThisTick.length = 0;
   }
 
   static fromState(state: {
