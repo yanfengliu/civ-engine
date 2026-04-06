@@ -8,6 +8,8 @@ export class GameLoop {
   private lastTime = 0;
   private accumulated = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private speedMultiplier = 1;
+  private paused = false;
 
   constructor(config: {
     tps: number;
@@ -52,11 +54,44 @@ export class GameLoop {
     this._tick = value;
   }
 
+  setSpeed(multiplier: number): void {
+    if (multiplier <= 0) {
+      throw new Error('Speed multiplier must be positive');
+    }
+    this.speedMultiplier = multiplier;
+  }
+
+  getSpeed(): number {
+    return this.speedMultiplier;
+  }
+
+  pause(): void {
+    this.paused = true;
+  }
+
+  resume(): void {
+    if (this.paused) {
+      this.paused = false;
+      this.lastTime = performance.now();
+    }
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
+  }
+
   private loop(): void {
     if (!this.running) return;
 
     const now = performance.now();
-    this.accumulated += now - this.lastTime;
+
+    if (this.paused) {
+      this.lastTime = now;
+      this.timer = setTimeout(() => this.loop(), 1);
+      return;
+    }
+
+    this.accumulated += (now - this.lastTime) * this.speedMultiplier;
     this.lastTime = now;
 
     let ticksThisFrame = 0;
