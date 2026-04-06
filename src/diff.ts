@@ -1,5 +1,10 @@
 import type { EntityId } from './types.js';
 
+export interface ResourcePool {
+  current: number;
+  max: number;
+}
+
 export interface TickDiff {
   tick: number;
   entities: {
@@ -10,6 +15,13 @@ export interface TickDiff {
     string,
     {
       set: Array<[EntityId, unknown]>;
+      removed: EntityId[];
+    }
+  >;
+  resources: Record<
+    string,
+    {
+      set: Array<[EntityId, ResourcePool]>;
       removed: EntityId[];
     }
   >;

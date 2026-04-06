@@ -7,6 +7,7 @@ import { SpatialGrid } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';
 import { EventBus } from './event-bus.js';
 import { CommandQueue } from './command-queue.js';
+import { ResourceStore } from './resource-store.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -35,6 +36,7 @@ export class World<
   readonly grid: SpatialGrid;
   private currentDiff: TickDiff | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
+  private resourceStore = new ResourceStore();
 
   constructor(config: WorldConfig) {
     this.entityManager = new EntityManager();
@@ -59,6 +61,7 @@ export class World<
     for (const store of this.componentStores.values()) {
       store.remove(id);
     }
+    this.resourceStore.removeEntity(id);
     this.entityManager.destroy(id);
   }
 
@@ -269,6 +272,74 @@ export class World<
     this.diffListeners.delete(fn);
   }
 
+  registerResource(key: string, options?: { defaultMax?: number }): void {
+    this.resourceStore.register(key, options);
+  }
+
+  addResource(entity: EntityId, key: string, amount: number): number {
+    return this.resourceStore.addResource(entity, key, amount);
+  }
+
+  removeResource(entity: EntityId, key: string, amount: number): number {
+    return this.resourceStore.removeResource(entity, key, amount);
+  }
+
+  getResource(
+    entity: EntityId,
+    key: string,
+  ): { current: number; max: number } | undefined {
+    return this.resourceStore.getResource(entity, key);
+  }
+
+  setResourceMax(entity: EntityId, key: string, max: number): void {
+    this.resourceStore.setResourceMax(entity, key, max);
+  }
+
+  *getResourceEntities(key: string): IterableIterator<EntityId> {
+    yield* this.resourceStore.getResourceEntities(key);
+  }
+
+  setProduction(entity: EntityId, key: string, rate: number): void {
+    this.resourceStore.setProduction(entity, key, rate);
+  }
+
+  setConsumption(entity: EntityId, key: string, rate: number): void {
+    this.resourceStore.setConsumption(entity, key, rate);
+  }
+
+  getProduction(entity: EntityId, key: string): number {
+    return this.resourceStore.getProduction(entity, key);
+  }
+
+  getConsumption(entity: EntityId, key: string): number {
+    return this.resourceStore.getConsumption(entity, key);
+  }
+
+  addTransfer(
+    from: EntityId,
+    to: EntityId,
+    resource: string,
+    rate: number,
+  ): number {
+    return this.resourceStore.addTransfer(from, to, resource, rate);
+  }
+
+  removeTransfer(id: number): void {
+    this.resourceStore.removeTransfer(id);
+  }
+
+  getTransfers(
+    entity: EntityId,
+  ): Array<{
+    id: number;
+    from: EntityId;
+    to: EntityId;
+    resource: string;
+    rate: number;
+  }> {
+    return this.resourceStore.getTransfers(entity);
+  }
+
   private processCommands(): void {
     const commands = this.commandQueue.drain();
     for (const command of commands) {
@@ -304,6 +375,7 @@ export class World<
       tick: this.gameLoop.tick + 1,
       entities,
       components,
+      resources: this.resourceStore.getDirty(),
     };
   }
 
@@ -311,11 +383,13 @@ export class World<
     this.eventBus.clear();
     this.entityManager.clearDirty();
     this.clearComponentDirty();
+    this.resourceStore.clearDirty();
     this.processCommands();
     this.syncSpatialIndex();
     for (const system of this.systems) {
       system(this);
     }
+    this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
     this.buildDiff();
     for (const listener of this.diffListeners) {
       listener(this.currentDiff!);
