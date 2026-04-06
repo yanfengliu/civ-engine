@@ -32,3 +32,4 @@
 - 2026-04-06: GameLoop speed control — setSpeed/getSpeed, pause/resume, isPaused added; NaN/Infinity guard; 12 new tests; 16 total GameLoop tests pass.
 - 2026-04-06: World speed control proxies — 5 proxy methods (setSpeed/getSpeed/pause/resume/isPaused); 3 new tests; 34 total World tests pass.
 - 2026-04-06: Simulation speed control docs — ARCHITECTURE.md and ROADMAP.md updated; "Turn / phase management" removed from roadmap; 198 total tests pass; feature complete.
+- 2026-04-06: Tutorials and README rewrite — getting-started guide, complete colony survival game tutorial, rewritten README with API reference, CLAUDE.md doc maintenance rules.

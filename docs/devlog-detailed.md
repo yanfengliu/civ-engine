@@ -231,3 +231,11 @@
 **Files changed:** src/game-loop.ts, tests/game-loop.test.ts
 **Reasoning:** TDD approach — tests written first to confirm failure before implementation. Speed multiplier scales accumulated time delta so tick rate adjusts without changing tickDuration. Pause freezes lastTime to prevent accumulated drift when the loop resumes.
 **Notes:** No World changes in this task — World proxy methods are Task 2. The loop still runs (setTimeout continues) while paused; ticks are simply suppressed and lastTime is reset each frame to prevent burst-catch-up on resume.
+
+## [2026-04-06 14:30, UTC] — Tutorials, README rewrite, documentation maintenance rules
+
+**Action:** Created docs/tutorials/getting-started.md covering core concepts (entities, components, systems, spatial grid, commands, events, resources, speed control, save/load, diffs) with code examples. Created docs/tutorials/building-a-game.md with a complete colony survival simulation tutorial using every engine feature (map generation, pathfinding, commands, events, resources, diffs, save/load, speed control). Rewrote README.md with feature overview table, tutorials section, complete API reference for all World methods and standalone utilities. Added documentation maintenance rules to CLAUDE.md requiring tutorials and API reference to stay in sync with code changes.
+**Result:** Success — comprehensive tutorials and reference docs committed.
+**Files changed:** README.md, CLAUDE.md, docs/tutorials/getting-started.md (new), docs/tutorials/building-a-game.md (new)
+**Reasoning:** User requested better guidance for humans and AI agents learning to use the engine. Tutorials demonstrate real usage patterns; API reference provides complete method listing; CLAUDE.md rules ensure docs stay current as the engine evolves.
+**Notes:** Tutorials are not executable code — they are documentation showing patterns. The building-a-game tutorial covers a colony survival sim that exercises all 11 engine features.
