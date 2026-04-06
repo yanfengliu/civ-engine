@@ -43,4 +43,20 @@ export class ComponentStore<T> {
       }
     }
   }
+
+  *entries(): IterableIterator<[EntityId, T]> {
+    for (let i = 0; i < this.data.length; i++) {
+      if (this.data[i] !== undefined) {
+        yield [i, this.data[i] as T];
+      }
+    }
+  }
+
+  static fromEntries<T>(entries: Array<[EntityId, T]>): ComponentStore<T> {
+    const store = new ComponentStore<T>();
+    for (const [id, data] of entries) {
+      store.set(id, data);
+    }
+    return store;
+  }
 }

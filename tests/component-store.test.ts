@@ -78,4 +78,30 @@ describe('ComponentStore', () => {
     expect(store.get(0)).toEqual({ x: 20 });
     expect(store.size).toBe(1);
   });
+
+  it('entries yields populated slots as [id, data] pairs', () => {
+    const store = new ComponentStore<{ x: number }>();
+    store.set(0, { x: 1 });
+    store.set(5, { x: 2 });
+    store.set(3, { x: 3 });
+    const entries = [...store.entries()];
+    expect(entries).toEqual([
+      [0, { x: 1 }],
+      [3, { x: 3 }],
+      [5, { x: 2 }],
+    ]);
+  });
+
+  it('fromEntries restores a component store from entry pairs', () => {
+    const original = new ComponentStore<{ x: number; y: number }>();
+    original.set(0, { x: 1, y: 2 });
+    original.set(5, { x: 3, y: 4 });
+    const entries = [...original.entries()];
+
+    const restored = ComponentStore.fromEntries(entries);
+    expect(restored.get(0)).toEqual({ x: 1, y: 2 });
+    expect(restored.get(5)).toEqual({ x: 3, y: 4 });
+    expect(restored.has(1)).toBe(false);
+    expect(restored.size).toBe(2);
+  });
 });
