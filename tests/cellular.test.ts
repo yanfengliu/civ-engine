@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createCellGrid, stepCellGrid } from '../src/cellular.js';
+import { createCellGrid, stepCellGrid, MOORE_OFFSETS, VON_NEUMANN_OFFSETS } from '../src/cellular.js';
 import type { CellRule } from '../src/cellular.js';
 
 describe('createCellGrid', () => {
@@ -86,5 +86,35 @@ describe('stepCellGrid', () => {
       1, 0, 1,
       1, 1, 1,
     ]);
+  });
+
+  it('accepts VON_NEUMANN_OFFSETS for 4-directional neighborhoods', () => {
+    const counts: number[] = [];
+    const grid = createCellGrid(3, 3, () => 1);
+    stepCellGrid(grid, (current, neighbors) => {
+      counts.push(neighbors.length);
+      return current;
+    }, VON_NEUMANN_OFFSETS);
+    // corner (0,0): 2 neighbors, edge (1,0): 3 neighbors, center (1,1): 4 neighbors
+    expect(counts[0]).toBe(2);
+    expect(counts[1]).toBe(3);
+    expect(counts[4]).toBe(4);
+  });
+
+  it('accepts custom offsets', () => {
+    const counts: number[] = [];
+    const grid = createCellGrid(5, 5, () => 1);
+    const knightOffsets: [number, number][] = [[1, 2], [2, 1]];
+    stepCellGrid(grid, (current, neighbors) => {
+      counts.push(neighbors.length);
+      return current;
+    }, knightOffsets);
+    // (0,0): both offsets in bounds → 2 neighbors
+    expect(counts[0]).toBe(2);
+  });
+
+  it('MOORE_OFFSETS has 8 entries, VON_NEUMANN_OFFSETS has 4', () => {
+    expect(MOORE_OFFSETS).toHaveLength(8);
+    expect(VON_NEUMANN_OFFSETS).toHaveLength(4);
   });
 });

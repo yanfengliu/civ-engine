@@ -20,10 +20,16 @@ export function createCellGrid(
   return { width, height, cells };
 }
 
-const MOORE_OFFSETS: [number, number][] = [
+export const MOORE_OFFSETS: ReadonlyArray<[number, number]> = [
   [-1, -1], [0, -1], [1, -1],
   [-1,  0],          [1,  0],
   [-1,  1], [0,  1], [1,  1],
+];
+
+export const VON_NEUMANN_OFFSETS: ReadonlyArray<[number, number]> = [
+  [0, -1],
+  [-1, 0], [1, 0],
+  [0,  1],
 ];
 
 function getNeighbors(
@@ -32,9 +38,10 @@ function getNeighbors(
   height: number,
   x: number,
   y: number,
+  offsets: ReadonlyArray<[number, number]>,
 ): number[] {
   const result: number[] = [];
-  for (const [dx, dy] of MOORE_OFFSETS) {
+  for (const [dx, dy] of offsets) {
     const nx = x + dx;
     const ny = y + dy;
     if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
@@ -44,13 +51,17 @@ function getNeighbors(
   return result;
 }
 
-export function stepCellGrid(grid: CellGrid, rule: CellRule): CellGrid {
+export function stepCellGrid(
+  grid: CellGrid,
+  rule: CellRule,
+  offsets: ReadonlyArray<[number, number]> = MOORE_OFFSETS,
+): CellGrid {
   const { width, height, cells } = grid;
   const next = new Array<number>(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = y * width + x;
-      const neighbors = getNeighbors(cells, width, height, x, y);
+      const neighbors = getNeighbors(cells, width, height, x, y, offsets);
       next[idx] = rule(cells[idx], neighbors);
     }
   }
