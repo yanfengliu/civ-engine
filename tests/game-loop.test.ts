@@ -109,4 +109,14 @@ describe('GameLoop', () => {
     expect(loop.getSpeed()).toBe(4);
     expect(loop.isPaused).toBe(true);
   });
+
+  it('setSpeed throws on Infinity', () => {
+    const loop = new GameLoop({ tps: 60, onTick: () => {} });
+    expect(() => loop.setSpeed(Infinity)).toThrow();
+  });
+
+  it('setSpeed throws on NaN', () => {
+    const loop = new GameLoop({ tps: 60, onTick: () => {} });
+    expect(() => loop.setSpeed(NaN)).toThrow();
+  });
 });

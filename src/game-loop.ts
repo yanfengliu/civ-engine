@@ -55,8 +55,8 @@ export class GameLoop {
   }
 
   setSpeed(multiplier: number): void {
-    if (multiplier <= 0) {
-      throw new Error('Speed multiplier must be positive');
+    if (!Number.isFinite(multiplier) || multiplier <= 0) {
+      throw new Error('Speed multiplier must be a finite positive number');
     }
     this.speedMultiplier = multiplier;
   }
