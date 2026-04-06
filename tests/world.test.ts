@@ -219,4 +219,53 @@ describe('World', () => {
     world.destroyEntity(id);
     expect(listener).toHaveBeenCalledWith({ id });
   });
+
+  it('submit with no validators queues and returns true', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', () => {});
+    const result = world.submit('move', { x: 1, y: 2 });
+    expect(result).toBe(true);
+  });
+
+  it('submit with passing validator queues and returns true', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', (data) => data.x >= 0 && data.y >= 0);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+  });
+
+  it('submit with failing validator rejects and returns false', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', (data) => data.x >= 0 && data.y >= 0);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: -1, y: 2 })).toBe(false);
+  });
+
+  it('all validators must pass for submit to accept', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', () => true);
+    world.registerValidator('move', () => false);
+    world.registerHandler('move', () => {});
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(false);
+  });
 });

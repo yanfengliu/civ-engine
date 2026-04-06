@@ -4,6 +4,7 @@ import { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';
 import { EventBus } from './event-bus.js';
+import { CommandQueue } from './command-queue.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -20,6 +21,15 @@ export class World<
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
   private eventBus = new EventBus<TEventMap>();
+  private commandQueue = new CommandQueue<TCommandMap>();
+  private validators = new Map<
+    keyof TCommandMap,
+    Array<(data: never, world: World<TEventMap, TCommandMap>) => boolean>
+  >();
+  private handlers = new Map<
+    keyof TCommandMap,
+    (data: never, world: World<TEventMap, TCommandMap>) => void
+  >();
   readonly grid: SpatialGrid;
 
   constructor(config: WorldConfig) {
@@ -131,6 +141,49 @@ export class World<
     listener: (event: TEventMap[K]) => void,
   ): void {
     this.eventBus.off(type, listener);
+  }
+
+  submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
+    const fns = this.validators.get(type);
+    if (fns) {
+      for (const fn of fns) {
+        if (
+          !(fn as (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean)(
+            data,
+            this,
+          )
+        ) {
+          return false;
+        }
+      }
+    }
+    this.commandQueue.push(type, data);
+    return true;
+  }
+
+  registerValidator<K extends keyof TCommandMap>(
+    type: K,
+    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean,
+  ): void {
+    let fns = this.validators.get(type);
+    if (!fns) {
+      fns = [];
+      this.validators.set(type, fns);
+    }
+    fns.push(fn as (data: never, world: World<TEventMap, TCommandMap>) => boolean);
+  }
+
+  registerHandler<K extends keyof TCommandMap>(
+    type: K,
+    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
+  ): void {
+    if (this.handlers.has(type)) {
+      throw new Error(`Handler already registered for command '${String(type)}'`);
+    }
+    this.handlers.set(
+      type,
+      fn as (data: never, world: World<TEventMap, TCommandMap>) => void,
+    );
   }
 
   getEvents(): ReadonlyArray<{
