@@ -21,6 +21,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Resource system          | `resource-store.ts`  | 2026-04-05 | Pools, production/consumption rates, transfers, diff integration |
 | Map infrastructure       | `noise.ts`, `cellular.ts`, `map-gen.ts` | 2026-04-06 | Simplex noise, cellular automata, MapGenerator interface, createTileGrid |
 | Pathfinding              | `pathfinding.ts`         | 2026-04-06 | Generic A*, graph-agnostic, user-defined cost/neighbors/heuristic/hash    |
+| Simulation speed control | `game-loop.ts`           | 2026-04-06 | Speed multiplier, pause/resume, step() ignores both for deterministic testing |
 
 ## In Progress
 
@@ -28,9 +29,7 @@ None currently.
 
 ## Planned — Engine Primitives
 
-| Feature                 | Priority | Description                                                                                  |
-| ----------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| Turn / phase management | Medium   | Generic turn structure and phase pipeline (game defines its own phases)                       |
+None currently.
 
 ## Planned — Client Integration
 

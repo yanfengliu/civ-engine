@@ -16,7 +16,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
 | ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
 | SpatialGrid    | `src/spatial-grid.ts`    | 2D flat array grid, lazy Set allocation per cell, 4-directional neighbor queries       |
-| GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop (60 TPS default), step() for testing, start()/stop() for real-time |
+| GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop, step() for testing, start()/stop() for real-time, speed multiplier, pause/resume |
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
 | Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
@@ -112,3 +112,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-06 | Added map infrastructure utilities     | Standalone noise, cellular automata, and tile-creation primitives for map generation |
 | 2026-04-06 | Made hardcoded defaults configurable   | positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets now have overridable defaults |
 | 2026-04-06 | Added generic A* pathfinding        | Standalone graph-agnostic pathfinding with configurable callbacks and early termination |
+| 2026-04-06 | Added simulation speed control       | Speed multiplier and pause/resume on GameLoop, proxied via World                             |
