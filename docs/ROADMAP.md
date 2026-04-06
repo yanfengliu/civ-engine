@@ -22,6 +22,7 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Map infrastructure       | `noise.ts`, `cellular.ts`, `map-gen.ts` | 2026-04-06 | Simplex noise, cellular automata, MapGenerator interface, createTileGrid |
 | Pathfinding              | `pathfinding.ts`         | 2026-04-06 | Generic A*, graph-agnostic, user-defined cost/neighbors/heuristic/hash    |
 | Simulation speed control | `game-loop.ts`           | 2026-04-06 | Speed multiplier, pause/resume, step() ignores both for deterministic testing |
+| Client protocol | `client-adapter.ts` | 2026-04-06 | `ClientAdapter` with typed `ServerMessage`/`ClientMessage`, transport-agnostic send callback |
 
 ## In Progress
 
@@ -33,9 +34,7 @@ None currently.
 
 ## Planned — Client Integration
 
-| Feature           | Priority | Description                                                                      |
-| ----------------- | -------- | -------------------------------------------------------------------------------- |
-| Client protocol   | Medium   | Define the wire format between engine and client (JSON, binary, WebSocket, etc.) |
+None currently.
 
 ## Notes
 

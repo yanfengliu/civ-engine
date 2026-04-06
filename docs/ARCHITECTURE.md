@@ -26,6 +26,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
 | MapGen         | `src/map-gen.ts`         | MapGenerator interface, createTileGrid bulk tile-entity helper                         |
 | Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
+| ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
 
 ## Data Flow
@@ -77,6 +78,7 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 - **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
 - **Pathfinding** is a standalone utility. It has no knowledge of the spatial grid, entities, or the tick loop. Game code provides `neighbors`, `cost`, `heuristic`, and `hash` callbacks to wire it to any graph topology.
+- **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submit`).
 
 ## Technology Map
 
@@ -113,3 +115,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-06 | Made hardcoded defaults configurable   | positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets now have overridable defaults |
 | 2026-04-06 | Added generic A* pathfinding        | Standalone graph-agnostic pathfinding with configurable callbacks and early termination |
 | 2026-04-06 | Added simulation speed control       | Speed multiplier and pause/resume on GameLoop, proxied via World                             |
+| 2026-04-06 | Added ClientAdapter | Transport-agnostic client protocol with typed messages for server-client communication |

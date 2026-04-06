@@ -65,6 +65,7 @@ world.step();
 | **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
 | **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()` |
 | **State Diffs** | Per-tick change sets: what entities/components/resources changed |
+| **Client Protocol** | Transport-agnostic typed messages, ClientAdapter bridges World to any transport |
 
 ## Architecture
 
@@ -100,6 +101,7 @@ src/
   cellular.ts         Cellular automata
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
+  client-adapter.ts   Transport-agnostic client protocol
   types.ts            Shared types (EntityId, Position, WorldConfig)
 tests/
   *.test.ts           Unit and integration tests per module
@@ -177,6 +179,11 @@ docs/
 | `getDiff()` | `TickDiff \| null` | Get last tick's diff |
 | `onDiff(fn)` | `void` | Subscribe to per-tick diffs |
 | `offDiff(fn)` | `void` | Unsubscribe from diffs |
+| **Client Protocol** | | |
+| `new ClientAdapter({ world, send })` | `ClientAdapter` | Create adapter with World and send callback |
+| `adapter.connect()` | `void` | Send snapshot, start streaming tick diffs |
+| `adapter.disconnect()` | `void` | Stop streaming tick diffs |
+| `adapter.handleMessage(msg)` | `void` | Process incoming client message |
 
 ### Standalone Utilities (import directly, not via World)
 
@@ -187,6 +194,7 @@ docs/
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
+| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
 
 ### SpatialGrid Methods
 
