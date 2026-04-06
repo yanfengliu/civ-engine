@@ -191,3 +191,11 @@
 **Files changed:** src/noise.ts (new), src/cellular.ts (new), src/map-gen.ts (new), tests/noise.test.ts (new), tests/cellular.test.ts (new), tests/map-gen.test.ts (new), docs/ARCHITECTURE.md, docs/ROADMAP.md
 **Reasoning:** Standalone utility approach chosen over World-integrated subsystem to keep the engine lean and composable. Game code imports and composes these primitives as needed.
 **Notes:** Noise uses mulberry32 PRNG for seeding, standard 2D simplex algorithm, output clamped to [-1,1]. Cellular automata uses Moore neighborhood (8-directional) with boundary omission. createTileGrid validates position component registration before creating entities. ARCHITECTURE.md updated.
+
+## [2026-04-06 12:00, UTC] — Remove hardcoded defaults, make engine configurable
+
+**Action:** Audited entire codebase for hardcoded logic that restricts engine flexibility. Fixed 5 issues: (1) `positionKey` now configurable in WorldConfig (default 'position'), (2) `getNeighbors` accepts optional offsets with exported presets (ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS), (3) `maxTicksPerFrame` configurable in WorldConfig (default 4), (4) `stepCellGrid` accepts optional offsets with exported MOORE_OFFSETS/VON_NEUMANN_OFFSETS, (5) `createTileGrid` accepts optional positionKey param.
+**Result:** Success — all changes backward-compatible with defaults matching previous behavior. 10 new tests, 164 total pass, lint and typecheck clean.
+**Files changed:** src/types.ts, src/world.ts, src/game-loop.ts, src/spatial-grid.ts, src/cellular.ts, src/map-gen.ts, tests/world.test.ts, tests/serializer.test.ts, tests/spatial-grid.test.ts, tests/cellular.test.ts, tests/map-gen.test.ts, README.md, docs/ARCHITECTURE.md
+**Reasoning:** A general-purpose engine should not force naming conventions or limit neighbor topologies. All defaults are sensible but every hardcoded choice now has an override.
+**Notes:** ARCHITECTURE.md updated.
