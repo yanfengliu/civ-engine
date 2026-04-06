@@ -1,5 +1,30 @@
 import type { EntityId } from './types.js';
 
+export const ORTHOGONAL: ReadonlyArray<[number, number]> = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+];
+
+export const DIAGONAL: ReadonlyArray<[number, number]> = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
+
+export const ALL_DIRECTIONS: ReadonlyArray<[number, number]> = [
+  [0, -1],
+  [0, 1],
+  [-1, 0],
+  [1, 0],
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
+
 export class SpatialGrid {
   readonly width: number;
   readonly height: number;
@@ -39,16 +64,14 @@ export class SpatialGrid {
     return this.cells[this.index(x, y)];
   }
 
-  getNeighbors(x: number, y: number): EntityId[] {
+  getNeighbors(
+    x: number,
+    y: number,
+    offsets: ReadonlyArray<[number, number]> = ORTHOGONAL,
+  ): EntityId[] {
     this.assertBounds(x, y);
     const result: EntityId[] = [];
-    const directions: [number, number][] = [
-      [0, -1],
-      [0, 1],
-      [-1, 0],
-      [1, 0],
-    ];
-    for (const [dx, dy] of directions) {
+    for (const [dx, dy] of offsets) {
       const nx = x + dx;
       const ny = y + dy;
       if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SpatialGrid } from '../src/spatial-grid.js';
+import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from '../src/spatial-grid.js';
 
 describe('SpatialGrid', () => {
   it('inserts and retrieves entity at position', () => {
@@ -81,5 +81,38 @@ describe('SpatialGrid', () => {
     const grid = new SpatialGrid(10, 10);
     expect(() => grid.getNeighbors(-1, 0)).toThrow(RangeError);
     expect(() => grid.getNeighbors(10, 0)).toThrow(RangeError);
+  });
+
+  it('getNeighbors with ALL_DIRECTIONS returns 8-directional neighbors', () => {
+    const grid = new SpatialGrid(10, 10);
+    grid.insert(0, 5, 4); // up
+    grid.insert(1, 5, 6); // down
+    grid.insert(2, 4, 5); // left
+    grid.insert(3, 6, 5); // right
+    grid.insert(4, 4, 4); // diagonal
+    const neighbors = grid.getNeighbors(5, 5, ALL_DIRECTIONS);
+    expect(neighbors.sort()).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('getNeighbors with DIAGONAL returns only diagonal neighbors', () => {
+    const grid = new SpatialGrid(10, 10);
+    grid.insert(0, 5, 4); // up (orthogonal)
+    grid.insert(1, 4, 4); // diagonal
+    grid.insert(2, 6, 6); // diagonal
+    const neighbors = grid.getNeighbors(5, 5, DIAGONAL);
+    expect(neighbors.sort()).toEqual([1, 2]);
+  });
+
+  it('getNeighbors with custom offsets works', () => {
+    const grid = new SpatialGrid(10, 10);
+    grid.insert(0, 7, 5); // 2 cells right
+    const neighbors = grid.getNeighbors(5, 5, [[2, 0]]);
+    expect(neighbors).toEqual([0]);
+  });
+
+  it('ORTHOGONAL has 4 entries, DIAGONAL 4, ALL_DIRECTIONS 8', () => {
+    expect(ORTHOGONAL).toHaveLength(4);
+    expect(DIAGONAL).toHaveLength(4);
+    expect(ALL_DIRECTIONS).toHaveLength(8);
   });
 });
