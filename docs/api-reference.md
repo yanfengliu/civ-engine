@@ -1,0 +1,1646 @@
+# API Reference
+
+Complete reference for every public type, method, and module in civ-engine.
+
+## Table of Contents
+
+- [Types](#types)
+- [World](#world)
+  - [Constructor](#constructor)
+  - [Entity Management](#entity-management)
+  - [Components](#components)
+  - [Systems & Simulation](#systems--simulation)
+  - [Speed Control](#speed-control)
+  - [Commands](#commands)
+  - [Events](#events)
+  - [Resources](#resources)
+  - [State Serialization](#state-serialization)
+  - [State Diffs](#state-diffs)
+  - [Entity Lifecycle Hooks](#entity-lifecycle-hooks)
+- [SpatialGrid](#spatialgrid)
+- [Pathfinding](#pathfinding)
+- [Noise](#noise)
+- [Cellular Automata](#cellular-automata)
+- [Map Generation](#map-generation)
+- [Behavior Tree](#behavior-tree)
+- [Client Adapter](#client-adapter)
+
+---
+
+## Types
+
+All types are importable from their respective modules.
+
+### `EntityId`
+
+```typescript
+// src/types.ts
+type EntityId = number;
+```
+
+Numeric identifier for entities. IDs are recycled via a free-list after destruction. Two entities may share the same ID across different lifetimes but never simultaneously.
+
+### `Position`
+
+```typescript
+// src/types.ts
+interface Position {
+  x: number;
+  y: number;
+}
+```
+
+Standard 2D position interface used for spatial grid synchronization. The component key for spatial tracking is configurable via `WorldConfig.positionKey` (default `'position'`).
+
+### `WorldConfig`
+
+```typescript
+// src/types.ts
+interface WorldConfig {
+  gridWidth: number;       // Width of the spatial grid (required)
+  gridHeight: number;      // Height of the spatial grid (required)
+  tps: number;             // Ticks per second for real-time loop (required)
+  positionKey?: string;    // Component key used for spatial sync (default: 'position')
+  maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
+}
+```
+
+### `System`
+
+```typescript
+// src/world.ts
+type System<TEventMap, TCommandMap> = (world: World<TEventMap, TCommandMap>) => void;
+```
+
+A system is a pure function that receives the `World` and runs game logic. Systems execute each tick in registration order.
+
+### `WorldSnapshot`
+
+```typescript
+// src/serializer.ts
+interface WorldSnapshot {
+  version: 1;
+  config: WorldConfig;
+  tick: number;
+  entities: {
+    generations: number[];
+    alive: boolean[];
+    freeList: number[];
+  };
+  components: Record<string, Array<[EntityId, unknown]>>;
+}
+```
+
+JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+
+### `TickDiff`
+
+```typescript
+// src/diff.ts
+interface TickDiff {
+  tick: number;
+  entities: {
+    created: EntityId[];
+    destroyed: EntityId[];
+  };
+  components: Record<string, {
+    set: Array<[EntityId, unknown]>;
+    removed: EntityId[];
+  }>;
+  resources: Record<string, {
+    set: Array<[EntityId, ResourcePool]>;
+    removed: EntityId[];
+  }>;
+}
+```
+
+Per-tick change set capturing every entity, component, and resource that changed. Only component types and resource types that actually changed appear in the record.
+
+### `ResourcePool`
+
+```typescript
+// src/resource-store.ts
+interface ResourcePool {
+  current: number;
+  max: number;
+}
+```
+
+A resource pool with a current value and a maximum capacity.
+
+### `Transfer`
+
+```typescript
+// src/resource-store.ts
+interface Transfer {
+  id: number;
+  from: EntityId;
+  to: EntityId;
+  resource: string;
+  rate: number;
+}
+```
+
+A recurring resource transfer between two entities, processed each tick.
+
+### `PathConfig<T>`
+
+```typescript
+// src/pathfinding.ts
+interface PathConfig<T> {
+  start: T;                                   // Starting node
+  goal: T;                                    // Target node
+  neighbors: (node: T) => T[];               // Returns adjacent nodes
+  cost: (from: T, to: T) => number;          // Edge cost (Infinity = impassable)
+  heuristic: (node: T, goal: T) => number;   // Estimated cost to goal
+  hash: (node: T) => string | number;        // Unique node identifier
+  maxCost?: number;                           // Cost ceiling (default: Infinity)
+  maxIterations?: number;                     // Iteration limit (default: 10,000)
+  trackExplored?: boolean;                    // Include explored count (default: false)
+}
+```
+
+### `PathResult<T>`
+
+```typescript
+// src/pathfinding.ts
+interface PathResult<T> {
+  path: T[];         // Ordered list of nodes from start to goal (inclusive)
+  cost: number;      // Total path cost
+  explored?: number; // Number of nodes explored (only if trackExplored was true)
+}
+```
+
+### `CellGrid`
+
+```typescript
+// src/cellular.ts
+type CellGrid = {
+  readonly width: number;
+  readonly height: number;
+  readonly cells: number[];   // Flat array, indexed as y * width + x
+};
+```
+
+### `CellRule`
+
+```typescript
+// src/cellular.ts
+type CellRule = (current: number, neighbors: number[]) => number;
+```
+
+A function that determines a cell's next value based on its current value and its neighbors' values.
+
+### `MapGenerator`
+
+```typescript
+// src/map-gen.ts
+interface MapGenerator {
+  generate(world: World, tiles: EntityId[][]): void;
+}
+```
+
+Interface for map generators. Receives the world and the tile entity grid from `createTileGrid`.
+
+### `NodeStatus`
+
+```typescript
+// src/behavior-tree.ts
+enum NodeStatus {
+  SUCCESS,   // 0 - Node completed successfully
+  FAILURE,   // 1 - Node failed
+  RUNNING,   // 2 - Node needs more ticks to complete
+}
+```
+
+### `BTState`
+
+```typescript
+// src/behavior-tree.ts
+interface BTState {
+  running: number[];  // Per-node index tracking which child is running (-1 = none)
+}
+```
+
+Serializable behavior tree execution state. Store this as a component on entities. The `running` array has one slot per node in the tree, tracking which child a composite node should resume from.
+
+### `TreeBuilder<TContext>`
+
+```typescript
+// src/behavior-tree.ts
+interface TreeBuilder<TContext> {
+  action(fn: (ctx: TContext) => NodeStatus): BTNode<TContext>;
+  condition(fn: (ctx: TContext) => boolean): BTNode<TContext>;
+  selector(children: BTNode<TContext>[]): BTNode<TContext>;
+  sequence(children: BTNode<TContext>[]): BTNode<TContext>;
+}
+```
+
+Builder object passed to the `createBehaviorTree` define callback. Used to construct tree nodes.
+
+### `GameEvent<TEventMap>`
+
+```typescript
+// src/client-adapter.ts
+type GameEvent<TEventMap> = {
+  type: keyof TEventMap;
+  data: TEventMap[keyof TEventMap];
+};
+```
+
+### `ServerMessage<TEventMap>`
+
+```typescript
+// src/client-adapter.ts
+type ServerMessage<TEventMap> =
+  | { type: 'snapshot'; data: WorldSnapshot }
+  | { type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
+  | { type: 'commandRejected'; data: { id: string; reason?: string } };
+```
+
+Messages sent from server to client:
+
+| Type | When sent | Payload |
+|---|---|---|
+| `snapshot` | On `connect()` or `requestSnapshot` | Full `WorldSnapshot` |
+| `tick` | After each `step()` while connected | `TickDiff` + events from the tick |
+| `commandRejected` | When a submitted command fails validation | Command ID + optional reason |
+
+### `ClientMessage<TCommandMap>`
+
+```typescript
+// src/client-adapter.ts
+type ClientMessage<TCommandMap> =
+  | { type: 'command'; data: { id: string; commandType: keyof TCommandMap; payload: TCommandMap[keyof TCommandMap] } }
+  | { type: 'requestSnapshot' };
+```
+
+Messages sent from client to server:
+
+| Type | Purpose | Payload |
+|---|---|---|
+| `command` | Submit a game command | Command ID, type, and payload |
+| `requestSnapshot` | Request a full state resync | (none) |
+
+---
+
+## World
+
+`World<TEventMap, TCommandMap>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
+
+```typescript
+import { World } from './src/world.js';
+```
+
+### Type Parameters
+
+| Parameter | Constraint | Default | Description |
+|---|---|---|---|
+| `TEventMap` | `Record<keyof TEventMap, unknown>` | `Record<string, never>` | Map of event type names to event data types |
+| `TCommandMap` | `Record<keyof TCommandMap, unknown>` | `Record<string, never>` | Map of command type names to command data types |
+
+### Constructor
+
+```typescript
+new World<TEventMap, TCommandMap>(config: WorldConfig)
+```
+
+Creates a new world with the specified grid dimensions, tick rate, and optional configuration.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `config.gridWidth` | `number` | Yes | Width of the spatial grid in cells |
+| `config.gridHeight` | `number` | Yes | Height of the spatial grid in cells |
+| `config.tps` | `number` | Yes | Ticks per second for the real-time loop |
+| `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
+| `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
+
+**Example:**
+
+```typescript
+const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
+```
+
+### Entity Management
+
+#### `createEntity()`
+
+```typescript
+createEntity(): EntityId
+```
+
+Creates a new entity and returns its ID. IDs are recycled from previously destroyed entities via a free-list. Entity IDs start at `0` and increment.
+
+**Returns:** `EntityId` — the new entity's numeric ID.
+
+```typescript
+const unit = world.createEntity(); // 0
+const building = world.createEntity(); // 1
+```
+
+#### `destroyEntity(id)`
+
+```typescript
+destroyEntity(id: EntityId): void
+```
+
+Immediately destroys an entity. Performs full cleanup in this order:
+
+1. Fires all `onDestroy` callbacks (with components still attached)
+2. Removes entity from the spatial grid using its last-synced position
+3. Removes all components from all stores
+4. Removes all resource pools, production rates, consumption rates, and transfers
+5. Marks the entity as dead in the entity manager (ID becomes available for recycling)
+
+**No-op** if the entity is already dead.
+
+```typescript
+world.destroyEntity(unit);
+world.isAlive(unit); // false
+```
+
+#### `isAlive(id)`
+
+```typescript
+isAlive(id: EntityId): boolean
+```
+
+Returns `true` if the entity exists and has not been destroyed. Returns `false` for IDs that were never created or have been destroyed.
+
+```typescript
+const e = world.createEntity();
+world.isAlive(e);    // true
+world.destroyEntity(e);
+world.isAlive(e);    // false
+world.isAlive(999);  // false
+```
+
+### Components
+
+#### `registerComponent<T>(key)`
+
+```typescript
+registerComponent<T>(key: string): void
+```
+
+Registers a component type by string key. Must be called before using `addComponent`, `getComponent`, `removeComponent`, or `query` with this key.
+
+**Throws:** `Error` if a component with this key is already registered.
+
+```typescript
+interface Health { hp: number; maxHp: number }
+world.registerComponent<Health>('health');
+```
+
+#### `addComponent<T>(entity, key, data)`
+
+```typescript
+addComponent<T>(entity: EntityId, key: string, data: T): void
+```
+
+Attaches a component to an entity. If the entity already has this component, it is overwritten.
+
+**Throws:** `Error` if the component key is not registered.
+
+```typescript
+world.addComponent(unit, 'health', { hp: 100, maxHp: 100 });
+```
+
+#### `getComponent<T>(entity, key)`
+
+```typescript
+getComponent<T>(entity: EntityId, key: string): T | undefined
+```
+
+Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference — mutations are reflected immediately.
+
+```typescript
+const hp = world.getComponent<Health>(unit, 'health');
+if (hp) {
+  hp.hp -= 10; // mutate in-place
+}
+```
+
+#### `getComponents<T>(entity, keys)`
+
+```typescript
+getComponents<T extends unknown[]>(entity: EntityId, keys: string[]): ComponentTuple<T>
+```
+
+Batch-reads multiple components for a single entity. Returns a tuple where each element is the component data or `undefined`. More concise than multiple `getComponent` calls.
+
+**Type:** `ComponentTuple<T>` is `{ [K in keyof T]: T[K] | undefined }`.
+
+```typescript
+const [pos, hp, vel] = world.getComponents<[Position, Health, Velocity]>(
+  unit,
+  ['position', 'health', 'velocity'],
+);
+// pos: Position | undefined
+// hp: Health | undefined
+// vel: Velocity | undefined
+```
+
+#### `removeComponent(entity, key)`
+
+```typescript
+removeComponent(entity: EntityId, key: string): void
+```
+
+Detaches a component from an entity. No-op if the entity doesn't have this component.
+
+```typescript
+world.removeComponent(unit, 'velocity');
+```
+
+#### `query(...keys)`
+
+```typescript
+*query(...keys: string[]): IterableIterator<EntityId>
+```
+
+Returns an iterator over all entity IDs that have **every** specified component. Uses the smallest component store as the iteration base for efficiency.
+
+**Throws:** `Error` if any component key is not registered.
+
+Returns immediately (yields nothing) if `keys` is empty.
+
+```typescript
+// Iterate
+for (const id of world.query('position', 'health')) {
+  // id has both 'position' and 'health'
+}
+
+// Collect to array
+const soldiers = [...world.query('position', 'health', 'attack')];
+```
+
+### Systems & Simulation
+
+#### `registerSystem(fn)`
+
+```typescript
+registerSystem(system: System<TEventMap, TCommandMap>): void
+```
+
+Adds a system function to the end of the pipeline. Systems run each tick in registration order.
+
+```typescript
+function movementSystem(w: World): void {
+  for (const id of w.query('position', 'velocity')) {
+    const pos = w.getComponent<Position>(id, 'position')!;
+    const vel = w.getComponent<Velocity>(id, 'velocity')!;
+    pos.x += vel.dx;
+    pos.y += vel.dy;
+  }
+}
+
+world.registerSystem(movementSystem);
+```
+
+#### `step()`
+
+```typescript
+step(): void
+```
+
+Advances the simulation by exactly one tick. **Deterministic** — ignores pause state and speed multiplier. This is the primary method for testing and AI-driven simulations.
+
+Each tick executes in this order:
+
+1. Clear event buffer
+2. Clear dirty flags (entities, components, resources)
+3. Process commands (drain queue, run handlers)
+4. Sync spatial index (update grid from position components)
+5. Run systems (in registration order)
+6. Process resource rates and transfers
+7. Build diff (collect dirty state into `TickDiff`)
+8. Notify diff listeners
+9. Increment tick counter
+
+```typescript
+world.step(); // always executes, even when paused
+```
+
+#### `start()`
+
+```typescript
+start(): void
+```
+
+Begins the real-time loop. Ticks accumulate based on elapsed time and the configured TPS. Uses a fixed-timestep algorithm with spiral-of-death protection (controlled by `maxTicksPerFrame`).
+
+```typescript
+world.start(); // begins ticking at TPS rate
+```
+
+#### `stop()`
+
+```typescript
+stop(): void
+```
+
+Stops the real-time loop. The tick counter is preserved.
+
+```typescript
+world.stop();
+```
+
+#### `tick`
+
+```typescript
+get tick(): number
+```
+
+Read-only property returning the current tick count. Starts at `0`, increments by 1 after each tick.
+
+```typescript
+console.log(world.tick); // 0
+world.step();
+console.log(world.tick); // 1
+```
+
+#### `grid`
+
+```typescript
+readonly grid: SpatialGrid
+```
+
+Read-only reference to the spatial grid. Use `grid.getAt()` and `grid.getNeighbors()` to query spatial data. Do not call `grid.insert()`, `grid.remove()`, or `grid.move()` directly — the World handles spatial sync automatically.
+
+### Speed Control
+
+#### `setSpeed(multiplier)`
+
+```typescript
+setSpeed(multiplier: number): void
+```
+
+Sets the simulation speed multiplier for the real-time loop. `2` means ticks accumulate twice as fast. `0.5` means half speed. Has no effect on `step()`.
+
+**Throws:** `Error` if `multiplier` is not a finite positive number (rejects `0`, negative, `NaN`, `Infinity`).
+
+```typescript
+world.setSpeed(2);    // double speed
+world.setSpeed(0.5);  // half speed
+```
+
+#### `getSpeed()`
+
+```typescript
+getSpeed(): number
+```
+
+Returns the current speed multiplier. Default is `1`.
+
+#### `pause()`
+
+```typescript
+pause(): void
+```
+
+Pauses the real-time loop. The speed multiplier is preserved. `step()` still works while paused.
+
+#### `resume()`
+
+```typescript
+resume(): void
+```
+
+Resumes the real-time loop at the current speed multiplier. Resets the time accumulator to prevent a burst of ticks.
+
+#### `isPaused`
+
+```typescript
+get isPaused(): boolean
+```
+
+Read-only property. `true` when the simulation is paused.
+
+### Commands
+
+Commands are validated-and-queued input from external code (AI agents, UI). They are processed at the start of each tick, before spatial sync and systems.
+
+#### `submit<K>(type, data)`
+
+```typescript
+submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean
+```
+
+Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator returns `false`, the command is rejected and not queued.
+
+**Returns:** `true` if the command passed all validators and was queued, `false` if rejected.
+
+```typescript
+const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
+// accepted: true if validation passed
+```
+
+#### `registerValidator<K>(type, fn)`
+
+```typescript
+registerValidator<K extends keyof TCommandMap>(
+  type: K,
+  fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean,
+): void
+```
+
+Adds a validator for a command type. Multiple validators can be registered per type — they short-circuit on the first `false` return.
+
+```typescript
+world.registerValidator('moveUnit', (data, w) => {
+  return w.isAlive(data.entityId);
+});
+```
+
+#### `registerHandler<K>(type, fn)`
+
+```typescript
+registerHandler<K extends keyof TCommandMap>(
+  type: K,
+  fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
+): void
+```
+
+Sets the handler for a command type. Exactly one handler per type. The handler runs at tick start when commands are processed.
+
+**Throws:** `Error` if a handler is already registered for this command type.
+
+When a command is processed but no handler is registered, an `Error` is thrown.
+
+```typescript
+world.registerHandler('moveUnit', (data, w) => {
+  const pos = w.getComponent<Position>(data.entityId, 'position')!;
+  pos.x = data.targetX;
+  pos.y = data.targetY;
+});
+```
+
+### Events
+
+Events are a typed pub/sub mechanism for system-to-system communication and external observation. Events are buffered per tick and cleared at the start of the next tick.
+
+#### `emit<K>(type, data)`
+
+```typescript
+emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void
+```
+
+Emits an event. The event is added to the tick buffer and all registered listeners are called immediately (synchronously).
+
+```typescript
+world.emit('unitDied', { entityId: 5, cause: 'starvation' });
+```
+
+#### `on<K>(type, listener)`
+
+```typescript
+on<K extends keyof TEventMap>(type: K, listener: (event: TEventMap[K]) => void): void
+```
+
+Subscribes to an event type. The listener fires each time an event of this type is emitted.
+
+```typescript
+world.on('unitDied', (event) => {
+  console.log(`Unit ${event.entityId} died from ${event.cause}`);
+});
+```
+
+#### `off<K>(type, listener)`
+
+```typescript
+off<K extends keyof TEventMap>(type: K, listener: (event: TEventMap[K]) => void): void
+```
+
+Unsubscribes from an event type. Pass the exact same function reference used in `on()`.
+
+#### `getEvents()`
+
+```typescript
+getEvents(): ReadonlyArray<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>
+```
+
+Returns all events emitted during the current tick. The returned array is read-only. Cleared at the start of each tick.
+
+```typescript
+world.step();
+for (const event of world.getEvents()) {
+  console.log(event.type, event.data);
+}
+```
+
+### Resources
+
+Resources are numeric pools (current/max) attached to entities with automatic production, consumption, and inter-entity transfers. Resource rates and transfers are processed after systems each tick.
+
+#### `registerResource(key, options?)`
+
+```typescript
+registerResource(key: string, options?: { defaultMax?: number }): void
+```
+
+Registers a resource type. Must be called before using any resource methods with this key.
+
+**Throws:** `Error` if the resource key is already registered.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `defaultMax` | `number` | `Infinity` | Default maximum capacity for new pools |
+
+```typescript
+world.registerResource('food');
+world.registerResource('gold', { defaultMax: 1000 });
+```
+
+#### `addResource(entity, key, amount)`
+
+```typescript
+addResource(entity: EntityId, key: string, amount: number): number
+```
+
+Adds to an entity's resource pool. Creates the pool if it doesn't exist (with the resource type's `defaultMax`). Clamped to the pool's maximum.
+
+**Returns:** The amount actually added (may be less than requested if the pool is near max).
+
+**Throws:** `Error` if the resource key is not registered.
+
+```typescript
+const added = world.addResource(city, 'food', 50); // returns 50 (or less if near cap)
+```
+
+#### `removeResource(entity, key, amount)`
+
+```typescript
+removeResource(entity: EntityId, key: string, amount: number): number
+```
+
+Removes from an entity's resource pool. Clamped to the current value (cannot go below 0).
+
+**Returns:** The amount actually removed.
+
+```typescript
+const removed = world.removeResource(city, 'food', 30);
+```
+
+#### `getResource(entity, key)`
+
+```typescript
+getResource(entity: EntityId, key: string): { current: number; max: number } | undefined
+```
+
+Returns a copy of the resource pool for the given entity, or `undefined` if the entity has no pool for this resource.
+
+```typescript
+const pool = world.getResource(city, 'food');
+if (pool) {
+  console.log(`${pool.current}/${pool.max}`);
+}
+```
+
+#### `setResourceMax(entity, key, max)`
+
+```typescript
+setResourceMax(entity: EntityId, key: string, max: number): void
+```
+
+Sets the maximum capacity for a resource pool. If `current` exceeds the new max, it is clamped down. No-op if the entity has no pool for this resource.
+
+```typescript
+world.setResourceMax(city, 'food', 200);
+```
+
+#### `setProduction(entity, key, rate)`
+
+```typescript
+setProduction(entity: EntityId, key: string, rate: number): void
+```
+
+Sets the per-tick production rate. A pool is auto-created if one doesn't exist. Set to `0` to remove the production rate.
+
+```typescript
+world.setProduction(farm, 'food', 5); // +5 food/tick
+world.setProduction(farm, 'food', 0); // stop producing
+```
+
+#### `setConsumption(entity, key, rate)`
+
+```typescript
+setConsumption(entity: EntityId, key: string, rate: number): void
+```
+
+Sets the per-tick consumption rate. Does not auto-create a pool. Set to `0` to remove the consumption rate.
+
+```typescript
+world.setConsumption(city, 'food', 2); // -2 food/tick
+```
+
+#### `getProduction(entity, key)`
+
+```typescript
+getProduction(entity: EntityId, key: string): number
+```
+
+Returns the production rate for an entity/resource, or `0` if none set.
+
+#### `getConsumption(entity, key)`
+
+```typescript
+getConsumption(entity: EntityId, key: string): number
+```
+
+Returns the consumption rate for an entity/resource, or `0` if none set.
+
+#### `addTransfer(from, to, resource, rate)`
+
+```typescript
+addTransfer(from: EntityId, to: EntityId, resource: string, rate: number): number
+```
+
+Creates a recurring resource transfer. Each tick, up to `rate` units are moved from the source entity's pool to the destination entity's pool (clamped by source availability and destination capacity).
+
+Transfers involving dead entities are automatically removed during tick processing.
+
+**Returns:** A unique transfer ID (for later removal with `removeTransfer`).
+
+```typescript
+const transferId = world.addTransfer(farm, city, 'food', 3); // 3 food/tick
+```
+
+#### `removeTransfer(id)`
+
+```typescript
+removeTransfer(id: number): void
+```
+
+Removes a transfer by its ID.
+
+```typescript
+world.removeTransfer(transferId);
+```
+
+#### `getTransfers(entity)`
+
+```typescript
+getTransfers(entity: EntityId): Array<{
+  id: number;
+  from: EntityId;
+  to: EntityId;
+  resource: string;
+  rate: number;
+}>
+```
+
+Returns all transfers that involve the given entity (as source or destination).
+
+#### `getResourceEntities(key)`
+
+```typescript
+*getResourceEntities(key: string): IterableIterator<EntityId>
+```
+
+Iterates all entities that have a pool for this resource.
+
+```typescript
+for (const id of world.getResourceEntities('food')) {
+  const pool = world.getResource(id, 'food')!;
+  console.log(`Entity ${id}: ${pool.current} food`);
+}
+```
+
+### State Serialization
+
+#### `serialize()`
+
+```typescript
+serialize(): WorldSnapshot
+```
+
+Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions).
+
+```typescript
+const snapshot = world.serialize();
+const json = JSON.stringify(snapshot);
+```
+
+#### `World.deserialize(snapshot, systems?)`
+
+```typescript
+static deserialize<TEventMap, TCommandMap>(
+  snapshot: WorldSnapshot,
+  systems?: System<TEventMap, TCommandMap>[],
+): World<TEventMap, TCommandMap>
+```
+
+Restores a world from a snapshot. Optionally accepts systems to re-register. After deserializing, you must also re-register:
+- Command validators and handlers
+- Event listeners
+- Resource types (if you need to add/modify resources after loading)
+
+**Throws:**
+- `Error` if `snapshot.version` is not `1`
+- `Error` if entity state arrays have mismatched lengths
+
+```typescript
+const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);
+restored.registerValidator('moveUnit', validator);
+restored.registerHandler('moveUnit', handler);
+```
+
+### State Diffs
+
+#### `getDiff()`
+
+```typescript
+getDiff(): TickDiff | null
+```
+
+Returns the diff from the most recent tick, or `null` if no tick has been executed yet. The diff is rebuilt each tick.
+
+```typescript
+world.step();
+const diff = world.getDiff();
+if (diff) {
+  console.log(`Created: ${diff.entities.created}`);
+  console.log(`Destroyed: ${diff.entities.destroyed}`);
+}
+```
+
+#### `onDiff(fn)`
+
+```typescript
+onDiff(fn: (diff: TickDiff) => void): void
+```
+
+Subscribes to per-tick diffs. The callback fires at the end of each tick, after systems and resource processing.
+
+```typescript
+world.onDiff((diff) => {
+  // send to client, log, etc.
+});
+```
+
+#### `offDiff(fn)`
+
+```typescript
+offDiff(fn: (diff: TickDiff) => void): void
+```
+
+Unsubscribes from diffs. Pass the exact same function reference used in `onDiff()`.
+
+### Entity Lifecycle Hooks
+
+#### `onDestroy(callback)`
+
+```typescript
+onDestroy(
+  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+): void
+```
+
+Registers a callback that fires when any entity is destroyed, **before** its components are removed. This allows cleanup logic (e.g., removing references from other entities).
+
+Multiple callbacks can be registered. They fire in registration order.
+
+```typescript
+world.onDestroy((id, w) => {
+  // Entity still has its components here
+  const owner = w.getComponent<{ ownerId: EntityId }>(id, 'owned');
+  if (owner) {
+    // clean up reference on the owner entity
+  }
+});
+```
+
+#### `offDestroy(callback)`
+
+```typescript
+offDestroy(
+  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+): void
+```
+
+Unregisters a destroy callback. Pass the exact same function reference used in `onDestroy()`.
+
+---
+
+## SpatialGrid
+
+A 2D flat-array grid that tracks which entities are at each cell. The World automatically syncs entity positions to the grid each tick. You should **read** from the grid but not write to it directly.
+
+```typescript
+import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
+```
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `width` | `number` | Grid width (read-only) |
+| `height` | `number` | Grid height (read-only) |
+
+### Methods
+
+#### `getAt(x, y)`
+
+```typescript
+getAt(x: number, y: number): ReadonlySet<EntityId> | null
+```
+
+Returns the set of entities at a cell, or `null` if no entity is there. The returned set is read-only.
+
+**Throws:** `RangeError` if `(x, y)` is out of bounds.
+
+```typescript
+const entities = world.grid.getAt(5, 3);
+if (entities) {
+  for (const id of entities) {
+    console.log(`Entity ${id} is at (5, 3)`);
+  }
+}
+```
+
+#### `getNeighbors(x, y, offsets?)`
+
+```typescript
+getNeighbors(x: number, y: number, offsets?: ReadonlyArray<[number, number]>): EntityId[]
+```
+
+Returns all entities in neighboring cells. Automatically skips out-of-bounds cells.
+
+**Throws:** `RangeError` if `(x, y)` is out of bounds.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `offsets` | `ORTHOGONAL` | Direction offsets to check |
+
+```typescript
+// 4 orthogonal neighbors (default)
+const nearby = world.grid.getNeighbors(5, 3);
+
+// 8 directions (orthogonal + diagonal)
+const allNearby = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
+
+// Only diagonal
+const diag = world.grid.getNeighbors(5, 3, DIAGONAL);
+```
+
+### Direction Constants
+
+| Constant | Directions | Count |
+|---|---|---|
+| `ORTHOGONAL` | Up, Down, Left, Right | 4 |
+| `DIAGONAL` | Up-Left, Up-Right, Down-Left, Down-Right | 4 |
+| `ALL_DIRECTIONS` | All 8 | 8 |
+
+Each constant is `ReadonlyArray<[number, number]>` of `[dx, dy]` offsets.
+
+---
+
+## Pathfinding
+
+Generic A* pathfinding on any graph topology. Standalone utility with no dependency on World or SpatialGrid.
+
+```typescript
+import { findPath } from './src/pathfinding.js';
+import type { PathConfig, PathResult } from './src/pathfinding.js';
+```
+
+### `findPath<T>(config)`
+
+```typescript
+findPath<T>(config: PathConfig<T>): PathResult<T> | null
+```
+
+Finds the shortest path from `start` to `goal` using A*.
+
+**Returns:** `PathResult<T>` with the path and cost, or `null` if no path exists, the cost ceiling is exceeded, or the iteration limit is reached.
+
+**Behavior details:**
+- If `start === goal` (by hash), returns immediately with `{ path: [start], cost: 0 }`
+- Edges with `Infinity` cost are treated as impassable and skipped
+- Uses an internal min-heap for the open set
+- `maxCost` terminates early if the best known cost exceeds it
+- `maxIterations` prevents infinite loops on large graphs (default: 10,000)
+
+**Grid pathfinding example:**
+
+```typescript
+const WIDTH = 32;
+const HEIGHT = 32;
+
+const result = findPath<number>({
+  start: 0,         // top-left corner
+  goal: WIDTH * HEIGHT - 1,  // bottom-right corner
+  neighbors: (node) => {
+    const x = node % WIDTH;
+    const y = Math.floor(node / WIDTH);
+    const result: number[] = [];
+    if (x > 0) result.push(node - 1);
+    if (x < WIDTH - 1) result.push(node + 1);
+    if (y > 0) result.push(node - WIDTH);
+    if (y < HEIGHT - 1) result.push(node + WIDTH);
+    return result;
+  },
+  cost: () => 1,
+  heuristic: (node, goal) => {
+    return Math.abs((node % WIDTH) - (goal % WIDTH))
+         + Math.abs(Math.floor(node / WIDTH) - Math.floor(goal / WIDTH));
+  },
+  hash: (node) => node,
+  maxCost: 100,
+  trackExplored: true,
+});
+
+if (result) {
+  console.log(`Path: ${result.path.length} steps, cost: ${result.cost}`);
+  console.log(`Explored: ${result.explored} nodes`);
+}
+```
+
+**Graph pathfinding example (non-grid):**
+
+```typescript
+interface City { name: string; x: number; y: number }
+
+const cities: Record<string, City> = {
+  A: { name: 'A', x: 0, y: 0 },
+  B: { name: 'B', x: 3, y: 4 },
+  C: { name: 'C', x: 10, y: 0 },
+};
+
+const roads: Record<string, string[]> = {
+  A: ['B', 'C'],
+  B: ['A', 'C'],
+  C: ['A', 'B'],
+};
+
+const result = findPath<string>({
+  start: 'A',
+  goal: 'C',
+  neighbors: (city) => roads[city] ?? [],
+  cost: (from, to) => {
+    const a = cities[from];
+    const b = cities[to];
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  },
+  heuristic: (city, goal) => {
+    const a = cities[city];
+    const b = cities[goal];
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  },
+  hash: (city) => city,
+});
+```
+
+---
+
+## Noise
+
+Seedable 2D simplex noise for procedural generation. Standalone utility.
+
+```typescript
+import { createNoise2D, octaveNoise2D } from './src/noise.js';
+```
+
+### `createNoise2D(seed)`
+
+```typescript
+createNoise2D(seed: number): (x: number, y: number) => number
+```
+
+Creates a noise function from a seed. The same seed always produces the same output. Returns values in `[-1, 1]`.
+
+```typescript
+const noise = createNoise2D(42);
+const value = noise(1.5, 2.3); // number in [-1, 1]
+```
+
+### `octaveNoise2D(noise, x, y, octaves, persistence?, lacunarity?)`
+
+```typescript
+octaveNoise2D(
+  noise: (x: number, y: number) => number,
+  x: number,
+  y: number,
+  octaves: number,
+  persistence?: number,  // default: 0.5
+  lacunarity?: number,   // default: 2.0
+): number
+```
+
+Layers multiple noise samples at increasing frequency and decreasing amplitude (fractal Brownian motion). Produces more natural-looking terrain than single-octave noise. Returns values in `[-1, 1]`.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `octaves` | (required) | Number of noise layers |
+| `persistence` | `0.5` | Amplitude multiplier per octave (lower = smoother) |
+| `lacunarity` | `2.0` | Frequency multiplier per octave (higher = more detail) |
+
+```typescript
+const noise = createNoise2D(42);
+
+// 4 octaves for terrain generation
+for (let y = 0; y < 64; y++) {
+  for (let x = 0; x < 64; x++) {
+    const elevation = octaveNoise2D(noise, x * 0.05, y * 0.05, 4);
+    // elevation: -1 (deep water) to 1 (mountain peaks)
+  }
+}
+```
+
+---
+
+## Cellular Automata
+
+Immutable cellular automata for map generation. Each step produces a new grid. Standalone utility.
+
+```typescript
+import { createCellGrid, stepCellGrid, MOORE_OFFSETS, VON_NEUMANN_OFFSETS } from './src/cellular.js';
+import type { CellGrid, CellRule } from './src/cellular.js';
+```
+
+### `createCellGrid(width, height, fill)`
+
+```typescript
+createCellGrid(
+  width: number,
+  height: number,
+  fill: (x: number, y: number) => number,
+): CellGrid
+```
+
+Creates a cell grid from a fill function. The fill function is called for every cell with its coordinates.
+
+```typescript
+// Random binary grid
+const grid = createCellGrid(32, 32, () => Math.random() > 0.5 ? 1 : 0);
+
+// Noise-seeded grid
+const noise = createNoise2D(42);
+const grid = createCellGrid(32, 32, (x, y) =>
+  octaveNoise2D(noise, x * 0.1, y * 0.1, 4) > 0 ? 1 : 0
+);
+```
+
+### `stepCellGrid(grid, rule, offsets?)`
+
+```typescript
+stepCellGrid(
+  grid: CellGrid,
+  rule: CellRule,
+  offsets?: ReadonlyArray<[number, number]>,  // default: MOORE_OFFSETS
+): CellGrid
+```
+
+Produces a new grid by applying the rule function to every cell. The original grid is not mutated. Out-of-bounds neighbors are excluded (edge cells have fewer neighbors).
+
+```typescript
+// Game of Life rule
+const gameOfLife: CellRule = (current, neighbors) => {
+  const alive = neighbors.filter(n => n === 1).length;
+  if (current === 1) return (alive === 2 || alive === 3) ? 1 : 0;
+  return alive === 3 ? 1 : 0;
+};
+
+let grid = createCellGrid(32, 32, () => Math.random() > 0.6 ? 1 : 0);
+for (let i = 0; i < 5; i++) {
+  grid = stepCellGrid(grid, gameOfLife);
+}
+
+// Cave generation (smoothing rule)
+const caveSmooth: CellRule = (current, neighbors) => {
+  const walls = neighbors.filter(n => n === 1).length;
+  return walls >= 5 ? 1 : walls <= 2 ? 0 : current;
+};
+```
+
+### Neighborhood Constants
+
+| Constant | Pattern | Count | Description |
+|---|---|---|---|
+| `MOORE_OFFSETS` | 8 surrounding cells | 8 | Default. All 8 neighbors (orthogonal + diagonal) |
+| `VON_NEUMANN_OFFSETS` | 4 adjacent cells | 4 | Only orthogonal neighbors (up, down, left, right) |
+
+---
+
+## Map Generation
+
+Helpers for bulk tile entity creation. Standalone utility.
+
+```typescript
+import { createTileGrid } from './src/map-gen.js';
+import type { MapGenerator } from './src/map-gen.js';
+```
+
+### `createTileGrid(world, positionKey?)`
+
+```typescript
+createTileGrid(
+  world: World,
+  positionKey?: string,  // default: 'position'
+): EntityId[][]
+```
+
+Creates one entity per grid cell and attaches a position component to each. Returns a 2D array indexed as `tiles[y][x]`.
+
+The position component must be registered on the world before calling this function.
+
+**Throws:** `Error` (via `query`) if the position component is not registered.
+
+```typescript
+world.registerComponent<Position>('position');
+const tiles = createTileGrid(world);
+// tiles[0][0] = entity at (0, 0)
+// tiles[3][5] = entity at (5, 3)
+
+// Add terrain data to tiles
+world.registerComponent<{ type: string }>('terrain');
+tiles[3][5]; // entity ID at x=5, y=3
+world.addComponent(tiles[3][5], 'terrain', { type: 'forest' });
+```
+
+### `MapGenerator` Interface
+
+```typescript
+interface MapGenerator {
+  generate(world: World, tiles: EntityId[][]): void;
+}
+```
+
+An optional interface for organizing map generation logic. Not enforced by the engine.
+
+```typescript
+const myGenerator: MapGenerator = {
+  generate(world, tiles) {
+    const noise = createNoise2D(42);
+    for (let y = 0; y < tiles.length; y++) {
+      for (let x = 0; x < tiles[y].length; x++) {
+        const value = octaveNoise2D(noise, x * 0.05, y * 0.05, 4);
+        const type = value > 0.3 ? 'mountain' : value > -0.2 ? 'grass' : 'water';
+        world.addComponent(tiles[y][x], 'terrain', { type });
+      }
+    }
+  },
+};
+
+const tiles = createTileGrid(world);
+myGenerator.generate(world, tiles);
+```
+
+---
+
+## Behavior Tree
+
+Generic behavior tree framework for AI decision-making. Trees are structural blueprints shared across entities; per-entity execution state lives in `BTState` (stored as a component). Standalone utility.
+
+```typescript
+import {
+  createBehaviorTree,
+  createBTState,
+  NodeStatus,
+} from './src/behavior-tree.js';
+import type { BTState, BTNode, TreeBuilder } from './src/behavior-tree.js';
+```
+
+### `createBehaviorTree<TContext>(getState, define)`
+
+```typescript
+createBehaviorTree<TContext>(
+  getState: (ctx: TContext) => BTState,
+  define: (builder: TreeBuilder<TContext>) => BTNode<TContext>,
+): BTNode<TContext>
+```
+
+Creates a behavior tree. `TContext` is game-defined — the engine does not prescribe what it contains.
+
+**Parameters:**
+- `getState` — Extracts the `BTState` from the context (used by composite nodes to track which child is running)
+- `define` — Builder function that constructs the tree using the `TreeBuilder` API
+
+**Returns:** The root `BTNode`, which has a `tick(context)` method and a `nodeCount` property.
+
+### `createBTState(tree)`
+
+```typescript
+createBTState(tree: BTNode<unknown>): BTState
+```
+
+Creates a fresh `BTState` sized to the given tree. All running indices start at `-1` (no child running).
+
+### Builder Nodes
+
+All nodes are created through the `TreeBuilder` passed to the `define` callback:
+
+#### `builder.action(fn)`
+
+Leaf node that runs a function returning `NodeStatus`. Use for concrete actions (move, attack, gather).
+
+```typescript
+builder.action((ctx) => {
+  // do something
+  return NodeStatus.SUCCESS;
+});
+```
+
+#### `builder.condition(fn)`
+
+Leaf node that runs a boolean test. Returns `SUCCESS` if true, `FAILURE` if false.
+
+```typescript
+builder.condition((ctx) => ctx.health > 0);
+```
+
+#### `builder.selector(children)`
+
+Composite node that tries children left-to-right until one succeeds or returns `RUNNING`. If all fail, the selector fails. Resumes from the running child on the next tick.
+
+```typescript
+builder.selector([
+  builder.condition((ctx) => ctx.hasFood),
+  builder.action((ctx) => { ctx.forage(); return NodeStatus.SUCCESS; }),
+]);
+```
+
+#### `builder.sequence(children)`
+
+Composite node that runs children left-to-right until one fails or returns `RUNNING`. If all succeed, the sequence succeeds. Resumes from the running child on the next tick.
+
+```typescript
+builder.sequence([
+  builder.condition((ctx) => ctx.hasTarget),
+  builder.action((ctx) => ctx.moveToTarget()),
+  builder.action((ctx) => ctx.attack()),
+]);
+```
+
+### Complete Example
+
+```typescript
+import { World } from './src/world.js';
+import { createBehaviorTree, createBTState, NodeStatus } from './src/behavior-tree.js';
+import type { BTState, BTNode } from './src/behavior-tree.js';
+import type { Position, EntityId } from './src/types.js';
+
+// Define game-specific context
+interface AIContext {
+  entityId: EntityId;
+  world: World;
+  btState: BTState;
+}
+
+// Define the behavior tree (shared across all entities)
+const tree: BTNode<AIContext> = createBehaviorTree<AIContext>(
+  (ctx) => ctx.btState,
+  (b) =>
+    b.selector([
+      // Priority 1: flee if low health
+      b.sequence([
+        b.condition((ctx) => {
+          const hp = ctx.world.getComponent<{ hp: number }>(ctx.entityId, 'health');
+          return hp !== undefined && hp.hp < 20;
+        }),
+        b.action((ctx) => {
+          // flee logic
+          return NodeStatus.SUCCESS;
+        }),
+      ]),
+      // Priority 2: attack nearby enemy
+      b.sequence([
+        b.condition((ctx) => {
+          const pos = ctx.world.getComponent<Position>(ctx.entityId, 'position')!;
+          const nearby = ctx.world.grid.getNeighbors(pos.x, pos.y);
+          return nearby.length > 0;
+        }),
+        b.action((ctx) => {
+          // attack logic
+          return NodeStatus.SUCCESS;
+        }),
+      ]),
+      // Priority 3: wander
+      b.action((ctx) => {
+        // wander logic
+        return NodeStatus.SUCCESS;
+      }),
+    ]),
+);
+
+// Store BTState as a component
+world.registerComponent<BTState>('btState');
+
+// Create an entity with AI
+const unit = world.createEntity();
+world.addComponent(unit, 'btState', createBTState(tree));
+
+// System that ticks behavior trees
+function aiSystem(w: World): void {
+  for (const id of w.query('btState', 'position')) {
+    const btState = w.getComponent<BTState>(id, 'btState')!;
+    const ctx: AIContext = { entityId: id, world: w, btState };
+    tree.tick(ctx);
+  }
+}
+
+world.registerSystem(aiSystem);
+```
+
+---
+
+## Client Adapter
+
+Transport-agnostic bridge between the World and external clients. The adapter serializes world state into typed messages and dispatches incoming commands. Standalone class that uses only World's public API.
+
+```typescript
+import { ClientAdapter } from './src/client-adapter.js';
+import type { ServerMessage, ClientMessage, GameEvent } from './src/client-adapter.js';
+```
+
+### Constructor
+
+```typescript
+new ClientAdapter<TEventMap, TCommandMap>(config: {
+  world: World<TEventMap, TCommandMap>;
+  send: (message: ServerMessage<TEventMap>) => void;
+})
+```
+
+| Parameter | Description |
+|---|---|
+| `world` | The World instance to bridge |
+| `send` | Callback invoked for every outgoing server message |
+
+### Methods
+
+#### `connect()`
+
+```typescript
+connect(): void
+```
+
+Starts streaming. Immediately sends a `snapshot` message with the full world state, then subscribes to diffs so a `tick` message is sent after each step. No-op if already connected.
+
+#### `disconnect()`
+
+```typescript
+disconnect(): void
+```
+
+Stops streaming. Unsubscribes from diffs. No-op if already disconnected.
+
+#### `handleMessage(message)`
+
+```typescript
+handleMessage(message: ClientMessage<TCommandMap>): void
+```
+
+Processes an incoming client message:
+
+| Message type | Behavior |
+|---|---|
+| `command` | Calls `world.submit()`. If rejected, sends a `commandRejected` message with the command's ID |
+| `requestSnapshot` | Sends a `snapshot` message with the current world state |
+
+### WebSocket Example
+
+```typescript
+import { WebSocketServer } from 'ws';
+
+const wss = new WebSocketServer({ port: 8080 });
+
+wss.on('connection', (ws) => {
+  const adapter = new ClientAdapter({
+    world,
+    send: (msg) => ws.send(JSON.stringify(msg)),
+  });
+
+  ws.on('message', (data) => {
+    adapter.handleMessage(JSON.parse(data.toString()));
+  });
+
+  ws.on('close', () => adapter.disconnect());
+
+  adapter.connect();
+});
+```
+
+### stdin/stdout Example (for AI agents)
+
+```typescript
+import * as readline from 'readline';
+
+const rl = readline.createInterface({ input: process.stdin });
+
+const adapter = new ClientAdapter({
+  world,
+  send: (msg) => {
+    process.stdout.write(JSON.stringify(msg) + '\n');
+  },
+});
+
+rl.on('line', (line) => {
+  adapter.handleMessage(JSON.parse(line));
+});
+
+adapter.connect();
+```

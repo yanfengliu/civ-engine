@@ -34,3 +34,4 @@
 - 2026-04-06: Simulation speed control docs — ARCHITECTURE.md and ROADMAP.md updated; "Turn / phase management" removed from roadmap; 198 total tests pass; feature complete.
 - 2026-04-06: Tutorials and README rewrite — getting-started guide, complete colony survival game tutorial, rewritten README with API reference, CLAUDE.md doc maintenance rules.
 - 2026-04-06: Client protocol complete — ClientAdapter with typed ServerMessage/ClientMessage/GameEvent, connect/disconnect/handleMessage; 9 new tests, 207 total pass; docs updated; all roadmap items now built.
+- 2026-04-06: Comprehensive documentation — full API reference, 10 subsystem guides (concepts, entities, systems, spatial grid, commands/events, resources, serialization/diffs, map gen, pathfinding, behavior trees, client protocol); README updated with doc links and missing API entries.

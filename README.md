@@ -17,10 +17,28 @@ npm run typecheck
 
 Requires Node.js 18+.
 
-## Tutorials
+## Documentation
+
+- **[API Reference](docs/api-reference.md)** — Complete reference for every public type, method, and module
+
+### Tutorials
 
 - **[Getting Started](docs/tutorials/getting-started.md)** — Core concepts, minimal example, and feature walkthrough
 - **[Building a Complete Game](docs/tutorials/building-a-game.md)** — Step-by-step tutorial building a colony survival simulation using every engine feature
+
+### Guides
+
+- **[Core Concepts](docs/guides/concepts.md)** — ECS architecture, tick lifecycle, determinism, AI-native design
+- **[Entities & Components](docs/guides/entities-and-components.md)** — Lifecycle, storage, querying, batch access, destroy hooks
+- **[Systems & Simulation](docs/guides/systems-and-simulation.md)** — System design, tick order, real-time loop, speed control
+- **[Spatial Grid](docs/guides/spatial-grid.md)** — Auto-sync, neighbor queries, range searches, collision patterns
+- **[Commands & Events](docs/guides/commands-and-events.md)** — Input/output protocol, validators, handlers, event lifecycle
+- **[Resources](docs/guides/resources.md)** — Pools, production, consumption, transfers, supply chains
+- **[Serialization & Diffs](docs/guides/serialization-and-diffs.md)** — Save/load, per-tick change tracking, client sync
+- **[Map Generation](docs/guides/map-generation.md)** — Simplex noise, cellular automata, terrain recipes
+- **[Pathfinding](docs/guides/pathfinding.md)** — A* on grids and graphs, terrain costs, ECS integration
+- **[Behavior Trees](docs/guides/behavior-trees.md)** — AI decision-making, ECS integration, shared trees
+- **[Client Protocol](docs/guides/client-protocol.md)** — Transport-agnostic client streaming, WebSocket/stdio examples
 
 ## What You Can Build
 
@@ -62,6 +80,7 @@ world.step();
 | **Resources** | Numeric pools (current/max) per entity with production, consumption, transfers |
 | **Map Generation** | Seedable simplex noise, octave layering, cellular automata, tile grid helper |
 | **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
+| **Behavior Trees** | Generic BT framework with action, condition, selector, sequence nodes |
 | **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
 | **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()` |
 | **State Diffs** | Per-tick change sets: what entities/components/resources changed |
@@ -101,6 +120,7 @@ src/
   cellular.ts         Cellular automata
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
+  behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
   types.ts            Shared types (EntityId, Position, WorldConfig)
 tests/
@@ -135,6 +155,7 @@ docs/
 | `registerComponent<T>(key)` | `void` | Register a component type |
 | `addComponent<T>(id, key, data)` | `void` | Attach component to entity |
 | `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
+| `getComponents<T>(id, keys)` | `ComponentTuple<T>` | Batch-read multiple components |
 | `removeComponent(id, key)` | `void` | Detach component from entity |
 | `query(...keys)` | `IterableIterator<EntityId>` | Find entities with all listed components |
 | **Systems & Simulation** | | |
@@ -179,6 +200,9 @@ docs/
 | `getDiff()` | `TickDiff \| null` | Get last tick's diff |
 | `onDiff(fn)` | `void` | Subscribe to per-tick diffs |
 | `offDiff(fn)` | `void` | Unsubscribe from diffs |
+| **Entity Lifecycle** | | |
+| `onDestroy(fn)` | `void` | Register callback fired before entity destruction |
+| `offDestroy(fn)` | `void` | Unregister destroy callback |
 | **Client Protocol** | | |
 | `new ClientAdapter({ world, send })` | `ClientAdapter` | Create adapter with World and send callback |
 | `adapter.connect()` | `void` | Send snapshot, start streaming tick diffs |
@@ -194,6 +218,7 @@ docs/
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
+| `behavior-tree.ts` | `createBehaviorTree`, `createBTState`, `NodeStatus` | Generic behavior tree framework |
 | `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
 
 ### SpatialGrid Methods
