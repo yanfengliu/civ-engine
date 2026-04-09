@@ -115,4 +115,62 @@ describe('SpatialGrid', () => {
     expect(DIAGONAL).toHaveLength(4);
     expect(ALL_DIRECTIONS).toHaveLength(8);
   });
+
+  describe('getInRadius', () => {
+    it('returns entities within the specified radius', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 5, 5);
+      grid.insert(1, 6, 5); // distance 1
+      grid.insert(2, 7, 5); // distance 2
+      grid.insert(3, 8, 5); // distance 3
+      grid.insert(4, 9, 5); // distance 4
+      const result = grid.getInRadius(5, 5, 2);
+      expect(result.sort()).toEqual([0, 1, 2]);
+    });
+
+    it('returns empty array when no entities in radius', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 9, 9);
+      const result = grid.getInRadius(0, 0, 2);
+      expect(result).toEqual([]);
+    });
+
+    it('clamps search area to grid bounds', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 0, 0);
+      grid.insert(1, 1, 0);
+      const result = grid.getInRadius(0, 0, 3);
+      expect(result).toContain(0);
+      expect(result).toContain(1);
+    });
+
+    it('uses Euclidean distance by default', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 7, 7); // Euclidean from (5,5) = sqrt(8) ≈ 2.83
+      expect(grid.getInRadius(5, 5, 2)).toEqual([]);
+      expect(grid.getInRadius(5, 5, 3)).toContain(0);
+    });
+
+    it('supports manhattan distance mode', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 7, 7); // Manhattan from (5,5) = 4
+      expect(grid.getInRadius(5, 5, 3, 'manhattan')).toEqual([]);
+      expect(grid.getInRadius(5, 5, 4, 'manhattan')).toContain(0);
+    });
+
+    it('includes entities at exact radius boundary', () => {
+      const grid = new SpatialGrid(10, 10);
+      grid.insert(0, 8, 5); // distance exactly 3
+      const result = grid.getInRadius(5, 5, 3);
+      expect(result).toContain(0);
+    });
+
+    it('handles radius larger than grid', () => {
+      const grid = new SpatialGrid(5, 5);
+      grid.insert(0, 0, 0);
+      grid.insert(1, 4, 4);
+      const result = grid.getInRadius(2, 2, 100);
+      expect(result.sort()).toEqual([0, 1]);
+    });
+  });
 });

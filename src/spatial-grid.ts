@@ -86,6 +86,40 @@ export class SpatialGrid {
     return result;
   }
 
+  getInRadius(
+    cx: number,
+    cy: number,
+    radius: number,
+    metric: 'euclidean' | 'manhattan' = 'euclidean',
+  ): EntityId[] {
+    const r = Math.ceil(radius);
+    const minX = Math.max(0, cx - r);
+    const maxX = Math.min(this.width - 1, cx + r);
+    const minY = Math.max(0, cy - r);
+    const maxY = Math.min(this.height - 1, cy + r);
+    const radiusSq = radius * radius;
+    const result: EntityId[] = [];
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const dx = x - cx;
+        const dy = y - cy;
+        const inRange =
+          metric === 'manhattan'
+            ? Math.abs(dx) + Math.abs(dy) <= radius
+            : dx * dx + dy * dy <= radiusSq;
+        if (!inRange) continue;
+        const cell = this.cells[y * this.width + x];
+        if (cell) {
+          for (const entity of cell) {
+            result.push(entity);
+          }
+        }
+      }
+    }
+    return result;
+  }
+
   private assertBounds(x: number, y: number): void {
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
       throw new RangeError(`Position (${x}, ${y}) is out of bounds`);
