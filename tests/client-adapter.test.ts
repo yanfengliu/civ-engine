@@ -106,8 +106,71 @@ describe('ClientAdapter', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toEqual({
       type: 'commandRejected',
-      data: { id: 'cmd-42' },
+      data: { id: 'cmd-42', reason: 'Validation failed' },
     });
+  });
+
+  it('rejects command when no handler is registered', () => {
+    const { adapter, messages } = setup();
+
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-missing',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+
+    expect(messages).toEqual([
+      {
+        type: 'commandRejected',
+        data: {
+          id: 'cmd-missing',
+          reason: "No handler registered for command 'move'",
+        },
+      },
+    ]);
+  });
+
+  it('ignores malformed messages', () => {
+    const { adapter, messages } = setup();
+    adapter.handleMessage(null);
+    adapter.handleMessage({ type: 'command', data: { id: 'bad' } });
+    expect(messages).toEqual([
+      {
+        type: 'commandRejected',
+        data: { id: 'bad', reason: 'Malformed command type' },
+      },
+    ]);
+  });
+
+  it('disconnects and reports send failures', () => {
+    const world = new World<Events, Commands>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 10,
+    });
+    const errors: unknown[] = [];
+    let shouldThrow = false;
+    const messages: ServerMessage<Events>[] = [];
+    const adapter = new ClientAdapter<Events, Commands>({
+      world,
+      send: (msg) => {
+        if (shouldThrow) throw new Error('transport down');
+        messages.push(msg);
+      },
+      onError: (error) => errors.push(error),
+    });
+
+    adapter.connect();
+    shouldThrow = true;
+    world.step();
+    shouldThrow = false;
+    world.step();
+
+    expect(errors).toHaveLength(1);
+    expect(messages).toHaveLength(1);
   });
 
   it('handleMessage with requestSnapshot sends a fresh snapshot', () => {

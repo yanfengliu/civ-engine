@@ -13,6 +13,7 @@ npm install
 npm test        # run all tests
 npm run lint    # lint
 npm run typecheck
+npm run build   # emit dist package files
 ```
 
 Requires Node.js 18+.
@@ -43,8 +44,7 @@ Requires Node.js 18+.
 ## What You Can Build
 
 ```typescript
-import { World } from './src/world.js';
-import type { Position } from './src/types.js';
+import { World, type Position } from './src/index.js';
 
 const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 world.registerComponent<Position>('position');
@@ -106,6 +106,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
 ```
 src/
+  index.ts            Public package export barrel
   world.ts            Top-level API — the only public entry point
   entity-manager.ts   Entity creation/destruction, ID recycling, generations
   component-store.ts  Sparse array storage per component type
@@ -122,7 +123,7 @@ src/
   pathfinding.ts      Generic A* pathfinding
   behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
-  types.ts            Shared types (EntityId, Position, WorldConfig)
+  types.ts            Shared types (EntityId, EntityRef, Position, WorldConfig)
 tests/
   *.test.ts           Unit and integration tests per module
 docs/
@@ -151,9 +152,14 @@ docs/
 | `createEntity()` | `EntityId` | Create a new entity |
 | `destroyEntity(id)` | `void` | Destroy entity and all its components |
 | `isAlive(id)` | `boolean` | Check if entity exists |
+| `getEntityRef(id)` | `EntityRef \| null` | Get a generation-aware entity reference |
+| `isCurrent(ref)` | `boolean` | Check whether an entity reference still points at the same lifetime |
 | **Components** | | |
 | `registerComponent<T>(key)` | `void` | Register a component type |
-| `addComponent<T>(id, key, data)` | `void` | Attach component to entity |
+| `addComponent<T>(id, key, data)` | `void` | Attach component to entity (compatibility alias for `setComponent`) |
+| `setComponent<T>(id, key, data)` | `void` | Set component data and mark it dirty |
+| `patchComponent<T>(id, key, fn)` | `T` | Mutate or replace existing component data and mark it dirty |
+| `setPosition(id, position, key?)` | `void` | Set position data and update the spatial grid immediately |
 | `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
 | `getComponents<T>(id, keys)` | `ComponentTuple<T>` | Batch-read multiple components |
 | `removeComponent(id, key)` | `void` | Detach component from entity |
@@ -173,6 +179,7 @@ docs/
 | `submit(type, data)` | `boolean` | Submit a command (validated, queued) |
 | `registerValidator(type, fn)` | `void` | Add a validator for a command type |
 | `registerHandler(type, fn)` | `void` | Set the handler for a command type |
+| `hasCommandHandler(type)` | `boolean` | Check whether a command handler is registered |
 | **Events** | | |
 | `emit(type, data)` | `void` | Emit an event (from systems) |
 | `on(type, listener)` | `void` | Subscribe to event type |
@@ -182,7 +189,7 @@ docs/
 | `registerResource(key, options?)` | `void` | Register a resource type |
 | `addResource(entity, key, amount)` | `number` | Add to resource pool (returns amount added) |
 | `removeResource(entity, key, amount)` | `number` | Remove from pool (returns amount removed) |
-| `getResource(entity, key)` | `{current, max} \| undefined` | Read resource pool |
+| `getResource(entity, key)` | `{current, max} \| undefined` | Read resource pool (`max: null` means unbounded) |
 | `setResourceMax(entity, key, max)` | `void` | Set pool maximum |
 | `setProduction(entity, key, rate)` | `void` | Set production rate per tick |
 | `setConsumption(entity, key, rate)` | `void` | Set consumption rate per tick |
@@ -194,7 +201,7 @@ docs/
 | `getResourceEntities(key)` | `IterableIterator<EntityId>` | All entities with this resource |
 | **State** | | |
 | `tick` | `number` | Current tick count |
-| `grid` | `SpatialGrid` | Spatial index (read-only access) |
+| `grid` | `SpatialGridView` | Spatial index read-only view |
 | `serialize()` | `WorldSnapshot` | Capture current state as JSON snapshot |
 | `World.deserialize(snapshot, systems?)` | `World` | Restore world from snapshot (static) |
 | `getDiff()` | `TickDiff \| null` | Get last tick's diff |
@@ -204,7 +211,7 @@ docs/
 | `onDestroy(fn)` | `void` | Register callback fired before entity destruction |
 | `offDestroy(fn)` | `void` | Unregister destroy callback |
 | **Client Protocol** | | |
-| `new ClientAdapter({ world, send })` | `ClientAdapter` | Create adapter with World and send callback |
+| `new ClientAdapter({ world, send, onError? })` | `ClientAdapter` | Create adapter with World and send/error callbacks |
 | `adapter.connect()` | `void` | Send snapshot, start streaming tick diffs |
 | `adapter.disconnect()` | `void` | Stop streaming tick diffs |
 | `adapter.handleMessage(msg)` | `void` | Process incoming client message |
@@ -218,6 +225,7 @@ docs/
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
+| `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer` | Resource system types |
 | `behavior-tree.ts` | `createBehaviorTree`, `createBTState`, `NodeStatus` | Generic behavior tree framework |
 | `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
 
@@ -227,6 +235,7 @@ docs/
 |---|---|---|
 | `getAt(x, y)` | `ReadonlySet<EntityId> \| null` | Entities at cell |
 | `getNeighbors(x, y, offsets?)` | `EntityId[]` | Entities in neighbor cells |
+| `getInRadius(x, y, radius, metric?)` | `EntityId[]` | Entities in range |
 | `width` | `number` | Grid width |
 | `height` | `number` | Grid height |
 

@@ -28,6 +28,13 @@ describe('GameLoop', () => {
     expect(loop.tps).toBe(30);
   });
 
+  it('validates timing config', () => {
+    expect(() => new GameLoop({ tps: 0, onTick: () => {} })).toThrow();
+    expect(
+      () => new GameLoop({ tps: 60, maxTicksPerFrame: 0, onTick: () => {} }),
+    ).toThrow();
+  });
+
   it('calls onTick the correct number of times across multiple steps', () => {
     let count = 0;
     const loop = new GameLoop({
@@ -118,5 +125,14 @@ describe('GameLoop', () => {
   it('setSpeed throws on NaN', () => {
     const loop = new GameLoop({ tps: 60, onTick: () => {} });
     expect(() => loop.setSpeed(NaN)).toThrow();
+  });
+
+  it('start is idempotent', () => {
+    const loop = new GameLoop({ tps: 60, onTick: () => {} });
+    expect(() => {
+      loop.start();
+      loop.start();
+      loop.stop();
+    }).not.toThrow();
   });
 });

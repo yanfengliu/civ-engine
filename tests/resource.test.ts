@@ -62,7 +62,7 @@ describe('Resource System', () => {
     world.step();
 
     const diff = world.getDiff()!;
-    expect(diff.resources['food'].set).toEqual([[e, { current: 30, max: Infinity }]]);
+    expect(diff.resources['food'].set).toEqual([[e, { current: 30, max: null }]]);
   });
 
   it('transfer between two entities via world API', () => {
@@ -97,6 +97,18 @@ describe('Resource System', () => {
     world.step();
 
     const diff = world.getDiff()!;
-    expect(diff.resources['food'].set).toEqual([[e, { current: 25, max: Infinity }]]);
+    expect(diff.resources['food'].set).toEqual([[e, { current: 25, max: null }]]);
+  });
+
+  it('throws when writing resources to dead entities', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerResource('food');
+    const e = world.createEntity();
+    world.destroyEntity(e);
+
+    expect(() => world.addResource(e, 'food', 1)).toThrow('Entity 0 is not alive');
+    expect(() => world.setProduction(e, 'food', 1)).toThrow(
+      'Entity 0 is not alive',
+    );
   });
 });

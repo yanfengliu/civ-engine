@@ -15,12 +15,38 @@ describe('World', () => {
     expect(world.isAlive(id)).toBe(false);
   });
 
+  it('returns generation-aware entity refs', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const id = world.createEntity();
+    const ref = world.getEntityRef(id)!;
+
+    expect(ref).toEqual({ id, generation: 0 });
+    expect(world.isCurrent(ref)).toBe(true);
+
+    world.destroyEntity(id);
+    const reused = world.createEntity();
+    expect(reused).toBe(id);
+    expect(world.isCurrent(ref)).toBe(false);
+    expect(world.getEntityRef(999)).toBeNull();
+  });
+
   it('registers components and round-trips data', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     world.registerComponent<{ hp: number }>('health');
     const id = world.createEntity();
     world.addComponent(id, 'health', { hp: 100 });
     expect(world.getComponent(id, 'health')).toEqual({ hp: 100 });
+  });
+
+  it('setComponent and patchComponent update registered components', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+    const id = world.createEntity();
+    world.setComponent(id, 'health', { hp: 100 });
+    world.patchComponent<{ hp: number }>(id, 'health', (hp) => {
+      hp.hp -= 25;
+    });
+    expect(world.getComponent(id, 'health')).toEqual({ hp: 75 });
   });
 
   it('removes components', () => {
@@ -147,6 +173,55 @@ describe('World', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     const id = world.createEntity();
     expect(() => world.addComponent(id, 'nonexistent', {})).toThrow();
+  });
+
+  it('throws when writing components to dead or never-created entities', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+    const id = world.createEntity();
+    world.destroyEntity(id);
+
+    expect(() => world.addComponent(id, 'health', { hp: 1 })).toThrow(
+      'Entity 0 is not alive',
+    );
+    expect(() => world.removeComponent(999, 'health')).toThrow(
+      'Entity 999 is not alive',
+    );
+  });
+
+  it('setPosition updates the spatial grid immediately', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.setPosition(id, { x: 1, y: 1 });
+    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+
+    world.setPosition(id, { x: 2, y: 2 });
+    expect(world.grid.getAt(1, 1)?.has(id) ?? false).toBe(false);
+    expect(world.grid.getAt(2, 2)!.has(id)).toBe(true);
+  });
+
+  it('setPosition validates bounds before mutating component state', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.setPosition(id, { x: 1, y: 1 });
+
+    expect(() => world.setPosition(id, { x: 10, y: 1 })).toThrow(RangeError);
+    expect(world.getComponent(id, 'position')).toEqual({ x: 1, y: 1 });
+    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+  });
+
+  it('validates world config', () => {
+    expect(() => new World({ gridWidth: 0, gridHeight: 10, tps: 60 })).toThrow(
+      RangeError,
+    );
+    expect(() => new World({ gridWidth: 10, gridHeight: 10, tps: 0 })).toThrow(
+      RangeError,
+    );
+    expect(
+      () => new World({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: '' }),
+    ).toThrow('positionKey must not be empty');
   });
 
   it('removes entity from grid on destroy even if position was mutated since last sync', () => {

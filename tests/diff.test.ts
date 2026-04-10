@@ -131,4 +131,21 @@ describe('State Diff', () => {
     const diff = world.getDiff()!;
     expect(diff.components['health'].set).toEqual([[e, { hp: 80 }]]);
   });
+
+  it('in-place component mutations appear in diff', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+    const e = world.createEntity();
+    world.addComponent(e, 'health', { hp: 50 });
+    world.step();
+
+    world.registerSystem((w) => {
+      const hp = w.getComponent<{ hp: number }>(e, 'health')!;
+      hp.hp += 5;
+    });
+    world.step();
+
+    const diff = world.getDiff()!;
+    expect(diff.components['health'].set).toEqual([[e, { hp: 55 }]]);
+  });
 });

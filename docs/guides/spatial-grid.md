@@ -15,13 +15,13 @@ This guide covers the 2D spatial grid, how automatic synchronization works, and 
 
 ## Overview
 
-The spatial grid is a 2D flat-array structure that tracks which entities are at each (x, y) cell. It is owned by the World and synced automatically each tick — you mutate position components and the engine updates the grid.
+The spatial grid is a 2D flat-array structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` for immediate component and grid updates, or mutate position components directly when next-tick grid sync is acceptable.
 
-The grid is **read-only** from user code. Never call `grid.insert()`, `grid.remove()`, or `grid.move()` directly.
+The grid exposed as `world.grid` is a read-only view. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API.
 
 ```typescript
 const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
-// world.grid is a SpatialGrid with dimensions 64x64
+// world.grid is a read-only SpatialGridView with dimensions 64x64
 ```
 
 ## Automatic Synchronization
@@ -35,8 +35,8 @@ Each tick, before systems run, the World's `syncSpatialIndex()` routine:
 5. **Removed entities** (position component removed) → removed from grid
 
 This means:
-- You just mutate position components in your systems
-- The grid reflects the new positions **next tick** (after sync runs)
+- Direct position component mutations are picked up by the next tick's sync
+- `world.setPosition()` updates the component and grid immediately
 - Within the current tick, systems see the grid state from **after** sync
 
 ```typescript
@@ -44,9 +44,8 @@ function movementSystem(w: World): void {
   for (const id of w.query('position', 'velocity')) {
     const pos = w.getComponent<Position>(id, 'position')!;
     const vel = w.getComponent<Velocity>(id, 'velocity')!;
-    // Just mutate the position — grid syncs automatically next tick
-    pos.x += vel.dx;
-    pos.y += vel.dy;
+    // setPosition keeps component state and grid state in sync immediately
+    w.setPosition(id, { x: pos.x + vel.dx, y: pos.y + vel.dy });
   }
 }
 ```
@@ -56,12 +55,12 @@ function movementSystem(w: World): void {
 ```
 syncSpatialIndex()  ← grid is up-to-date after this
 system A            ← reads correct grid state
-system B            ← reads correct grid state, but position mutations
-                       from system A are NOT reflected in the grid yet
-                       (they'll be synced next tick)
+system B            ← reads correct grid state; direct position mutations
+                       from system A are not reflected in the grid yet,
+                       but setPosition updates the grid immediately
 ```
 
-If system A moves entity `5` from (0,0) to (1,0), system B (running after system A in the same tick) will still see entity `5` at (0,0) in the grid, but `getComponent('position')` will return (1,0). The grid updates at the start of the **next** tick.
+If system A directly mutates entity `5` from (0,0) to (1,0), system B (running after system A in the same tick) will still see entity `5` at (0,0) in the grid, but `getComponent('position')` will return (1,0). The grid updates at the start of the **next** tick. If system A calls `setPosition()`, both the component and grid reflect the move immediately.
 
 ## Querying the Grid
 

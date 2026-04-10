@@ -176,8 +176,7 @@ function movementSystem(w: World<GameEvents, GameCommands>): void {
 
     // Move one step along the path
     const nextNode = moveTo.path[moveTo.step];
-    pos.x = nextNode % WIDTH;
-    pos.y = Math.floor(nextNode / WIDTH);
+    w.setPosition(id, { x: nextNode % WIDTH, y: Math.floor(nextNode / WIDTH) });
     moveTo.step++;
     colonist.state = 'moving';
   }
@@ -445,9 +444,6 @@ function loadGame(json: string): World<GameEvents, GameCommands> {
     console.log(`Colonist ${event.entityId} arrived`);
   });
 
-  // Re-register resource types
-  restored.registerResource('food', { defaultMax: 500 });
-
   return restored;
 }
 ```
@@ -511,7 +507,7 @@ function attachClient(ws: WebSocket, world: World<GameEvents, GameCommands>): Cl
 The client receives:
 - A `snapshot` message on connect (full world state)
 - A `tick` message after each step (diff + events from that tick)
-- A `commandRejected` message if a submitted command fails validation
+- A `commandRejected` message if a submitted command fails validation, is malformed, or names a command with no registered handler
 
 The client sends:
 - `command` messages to submit game commands (e.g., `moveColonist`)

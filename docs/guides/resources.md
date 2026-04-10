@@ -33,12 +33,12 @@ Resources are processed after systems each tick, so system logic can add/remove 
 Register resource types before using them:
 
 ```typescript
-world.registerResource('food');                          // max = Infinity
+world.registerResource('food');                          // max = null (unbounded)
 world.registerResource('gold', { defaultMax: 1000 });    // max = 1000
 world.registerResource('mana', { defaultMax: 100 });     // max = 100
 ```
 
-The `defaultMax` applies to all new pools created for this resource type.
+The `defaultMax` applies to all new pools created for this resource type. Use `null` for unbounded capacity. The public resource state uses `null` instead of `Infinity` so snapshots and tick diffs stay JSON-safe.
 
 ### Adding resources
 
@@ -49,7 +49,7 @@ const city = world.createEntity();
 
 // First add creates the pool
 const added = world.addResource(city, 'food', 50);
-// Pool: { current: 50, max: Infinity }
+// Pool: { current: 50, max: null }
 // added = 50
 
 // Subsequent adds accumulate
@@ -68,6 +68,8 @@ const removed = world.removeResource(city, 'food', 30);
 // removed = 30 (or less if pool had < 30)
 ```
 
+Resource amounts, rates, and finite maxima must be non-negative finite numbers.
+
 ### Reading pools
 
 `getResource` returns a copy (not a reference):
@@ -84,6 +86,7 @@ if (pool) {
 
 ```typescript
 world.setResourceMax(city, 'gold', 2000);  // increase capacity
+world.setResourceMax(city, 'gold', null);  // unbounded capacity
 world.setResourceMax(city, 'gold', 500);   // decrease — current clamped to 500
 ```
 
@@ -276,7 +279,8 @@ function populationSystem(w: World): void {
 world.registerHandler('upgradeStorage', (data, w) => {
   const current = w.getResource(data.entityId, data.resource);
   if (current) {
-    w.setResourceMax(data.entityId, data.resource, current.max + 100);
+    const nextMax = current.max === null ? 100 : current.max + 100;
+    w.setResourceMax(data.entityId, data.resource, nextMax);
   }
 });
 ```

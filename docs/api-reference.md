@@ -40,6 +40,18 @@ type EntityId = number;
 
 Numeric identifier for entities. IDs are recycled via a free-list after destruction. Two entities may share the same ID across different lifetimes but never simultaneously.
 
+### `EntityRef`
+
+```typescript
+// src/types.ts
+interface EntityRef {
+  id: EntityId;
+  generation: number;
+}
+```
+
+Generation-aware entity reference. Use this for external commands and clients that need to detect stale entity IDs after destruction and recycling.
+
 ### `Position`
 
 ```typescript
@@ -79,7 +91,7 @@ A system is a pure function that receives the `World` and runs game logic. Syste
 ```typescript
 // src/serializer.ts
 interface WorldSnapshot {
-  version: 1;
+  version: 2;
   config: WorldConfig;
   tick: number;
   entities: {
@@ -88,10 +100,11 @@ interface WorldSnapshot {
     freeList: number[];
   };
   components: Record<string, Array<[EntityId, unknown]>>;
+  resources: ResourceStoreState;
 }
 ```
 
-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
 
 ### `TickDiff`
 
@@ -122,11 +135,27 @@ Per-tick change set capturing every entity, component, and resource that changed
 // src/resource-store.ts
 interface ResourcePool {
   current: number;
-  max: number;
+  max: number | null;
 }
 ```
 
-A resource pool with a current value and a maximum capacity.
+A resource pool with a current value and a maximum capacity. `max: null` means unbounded capacity and is used instead of `Infinity` so snapshots and diffs stay JSON-safe.
+
+### `ResourceStoreState`
+
+```typescript
+// src/resource-store.ts
+interface ResourceStoreState {
+  registered: Array<[string, { defaultMax: number | null }]>;
+  pools: Record<string, Array<[EntityId, ResourcePool]>>;
+  production: Record<string, Array<[EntityId, number]>>;
+  consumption: Record<string, Array<[EntityId, number]>>;
+  transfers: Transfer[];
+  nextTransferId: number;
+}
+```
+
+Serializable resource subsystem state included in snapshot version 2.
 
 ### `Transfer`
 
@@ -264,7 +293,7 @@ Messages sent from server to client:
 |---|---|---|
 | `snapshot` | On `connect()` or `requestSnapshot` | Full `WorldSnapshot` |
 | `tick` | After each `step()` while connected | `TickDiff` + events from the tick |
-| `commandRejected` | When a submitted command fails validation | Command ID + optional reason |
+| `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | Command ID + optional reason |
 
 ### `ClientMessage<TCommandMap>`
 
@@ -377,6 +406,22 @@ world.isAlive(e);    // false
 world.isAlive(999);  // false
 ```
 
+#### `getEntityRef(id)`
+
+```typescript
+getEntityRef(id: EntityId): EntityRef | null
+```
+
+Returns a generation-aware reference for a live entity, or `null` if the entity is not alive.
+
+#### `isCurrent(ref)`
+
+```typescript
+isCurrent(ref: EntityRef): boolean
+```
+
+Returns `true` only if the referenced entity ID is alive and still has the same generation.
+
 ### Components
 
 #### `registerComponent<T>(key)`
@@ -402,11 +447,41 @@ addComponent<T>(entity: EntityId, key: string, data: T): void
 
 Attaches a component to an entity. If the entity already has this component, it is overwritten.
 
-**Throws:** `Error` if the component key is not registered.
+**Throws:** `Error` if the entity is not alive, the component key is not registered, or the data is not JSON-compatible.
 
 ```typescript
 world.addComponent(unit, 'health', { hp: 100, maxHp: 100 });
 ```
+
+`addComponent` is kept as a compatibility alias for `setComponent`.
+
+#### `setComponent<T>(entity, key, data)`
+
+```typescript
+setComponent<T>(entity: EntityId, key: string, data: T): void
+```
+
+Sets or replaces a component, marks it dirty for diffs, and updates the spatial grid immediately when `key` is the world's `positionKey`.
+
+#### `patchComponent<T>(entity, key, fn)`
+
+```typescript
+patchComponent<T>(
+  entity: EntityId,
+  key: string,
+  patch: (data: T) => T | void,
+): T
+```
+
+Reads an existing component, lets the callback mutate it or return a replacement, then marks it dirty.
+
+#### `setPosition(entity, position, key?)`
+
+```typescript
+setPosition(entity: EntityId, position: Position, key?: string): void
+```
+
+Sets position data and updates the spatial grid immediately when the key is the world's `positionKey`.
 
 #### `getComponent<T>(entity, key)`
 
@@ -414,7 +489,7 @@ world.addComponent(unit, 'health', { hp: 100, maxHp: 100 });
 getComponent<T>(entity: EntityId, key: string): T | undefined
 ```
 
-Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference — mutations are reflected immediately.
+Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference, so mutations are reflected immediately. Direct mutations are detected for diffs, but `setComponent()` and `patchComponent()` are the preferred write APIs for clearer intent and immediate position/grid synchronization.
 
 ```typescript
 const hp = world.getComponent<Health>(unit, 'health');
@@ -668,7 +743,7 @@ Sets the handler for a command type. Exactly one handler per type. The handler r
 
 **Throws:** `Error` if a handler is already registered for this command type.
 
-When a command is processed but no handler is registered, an `Error` is thrown.
+When a command is processed but no handler is registered, an `Error` is thrown. `ClientAdapter` checks this ahead of time and rejects unhandled client commands before they enter the queue.
 
 ```typescript
 world.registerHandler('moveUnit', (data, w) => {
@@ -677,6 +752,14 @@ world.registerHandler('moveUnit', (data, w) => {
   pos.y = data.targetY;
 });
 ```
+
+#### `hasCommandHandler(type)`
+
+```typescript
+hasCommandHandler(type: keyof TCommandMap): boolean
+```
+
+Returns whether a handler is registered for the command type. This is primarily useful for transport adapters that need to reject unhandled commands before enqueueing them.
 
 ### Events
 
@@ -738,7 +821,7 @@ Resources are numeric pools (current/max) attached to entities with automatic pr
 #### `registerResource(key, options?)`
 
 ```typescript
-registerResource(key: string, options?: { defaultMax?: number }): void
+registerResource(key: string, options?: { defaultMax?: number | null }): void
 ```
 
 Registers a resource type. Must be called before using any resource methods with this key.
@@ -747,7 +830,7 @@ Registers a resource type. Must be called before using any resource methods with
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `defaultMax` | `number` | `Infinity` | Default maximum capacity for new pools |
+| `defaultMax` | `number \| null` | `null` | Default maximum capacity for new pools; `null` means unbounded |
 
 ```typescript
 world.registerResource('food');
@@ -764,7 +847,7 @@ Adds to an entity's resource pool. Creates the pool if it doesn't exist (with th
 
 **Returns:** The amount actually added (may be less than requested if the pool is near max).
 
-**Throws:** `Error` if the resource key is not registered.
+**Throws:** `Error` if the resource key is not registered, the entity is not alive, or `amount` is negative/non-finite.
 
 ```typescript
 const added = world.addResource(city, 'food', 50); // returns 50 (or less if near cap)
@@ -787,7 +870,7 @@ const removed = world.removeResource(city, 'food', 30);
 #### `getResource(entity, key)`
 
 ```typescript
-getResource(entity: EntityId, key: string): { current: number; max: number } | undefined
+getResource(entity: EntityId, key: string): { current: number; max: number | null } | undefined
 ```
 
 Returns a copy of the resource pool for the given entity, or `undefined` if the entity has no pool for this resource.
@@ -802,10 +885,10 @@ if (pool) {
 #### `setResourceMax(entity, key, max)`
 
 ```typescript
-setResourceMax(entity: EntityId, key: string, max: number): void
+setResourceMax(entity: EntityId, key: string, max: number | null): void
 ```
 
-Sets the maximum capacity for a resource pool. If `current` exceeds the new max, it is clamped down. No-op if the entity has no pool for this resource.
+Sets the maximum capacity for a resource pool. If `current` exceeds the new max, it is clamped down. Use `null` for unbounded capacity. No-op if the entity has no pool for this resource.
 
 ```typescript
 world.setResourceMax(city, 'food', 200);
@@ -917,7 +1000,7 @@ for (const id of world.getResourceEntities('food')) {
 serialize(): WorldSnapshot
 ```
 
-Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions).
+Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, resource state, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions).
 
 ```typescript
 const snapshot = world.serialize();
@@ -936,11 +1019,12 @@ static deserialize<TEventMap, TCommandMap>(
 Restores a world from a snapshot. Optionally accepts systems to re-register. After deserializing, you must also re-register:
 - Command validators and handlers
 - Event listeners
-- Resource types (if you need to add/modify resources after loading)
 
 **Throws:**
-- `Error` if `snapshot.version` is not `1`
+- `Error` if `snapshot.version` is not `1` or `2`
 - `Error` if entity state arrays have mismatched lengths
+
+Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID.
 
 ```typescript
 const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);
@@ -1562,6 +1646,7 @@ import type { ServerMessage, ClientMessage, GameEvent } from './src/client-adapt
 new ClientAdapter<TEventMap, TCommandMap>(config: {
   world: World<TEventMap, TCommandMap>;
   send: (message: ServerMessage<TEventMap>) => void;
+  onError?: (error: unknown) => void;
 })
 ```
 
@@ -1569,6 +1654,7 @@ new ClientAdapter<TEventMap, TCommandMap>(config: {
 |---|---|
 | `world` | The World instance to bridge |
 | `send` | Callback invoked for every outgoing server message |
+| `onError` | Optional callback invoked when `send` throws; the adapter disconnects after reporting |
 
 ### Methods
 
@@ -1591,15 +1677,17 @@ Stops streaming. Unsubscribes from diffs. No-op if already disconnected.
 #### `handleMessage(message)`
 
 ```typescript
-handleMessage(message: ClientMessage<TCommandMap>): void
+handleMessage(message: ClientMessage<TCommandMap> | unknown): void
 ```
 
 Processes an incoming client message:
 
 | Message type | Behavior |
 |---|---|
-| `command` | Calls `world.submit()`. If rejected, sends a `commandRejected` message with the command's ID |
+| `command` | Validates the envelope, rejects unhandled command types, then calls `world.submit()`. If rejected, sends a `commandRejected` message with the command's ID and reason |
 | `requestSnapshot` | Sends a `snapshot` message with the current world state |
+
+Malformed messages without a usable `type` are ignored. Malformed command envelopes with an ID are rejected when the adapter can safely identify which command to reject.
 
 ### WebSocket Example
 

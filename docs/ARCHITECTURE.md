@@ -15,20 +15,22 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | World          | `src/world.ts`           | Top-level API, owns all subsystems, system pipeline, spatial index sync                |
 | EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
 | ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
-| SpatialGrid    | `src/spatial-grid.ts`    | 2D flat array grid, lazy Set allocation per cell, 4-directional neighbor queries       |
+| SpatialGrid    | `src/spatial-grid.ts`    | 2D flat array grid plus read-only view, lazy Set allocation per cell, neighbor/radius queries |
 | GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop, step() for testing, start()/stop() for real-time, speed multiplier, pause/resume |
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
-| Serializer     | `src/serializer.ts`      | WorldSnapshot type for state serialization                                             |
+| Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
+| JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
 | Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
 | Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
 | MapGen         | `src/map-gen.ts`         | MapGenerator interface, createTileGrid bulk tile-entity helper                         |
 | Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
 | ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
 | BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, Action, Condition, BTState, createBehaviorTree |
-| Types          | `src/types.ts`           | Shared type definitions (EntityId, Position, WorldConfig)                              |
+| Public exports | `src/index.ts`           | Barrel export for the intended package API                                             |
+| Types          | `src/types.ts`           | Shared type definitions (EntityId, EntityRef, Position, WorldConfig)                   |
 
 ## Data Flow
 
@@ -57,6 +59,8 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 2. Compares current position to `previousPositions` map
 3. Inserts new entities into grid, moves changed ones, removes stale ones
 
+Position writes through `world.setPosition()` or `world.setComponent()` with the configured position key update the component store and spatial grid immediately. Direct object mutation is still picked up by the next tick's sync pass.
+
 ### Entity Destruction
 
 `destroyEntity(id)` performs immediate cleanup:
@@ -70,11 +74,11 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 - **World** is the only public entry point. EntityManager, ComponentStore, GameLoop are internal implementation details.
 - **Systems** are pure functions `(world: World) => void`. No classes, no lifecycle hooks.
 - **Components** are pure data interfaces. No methods, no inheritance.
-- **SpatialGrid** is synced automatically by World's internal spatial index routine. User systems should read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` but should not call `grid.insert/remove/move` directly.
+- **SpatialGrid** is synced automatically by World's internal spatial index routine. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property exposes only a read-only view.
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
-- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
+- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 2 includes resource state; version 1 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 - **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
@@ -122,3 +126,4 @@ Each tick, before user systems run, `syncSpatialIndex()`:
 | 2026-04-06 | Added getComponents batch API      | Reduces verbosity when systems need multiple components per entity        |
 | 2026-04-06 | Added entity destroy hooks           | onDestroy/offDestroy callbacks fire before component removal for relationship cleanup |
 | 2026-04-06 | Added behavior tree framework        | Standalone generic BT with ECS-compatible state (BTState) and game-defined TContext    |
+| 2026-04-10 | Hardened engine invariants           | Added JSON-safe component/resource state, entity refs, explicit write APIs, read-only grid exposure, resource snapshot v2, package exports/build, and CI |

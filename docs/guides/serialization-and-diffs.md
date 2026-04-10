@@ -48,7 +48,7 @@ localStorage.setItem('save', json);
 
 ```typescript
 interface WorldSnapshot {
-  version: 1;                    // format version
+  version: 2;                    // format version
   config: WorldConfig;           // grid dimensions, TPS, positionKey
   tick: number;                  // current tick count
   entities: {
@@ -58,6 +58,7 @@ interface WorldSnapshot {
   };
   components: Record<string, Array<[EntityId, unknown]>>;
   // e.g., { position: [[0, {x:5,y:3}], [1, {x:2,y:7}]], health: [[0, {hp:100}]] }
+  resources: ResourceStoreState; // registrations, pools, rates, transfers
 }
 ```
 
@@ -91,10 +92,6 @@ restored.registerHandler('attackUnit', attackHandler);
 // Re-register event listeners
 restored.on('unitDied', deathListener);
 
-// Re-register resource types (if you need to add/modify resources after load)
-restored.registerResource('food', { defaultMax: 500 });
-restored.registerResource('gold', { defaultMax: 1000 });
-
 // Re-register destroy hooks
 restored.onDestroy(cleanupCallback);
 ```
@@ -103,8 +100,10 @@ restored.onDestroy(cleanupCallback);
 
 `World.deserialize()` validates the snapshot:
 
-- Throws if `version` is not `1`
+- Throws if `version` is not `1` or `2`
 - Throws if entity state arrays have mismatched lengths
+
+Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store. Version 2 snapshots include resource registrations, pools, rates, transfers, and the next transfer ID.
 
 ## What's Included and Excluded
 
@@ -117,6 +116,7 @@ restored.onDestroy(cleanupCallback);
 | Tick count | `snapshot.tick` |
 | Entity IDs, alive states, generations | `snapshot.entities` |
 | All component data | `snapshot.components` |
+| Resource registrations, pools, rates, transfers | `snapshot.resources` |
 
 ### Excluded (must be re-registered)
 
@@ -128,10 +128,6 @@ restored.onDestroy(cleanupCallback);
 | Event listeners | Functions |
 | Diff listeners | Functions |
 | Destroy callbacks | Functions |
-| Resource type registrations | Config, not state |
-| Resource pools/rates/transfers | Not yet serialized (see notes) |
-
-**Note:** Resource pools are stored as component-like data internally but are not currently included in the snapshot. If your game uses resources, you may need to reconstruct resource state after loading. This is a known limitation.
 
 ## Diffs Overview
 

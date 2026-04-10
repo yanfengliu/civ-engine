@@ -23,6 +23,8 @@ Feature tracker for civ-engine. Tracks what's built, what's in progress, and wha
 | Pathfinding              | `pathfinding.ts`         | 2026-04-06 | Generic A*, graph-agnostic, user-defined cost/neighbors/heuristic/hash    |
 | Simulation speed control | `game-loop.ts`           | 2026-04-06 | Speed multiplier, pause/resume, step() ignores both for deterministic testing |
 | Client protocol | `client-adapter.ts` | 2026-04-06 | `ClientAdapter` with typed `ServerMessage`/`ClientMessage`, transport-agnostic send callback |
+| Engine hardening | `world.ts`, `resource-store.ts`, `client-adapter.ts` | 2026-04-10 | Entity refs, explicit write APIs, JSON-safe resources, snapshot v2, read-only grid view, runtime validation |
+| Package boundary | `index.ts`, `package.json`, `tsconfig.build.json` | 2026-04-10 | Public export barrel, declaration build, npm package metadata, CI workflow |
 
 ## In Progress
 

@@ -64,6 +64,9 @@ const adapter = new ClientAdapter<Events, Commands>({
     // Your transport logic here
     console.log('Sending:', message.type);
   },
+  onError: (error) => {
+    console.error('Client send failed:', error);
+  },
 });
 ```
 
@@ -123,7 +126,7 @@ Per-tick update. Sent after each `step()` while connected.
 
 ### `commandRejected`
 
-Sent when a submitted command fails validation.
+Sent when a submitted command fails validation, has a malformed command type, or names a command type with no registered handler.
 
 ```typescript
 {
@@ -154,7 +157,7 @@ Submit a game command:
 }
 ```
 
-The adapter calls `world.submit()`. If validation fails, a `commandRejected` message is sent back with the command's ID.
+The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submit()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID and a reason.
 
 ### `requestSnapshot`
 
@@ -277,7 +280,7 @@ Each connected adapter subscribes to diffs independently. All receive the same t
 
 ### Invalid commands
 
-If a client sends a command that fails validation, the adapter sends a `commandRejected` message. The client can use the `id` field to match rejections to submitted commands.
+If a client sends a command that fails validation, has a malformed command type, or names a command type with no registered handler, the adapter sends a `commandRejected` message. The client can use the `id` field to match rejections to submitted commands.
 
 ```typescript
 // Client submits invalid command
@@ -291,26 +294,28 @@ adapter.handleMessage({
 });
 
 // send callback receives:
-// { type: 'commandRejected', data: { id: 'cmd-123' } }
+// { type: 'commandRejected', data: { id: 'cmd-123', reason: 'Validation failed' } }
 ```
 
 ### Missing handlers
 
-If a command type has no registered handler, the command passes validation (if no validators reject it) but throws an error when processed at tick start. Register handlers for all command types before accepting client connections.
+`ClientAdapter` rejects commands whose `commandType` has no registered handler, using `world.hasCommandHandler()` before enqueueing the command. Direct calls to `world.submit()` still need matching handlers before the next tick or `World` will throw when processing the command.
 
 ### Malformed messages
 
-The adapter does not validate the structure of incoming messages beyond checking `message.type`. If your transport can receive malformed JSON, validate before calling `handleMessage()`.
+`handleMessage()` accepts `unknown` and ignores messages without a string `type`. Malformed command messages with a string `id` are rejected when possible; malformed command messages without an ID are ignored because there is no safe command to acknowledge.
 
 ```typescript
 ws.on('message', (data) => {
   try {
     const msg = JSON.parse(data.toString());
-    if (msg && typeof msg.type === 'string') {
-      adapter.handleMessage(msg);
-    }
+    adapter.handleMessage(msg);
   } catch {
-    // ignore malformed messages
+    // ignore malformed JSON
   }
 });
 ```
+
+### Send failures
+
+If your `send` callback throws, the adapter calls the optional `onError` callback and disconnects itself. This prevents a broken transport from throwing inside `world.step()` while diff listeners are running.

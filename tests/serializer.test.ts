@@ -19,7 +19,7 @@ describe('Serialization', () => {
 
     const snapshot = world.serialize();
 
-    expect(snapshot.version).toBe(1);
+    expect(snapshot.version).toBe(2);
     expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
@@ -32,6 +32,15 @@ describe('Serialization', () => {
     expect(snapshot.components['health']).toEqual([
       [0, { hp: 100 }],
     ]);
+    if (snapshot.version !== 2) throw new Error('Expected version 2 snapshot');
+    expect(snapshot.resources).toEqual({
+      registered: [],
+      pools: {},
+      production: {},
+      consumption: {},
+      transfers: [],
+      nextTransferId: 0,
+    });
   });
 
   it('round-trip: serialize then deserialize preserves all state', () => {
@@ -70,6 +79,57 @@ describe('Serialization', () => {
     };
     expect(() => World.deserialize(bad as never)).toThrow(
       'Unsupported snapshot version: 99',
+    );
+  });
+
+  it('loads version 1 snapshots for backward compatibility', () => {
+    const snapshot = {
+      version: 1 as const,
+      config: { gridWidth: 10, gridHeight: 10, tps: 60 },
+      tick: 0,
+      entities: { generations: [0], alive: [true], freeList: [] },
+      components: { health: [[0, { hp: 10 }]] as Array<[number, unknown]> },
+    };
+
+    const restored = World.deserialize(snapshot);
+    expect(restored.isAlive(0)).toBe(true);
+    expect(restored.getComponent(0, 'health')).toEqual({ hp: 10 });
+  });
+
+  it('round-trips resources and remains JSON-safe', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerResource('food');
+    world.registerResource('gold', { defaultMax: 100 });
+    const a = world.createEntity();
+    const b = world.createEntity();
+    world.addResource(a, 'food', 50);
+    world.setProduction(a, 'food', 5);
+    world.setConsumption(a, 'food', 2);
+    world.addResource(b, 'food', 0);
+    world.addTransfer(a, b, 'food', 3);
+
+    const restored = World.deserialize(
+      JSON.parse(JSON.stringify(world.serialize())),
+    );
+
+    expect(restored.getResource(a, 'food')).toEqual({ current: 50, max: null });
+    expect(restored.getProduction(a, 'food')).toBe(5);
+    expect(restored.getConsumption(a, 'food')).toBe(2);
+    expect(restored.getTransfers(a)).toEqual([
+      { id: 0, from: a, to: b, resource: 'food', rate: 3 },
+    ]);
+  });
+
+  it('serialize rejects direct mutations that make components non-JSON', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ value: unknown }>('state');
+    const entity = world.createEntity();
+    world.addComponent(entity, 'state', { value: 1 });
+
+    world.getComponent<{ value: unknown }>(entity, 'state')!.value = () => undefined;
+
+    expect(() => world.serialize()).toThrow(
+      "component 'state' on entity 0.value is not JSON-compatible",
     );
   });
 
@@ -148,7 +208,7 @@ describe('Serialization', () => {
     expect(restored.getComponent(e, 'position')).toEqual({ x: 2, y: 0 });
   });
 
-  it('deserialized world syncs spatial grid on first step', () => {
+  it('deserialized world syncs spatial grid immediately', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     world.registerComponent<{ x: number; y: number }>('position');
 
@@ -159,11 +219,6 @@ describe('Serialization', () => {
     const snapshot = world.serialize();
     const restored = World.deserialize(snapshot);
 
-    // Grid is empty before first step
-    expect(restored.grid.getAt(3, 4)?.has(e) ?? false).toBe(false);
-
-    restored.step();
-    // Grid is populated after step
     expect(restored.grid.getAt(3, 4)!.has(e)).toBe(true);
   });
 

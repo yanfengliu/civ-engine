@@ -71,6 +71,16 @@ describe('SpatialGrid', () => {
     expect(() => grid.insert(0, 0, 10)).toThrow(RangeError);
   });
 
+  it('throws on fractional coordinates and invalid dimensions', () => {
+    expect(() => new SpatialGrid(0, 10)).toThrow(RangeError);
+    expect(() => new SpatialGrid(10.5, 10)).toThrow(RangeError);
+
+    const grid = new SpatialGrid(10, 10);
+    expect(() => grid.insert(0, 1.5, 0)).toThrow(RangeError);
+    expect(() => grid.getInRadius(1.5, 0, 1)).toThrow(RangeError);
+    expect(() => grid.getInRadius(1, 0, -1)).toThrow(RangeError);
+  });
+
   it('throws on out-of-bounds getAt', () => {
     const grid = new SpatialGrid(10, 10);
     expect(() => grid.getAt(-1, 0)).toThrow(RangeError);

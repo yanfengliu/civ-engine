@@ -1,5 +1,10 @@
 export type EntityId = number;
 
+export interface EntityRef {
+  id: EntityId;
+  generation: number;
+}
+
 export interface Position {
   x: number;
   y: number;

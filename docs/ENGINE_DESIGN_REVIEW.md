@@ -4,6 +4,8 @@ Review date: 2026-04-10
 
 Scope: general state and design quality for a headless 2D realtime civilization simulation engine. This is a handoff note for a future Codex or Claude pass. No engine behavior was changed as part of this review.
 
+Follow-up: the high-priority hardening pass was planned in `docs/ENGINE_HARDENING_PLAN.md` and implemented on 2026-04-10. This review remains the pre-hardening baseline; check the plan and later commits before treating any specific risk below as still open.
+
 Validation run during review:
 
 - `npm.cmd test` - 19 files, 242 tests passed.

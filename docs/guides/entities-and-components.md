@@ -43,6 +43,17 @@ world.isAlive(b);   // false (destroyed)
 world.isAlive(999); // false (never created)
 ```
 
+### Generation-aware references
+
+Entity IDs are recycled, so external clients and long-lived commands should use `EntityRef` when they need to detect stale IDs:
+
+```typescript
+const ref = world.getEntityRef(a); // { id, generation } | null
+if (ref && world.isCurrent(ref)) {
+  // The referenced entity is still the same lifetime.
+}
+```
+
 ## Component Registration and Storage
 
 ### Registration
@@ -74,6 +85,13 @@ Components are stored in sparse arrays indexed by entity ID. This gives O(1) get
 world.addComponent(entity, 'health', { hp: 100, maxHp: 100 });
 ```
 
+`addComponent` is retained as an alias for `setComponent`. New code can use `setComponent` for clearer write intent:
+
+```typescript
+world.setComponent(entity, 'health', { hp: 100, maxHp: 100 });
+world.patchComponent<Health>(entity, 'health', { hp: 80 });
+```
+
 If the entity already has this component, it is **overwritten**:
 
 ```typescript
@@ -93,7 +111,7 @@ No-op if the entity doesn't have the component.
 
 ### Single component read
 
-`getComponent` returns a **direct reference** to the stored object, not a copy. Mutations are immediate.
+`getComponent` returns a **direct reference** to the stored object, not a copy. Mutations are immediate and are detected for diffs, but `setComponent` and `patchComponent` make write intent clearer and update position/grid state immediately when the key is the configured position key.
 
 ```typescript
 const hp = world.getComponent<Health>(entity, 'health');

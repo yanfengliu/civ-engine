@@ -16,6 +16,15 @@ export class GameLoop {
     onTick: () => void;
     maxTicksPerFrame?: number;
   }) {
+    if (!Number.isFinite(config.tps) || config.tps <= 0) {
+      throw new Error('TPS must be a finite positive number');
+    }
+    if (
+      config.maxTicksPerFrame !== undefined &&
+      (!Number.isInteger(config.maxTicksPerFrame) || config.maxTicksPerFrame <= 0)
+    ) {
+      throw new Error('maxTicksPerFrame must be a positive integer');
+    }
     this._tps = config.tps;
     this.tickDuration = 1000 / config.tps;
     this.onTick = config.onTick;
@@ -28,6 +37,7 @@ export class GameLoop {
   }
 
   start(): void {
+    if (this.running) return;
     this.running = true;
     this.lastTime = performance.now();
     this.accumulated = 0;

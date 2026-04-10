@@ -144,4 +144,20 @@ describe('ComponentStore', () => {
       [3, { x: 3 }],
     ]);
   });
+
+  it('tracks in-place mutations after clearDirty', () => {
+    const store = new ComponentStore<{ hp: number }>();
+    store.set(1, { hp: 10 });
+    store.clearDirty();
+    store.get(1)!.hp = 15;
+    expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+  });
+
+  it('rejects non-JSON-compatible component data', () => {
+    const store = new ComponentStore<{ value: number }>();
+    expect(() => store.set(1, { value: Number.NaN })).toThrow();
+    expect(() =>
+      store.set(2, { fn: () => undefined } as unknown as { value: number }),
+    ).toThrow();
+  });
 });

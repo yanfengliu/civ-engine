@@ -13,7 +13,7 @@ describe('ResourceStore', () => {
     store.register('food');
     const added = store.addResource(0, 'food', 50);
     expect(added).toBe(50);
-    expect(store.getResource(0, 'food')).toEqual({ current: 50, max: Infinity });
+    expect(store.getResource(0, 'food')).toEqual({ current: 50, max: null });
   });
 
   it('addResource caps at max', () => {
@@ -218,8 +218,8 @@ describe('ResourceStore', () => {
     store.addResource(1, 'food', 30);
     const dirty = store.getDirty();
     expect(dirty['food'].set).toEqual([
-      [0, { current: 50, max: Infinity }],
-      [1, { current: 30, max: Infinity }],
+      [0, { current: 50, max: null }],
+      [1, { current: 30, max: null }],
     ]);
     expect(dirty['food'].removed).toEqual([]);
   });
@@ -242,5 +242,38 @@ describe('ResourceStore', () => {
     const dirty = store.getDirty();
     expect(dirty['food'].set).toEqual([]);
     expect(dirty['food'].removed).toEqual([0]);
+  });
+
+  it('rejects negative and non-finite resource values', () => {
+    const store = new ResourceStore();
+    store.register('food');
+
+    expect(() => store.addResource(0, 'food', -1)).toThrow();
+    expect(() => store.removeResource(0, 'food', Number.NaN)).toThrow();
+    expect(() => store.setResourceMax(0, 'food', Infinity)).toThrow();
+    expect(() => store.setProduction(0, 'food', -1)).toThrow();
+    expect(() => store.setConsumption(0, 'food', Infinity)).toThrow();
+    expect(() => store.addTransfer(0, 1, 'food', -1)).toThrow();
+  });
+
+  it('round-trips resource state', () => {
+    const store = new ResourceStore();
+    store.register('food');
+    store.register('gold', { defaultMax: 100 });
+    store.addResource(0, 'food', 50);
+    store.setProduction(0, 'food', 5);
+    store.setConsumption(0, 'food', 2);
+    store.addResource(1, 'food', 0);
+    const transfer = store.addTransfer(0, 1, 'food', 3);
+    store.clearDirty();
+
+    const restored = ResourceStore.fromState(store.getState());
+    expect(restored.getResource(0, 'food')).toEqual({ current: 50, max: null });
+    expect(restored.getProduction(0, 'food')).toBe(5);
+    expect(restored.getConsumption(0, 'food')).toBe(2);
+    expect(restored.getTransfers(0)).toEqual([
+      { id: transfer, from: 0, to: 1, resource: 'food', rate: 3 },
+    ]);
+    expect(restored.getDirty()).toEqual({});
   });
 });

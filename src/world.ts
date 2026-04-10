@@ -1,13 +1,16 @@
-import type { EntityId, Position, WorldConfig } from './types.js';
+import type { EntityId, EntityRef, Position, WorldConfig } from './types.js';
 import type { WorldSnapshot } from './serializer.js';
 import type { TickDiff } from './diff.js';
 import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
+import type { SpatialGridView } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';
 import { EventBus } from './event-bus.js';
 import { CommandQueue } from './command-queue.js';
 import { ResourceStore } from './resource-store.js';
+import type { ResourceMax, ResourcePool } from './resource-store.js';
+import { assertJsonCompatible } from './json.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -35,7 +38,8 @@ export class World<
     keyof TCommandMap,
     (data: never, world: World<TEventMap, TCommandMap>) => void
   >();
-  readonly grid: SpatialGrid;
+  private spatialGrid: SpatialGrid;
+  readonly grid: SpatialGridView;
   readonly positionKey: string;
   private currentDiff: TickDiff | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
@@ -43,8 +47,10 @@ export class World<
   private destroyCallbacks: Array<(id: EntityId, world: World<TEventMap, TCommandMap>) => void> = [];
 
   constructor(config: WorldConfig) {
+    validateWorldConfig(config);
     this.entityManager = new EntityManager();
-    this.grid = new SpatialGrid(config.gridWidth, config.gridHeight);
+    this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
+    this.grid = this.spatialGrid;
     this.positionKey = config.positionKey ?? 'position';
     this.gameLoop = new GameLoop({
       tps: config.tps,
@@ -66,7 +72,7 @@ export class World<
 
     const prev = this.previousPositions.get(id);
     if (prev) {
-      this.grid.remove(id, prev.x, prev.y);
+      this.spatialGrid.remove(id, prev.x, prev.y);
       this.previousPositions.delete(id);
     }
     for (const store of this.componentStores.values()) {
@@ -78,6 +84,18 @@ export class World<
 
   isAlive(id: EntityId): boolean {
     return this.entityManager.isAlive(id);
+  }
+
+  getEntityRef(id: EntityId): EntityRef | null {
+    if (!this.entityManager.isAlive(id)) return null;
+    return { id, generation: this.entityManager.getGeneration(id) };
+  }
+
+  isCurrent(ref: EntityRef): boolean {
+    return (
+      this.entityManager.isAlive(ref.id) &&
+      this.entityManager.getGeneration(ref.id) === ref.generation
+    );
   }
 
   onDestroy(
@@ -103,8 +121,20 @@ export class World<
   }
 
   addComponent<T>(entity: EntityId, key: string, data: T): void {
+    this.setComponent(entity, key, data);
+  }
+
+  setComponent<T>(entity: EntityId, key: string, data: T): void {
+    this.assertAlive(entity);
+    const position = key === this.positionKey ? asPosition(data) : null;
+    if (position) {
+      this.assertPositionInBounds(position);
+    }
     const store = this.getStore<T>(key);
     store.set(entity, data);
+    if (position) {
+      this.syncSpatialEntity(entity, position);
+    }
   }
 
   getComponent<T>(entity: EntityId, key: string): T | undefined {
@@ -125,8 +155,35 @@ export class World<
   }
 
   removeComponent(entity: EntityId, key: string): void {
+    this.assertAlive(entity);
     const store = this.componentStores.get(key);
     store?.remove(entity);
+    if (key === this.positionKey) {
+      this.removeFromSpatialIndex(entity);
+    }
+  }
+
+  patchComponent<T>(
+    entity: EntityId,
+    key: string,
+    patch: (data: T) => T | void,
+  ): T {
+    this.assertAlive(entity);
+    const current = this.getComponent<T>(entity, key);
+    if (current === undefined) {
+      throw new Error(`Entity ${entity} does not have component '${key}'`);
+    }
+    const next = patch(current) ?? current;
+    this.setComponent(entity, key, next);
+    return next;
+  }
+
+  setPosition(
+    entity: EntityId,
+    position: Position,
+    key = this.positionKey,
+  ): void {
+    this.setComponent(entity, key, { x: position.x, y: position.y });
   }
 
   *query(...keys: string[]): IterableIterator<EntityId> {
@@ -249,6 +306,10 @@ export class World<
     );
   }
 
+  hasCommandHandler(type: keyof TCommandMap): boolean {
+    return this.handlers.has(type);
+  }
+
   getEvents(): ReadonlyArray<{
     type: keyof TEventMap;
     data: TEventMap[keyof TEventMap];
@@ -259,19 +320,24 @@ export class World<
   serialize(): WorldSnapshot {
     const components: Record<string, Array<[EntityId, unknown]>> = {};
     for (const [key, store] of this.componentStores) {
-      components[key] = [...store.entries()];
+      const entries = [...store.entries()];
+      for (const [entity, data] of entries) {
+        assertJsonCompatible(data, `component '${key}' on entity ${entity}`);
+      }
+      components[key] = entries;
     }
     return {
-      version: 1,
+      version: 2,
       config: {
-        gridWidth: this.grid.width,
-        gridHeight: this.grid.height,
+        gridWidth: this.spatialGrid.width,
+        gridHeight: this.spatialGrid.height,
         tps: this.gameLoop.tps,
         positionKey: this.positionKey,
       },
       tick: this.gameLoop.tick,
       entities: this.entityManager.getState(),
       components,
+      resources: this.resourceStore.getState(),
     };
   }
 
@@ -282,8 +348,9 @@ export class World<
     snapshot: WorldSnapshot,
     systems?: System<TEventMap, TCommandMap>[],
   ): World<TEventMap, TCommandMap> {
-    if (snapshot.version !== 1) {
-      throw new Error(`Unsupported snapshot version: ${snapshot.version}`);
+    const version = (snapshot as { version: number }).version;
+    if (version !== 1 && version !== 2) {
+      throw new Error(`Unsupported snapshot version: ${version}`);
     }
     if (
       snapshot.entities.generations.length !== snapshot.entities.alive.length
@@ -301,6 +368,10 @@ export class World<
         ComponentStore.fromEntries(entries as Array<[number, unknown]>),
       );
     }
+    if (snapshot.version === 2) {
+      world.resourceStore = ResourceStore.fromState(snapshot.resources);
+    }
+    world.syncSpatialIndex();
 
     world.gameLoop.setTick(snapshot.tick);
 
@@ -329,26 +400,29 @@ export class World<
     this.diffListeners.delete(fn);
   }
 
-  registerResource(key: string, options?: { defaultMax?: number }): void {
+  registerResource(key: string, options?: { defaultMax?: ResourceMax }): void {
     this.resourceStore.register(key, options);
   }
 
   addResource(entity: EntityId, key: string, amount: number): number {
+    this.assertAlive(entity);
     return this.resourceStore.addResource(entity, key, amount);
   }
 
   removeResource(entity: EntityId, key: string, amount: number): number {
+    this.assertAlive(entity);
     return this.resourceStore.removeResource(entity, key, amount);
   }
 
   getResource(
     entity: EntityId,
     key: string,
-  ): { current: number; max: number } | undefined {
+  ): ResourcePool | undefined {
     return this.resourceStore.getResource(entity, key);
   }
 
-  setResourceMax(entity: EntityId, key: string, max: number): void {
+  setResourceMax(entity: EntityId, key: string, max: ResourceMax): void {
+    this.assertAlive(entity);
     this.resourceStore.setResourceMax(entity, key, max);
   }
 
@@ -357,10 +431,12 @@ export class World<
   }
 
   setProduction(entity: EntityId, key: string, rate: number): void {
+    this.assertAlive(entity);
     this.resourceStore.setProduction(entity, key, rate);
   }
 
   setConsumption(entity: EntityId, key: string, rate: number): void {
+    this.assertAlive(entity);
     this.resourceStore.setConsumption(entity, key, rate);
   }
 
@@ -378,6 +454,8 @@ export class World<
     resource: string,
     rate: number,
   ): number {
+    this.assertAlive(from);
+    this.assertAlive(to);
     return this.resourceStore.addTransfer(from, to, resource, rate);
   }
 
@@ -467,10 +545,10 @@ export class World<
       const prev = this.previousPositions.get(id);
 
       if (!prev) {
-        this.grid.insert(id, pos.x, pos.y);
+        this.spatialGrid.insert(id, pos.x, pos.y);
         this.previousPositions.set(id, { x: pos.x, y: pos.y });
       } else if (prev.x !== pos.x || prev.y !== pos.y) {
-        this.grid.move(id, prev.x, prev.y, pos.x, pos.y);
+        this.spatialGrid.move(id, prev.x, prev.y, pos.x, pos.y);
         prev.x = pos.x;
         prev.y = pos.y;
       }
@@ -478,10 +556,31 @@ export class World<
 
     for (const [id, pos] of this.previousPositions) {
       if (!seen.has(id)) {
-        this.grid.remove(id, pos.x, pos.y);
+        this.spatialGrid.remove(id, pos.x, pos.y);
         this.previousPositions.delete(id);
       }
     }
+  }
+
+  private syncSpatialEntity(entity: EntityId, pos: Position): void {
+    const prev = this.previousPositions.get(entity);
+    if (!prev) {
+      this.spatialGrid.insert(entity, pos.x, pos.y);
+      this.previousPositions.set(entity, { x: pos.x, y: pos.y });
+      return;
+    }
+    if (prev.x !== pos.x || prev.y !== pos.y) {
+      this.spatialGrid.move(entity, prev.x, prev.y, pos.x, pos.y);
+      prev.x = pos.x;
+      prev.y = pos.y;
+    }
+  }
+
+  private removeFromSpatialIndex(entity: EntityId): void {
+    const prev = this.previousPositions.get(entity);
+    if (!prev) return;
+    this.spatialGrid.remove(entity, prev.x, prev.y);
+    this.previousPositions.delete(entity);
   }
 
   private getStore<T>(key: string): ComponentStore<T> {
@@ -489,4 +588,56 @@ export class World<
     if (!store) throw new Error(`Component '${key}' is not registered`);
     return store as ComponentStore<T>;
   }
+
+  private assertAlive(entity: EntityId): void {
+    if (!this.entityManager.isAlive(entity)) {
+      throw new Error(`Entity ${entity} is not alive`);
+    }
+  }
+
+  private assertPositionInBounds(position: Position): void {
+    this.spatialGrid.getAt(position.x, position.y);
+  }
+}
+
+function validateWorldConfig(config: WorldConfig): void {
+  if (!Number.isInteger(config.gridWidth) || config.gridWidth <= 0) {
+    throw new RangeError('gridWidth must be a positive integer');
+  }
+  if (!Number.isInteger(config.gridHeight) || config.gridHeight <= 0) {
+    throw new RangeError('gridHeight must be a positive integer');
+  }
+  if (!Number.isFinite(config.tps) || config.tps <= 0) {
+    throw new RangeError('tps must be a finite positive number');
+  }
+  if (
+    config.maxTicksPerFrame !== undefined &&
+    (!Number.isInteger(config.maxTicksPerFrame) || config.maxTicksPerFrame <= 0)
+  ) {
+    throw new RangeError('maxTicksPerFrame must be a positive integer');
+  }
+  if (config.positionKey !== undefined && config.positionKey.length === 0) {
+    throw new Error('positionKey must not be empty');
+  }
+}
+
+function asPosition(value: unknown): Position {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    !('x' in value) ||
+    !('y' in value)
+  ) {
+    throw new Error('Position component must be an object with x and y');
+  }
+  const position = value as { x: unknown; y: unknown };
+  if (
+    typeof position.x !== 'number' ||
+    typeof position.y !== 'number' ||
+    !Number.isInteger(position.x) ||
+    !Number.isInteger(position.y)
+  ) {
+    throw new RangeError('Position coordinates must be integers');
+  }
+  return { x: position.x, y: position.y };
 }

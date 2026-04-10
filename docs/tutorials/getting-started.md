@@ -202,7 +202,7 @@ world.addResource(farm, 'food', 100);
 world.addTransfer(farm, city, 'food', 3); // 3 food/tick from farm to city
 
 // Read resource state
-const pool = world.getResource(city, 'food'); // { current: 50, max: Infinity }
+const pool = world.getResource(city, 'food'); // { current: 50, max: null }
 ```
 
 Resource rates and transfers are processed automatically after systems run each tick.
@@ -293,13 +293,13 @@ adapter.handleMessage({
   type: 'command',
   data: { id: 'cmd-1', commandType: 'moveUnit', payload: { entityId: 0, targetX: 5, targetY: 3 } },
 });
-// If validation fails, send callback fires with: { type: 'commandRejected', data: { id: 'cmd-1' } }
+// If validation fails, send callback fires with: { type: 'commandRejected', data: { id: 'cmd-1', reason: 'Validation failed' } }
 
 // Stop streaming
 adapter.disconnect();
 ```
 
-Server messages: `snapshot` (full state), `tick` (diff + events), `commandRejected` (failed validation).
+Server messages: `snapshot` (full state), `tick` (diff + events), `commandRejected` (failed validation, malformed command, or missing handler).
 Client messages: `command` (submit a game command), `requestSnapshot` (request full state).
 
 ## Next Steps
