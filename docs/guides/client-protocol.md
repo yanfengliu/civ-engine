@@ -48,8 +48,7 @@ The adapter uses only World's public API:
 ## Setting Up a ClientAdapter
 
 ```typescript
-import { ClientAdapter } from './src/client-adapter.js';
-import type { ServerMessage, ClientMessage } from './src/client-adapter.js';
+import { World, ClientAdapter, type ServerMessage, type ClientMessage } from 'civ-engine';
 
 type Events = { unitDied: { entityId: number } };
 type Commands = { moveUnit: { entityId: number; x: number; y: number } };
@@ -69,6 +68,8 @@ const adapter = new ClientAdapter<Events, Commands>({
   },
 });
 ```
+
+For long-lived clients, prefer command payloads that include `EntityRef` values instead of bare entity IDs. Validators can then call `world.isCurrent(ref)` and reject commands that point at a recycled ID.
 
 ### Connect
 

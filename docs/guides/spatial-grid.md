@@ -89,7 +89,7 @@ world.grid.getAt(64, 0);  // RangeError (if grid width is 64)
 ### Get neighbors
 
 ```typescript
-import { ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
+import { ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';
 
 // 4 orthogonal neighbors (default)
 const nearby = world.grid.getNeighbors(5, 3);
@@ -218,8 +218,7 @@ function movementSystem(w: World): void {
     const occupants = w.grid.getAt(newX, newY);
     if (occupants && occupants.size > 0) continue; // cell occupied
     
-    pos.x = newX;
-    pos.y = newY;
+    w.setPosition(id, { x: newX, y: newY });
   }
 }
 ```

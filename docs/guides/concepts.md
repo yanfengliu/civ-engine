@@ -55,15 +55,17 @@ world.registerComponent<Health>('health');
 // Attach to an entity
 world.addComponent(unit, 'health', { hp: 100, maxHp: 100 });
 
-// Read (returns a direct reference; mutations are immediate)
-const hp = world.getComponent<Health>(unit, 'health')!;
-hp.hp -= 10;  // this mutates the stored component
+// Update
+world.patchComponent<Health>(unit, 'health', (hp) => {
+  hp.hp -= 10;
+});
 ```
 
 **Key rules:**
 - Register a component key before using it (enforced with errors)
 - One component per key per entity (adding overwrites)
 - `getComponent` returns a direct reference, not a copy; direct mutations are diff-detected, but `setComponent`/`patchComponent` are clearer write APIs
+- Component data must be JSON-compatible plain data
 - Components are stored in sparse arrays indexed by entity ID, giving O(1) lookup
 
 ### Systems

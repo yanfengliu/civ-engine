@@ -44,6 +44,8 @@ writeFileSync('save.json', json);
 localStorage.setItem('save', json);
 ```
 
+Components must already be JSON-compatible plain data. `serialize()` rejects non-finite numbers, functions, symbols, bigints, class instances, circular references, and `undefined` component fields instead of silently producing an invalid save.
+
 ### Snapshot structure
 
 ```typescript

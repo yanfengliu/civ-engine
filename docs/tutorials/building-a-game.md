@@ -25,8 +25,7 @@ This tutorial walks through building a small but complete real-time colony survi
 ## 1. Setup
 
 ```typescript
-import { World } from './src/world.js';
-import type { Position, EntityId } from './src/types.js';
+import { World, type Position, type EntityId } from 'civ-engine';
 
 // Define your game's component types
 interface Colonist {
@@ -86,8 +85,7 @@ world.registerResource('food', { defaultMax: 500 });
 Use simplex noise to scatter berry bushes across the map, and `createTileGrid` to create tile entities.
 
 ```typescript
-import { createTileGrid } from './src/map-gen.js';
-import { createNoise2D, octaveNoise2D } from './src/noise.js';
+import { createTileGrid, createNoise2D, octaveNoise2D } from 'civ-engine';
 
 // Create a tile entity for every cell (each gets a position component)
 const tiles = createTileGrid(world);
@@ -113,7 +111,7 @@ for (let y = 0; y < HEIGHT; y++) {
 You can also use cellular automata to create more structured patterns:
 
 ```typescript
-import { createCellGrid, stepCellGrid } from './src/cellular.js';
+import { createCellGrid, stepCellGrid } from 'civ-engine';
 
 // Create a noise-seeded cell grid and smooth it
 let cells = createCellGrid(WIDTH, HEIGHT, (x, y) => {
@@ -136,14 +134,14 @@ for (let i = 0; i < 3; i++) {
 ```typescript
 // Create a settlement at the center
 const settlement = world.createEntity();
-world.addComponent(settlement, 'position', { x: 16, y: 16 });
+world.setPosition(settlement, { x: 16, y: 16 });
 world.addComponent(settlement, 'settlement', { name: 'New Colony' });
 world.addResource(settlement, 'food', 100); // start with 100 food
 
 // Spawn 3 colonists near the settlement
 function spawnColonist(name: string, x: number, y: number): EntityId {
   const id = world.createEntity();
-  world.addComponent(id, 'position', { x, y });
+  world.setPosition(id, { x, y });
   world.addComponent(id, 'colonist', { name, state: 'idle' });
   return id;
 }
@@ -234,7 +232,7 @@ world.registerSystem(gatheringSystem);
 Commands are how AI agents or UI send instructions to the game. They are validated on submit and executed at the start of the next tick.
 
 ```typescript
-import { findPath } from './src/pathfinding.js';
+import { findPath } from 'civ-engine';
 
 // Validator: entity must be alive and a colonist
 world.registerValidator('moveColonist', (data, w) => {
@@ -322,7 +320,7 @@ world.on('settlementStarving', (event) => {
 The pathfinding module is generic — it works on any graph. Here's a reusable helper for grid pathfinding:
 
 ```typescript
-import { findPath, type PathResult } from './src/pathfinding.js';
+import { findPath, type PathResult } from 'civ-engine';
 
 function findGridPath(
   fromX: number,
@@ -478,8 +476,7 @@ world.resume();
 Wire your game to an external client (browser, another process, AI agent) using the `ClientAdapter`. It sends typed messages — you provide the transport.
 
 ```typescript
-import { ClientAdapter } from './src/client-adapter.js';
-import type { ServerMessage, ClientMessage } from './src/client-adapter.js';
+import { ClientAdapter, type ServerMessage, type ClientMessage } from 'civ-engine';
 
 // Example: wire to a WebSocket
 function attachClient(ws: WebSocket, world: World<GameEvents, GameCommands>): ClientAdapter<GameEvents, GameCommands> {

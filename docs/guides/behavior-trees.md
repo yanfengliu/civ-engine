@@ -34,7 +34,7 @@ Trees are composed of **leaf nodes** (actions, conditions) and **composite nodes
 A leaf node that performs work and returns a status.
 
 ```typescript
-import { NodeStatus } from './src/behavior-tree.js';
+import { NodeStatus, type Position } from 'civ-engine';
 
 // Immediate action
 builder.action((ctx) => {
@@ -44,12 +44,16 @@ builder.action((ctx) => {
 
 // Multi-tick action
 builder.action((ctx) => {
-  const pos = ctx.world.getComponent(ctx.entityId, 'position');
+  const pos = ctx.world.getComponent<Position>(ctx.entityId, 'position');
+  if (!pos) return NodeStatus.FAILURE;
   if (pos.x === ctx.targetX && pos.y === ctx.targetY) {
     return NodeStatus.SUCCESS;
   }
   // Move one step closer
-  pos.x += Math.sign(ctx.targetX - pos.x);
+  ctx.world.setPosition(ctx.entityId, {
+    x: pos.x + Math.sign(ctx.targetX - pos.x),
+    y: pos.y,
+  });
   return NodeStatus.RUNNING;
 });
 ```
@@ -104,10 +108,15 @@ builder.sequence([
 ## Building Your First Tree
 
 ```typescript
-import { createBehaviorTree, createBTState, NodeStatus } from './src/behavior-tree.js';
-import type { BTState, BTNode } from './src/behavior-tree.js';
-import type { EntityId } from './src/types.js';
-import type { World } from './src/world.js';
+import {
+  createBehaviorTree,
+  createBTState,
+  NodeStatus,
+  type BTState,
+  type BTNode,
+  type EntityId,
+  type World,
+} from 'civ-engine';
 
 // 1. Define your context type
 interface AIContext {
@@ -164,11 +173,12 @@ const moveToTarget = createBehaviorTree<AIContext>(
         return NodeStatus.SUCCESS;
       }
 
-      // Move one step
-      if (pos.x < target.x) pos.x++;
-      else if (pos.x > target.x) pos.x--;
-      if (pos.y < target.y) pos.y++;
-      else if (pos.y > target.y) pos.y--;
+      const next = { x: pos.x, y: pos.y };
+      if (next.x < target.x) next.x++;
+      else if (next.x > target.x) next.x--;
+      if (next.y < target.y) next.y++;
+      else if (next.y > target.y) next.y--;
+      ctx.world.setPosition(ctx.entityId, next);
 
       return NodeStatus.RUNNING; // not there yet
     }),
@@ -197,10 +207,16 @@ b.selector([
 The behavior tree framework is designed to integrate cleanly with the ECS. Here's the standard pattern:
 
 ```typescript
-import { World } from './src/world.js';
-import { createBehaviorTree, createBTState, NodeStatus } from './src/behavior-tree.js';
-import type { BTState, BTNode } from './src/behavior-tree.js';
-import type { Position, EntityId } from './src/types.js';
+import {
+  World,
+  createBehaviorTree,
+  createBTState,
+  NodeStatus,
+  type BTState,
+  type BTNode,
+  type Position,
+  type EntityId,
+} from 'civ-engine';
 
 // Component types
 interface Colonist { name: string; state: string }
@@ -264,7 +280,7 @@ world.registerSystem(aiSystem);
 
 // Spawn a colonist
 const c = world.createEntity();
-world.addComponent(c, 'position', { x: 5, y: 5 });
+world.setPosition(c, { x: 5, y: 5 });
 world.addComponent(c, 'colonist', { name: 'Alice', state: 'idle' });
 world.addComponent(c, 'health', { hp: 100, maxHp: 100 });
 world.addComponent(c, 'btState', createBTState(colonistTree));

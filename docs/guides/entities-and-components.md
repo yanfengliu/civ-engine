@@ -89,8 +89,12 @@ world.addComponent(entity, 'health', { hp: 100, maxHp: 100 });
 
 ```typescript
 world.setComponent(entity, 'health', { hp: 100, maxHp: 100 });
-world.patchComponent<Health>(entity, 'health', { hp: 80 });
+world.patchComponent<Health>(entity, 'health', (health) => {
+  health.hp = 80;
+});
 ```
+
+Component data must be JSON-compatible plain data: objects, arrays, strings, finite numbers, booleans, and `null`. Do not store functions, class instances, `undefined`, `NaN`, `Infinity`, bigints, symbols, or circular references.
 
 If the entity already has this component, it is **overwritten**:
 
@@ -118,6 +122,14 @@ const hp = world.getComponent<Health>(entity, 'health');
 if (hp) {
   hp.hp -= 10; // mutates the stored component directly
 }
+```
+
+For clearer write intent, prefer:
+
+```typescript
+world.patchComponent<Health>(entity, 'health', (hp) => {
+  hp.hp -= 10;
+});
 ```
 
 Returns `undefined` if the entity doesn't have this component:

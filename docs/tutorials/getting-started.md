@@ -35,8 +35,7 @@ World.step()
 ## Minimal Example
 
 ```typescript
-import { World } from './src/world.js';
-import type { Position } from './src/types.js';
+import { World, type Position } from 'civ-engine';
 
 // 1. Create a world with a 16x16 grid, 60 ticks per second
 const world = new World({ gridWidth: 16, gridHeight: 16, tps: 60 });
@@ -51,7 +50,7 @@ world.registerComponent<Velocity>('velocity');
 
 // 3. Create entities and attach components
 const unit = world.createEntity();
-world.addComponent(unit, 'position', { x: 0, y: 0 });
+world.setPosition(unit, { x: 0, y: 0 });
 world.addComponent(unit, 'health', { hp: 100, maxHp: 100 });
 world.addComponent(unit, 'velocity', { dx: 1, dy: 0 });
 
@@ -60,8 +59,10 @@ function movementSystem(world: World): void {
   for (const id of world.query('position', 'velocity')) {
     const pos = world.getComponent<Position>(id, 'position')!;
     const vel = world.getComponent<Velocity>(id, 'velocity')!;
-    pos.x = Math.max(0, Math.min(15, pos.x + vel.dx));
-    pos.y = Math.max(0, Math.min(15, pos.y + vel.dy));
+    world.setPosition(id, {
+      x: Math.max(0, Math.min(15, pos.x + vel.dx)),
+      y: Math.max(0, Math.min(15, pos.y + vel.dy)),
+    });
   }
 }
 
@@ -94,10 +95,10 @@ const soldiers = [...world.query('position', 'health', 'attack')];
 
 ## Spatial Grid
 
-The grid tracks which entities are at each (x, y) cell. It syncs automatically each tick — just mutate position components and the engine handles the rest.
+The grid tracks which entities are at each (x, y) cell. Use `setPosition()` when you need same-tick grid updates; direct position mutations are picked up by the next tick's spatial sync.
 
 ```typescript
-import { ORTHOGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
+import { ORTHOGONAL, ALL_DIRECTIONS } from 'civ-engine';
 
 // Who is at cell (5, 3)?
 const entities = world.grid.getAt(5, 3); // ReadonlySet<EntityId> | null
@@ -131,9 +132,7 @@ world.registerValidator('moveUnit', (data, world) => {
 
 // Register a handler (required — runs at tick start)
 world.registerHandler('moveUnit', (data, world) => {
-  const pos = world.getComponent<Position>(data.entityId, 'position')!;
-  pos.x = data.targetX;
-  pos.y = data.targetY;
+  world.setPosition(data.entityId, { x: data.targetX, y: data.targetY });
 });
 
 // Submit a command (returns true if validation passes)
@@ -260,8 +259,7 @@ world.onDiff((diff) => {
 The `ClientAdapter` bridges the World to any transport (WebSocket, postMessage, stdin/stdout). It sends typed messages via a `send` callback — you wire it to whatever transport you need.
 
 ```typescript
-import { ClientAdapter } from './src/client-adapter.js';
-import type { ServerMessage, ClientMessage } from './src/client-adapter.js';
+import { ClientAdapter, type ServerMessage, type ClientMessage } from 'civ-engine';
 
 type Events = { unitDied: { entityId: number } };
 type Commands = { moveUnit: { entityId: number; targetX: number; targetY: number } };

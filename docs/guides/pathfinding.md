@@ -28,8 +28,7 @@ The pathfinding module provides a generic A* implementation that works on **any 
 ## Basic Usage
 
 ```typescript
-import { findPath } from './src/pathfinding.js';
-import type { PathResult } from './src/pathfinding.js';
+import { findPath, type PathResult } from 'civ-engine';
 
 const result = findPath<number>({
   start: 0,
@@ -316,8 +315,7 @@ function movementSystem(w: World): void {
     }
 
     const next = moveTo.path[moveTo.step];
-    pos.x = next % WIDTH;
-    pos.y = Math.floor(next / WIDTH);
+    w.setPosition(id, { x: next % WIDTH, y: Math.floor(next / WIDTH) });
     moveTo.step++;
   }
 }

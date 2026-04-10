@@ -29,6 +29,8 @@ Requires Node.js 18+.
 
 ### Guides
 
+- **[Public API & Invariants](docs/guides/public-api-and-invariants.md)** - Package imports, JSON-safe data, explicit writes, entity refs
+
 - **[Core Concepts](docs/guides/concepts.md)** — ECS architecture, tick lifecycle, determinism, AI-native design
 - **[Entities & Components](docs/guides/entities-and-components.md)** — Lifecycle, storage, querying, batch access, destroy hooks
 - **[Systems & Simulation](docs/guides/systems-and-simulation.md)** — System design, tick order, real-time loop, speed control
@@ -44,7 +46,7 @@ Requires Node.js 18+.
 ## What You Can Build
 
 ```typescript
-import { World, type Position } from './src/index.js';
+import { World, type Position } from 'civ-engine';
 
 const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 world.registerComponent<Position>('position');
@@ -52,7 +54,7 @@ world.registerComponent<{ hp: number }>('health');
 
 // Create entities, attach data
 const unit = world.createEntity();
-world.addComponent(unit, 'position', { x: 0, y: 0 });
+world.setPosition(unit, { x: 0, y: 0 });
 world.addComponent(unit, 'health', { hp: 100 });
 
 // Game logic is pure functions that run each tick

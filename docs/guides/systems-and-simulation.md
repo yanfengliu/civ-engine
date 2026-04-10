@@ -19,8 +19,7 @@ This guide covers system design, tick execution, real-time vs. deterministic ste
 A system is a plain function with the signature `(world: World) => void`. No classes, no lifecycle hooks, no return values.
 
 ```typescript
-import type { World } from './src/world.js';
-import type { Position } from './src/types.js';
+import type { World, Position } from 'civ-engine';
 
 interface Velocity { dx: number; dy: number }
 
@@ -28,8 +27,7 @@ function movementSystem(w: World): void {
   for (const id of w.query('position', 'velocity')) {
     const pos = w.getComponent<Position>(id, 'position')!;
     const vel = w.getComponent<Velocity>(id, 'velocity')!;
-    pos.x += vel.dx;
-    pos.y += vel.dy;
+    w.setPosition(id, { x: pos.x + vel.dx, y: pos.y + vel.dy });
   }
 }
 
@@ -44,6 +42,8 @@ Systems can:
 - Submit commands (though this is unusual — commands are primarily for external input)
 - Read the spatial grid
 - Read and modify resources
+
+For position components, prefer `world.setPosition()` over direct mutation when another system needs the spatial grid to reflect the move in the same tick. Direct component mutations are diff-detected, but direct position mutations are synchronized to the grid on the next tick.
 
 ## System Execution Order
 
@@ -127,7 +127,7 @@ describe('movement system', () => {
     world.registerSystem(movementSystem);
 
     const unit = world.createEntity();
-    world.addComponent(unit, 'position', { x: 0, y: 0 });
+    world.setPosition(unit, { x: 0, y: 0 });
     world.addComponent(unit, 'velocity', { dx: 1, dy: 0 });
 
     world.step();

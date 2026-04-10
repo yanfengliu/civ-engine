@@ -50,6 +50,26 @@ const world = new World<Record<string, never>, GameCommands>({
 
 The second type parameter of `World` is the command map. This gives you type-safe `submit()`, `registerValidator()`, and `registerHandler()` calls.
 
+### Stale entity references
+
+For commands from clients, UIs, or AI agents that may hold references across ticks, prefer `EntityRef` over bare `EntityId`. Entity IDs are recycled after destruction, and the generation lets validators reject stale commands:
+
+```typescript
+type GameCommands = {
+  moveUnit: { unit: EntityRef; target: Position };
+};
+
+world.registerValidator('moveUnit', (data, w) => {
+  return w.isCurrent(data.unit);
+});
+
+world.registerHandler('moveUnit', (data, w) => {
+  w.setPosition(data.unit.id, data.target);
+});
+```
+
+Bare `EntityId` is still fine for short-lived internal system work where the ID is read and used immediately.
+
 ## Validators
 
 Validators run synchronously when `submit()` is called. They decide whether a command is valid and should be queued.
@@ -104,9 +124,7 @@ Handlers execute the command logic at the start of the next tick. Exactly one ha
 
 ```typescript
 world.registerHandler('moveUnit', (data, w) => {
-  const pos = w.getComponent<Position>(data.entityId, 'position')!;
-  pos.x = data.targetX;
-  pos.y = data.targetY;
+  w.setPosition(data.entityId, { x: data.targetX, y: data.targetY });
 });
 ```
 
@@ -267,7 +285,7 @@ world.registerHandler('attackUnit', (data, w) => {
 world.on('cityFounded', (event) => {
   // Spawn initial garrison
   const guard = world.createEntity();
-  world.addComponent(guard, 'position', { x: event.x, y: event.y });
+  world.setPosition(guard, { x: event.x, y: event.y });
   world.addComponent(guard, 'health', { hp: 50, maxHp: 50 });
 });
 ```

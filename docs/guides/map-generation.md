@@ -36,9 +36,7 @@ All map generation happens **before** the simulation runs — these are setup ut
 `createTileGrid` creates one entity per grid cell, each with a position component:
 
 ```typescript
-import { World } from './src/world.js';
-import { createTileGrid } from './src/map-gen.js';
-import type { Position } from './src/types.js';
+import { World, createTileGrid, type Position } from 'civ-engine';
 
 const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 world.registerComponent<Position>('position');
@@ -81,7 +79,7 @@ const tiles = createTileGrid(world, 'pos'); // uses 'pos' instead of 'position'
 Simplex noise generates smooth, continuous values across 2D space. It's seedable — the same seed always produces the same output.
 
 ```typescript
-import { createNoise2D } from './src/noise.js';
+import { createNoise2D } from 'civ-engine';
 
 const noise = createNoise2D(42); // seed = 42
 ```
@@ -143,7 +141,7 @@ const map2 = createNoise2D(2);
 Single-octave noise produces smooth but uniform terrain. Real terrain has both large-scale features (continents, mountain ranges) and small-scale detail (hills, ridges). Octave noise layers multiple noise samples to achieve this.
 
 ```typescript
-import { createNoise2D, octaveNoise2D } from './src/noise.js';
+import { createNoise2D, octaveNoise2D } from 'civ-engine';
 
 const noise = createNoise2D(42);
 const value = octaveNoise2D(noise, x * 0.05, y * 0.05, 4);
@@ -203,7 +201,7 @@ for (let y = 0; y < 64; y++) {
 Cellular automata apply rules to a grid repeatedly to generate organic patterns. Each step produces a new grid (the original is not mutated).
 
 ```typescript
-import { createCellGrid, stepCellGrid, MOORE_OFFSETS, VON_NEUMANN_OFFSETS } from './src/cellular.js';
+import { createCellGrid, stepCellGrid, MOORE_OFFSETS, VON_NEUMANN_OFFSETS } from 'civ-engine';
 ```
 
 ### Creating a cell grid

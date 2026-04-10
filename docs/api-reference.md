@@ -29,7 +29,7 @@ Complete reference for every public type, method, and module in civ-engine.
 
 ## Types
 
-All types are importable from their respective modules.
+Package consumers should import public types and utilities from the root module, `civ-engine`. Source file comments below identify where each type is owned.
 
 ### `EntityId`
 
@@ -318,7 +318,7 @@ Messages sent from client to server:
 `World<TEventMap, TCommandMap>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
 
 ```typescript
-import { World } from './src/world.js';
+import { World } from 'civ-engine';
 ```
 
 ### Type Parameters
@@ -567,8 +567,7 @@ function movementSystem(w: World): void {
   for (const id of w.query('position', 'velocity')) {
     const pos = w.getComponent<Position>(id, 'position')!;
     const vel = w.getComponent<Velocity>(id, 'velocity')!;
-    pos.x += vel.dx;
-    pos.y += vel.dy;
+    w.setPosition(id, { x: pos.x + vel.dx, y: pos.y + vel.dy });
   }
 }
 
@@ -747,9 +746,7 @@ When a command is processed but no handler is registered, an `Error` is thrown. 
 
 ```typescript
 world.registerHandler('moveUnit', (data, w) => {
-  const pos = w.getComponent<Position>(data.entityId, 'position')!;
-  pos.x = data.targetX;
-  pos.y = data.targetY;
+  w.setPosition(data.entityId, { x: data.targetX, y: data.targetY });
 });
 ```
 
@@ -1114,7 +1111,7 @@ Unregisters a destroy callback. Pass the exact same function reference used in `
 A 2D flat-array grid that tracks which entities are at each cell. The World automatically syncs entity positions to the grid each tick. You should **read** from the grid but not write to it directly.
 
 ```typescript
-import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from './src/spatial-grid.js';
+import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';
 ```
 
 ### Properties
@@ -1187,8 +1184,7 @@ Each constant is `ReadonlyArray<[number, number]>` of `[dx, dy]` offsets.
 Generic A* pathfinding on any graph topology. Standalone utility with no dependency on World or SpatialGrid.
 
 ```typescript
-import { findPath } from './src/pathfinding.js';
-import type { PathConfig, PathResult } from './src/pathfinding.js';
+import { findPath, type PathConfig, type PathResult } from 'civ-engine';
 ```
 
 ### `findPath<T>(config)`
@@ -1285,7 +1281,7 @@ const result = findPath<string>({
 Seedable 2D simplex noise for procedural generation. Standalone utility.
 
 ```typescript
-import { createNoise2D, octaveNoise2D } from './src/noise.js';
+import { createNoise2D, octaveNoise2D } from 'civ-engine';
 ```
 
 ### `createNoise2D(seed)`
@@ -1341,8 +1337,14 @@ for (let y = 0; y < 64; y++) {
 Immutable cellular automata for map generation. Each step produces a new grid. Standalone utility.
 
 ```typescript
-import { createCellGrid, stepCellGrid, MOORE_OFFSETS, VON_NEUMANN_OFFSETS } from './src/cellular.js';
-import type { CellGrid, CellRule } from './src/cellular.js';
+import {
+  createCellGrid,
+  stepCellGrid,
+  MOORE_OFFSETS,
+  VON_NEUMANN_OFFSETS,
+  type CellGrid,
+  type CellRule,
+} from 'civ-engine';
 ```
 
 ### `createCellGrid(width, height, fill)`
@@ -1414,8 +1416,7 @@ const caveSmooth: CellRule = (current, neighbors) => {
 Helpers for bulk tile entity creation. Standalone utility.
 
 ```typescript
-import { createTileGrid } from './src/map-gen.js';
-import type { MapGenerator } from './src/map-gen.js';
+import { createTileGrid, type MapGenerator } from 'civ-engine';
 ```
 
 ### `createTileGrid(world, positionKey?)`
@@ -1484,8 +1485,10 @@ import {
   createBehaviorTree,
   createBTState,
   NodeStatus,
-} from './src/behavior-tree.js';
-import type { BTState, BTNode, TreeBuilder } from './src/behavior-tree.js';
+  type BTState,
+  type BTNode,
+  type TreeBuilder,
+} from 'civ-engine';
 ```
 
 ### `createBehaviorTree<TContext>(getState, define)`
@@ -1562,10 +1565,16 @@ builder.sequence([
 ### Complete Example
 
 ```typescript
-import { World } from './src/world.js';
-import { createBehaviorTree, createBTState, NodeStatus } from './src/behavior-tree.js';
-import type { BTState, BTNode } from './src/behavior-tree.js';
-import type { Position, EntityId } from './src/types.js';
+import {
+  World,
+  createBehaviorTree,
+  createBTState,
+  NodeStatus,
+  type BTState,
+  type BTNode,
+  type Position,
+  type EntityId,
+} from 'civ-engine';
 
 // Define game-specific context
 interface AIContext {
@@ -1636,8 +1645,12 @@ world.registerSystem(aiSystem);
 Transport-agnostic bridge between the World and external clients. The adapter serializes world state into typed messages and dispatches incoming commands. Standalone class that uses only World's public API.
 
 ```typescript
-import { ClientAdapter } from './src/client-adapter.js';
-import type { ServerMessage, ClientMessage, GameEvent } from './src/client-adapter.js';
+import {
+  ClientAdapter,
+  type ServerMessage,
+  type ClientMessage,
+  type GameEvent,
+} from 'civ-engine';
 ```
 
 ### Constructor
