@@ -20,6 +20,7 @@ Requires Node.js 18+.
 
 ## Documentation
 
+- **[Changelog](docs/changelog.md)** - Release notes and breaking changes
 - **[API Reference](docs/api-reference.md)** — Complete reference for every public type, method, and module
 
 ### Tutorials
@@ -30,7 +31,6 @@ Requires Node.js 18+.
 ### Guides
 
 - **[Public API & Invariants](docs/guides/public-api-and-invariants.md)** - Package imports, JSON-safe data, explicit writes, entity refs
-
 - **[Core Concepts](docs/guides/concepts.md)** — ECS architecture, tick lifecycle, determinism, AI-native design
 - **[Entities & Components](docs/guides/entities-and-components.md)** — Lifecycle, storage, querying, batch access, destroy hooks
 - **[Systems & Simulation](docs/guides/systems-and-simulation.md)** — System design, tick order, real-time loop, speed control

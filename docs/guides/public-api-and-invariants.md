@@ -1,126 +1,94 @@
 # Public API and Invariants
 
-This guide covers the current public import path and the invariants that game code should follow.
+Use this as the short checklist for writing game code against civ-engine.
 
-## Import from the Package Root
+## Imports
 
-Package consumers should import from the root export:
+Package consumers import from the root export:
 
 ```typescript
 import {
   World,
   ClientAdapter,
-  createTileGrid,
   findPath,
-  NodeStatus,
   type EntityId,
   type EntityRef,
   type Position,
 } from 'civ-engine';
 ```
 
-Inside this repository, local examples may use `./src/index.js` while developing the package. Avoid depending on deep package paths such as `civ-engine/src/world.js`; the package export is the root module.
+Do not depend on deep package paths such as `civ-engine/src/world.js`.
 
-## Component Data Must Be JSON-Compatible
+## Component Data
 
-Components are saved in snapshots and sent through diffs, so component payloads must be JSON-compatible:
-
-- Use plain objects, arrays, strings, numbers, booleans, and `null`.
-- Do not store `undefined`, `NaN`, `Infinity`, functions, symbols, bigints, class instances, or circular references.
-- Store IDs or component keys instead of object references to other entities.
+Components must be JSON-compatible because snapshots and diffs serialize them. Use plain objects, arrays, strings, finite numbers, booleans, and `null`. Do not store `undefined`, `NaN`, `Infinity`, functions, symbols, bigints, class instances, circular references, or references to live objects.
 
 ```typescript
 world.setComponent(unit, 'health', { hp: 100, maxHp: 100 });
 world.setComponent(unit, 'inventory', { itemIds: ['axe', 'food'] });
 ```
 
-## Use Explicit Write APIs
+## Writes
 
-`addComponent()` remains as a compatibility alias for `setComponent()`. New code should use explicit writes:
+Prefer explicit write APIs:
 
 ```typescript
 world.setComponent(unit, 'health', { hp: 100, maxHp: 100 });
-
-world.patchComponent<{ hp: number; maxHp: number }>(unit, 'health', (health) => {
-  health.hp = Math.max(0, health.hp - 10);
+world.patchComponent<{ hp: number }>(unit, 'health', (health) => {
+  health.hp -= 10;
 });
 ```
 
-`getComponent()` returns the stored object directly. Direct mutations are detected for diffs, but explicit writes make intent clearer.
+`getComponent()` returns the stored object directly. Direct mutations are diff-detected, but `setComponent()` and `patchComponent()` make write intent clearer.
 
-For position components, use `setPosition()` when same-tick grid correctness matters:
+Use `setPosition()` when same-tick grid correctness matters:
 
 ```typescript
 const pos = world.getComponent<Position>(unit, 'position')!;
 world.setPosition(unit, { x: pos.x + 1, y: pos.y });
 ```
 
-Directly mutating a position object is still allowed, but the spatial grid only sees that change during the next tick's sync.
+Direct position mutations are allowed, but the spatial grid sees them on the next tick's sync.
 
-## Use EntityRef for External Commands
+## Entity Handles
 
-Entity IDs are recycled after destruction. If a UI, network client, or AI agent holds an ID across ticks, include the generation too:
+Entity IDs are recycled. External clients, UIs, and AI agents that hold an entity across ticks should use `EntityRef`:
 
 ```typescript
 type Commands = {
   moveUnit: { unit: EntityRef; target: Position };
 };
 
-world.registerValidator('moveUnit', (data, w) => {
-  return w.isCurrent(data.unit);
-});
-
+world.registerValidator('moveUnit', (data, w) => w.isCurrent(data.unit));
 world.registerHandler('moveUnit', (data, w) => {
   w.setPosition(data.unit.id, data.target);
 });
 ```
 
-```typescript
-const unitRef = world.getEntityRef(unit);
-if (unitRef) {
-  world.submit('moveUnit', { unit: unitRef, target: { x: 5, y: 3 } });
-}
-```
+Bare `EntityId` is fine for short-lived internal system work.
 
-Use bare `EntityId` for short-lived internal system work where the entity is looked up and used in the same tick.
+## Resources and Saves
 
-## Resource Values
-
-Unbounded resource capacity is represented as `null`, not `Infinity`:
+Unbounded resource capacity is `null`, not `Infinity`:
 
 ```typescript
-world.registerResource('food'); // default max is null
+world.registerResource('food');
 world.addResource(city, 'food', 50);
 world.getResource(city, 'food'); // { current: 50, max: null }
 ```
 
-Resource amounts, rates, finite maxima, and transfer rates must be non-negative finite numbers. Use `setResourceMax(entity, key, null)` to make a pool unbounded.
+Resource amounts, rates, finite maxima, and transfer rates must be non-negative finite numbers.
 
-## Save and Load
+Snapshot version 2 restores resource registrations, pools, rates, transfers, and transfer IDs. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks. Version 1 snapshots still load, but without resource state.
 
-Snapshot version 2 includes resources:
+## Client Adapter
 
-```typescript
-const snapshot = world.serialize();
-const restored = World.deserialize(snapshot, [movementSystem]);
-```
-
-After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks. Resource registrations, pools, rates, transfers, and transfer IDs are data in version 2 snapshots and are restored automatically.
-
-Version 1 snapshots still load for compatibility, but they have no resource state.
-
-## Client Adapter Boundary
-
-Register command handlers before accepting client commands. `ClientAdapter` rejects malformed commands, unhandled command types, and validator failures with `commandRejected`.
+Register handlers before accepting client commands. `ClientAdapter` rejects malformed commands, unhandled command types, and validator failures with `commandRejected`. If `send` throws, the adapter calls `onError` and disconnects itself.
 
 ```typescript
 const adapter = new ClientAdapter({
   world,
   send: (message) => socket.send(JSON.stringify(message)),
-  onError: (error) => {
-    console.error('client transport failed', error);
-  },
+  onError: (error) => console.error('client transport failed', error),
 });
 ```
-
-If `send` throws, the adapter calls `onError` and disconnects itself so a broken transport does not break `world.step()`.
