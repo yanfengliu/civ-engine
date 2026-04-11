@@ -20,40 +20,11 @@ Requires Node.js 18+.
 
 ## Documentation
 
-- **[Documentation Hub](docs/README.md)** - Central map of tutorials, guides, plans, reviews, and history
+- **[Documentation Hub](docs/README.md)** - Full navigation for tutorials, guides, plans, reviews, and project history
+- **[Getting Started](docs/tutorials/getting-started.md)** — Fastest way to get productive with the engine
+- **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
-
-### Reference
-
-- **[Changelog](docs/changelog.md)** - Release notes and breaking changes
-- **[API Reference](docs/api-reference.md)** — Complete reference for every public type, method, and module
-
-### Start Here
-
-- **[Getting Started](docs/tutorials/getting-started.md)** — Core concepts, minimal example, and feature walkthrough
-- **[Building a Complete Game](docs/tutorials/building-a-game.md)** — Step-by-step tutorial building a colony survival simulation using every engine feature
-
-### Guides
-
-- **[Public API & Invariants](docs/guides/public-api-and-invariants.md)** - Package imports, JSON-safe data, explicit writes, entity refs
-- **[Core Concepts](docs/guides/concepts.md)** — ECS architecture, tick lifecycle, determinism, AI-native design
-- **[Entities & Components](docs/guides/entities-and-components.md)** — Lifecycle, storage, querying, batch access, destroy hooks
-- **[Systems & Simulation](docs/guides/systems-and-simulation.md)** — System design, tick order, real-time loop, speed control
-- **[Spatial Grid](docs/guides/spatial-grid.md)** — Auto-sync, neighbor queries, range searches, collision patterns
-- **[Commands & Events](docs/guides/commands-and-events.md)** — Input/output protocol, validators, handlers, event lifecycle
-- **[Resources](docs/guides/resources.md)** — Pools, production, consumption, transfers, supply chains
-- **[Serialization & Diffs](docs/guides/serialization-and-diffs.md)** — Save/load, per-tick change tracking, client sync
-- **[Map Generation](docs/guides/map-generation.md)** — Simplex noise, cellular automata, terrain recipes
-- **[Pathfinding](docs/guides/pathfinding.md)** — A* on grids and graphs, terrain costs, ECS integration
-- **[Behavior Trees](docs/guides/behavior-trees.md)** — AI decision-making, ECS integration, shared trees
-- **[Client Protocol](docs/guides/client-protocol.md)** — Transport-agnostic client streaming, WebSocket/stdio examples
-- **[Renderer Integration](docs/guides/rendering.md)** - Snapshot/diff rendering architecture, renderer contract, and Pixi-first reference renderer guidance
-
-### Plans and Reviews
-
-- **[RTS Engine Scale Plan](docs/reviews/todo/RTS_ENGINE_SCALE_PLAN.md)** - Planned engine work for RTS-scale support
-- **[Expert Review Remaining Candidates](docs/reviews/todo/EXPERT_REVIEW_REMAINING.md)** - Deferred review items not yet selected for implementation
-- **[Expert Review](docs/reviews/implemented/EXPERT_REVIEW.md)** - Review findings already addressed
+- **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
 ## What You Can Build
 
