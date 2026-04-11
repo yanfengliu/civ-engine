@@ -42,6 +42,7 @@ Requires Node.js 18+.
 - **[Pathfinding](docs/guides/pathfinding.md)** — A* on grids and graphs, terrain costs, ECS integration
 - **[Behavior Trees](docs/guides/behavior-trees.md)** — AI decision-making, ECS integration, shared trees
 - **[Client Protocol](docs/guides/client-protocol.md)** — Transport-agnostic client streaming, WebSocket/stdio examples
+- **[Renderer Integration](docs/guides/rendering.md)** - Snapshot/diff rendering architecture, renderer contract, and Pixi-first reference renderer guidance
 
 ## What You Can Build
 

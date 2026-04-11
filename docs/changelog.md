@@ -31,4 +31,5 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 
 - Added `docs/ENGINE_HARDENING_PLAN.md`.
 - Added `docs/guides/public-api-and-invariants.md`.
-- Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, JSON-compatible component data, resource `max: null`, snapshot v2, and client-adapter error handling.
+- Added `docs/guides/rendering.md`.
+- Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, JSON-compatible component data, resource `max: null`, snapshot v3, and client-adapter error handling.
