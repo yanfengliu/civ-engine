@@ -60,6 +60,7 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - Added `docs/reviews/done/AI_FIRST_ENGINE_PLAN.md`.
 - Added `docs/reviews/done/AI_FINAL_FORM_PLAN.md`.
 - Added `docs/reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md`.
+- Renamed the completed render/debugger review doc to `docs/reviews/done/RENDER_CONTRACT_AND_DEBUGGER_PLAN.md` and trimmed the root README back to an overview so `docs/api-reference.md` remains the single authoritative API surface.
 - Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command submission and execution outcomes, structured tick failures, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.

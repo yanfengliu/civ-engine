@@ -15,6 +15,8 @@ This is the navigation hub for `civ-engine` documentation.
 - [Public API & Invariants](guides/public-api-and-invariants.md) - Package boundary, JSON-safe data rules, entity refs, and write APIs
 - [Changelog](changelog.md) - Shipped changes and breaking changes
 
+The API reference is the authoritative public surface. The root `README.md` is intentionally a high-level overview.
+
 ## Guides
 
 - [AI Integration](guides/ai-integration.md)
@@ -46,6 +48,7 @@ Active future work lives in focused plan and review documents rather than a gene
 - [AI Runtime Feedback Plan](reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
 - [AI Final Form Plan](reviews/done/AI_FINAL_FORM_PLAN.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
 - [AI-First Engine Plan](reviews/done/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
+- [Render Contract and Debugger Plan](reviews/done/RENDER_CONTRACT_AND_DEBUGGER_PLAN.md) - Render-facing projection and debugger support work that has already landed
 - [RTS Engine Scale Plan](reviews/done/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
 - [Expert Review](reviews/done/EXPERT_REVIEW.md) - Review findings already addressed
 - [Engine Design Review](reviews/done/ENGINE_DESIGN_REVIEW.md) - Broader engine assessment

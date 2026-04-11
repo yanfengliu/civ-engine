@@ -1,8 +1,8 @@
-# Render Contract and Debugger Todo
+# Render Contract and Debugger Plan
 
 Status: DONE on 2026-04-10
 
-This document stays under `docs/reviews/todo/` because that was the requested location for the work item, even though the implementation is now landed.
+This document is retained under `docs/reviews/done/` as the implementation record for the render-contract and debugger work.
 
 ## Goal
 
