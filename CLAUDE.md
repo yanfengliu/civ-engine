@@ -11,3 +11,4 @@
 - **Tutorials must always compile.** If you change an API that tutorial code uses, update the tutorial code to match. Broken tutorials are worse than no tutorials.
 - **Keep the API Reference in README.md complete.** Every public method on World and every export from standalone utility modules must appear in the reference tables.
 - If you introduced any breaking change, increment the release version. Keep track of what is different since last release version in `docs/changelog.md`.
+- If there are unfinished action items from `docs/reviews/todo`, do them, mark the doc as DONE, then move it to `docs/reviews/done`.

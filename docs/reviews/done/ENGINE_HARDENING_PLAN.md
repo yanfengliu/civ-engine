@@ -2,7 +2,7 @@
 
 Date: 2026-04-10
 
-Status: IMPLEMENTED
+Status: DONE
 
 Goal: fix the high-priority issues from `docs/ENGINE_DESIGN_REVIEW.md` while preserving the headless simulation boundary.
 

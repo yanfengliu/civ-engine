@@ -2,7 +2,7 @@
 
 Review date: 2026-04-11
 
-Status: IMPLEMENTED
+Status: DONE
 
 ## Goal
 
@@ -20,7 +20,7 @@ This plan focuses on engine-native machine interfaces and their documentation:
 4. A ring-buffered history recorder for recent command outcomes and tick traces
 5. Documentation for AI-facing usage patterns and recovery loops
 
-## Implemented
+## Done
 
 - [x] Add `world.submitWithResult()` with stable outcome codes, messages, and JSON-compatible details.
 - [x] Keep `world.submit()` as a boolean compatibility wrapper over the structured result API.

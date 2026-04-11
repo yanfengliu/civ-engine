@@ -1,6 +1,6 @@
 # RTS Engine Scale Plan
 
-Status: Implemented
+Status: Done
 Scope: Single-player, headless RTS simulation support. Multiplayer tick-locking, rollback, prediction, and binary rewind snapshots are out of scope.
 
 ## Goal

@@ -1,6 +1,6 @@
 # Render Contract and Debugger Todo
 
-Status: Completed on 2026-04-10
+Status: DONE on 2026-04-10
 
 This document stays under `docs/reviews/todo/` because that was the requested location for the work item, even though the implementation is now landed.
 
@@ -8,7 +8,7 @@ This document stays under `docs/reviews/todo/` because that was the requested lo
 
 Add a renderer-facing contract and a more comprehensive debugger without making the engine itself responsible for concrete rendering.
 
-## Completed
+## Done
 
 - [x] Add a renderer projection boundary with generation-aware entity refs.
 - [x] Add a `RenderAdapter` that streams projected snapshots and per-tick render diffs.
