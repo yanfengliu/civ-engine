@@ -2,7 +2,7 @@
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
-**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces.
+**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces. The debugging tools should be easy for an AI to use in a closed implement-debug-iterate feedback loop without human intervention.
 
 The engine provides reusable infrastructure that game projects consume — it has no game-specific logic, rendering, or UI code.
 
@@ -57,26 +57,26 @@ world.step();
 
 ## Feature Overview
 
-| Feature | What it does |
-|---|---|
-| **Entities & Components** | Create entities (numeric IDs), attach typed data objects by key |
-| **Systems** | Pure functions `(world) => void` that run each tick in order |
-| **Spatial Grid** | 2D grid auto-synced with position components, neighbor queries |
-| **Commands** | Typed input buffer with validators and handlers — how AI agents send instructions |
-| **Events** | Typed pub/sub — how systems communicate and how observers read what happened |
-| **Resources** | Numeric pools (current/max) per entity with production, consumption, transfers |
-| **Map Generation** | Seedable simplex noise, octave layering, cellular automata, tile grid helper |
-| **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
-| **Occupancy & Reservation** | Deterministic blocked-cell, footprint, and reservation tracking for RTS movement/building rules |
-| **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
-| **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |
-| **Render Projection** | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
-| **Debugging** | `WorldDebugger` plus occupancy, visibility, and path queue probes for headless inspection |
-| **Behavior Trees** | Generic BT framework with action, condition, selector, sequence nodes |
-| **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
-| **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state |
-| **State Diffs** | Per-tick change sets: what entities/components/resources changed |
-| **Client Protocol** | Transport-agnostic typed messages, ClientAdapter bridges World to any transport |
+| Feature                     | What it does                                                                                                          |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Entities & Components**   | Create entities (numeric IDs), attach typed data objects by key                                                       |
+| **Systems**                 | Pure functions `(world) => void` that run each tick in order                                                          |
+| **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries                                                        |
+| **Commands**                | Typed input buffer with validators and handlers — how AI agents send instructions                                     |
+| **Events**                  | Typed pub/sub — how systems communicate and how observers read what happened                                          |
+| **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
+| **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
+| **Pathfinding**             | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks                                             |
+| **Occupancy & Reservation** | Deterministic blocked-cell, footprint, and reservation tracking for RTS movement/building rules                       |
+| **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
+| **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
+| **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
+| **Debugging**               | `WorldDebugger` plus occupancy, visibility, and path queue probes for headless inspection                             |
+| **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
+| **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
+| **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
+| **State Diffs**             | Per-tick change sets: what entities/components/resources changed                                                      |
+| **Client Protocol**         | Transport-agnostic typed messages, ClientAdapter bridges World to any transport                                       |
 
 ## Architecture
 
@@ -141,119 +141,119 @@ docs/
 
 ### `new World(config)`
 
-| Parameter                | Type     | Default        | Description                           |
-| ------------------------ | -------- | -------------- | ------------------------------------- |
-| `config.gridWidth`       | `number` | (required)     | Width of the spatial grid             |
-| `config.gridHeight`      | `number` | (required)     | Height of the spatial grid            |
-| `config.tps`             | `number` | (required)     | Ticks per second (e.g., 10 for sims)  |
-| `config.positionKey`     | `string` | `'position'`   | Component key used for spatial sync   |
-| `config.maxTicksPerFrame`| `number` | `4`            | Spiral-of-death cap for real-time loop|
-| `config.seed`            | `number \| string` | default seed | Seed for deterministic `world.random()` |
-| `config.detectInPlacePositionMutations` | `boolean` | `true` | Full-scan fallback for direct position object mutation |
+| Parameter                               | Type               | Default      | Description                                            |
+| --------------------------------------- | ------------------ | ------------ | ------------------------------------------------------ |
+| `config.gridWidth`                      | `number`           | (required)   | Width of the spatial grid                              |
+| `config.gridHeight`                     | `number`           | (required)   | Height of the spatial grid                             |
+| `config.tps`                            | `number`           | (required)   | Ticks per second (e.g., 10 for sims)                   |
+| `config.positionKey`                    | `string`           | `'position'` | Component key used for spatial sync                    |
+| `config.maxTicksPerFrame`               | `number`           | `4`          | Spiral-of-death cap for real-time loop                 |
+| `config.seed`                           | `number \| string` | default seed | Seed for deterministic `world.random()`                |
+| `config.detectInPlacePositionMutations` | `boolean`          | `true`       | Full-scan fallback for direct position object mutation |
 
 ### World Methods
 
-| Method | Returns | Description |
-|---|---|---|
-| **Entity Management** | | |
-| `createEntity()` | `EntityId` | Create a new entity |
-| `destroyEntity(id)` | `void` | Destroy entity and all its components |
-| `isAlive(id)` | `boolean` | Check if entity exists |
-| `getEntityRef(id)` | `EntityRef \| null` | Get a generation-aware entity reference |
-| `isCurrent(ref)` | `boolean` | Check whether an entity reference still points at the same lifetime |
-| **Components** | | |
-| `registerComponent<T>(key)` | `void` | Register a component type |
-| `addComponent<T>(id, key, data)` | `void` | Attach component to entity (compatibility alias for `setComponent`) |
-| `setComponent<T>(id, key, data)` | `void` | Set component data and mark it dirty |
-| `patchComponent<T>(id, key, fn)` | `T` | Mutate or replace existing component data and mark it dirty |
-| `setPosition(id, position, key?)` | `void` | Set position data and update the spatial grid immediately |
-| `markPositionDirty(id, key?)` | `void` | Sync an in-place position mutation when full-scan detection is disabled |
-| `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
-| `getComponents<T>(id, keys)` | `ComponentTuple<T>` | Batch-read multiple components |
-| `removeComponent(id, key)` | `void` | Detach component from entity |
-| `query(...keys)` | `IterableIterator<EntityId>` | Find entities with all listed components |
-| **Systems & Simulation** | | |
-| `registerSystem(fnOrConfig)` | `void` | Add a system to the phase-ordered pipeline |
-| `step()` | `void` | Advance one tick (deterministic, ignores pause/speed) |
-| `start()` | `void` | Begin real-time loop |
-| `stop()` | `void` | Stop real-time loop |
-| **Speed Control** | | |
-| `setSpeed(multiplier)` | `void` | Set simulation speed (any positive float) |
-| `getSpeed()` | `number` | Get current speed multiplier |
-| `pause()` | `void` | Freeze simulation (preserves speed) |
-| `resume()` | `void` | Unfreeze at current speed |
-| `isPaused` | `boolean` | Whether simulation is paused |
-| **Commands** | | |
-| `submit(type, data)` | `boolean` | Submit a command (validated, queued) |
-| `registerValidator(type, fn)` | `void` | Add a validator for a command type |
-| `registerHandler(type, fn)` | `void` | Set the handler for a command type |
-| `hasCommandHandler(type)` | `boolean` | Check whether a command handler is registered |
-| **Events** | | |
-| `emit(type, data)` | `void` | Emit an event (from systems) |
-| `on(type, listener)` | `void` | Subscribe to event type |
-| `off(type, listener)` | `void` | Unsubscribe from event type |
-| `getEvents()` | `ReadonlyArray` | Get all events from current tick |
-| `random()` | `number` | Deterministic pseudo-random number in `[0, 1)` |
-| **Resources** | | |
-| `registerResource(key, options?)` | `void` | Register a resource type |
-| `addResource(entity, key, amount)` | `number` | Add to resource pool (returns amount added) |
-| `removeResource(entity, key, amount)` | `number` | Remove from pool (returns amount removed) |
-| `getResource(entity, key)` | `{current, max} \| undefined` | Read resource pool (`max: null` means unbounded) |
-| `setResourceMax(entity, key, max)` | `void` | Set pool maximum |
-| `setProduction(entity, key, rate)` | `void` | Set production rate per tick |
-| `setConsumption(entity, key, rate)` | `void` | Set consumption rate per tick |
-| `getProduction(entity, key)` | `number` | Get production rate |
-| `getConsumption(entity, key)` | `number` | Get consumption rate |
-| `addTransfer(from, to, resource, rate)` | `number` | Create a resource transfer (returns ID) |
-| `removeTransfer(id)` | `void` | Remove a transfer |
-| `getTransfers(entity)` | `Array` | Get all transfers for an entity |
-| `getResourceEntities(key)` | `IterableIterator<EntityId>` | All entities with this resource |
-| **State** | | |
-| `tick` | `number` | Current tick count |
-| `grid` | `SpatialGridView` | Spatial index read-only view |
-| `serialize()` | `WorldSnapshot` | Capture current state as JSON snapshot |
-| `World.deserialize(snapshot, systems?)` | `World` | Restore world from snapshot (static) |
-| `getDiff()` | `TickDiff \| null` | Get last tick's diff |
-| `getMetrics()` | `WorldMetrics \| null` | Get last tick's timing/query/spatial metrics |
-| `onDiff(fn)` | `void` | Subscribe to per-tick diffs |
-| `offDiff(fn)` | `void` | Unsubscribe from diffs |
-| **Entity Lifecycle** | | |
-| `onDestroy(fn)` | `void` | Register callback fired before entity destruction |
-| `offDestroy(fn)` | `void` | Unregister destroy callback |
-| **Client Protocol** | | |
-| `new ClientAdapter({ world, send, onError? })` | `ClientAdapter` | Create adapter with World and send/error callbacks |
-| `adapter.connect()` | `void` | Send snapshot, start streaming tick diffs |
-| `adapter.disconnect()` | `void` | Stop streaming tick diffs |
-| `adapter.handleMessage(msg)` | `void` | Process incoming client message |
+| Method                                         | Returns                       | Description                                                             |
+| ---------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- |
+| **Entity Management**                          |                               |                                                                         |
+| `createEntity()`                               | `EntityId`                    | Create a new entity                                                     |
+| `destroyEntity(id)`                            | `void`                        | Destroy entity and all its components                                   |
+| `isAlive(id)`                                  | `boolean`                     | Check if entity exists                                                  |
+| `getEntityRef(id)`                             | `EntityRef \| null`           | Get a generation-aware entity reference                                 |
+| `isCurrent(ref)`                               | `boolean`                     | Check whether an entity reference still points at the same lifetime     |
+| **Components**                                 |                               |                                                                         |
+| `registerComponent<T>(key)`                    | `void`                        | Register a component type                                               |
+| `addComponent<T>(id, key, data)`               | `void`                        | Attach component to entity (compatibility alias for `setComponent`)     |
+| `setComponent<T>(id, key, data)`               | `void`                        | Set component data and mark it dirty                                    |
+| `patchComponent<T>(id, key, fn)`               | `T`                           | Mutate or replace existing component data and mark it dirty             |
+| `setPosition(id, position, key?)`              | `void`                        | Set position data and update the spatial grid immediately               |
+| `markPositionDirty(id, key?)`                  | `void`                        | Sync an in-place position mutation when full-scan detection is disabled |
+| `getComponent<T>(id, key)`                     | `T \| undefined`              | Read component data                                                     |
+| `getComponents<T>(id, keys)`                   | `ComponentTuple<T>`           | Batch-read multiple components                                          |
+| `removeComponent(id, key)`                     | `void`                        | Detach component from entity                                            |
+| `query(...keys)`                               | `IterableIterator<EntityId>`  | Find entities with all listed components                                |
+| **Systems & Simulation**                       |                               |                                                                         |
+| `registerSystem(fnOrConfig)`                   | `void`                        | Add a system to the phase-ordered pipeline                              |
+| `step()`                                       | `void`                        | Advance one tick (deterministic, ignores pause/speed)                   |
+| `start()`                                      | `void`                        | Begin real-time loop                                                    |
+| `stop()`                                       | `void`                        | Stop real-time loop                                                     |
+| **Speed Control**                              |                               |                                                                         |
+| `setSpeed(multiplier)`                         | `void`                        | Set simulation speed (any positive float)                               |
+| `getSpeed()`                                   | `number`                      | Get current speed multiplier                                            |
+| `pause()`                                      | `void`                        | Freeze simulation (preserves speed)                                     |
+| `resume()`                                     | `void`                        | Unfreeze at current speed                                               |
+| `isPaused`                                     | `boolean`                     | Whether simulation is paused                                            |
+| **Commands**                                   |                               |                                                                         |
+| `submit(type, data)`                           | `boolean`                     | Submit a command (validated, queued)                                    |
+| `registerValidator(type, fn)`                  | `void`                        | Add a validator for a command type                                      |
+| `registerHandler(type, fn)`                    | `void`                        | Set the handler for a command type                                      |
+| `hasCommandHandler(type)`                      | `boolean`                     | Check whether a command handler is registered                           |
+| **Events**                                     |                               |                                                                         |
+| `emit(type, data)`                             | `void`                        | Emit an event (from systems)                                            |
+| `on(type, listener)`                           | `void`                        | Subscribe to event type                                                 |
+| `off(type, listener)`                          | `void`                        | Unsubscribe from event type                                             |
+| `getEvents()`                                  | `ReadonlyArray`               | Get all events from current tick                                        |
+| `random()`                                     | `number`                      | Deterministic pseudo-random number in `[0, 1)`                          |
+| **Resources**                                  |                               |                                                                         |
+| `registerResource(key, options?)`              | `void`                        | Register a resource type                                                |
+| `addResource(entity, key, amount)`             | `number`                      | Add to resource pool (returns amount added)                             |
+| `removeResource(entity, key, amount)`          | `number`                      | Remove from pool (returns amount removed)                               |
+| `getResource(entity, key)`                     | `{current, max} \| undefined` | Read resource pool (`max: null` means unbounded)                        |
+| `setResourceMax(entity, key, max)`             | `void`                        | Set pool maximum                                                        |
+| `setProduction(entity, key, rate)`             | `void`                        | Set production rate per tick                                            |
+| `setConsumption(entity, key, rate)`            | `void`                        | Set consumption rate per tick                                           |
+| `getProduction(entity, key)`                   | `number`                      | Get production rate                                                     |
+| `getConsumption(entity, key)`                  | `number`                      | Get consumption rate                                                    |
+| `addTransfer(from, to, resource, rate)`        | `number`                      | Create a resource transfer (returns ID)                                 |
+| `removeTransfer(id)`                           | `void`                        | Remove a transfer                                                       |
+| `getTransfers(entity)`                         | `Array`                       | Get all transfers for an entity                                         |
+| `getResourceEntities(key)`                     | `IterableIterator<EntityId>`  | All entities with this resource                                         |
+| **State**                                      |                               |                                                                         |
+| `tick`                                         | `number`                      | Current tick count                                                      |
+| `grid`                                         | `SpatialGridView`             | Spatial index read-only view                                            |
+| `serialize()`                                  | `WorldSnapshot`               | Capture current state as JSON snapshot                                  |
+| `World.deserialize(snapshot, systems?)`        | `World`                       | Restore world from snapshot (static)                                    |
+| `getDiff()`                                    | `TickDiff \| null`            | Get last tick's diff                                                    |
+| `getMetrics()`                                 | `WorldMetrics \| null`        | Get last tick's timing/query/spatial metrics                            |
+| `onDiff(fn)`                                   | `void`                        | Subscribe to per-tick diffs                                             |
+| `offDiff(fn)`                                  | `void`                        | Unsubscribe from diffs                                                  |
+| **Entity Lifecycle**                           |                               |                                                                         |
+| `onDestroy(fn)`                                | `void`                        | Register callback fired before entity destruction                       |
+| `offDestroy(fn)`                               | `void`                        | Unregister destroy callback                                             |
+| **Client Protocol**                            |                               |                                                                         |
+| `new ClientAdapter({ world, send, onError? })` | `ClientAdapter`               | Create adapter with World and send/error callbacks                      |
+| `adapter.connect()`                            | `void`                        | Send snapshot, start streaming tick diffs                               |
+| `adapter.disconnect()`                         | `void`                        | Stop streaming tick diffs                                               |
+| `adapter.handleMessage(msg)`                   | `void`                        | Process incoming client message                                         |
 
 ### Standalone Utilities (import directly, not via World)
 
-| Module | Exports | Description |
-|---|---|---|
-| `pathfinding.ts` | `findPath<T>(config)` | Generic A* pathfinding |
-| `occupancy-grid.ts` | `OccupancyGrid`, `OccupancyGridState` | Deterministic occupancy, footprints, and reservations |
-| `path-service.ts` | `findGridPath`, `PathCache`, `PathRequestQueue`, `createGridPathQueue` | Grid path helper and deterministic queued path processing |
-| `noise.ts` | `createNoise2D(seed)`, `octaveNoise2D(...)` | Seedable simplex noise |
-| `random.ts` | `DeterministicRandom`, `RandomState` | Engine PRNG and serializable RNG state |
-| `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector` | Projection boundary for renderer-facing snapshots and diffs |
-| `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
-| `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
-| `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
-| `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer` | Resource system types |
-| `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState` | Per-player visible/explored cell tracking |
-| `behavior-tree.ts` | `createBehaviorTree`, `createBTState`, `NodeStatus` | Generic behavior tree framework |
-| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
-| `world-debugger.ts` | `WorldDebugger`, probe helpers | Structured world/debug snapshots for headless inspection |
+| Module              | Exports                                                                | Description                                                 |
+| ------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `pathfinding.ts`    | `findPath<T>(config)`                                                  | Generic A* pathfinding                                      |
+| `occupancy-grid.ts` | `OccupancyGrid`, `OccupancyGridState`                                  | Deterministic occupancy, footprints, and reservations       |
+| `path-service.ts`   | `findGridPath`, `PathCache`, `PathRequestQueue`, `createGridPathQueue` | Grid path helper and deterministic queued path processing   |
+| `noise.ts`          | `createNoise2D(seed)`, `octaveNoise2D(...)`                            | Seedable simplex noise                                      |
+| `random.ts`         | `DeterministicRandom`, `RandomState`                                   | Engine PRNG and serializable RNG state                      |
+| `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector`     | Projection boundary for renderer-facing snapshots and diffs |
+| `cellular.ts`       | `createCellGrid(...)`, `stepCellGrid(...)`                             | Cellular automata                                           |
+| `map-gen.ts`        | `createTileGrid(world)`                                                | Bulk tile entity creation                                   |
+| `spatial-grid.ts`   | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS`                             | Direction offset presets                                    |
+| `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer`                              | Resource system types                                       |
+| `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState`                                  | Per-player visible/explored cell tracking                   |
+| `behavior-tree.ts`  | `createBehaviorTree`, `createBTState`, `NodeStatus`                    | Generic behavior tree framework                             |
+| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent`         | Transport-agnostic client protocol                          |
+| `world-debugger.ts` | `WorldDebugger`, probe helpers                                         | Structured world/debug snapshots for headless inspection    |
 
 ### SpatialGrid Methods
 
-| Method | Returns | Description |
-|---|---|---|
-| `getAt(x, y)` | `ReadonlySet<EntityId> \| null` | Entities at cell |
-| `getNeighbors(x, y, offsets?)` | `EntityId[]` | Entities in neighbor cells |
-| `getInRadius(x, y, radius, metric?)` | `EntityId[]` | Entities in range |
-| `width` | `number` | Grid width |
-| `height` | `number` | Grid height |
+| Method                               | Returns                         | Description                |
+| ------------------------------------ | ------------------------------- | -------------------------- |
+| `getAt(x, y)`                        | `ReadonlySet<EntityId> \| null` | Entities at cell           |
+| `getNeighbors(x, y, offsets?)`       | `EntityId[]`                    | Entities in neighbor cells |
+| `getInRadius(x, y, radius, metric?)` | `EntityId[]`                    | Entities in range          |
+| `width`                              | `number`                        | Grid width                 |
+| `height`                             | `number`                        | Grid height                |
 
 ## Design Decisions
 
