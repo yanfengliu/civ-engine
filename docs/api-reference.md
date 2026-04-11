@@ -28,6 +28,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Behavior Tree](#behavior-tree)
 - [Client Adapter](#client-adapter)
 - [Render Adapter](#render-adapter)
+- [Scenario Runner](#scenario-runner)
 - [World History Recorder](#world-history-recorder)
 - [World Debugger](#world-debugger)
 
@@ -2743,6 +2744,144 @@ Stops streaming render messages.
 - Render messages use `EntityRef` values so same-tick ID recycling is unambiguous.
 - `projectEntity()` returning `null` removes an entity from the render surface without destroying it in the simulation.
 - `debug.capture()` is optional and can attach structured debugger output to each render message.
+
+---
+
+## Scenario Runner
+
+Headless setup/run/check harness for deterministic experiments. Intended for AI agents, integration tests, and debug workflows that need one structured result object instead of ad hoc setup code.
+
+```typescript
+import {
+  runScenario,
+  type ScenarioCapture,
+  type ScenarioCheck,
+  type ScenarioContext,
+  type ScenarioFailure,
+  type ScenarioResult,
+  type ScenarioStepUntilResult,
+} from 'civ-engine';
+```
+
+### Core Types
+
+#### `ScenarioFailure`
+
+```typescript
+interface ScenarioFailure {
+  code: string;
+  message: string;
+  source?: 'setup' | 'run' | 'stepUntil' | 'check';
+  details?: JsonValue;
+}
+```
+
+Structured failure object used by runner-level failures, `stepUntil()`, and checks.
+
+#### `ScenarioCheck`
+
+```typescript
+interface ScenarioCheck<TEventMap, TCommandMap> {
+  name: string;
+  check(
+    context: ScenarioContext<TEventMap, TCommandMap>,
+  ): boolean | ScenarioFailure;
+}
+```
+
+Post-run check evaluated after `run()`.
+
+#### `ScenarioContext`
+
+```typescript
+interface ScenarioContext<TEventMap, TCommandMap> {
+  name: string;
+  world: World<TEventMap, TCommandMap>;
+  debugger: WorldDebugger<TEventMap, TCommandMap>;
+  history: WorldHistoryRecorder<TEventMap, TCommandMap, WorldDebugSnapshot>;
+  submit<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+  ): CommandSubmissionResult<K>;
+  step(count?: number): ScenarioCapture<TEventMap, TCommandMap>;
+  stepUntil(
+    predicate: (context: ScenarioContext<TEventMap, TCommandMap>) => boolean,
+    options?: {
+      maxTicks?: number;
+      code?: string;
+      message?: string;
+      details?: JsonValue;
+    },
+  ): ScenarioStepUntilResult;
+  capture(): ScenarioCapture<TEventMap, TCommandMap>;
+  fail(
+    code: string,
+    message: string,
+    details?: JsonValue,
+    source?: ScenarioFailure['source'],
+  ): ScenarioFailure;
+}
+```
+
+Runtime helpers exposed to `setup()`, `run()`, and checks.
+
+#### `ScenarioStepUntilResult`
+
+```typescript
+interface ScenarioStepUntilResult {
+  completed: boolean;
+  steps: number;
+  tick: number;
+  failure: ScenarioFailure | null;
+}
+```
+
+Bounded loop result returned by `context.stepUntil()`.
+
+#### `ScenarioResult`
+
+```typescript
+interface ScenarioResult<TEventMap, TCommandMap>
+  extends ScenarioCapture<TEventMap, TCommandMap> {
+  name: string;
+  passed: boolean;
+  failure: ScenarioFailure | null;
+  checks: ScenarioCheckOutcome[];
+  issues: DebugIssue[];
+}
+```
+
+Final machine-readable result from `runScenario()`.
+
+### `runScenario(config)`
+
+```typescript
+runScenario<TEventMap, TCommandMap>(config: {
+  name: string;
+  world: World<TEventMap, TCommandMap>;
+  debugger?: WorldDebugger<TEventMap, TCommandMap>;
+  probes?: DebugProbe[];
+  history?: {
+    capacity?: number;
+    commandCapacity?: number;
+    captureInitialSnapshot?: boolean;
+  };
+  setup?(context: ScenarioContext<TEventMap, TCommandMap>): void;
+  run?(
+    context: ScenarioContext<TEventMap, TCommandMap>,
+  ): void | ScenarioFailure | null;
+  checks?: Array<ScenarioCheck<TEventMap, TCommandMap>>;
+}): ScenarioResult<TEventMap, TCommandMap>
+```
+
+Runs a scenario and returns the final structured result.
+
+### Behavior Notes
+
+- The runner creates a `WorldHistoryRecorder` and clears it after `setup()`, so the recorded initial snapshot reflects the prepared scenario state.
+- `submit()` inside the scenario context calls `world.submitWithResult()`.
+- `stepUntil()` returns a structured timeout failure instead of forcing the caller to throw.
+- Exceptions thrown by `setup()`, `run()`, or checks are converted into structured runner failures when possible.
 
 ---
 

@@ -27,6 +27,7 @@ This plan focuses on engine-native machine interfaces and their documentation:
 - [x] Allow validators to return structured rejection objects instead of only `boolean`.
 - [x] Add command-result listeners so external tooling can observe accepted and rejected submissions.
 - [x] Add `WorldHistoryRecorder` for recent command outcomes and tick history with optional debug payload capture.
+- [x] Add `runScenario()` so setup, stepping, assertions, and recorder output can be executed through one headless harness.
 - [x] Add machine-readable `issues` to `WorldDebugger` while preserving the older `warnings` field for compatibility.
 - [x] Extend `ClientAdapter` to emit structured command outcome messages, including positive acknowledgement for accepted commands.
 - [x] Document the AI-facing APIs and the recommended closed-loop workflow.
@@ -38,10 +39,10 @@ This plan focuses on engine-native machine interfaces and their documentation:
 - The structured outcomes use stable codes such as `accepted`, `validation_failed`, and `missing_handler`.
 - Debug payloads remain JSON-compatible so they work over transports, workers, tests, and future MCP adapters without translation layers.
 - The history recorder is intentionally short-horizon and in-memory. It is for fast diagnosis, not long-term persistence or replay storage.
+- The scenario runner resets recorded history after setup so the baseline snapshot reflects the prepared scenario state.
 
 ## Follow-up Candidates
 
 - Add richer built-in issue codes for common RTS failures such as blocked move targets or stale selection refs.
-- Add a scenario runner that pairs setup, stepping, assertions, and recorder output in one headless harness.
 - Add diff/tick comparison helpers on top of the history recorder.
 - Add a thin MCP adapter only after the engine-native schemas settle.

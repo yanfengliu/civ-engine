@@ -26,6 +26,7 @@ Requires Node.js 18+.
 - **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured command outcomes, debugger issues, and history for closed-loop agents
+- **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
@@ -73,6 +74,7 @@ world.step();
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
 | **Debugging**               | `WorldDebugger`, machine-readable issues, `WorldHistoryRecorder`, and probes for headless inspection                  |
+| **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
 | **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
@@ -119,6 +121,7 @@ src/
   pathfinding.ts      Generic A* pathfinding
   render-adapter.ts   Renderer-facing projected snapshot/diff streaming
   history-recorder.ts Short-horizon tick and command history for AI/debug loops
+  scenario-runner.ts  Headless scenario harness for AI/test iteration
   visibility-map.ts   Per-player visible and explored cell tracking
   behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
@@ -242,6 +245,7 @@ docs/
 | `random.ts`         | `DeterministicRandom`, `RandomState`                                   | Engine PRNG and serializable RNG state                      |
 | `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector`     | Projection boundary for renderer-facing snapshots and diffs |
 | `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`      | Short-horizon tick and command history capture              |
+| `scenario-runner.ts` | `runScenario`, `ScenarioResult`, `ScenarioContext`, `ScenarioCheck`  | Headless setup/run/check harness for AI and tests           |
 | `cellular.ts`       | `createCellGrid(...)`, `stepCellGrid(...)`                             | Cellular automata                                           |
 | `map-gen.ts`        | `createTileGrid(world)`                                                | Bulk tile entity creation                                   |
 | `spatial-grid.ts`   | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS`                             | Direction offset presets                                    |

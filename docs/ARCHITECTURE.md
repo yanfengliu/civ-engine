@@ -30,6 +30,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
 | Path Service   | `src/path-service.ts`    | Grid path helper, deterministic path queue, and cache for batched request handling     |
 | RenderAdapter  | `src/render-adapter.ts`  | Projects world state into renderer-facing snapshots and diffs with generation-aware refs |
+| ScenarioRunner | `src/scenario-runner.ts` | Headless setup/run/check harness built on World, WorldDebugger, and WorldHistoryRecorder |
 | VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
 | WorldDebugger  | `src/world-debugger.ts`  | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
 | ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
@@ -85,7 +86,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **SpatialGrid** is a sparse map of occupied cells and is synced automatically by World's internal spatial index routine. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property exposes only a read-only view.
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
-- **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
+- **CommandQueue** is owned by World. External code submits commands via `world.submit()` or `world.submitWithResult()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 3 includes resource state and deterministic RNG state; version 1 and 2 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
 - **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts.
@@ -98,8 +99,9 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **Path Service** is a standalone utility built on top of `findPath`. It provides `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for deterministic batched path processing.
 - **VisibilityMap** is a standalone utility. It tracks per-player visible and explored cells and remains independent of rendering and UI code.
 - **WorldDebugger** is a standalone inspection utility. It captures structured summaries of world state, metrics, events, last-diff data, and custom probe output for standalone utilities such as occupancy, visibility, and path queues.
+- **ScenarioRunner** is a standalone orchestration utility. It pairs prepared setup, deterministic stepping, checks, debugger output, and short-horizon history into one machine-readable result for AI agents and harnesses.
 - **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined — the engine does not prescribe what context contains beyond a BTState accessor.
-- **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submit`).
+- **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submitWithResult`).
 
 ## Technology Map
 
@@ -144,3 +146,4 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 | 2026-04-10 | Added RTS-scale standalone primitives | OccupancyGrid, queued grid path helpers, VisibilityMap, and benchmark harness |
 | 2026-04-10 | Added render projection and debugger helpers | RenderAdapter for renderer-facing projections and WorldDebugger with probe support |
 | 2026-04-10 | Hardened engine invariants           | Added JSON-safe component/resource state, entity refs, explicit write APIs, read-only grid exposure, resource snapshot v2, package exports/build, and CI |
+| 2026-04-11 | Added scenario runner harness        | `runScenario()` for deterministic setup/run/check orchestration over the AI-facing debug/history surfaces |

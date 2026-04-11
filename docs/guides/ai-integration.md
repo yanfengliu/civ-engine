@@ -60,6 +60,32 @@ The important messages are:
 
 `commandRejected` includes `code`, `message`, `details`, and `validatorIndex`. That gives an agent enough structure to decide whether to retry, resync, or change its behavior.
 
+## Scenario Runner
+
+Use `runScenario()` when the agent needs a repeatable experiment instead of manual setup and stepping:
+
+```typescript
+import { runScenario } from 'civ-engine';
+
+const result = runScenario({
+  name: 'villager-reaches-resource',
+  world,
+  setup: (ctx) => {
+    // register components, systems, handlers, entities
+  },
+  run: (ctx) => {
+    ctx.submit('moveVillager', payload);
+    const wait = ctx.stepUntil(
+      (active) => active.world.tick >= 20,
+      { maxTicks: 40 },
+    );
+    return wait.failure;
+  },
+});
+```
+
+The runner gives the agent one structured result object containing final state, debug output, issues, recent history, and check results.
+
 ## Debugger Surface
 
 Use `WorldDebugger` for machine-readable diagnosis:
@@ -108,13 +134,14 @@ This is intentionally short-horizon. It is for fast diagnosis, not archival repl
 
 For an autonomous agent, the basic loop should be:
 
-1. Submit a command with `submitWithResult()` or through `ClientAdapter`
-2. If rejected, branch on `code`
-3. Step the world
-4. Inspect `WorldDebugger.capture().issues`
-5. Inspect recent `WorldHistoryRecorder` state when the cause is not obvious
-6. Change code or commands
-7. Repeat
+1. Prefer `runScenario()` for repeatable experiments
+2. If `result.failure` is present, branch on `failure.code`
+3. If checks failed, inspect `result.checks`
+4. Inspect `result.issues`
+5. Inspect `result.history` when the cause is not obvious
+6. Fall back to direct `submitWithResult()` plus manual stepping only for interactive or exploratory workflows
+7. Change code or commands
+8. Repeat
 
 That loop works in-process, across a worker boundary, or over a transport protocol without changing the semantics.
 

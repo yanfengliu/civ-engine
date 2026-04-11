@@ -31,6 +31,7 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - Machine-readable `WorldDebugger.issues` alongside compatibility `warnings`.
 - `world.submitWithResult()`, structured validator rejections, and command-result listeners.
 - `WorldHistoryRecorder` for short-horizon command outcomes and tick history capture.
+- `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results.
 - A browser debug client example backed by a worker-owned simulation, `RenderAdapter`, and `WorldDebugger`.
 - `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios and metrics output.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
@@ -40,13 +41,14 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 ### Documentation
 
 - Added `docs/README.md`.
-- Added `docs/reviews/implemented/ENGINE_HARDENING_PLAN.md`.
+- Added `docs/reviews/done/ENGINE_HARDENING_PLAN.md`.
 - Added `docs/guides/public-api-and-invariants.md`.
 - Added `docs/guides/ai-integration.md`.
+- Added `docs/guides/scenario-runner.md`.
 - Added `docs/guides/rendering.md`.
 - Added `docs/guides/rts-primitives.md`.
 - Added `docs/guides/debugging.md`.
-- Added `docs/reviews/implemented/AI_FIRST_ENGINE_PLAN.md`.
+- Added `docs/reviews/done/AI_FIRST_ENGINE_PLAN.md`.
 - Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command outcomes, AI-facing debugging/history tools, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.

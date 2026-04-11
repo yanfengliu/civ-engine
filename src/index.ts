@@ -11,6 +11,7 @@ export * from './pathfinding.js';
 export * from './random.js';
 export * from './render-adapter.js';
 export * from './resource-store.js';
+export * from './scenario-runner.js';
 export * from './serializer.js';
 export * from './spatial-grid.js';
 export * from './types.js';
