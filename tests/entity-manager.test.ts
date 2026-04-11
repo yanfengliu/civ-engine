@@ -82,6 +82,23 @@ describe('EntityManager', () => {
     expect(recycled).toBe(0);
   });
 
+  it('tracks alive count across create, destroy, and restore', () => {
+    const em = new EntityManager();
+    const a = em.create();
+    em.create();
+    expect(em.count).toBe(2);
+
+    em.destroy(a);
+    expect(em.count).toBe(1);
+    em.destroy(a);
+    expect(em.count).toBe(1);
+
+    const restored = EntityManager.fromState(em.getState());
+    expect(restored.count).toBe(1);
+    restored.create();
+    expect(restored.count).toBe(2);
+  });
+
   it('create tracks created entities', () => {
     const em = new EntityManager();
     const id0 = em.create();

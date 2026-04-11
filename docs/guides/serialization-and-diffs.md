@@ -51,7 +51,7 @@ Components must already be JSON-compatible plain data. `serialize()` rejects non
 ```typescript
 interface WorldSnapshot {
   version: 3;                    // format version
-  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed
+  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, sync options
   tick: number;                  // current tick count
   entities: {
     generations: number[];       // per-slot generation counters
@@ -117,6 +117,7 @@ Version 1 snapshots still load for backward compatibility, but they restore with
 | Grid config (width, height, TPS) | `snapshot.config` |
 | Position key | `snapshot.config.positionKey` |
 | Seed config | `snapshot.config.seed` |
+| Position mutation detection mode | `snapshot.config.detectInPlacePositionMutations` |
 | Tick count | `snapshot.tick` |
 | Entity IDs, alive states, generations | `snapshot.entities` |
 | All component data | `snapshot.components` |

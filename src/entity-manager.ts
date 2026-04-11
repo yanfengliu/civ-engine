@@ -6,17 +6,20 @@ export class EntityManager {
   private freeList: number[] = [];
   private createdThisTick: EntityId[] = [];
   private destroyedThisTick: EntityId[] = [];
+  private _count = 0;
 
   create(): EntityId {
     if (this.freeList.length > 0) {
       const id = this.freeList.pop()!;
       this.alive[id] = true;
+      this._count++;
       this.createdThisTick.push(id);
       return id;
     }
     const id = this.generations.length;
     this.generations.push(0);
     this.alive.push(true);
+    this._count++;
     this.createdThisTick.push(id);
     return id;
   }
@@ -24,6 +27,7 @@ export class EntityManager {
   destroy(id: EntityId): void {
     if (!this.alive[id]) return;
     this.alive[id] = false;
+    this._count--;
     this.generations[id]++;
     this.freeList.push(id);
     this.destroyedThisTick.push(id);
@@ -35,6 +39,10 @@ export class EntityManager {
 
   getGeneration(id: EntityId): number {
     return this.generations[id] ?? 0;
+  }
+
+  get count(): number {
+    return this._count;
   }
 
   getState(): {
@@ -70,6 +78,7 @@ export class EntityManager {
     em.generations = [...state.generations];
     em.alive = [...state.alive];
     em.freeList = [...state.freeList];
+    em._count = em.alive.reduce((count, alive) => count + (alive ? 1 : 0), 0);
     return em;
   }
 }

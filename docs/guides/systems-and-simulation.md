@@ -16,7 +16,7 @@ This guide covers system design, tick execution, real-time vs. deterministic ste
 
 ## Writing Systems
 
-A system is a plain function with the signature `(world: World) => void`. No classes, no lifecycle hooks, no return values.
+A system is a plain function with the signature `(world: World) => void`, or a registration object with a `name`, `phase`, and `execute` function. There are no classes or return values.
 
 ```typescript
 import type { World, Position } from 'civ-engine';
@@ -31,7 +31,12 @@ function movementSystem(w: World): void {
   }
 }
 
-world.registerSystem(movementSystem);
+world.registerSystem(movementSystem); // defaults to the update phase
+world.registerSystem({
+  name: 'Combat',
+  phase: 'postUpdate',
+  execute: combatSystem,
+});
 ```
 
 Systems can:
@@ -43,17 +48,17 @@ Systems can:
 - Read the spatial grid
 - Read and modify resources
 
-For position components, prefer `world.setPosition()` over direct mutation when another system needs the spatial grid to reflect the move in the same tick. Direct component mutations are diff-detected, but direct position mutations are synchronized to the grid on the next tick.
+For position components, prefer `world.setPosition()` over direct mutation when another system needs the spatial grid to reflect the move in the same tick. Direct component mutations are diff-detected, and direct position mutations are synchronized to the grid on the next tick by default. Large simulations can opt out of that fallback with `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation.
 
 ## System Execution Order
 
-Systems run in **registration order**, one after another, synchronously. There is no scheduler, no dependency graph, no parallelism. This makes execution predictable.
+Systems run one after another, synchronously. They are grouped by phase in this order: `input`, `preUpdate`, `update`, `postUpdate`, `output`. Registration order is preserved inside each phase. There is no dependency graph or parallelism.
 
 ```typescript
-world.registerSystem(inputSystem);     // runs 1st
-world.registerSystem(movementSystem);  // runs 2nd
-world.registerSystem(combatSystem);    // runs 3rd
-world.registerSystem(deathSystem);     // runs 4th
+world.registerSystem({ phase: 'input', execute: inputSystem });
+world.registerSystem(movementSystem); // update phase
+world.registerSystem({ phase: 'postUpdate', execute: combatSystem });
+world.registerSystem({ phase: 'output', execute: reportSystem });
 ```
 
 **Order matters.** If the movement system moves a unit into range and the combat system checks range, movement must run first. If the combat system kills a unit and the death system cleans up corpses, combat must run before death.
@@ -68,14 +73,17 @@ Each `step()` call executes one tick in this exact sequence:
 3. clearComponentDirty()         — reset component change tracking
 4. resourceStore.clearDirty()    — reset resource change tracking
 5. processCommands()             — drain command queue, run handlers
-6. syncSpatialIndex()            — update grid from position components
-7. system[0](world)              — your first system
-8. system[1](world)              — your second system
-9. ...                           — all remaining systems
-10. resourceStore.processTick()  — production, consumption, transfers
-11. buildDiff()                  — collect all changes into TickDiff
-12. notify diffListeners         — push TickDiff to subscribers
-13. tick++                       — increment counter
+6. syncSpatialIndex()            — optional direct-position-mutation fallback scan
+7. input systems                 — input phase
+8. preUpdate systems             — setup phase
+9. update systems                — default phase
+10. postUpdate systems           — follow-up phase
+11. output systems               — reporting/output phase
+12. resourceStore.processTick()  — production, consumption, transfers
+13. buildDiff()                  — collect all changes into TickDiff
+14. metrics update               — collect timing/query/spatial metrics
+15. notify diffListeners         — push TickDiff to subscribers
+16. tick++                       — increment counter
 ```
 
 ### Implications
@@ -86,6 +94,7 @@ Each `step()` call executes one tick in this exact sequence:
 | Spatial sync before systems | Systems see up-to-date grid positions |
 | Resources process after systems | Systems can add/remove resources; rates apply on top |
 | Diff builds after everything | The diff captures all changes from the entire tick |
+| Metrics update after diff | `world.getMetrics()` reports the most recent completed tick |
 | Events cleared at tick start | Events from tick N are available during tick N, gone at tick N+1 |
 
 ## Deterministic Stepping

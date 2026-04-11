@@ -95,10 +95,11 @@ Everything flows through a single `World` object:
 ```
 World.step()
   -> process commands     (drain queue, run handlers)
-  -> sync spatial grid    (match grid to position components)
-  -> run systems          (your game logic, in registration order)
+  -> sync spatial grid    (optional direct-mutation fallback scan)
+  -> run systems          (phase-ordered game logic)
   -> process resources    (production, consumption, transfers)
   -> build diff           (collect changes for observers)
+  -> update metrics       (timings, query counts, spatial sync counts)
   -> tick++
 ```
 
@@ -112,7 +113,7 @@ src/
   world.ts            Top-level API — the only public entry point
   entity-manager.ts   Entity creation/destruction, ID recycling, generations
   component-store.ts  Sparse array storage per component type
-  spatial-grid.ts     2D flat array grid, neighbor queries
+  spatial-grid.ts     Sparse occupied-cell grid, neighbor queries
   game-loop.ts        Fixed-timestep loop, speed control, pause/resume
   event-bus.ts        Typed pub/sub event bus
   command-queue.ts    Typed command buffer
@@ -146,6 +147,7 @@ docs/
 | `config.positionKey`     | `string` | `'position'`   | Component key used for spatial sync   |
 | `config.maxTicksPerFrame`| `number` | `4`            | Spiral-of-death cap for real-time loop|
 | `config.seed`            | `number \| string` | default seed | Seed for deterministic `world.random()` |
+| `config.detectInPlacePositionMutations` | `boolean` | `true` | Full-scan fallback for direct position object mutation |
 
 ### World Methods
 
@@ -163,12 +165,13 @@ docs/
 | `setComponent<T>(id, key, data)` | `void` | Set component data and mark it dirty |
 | `patchComponent<T>(id, key, fn)` | `T` | Mutate or replace existing component data and mark it dirty |
 | `setPosition(id, position, key?)` | `void` | Set position data and update the spatial grid immediately |
+| `markPositionDirty(id, key?)` | `void` | Sync an in-place position mutation when full-scan detection is disabled |
 | `getComponent<T>(id, key)` | `T \| undefined` | Read component data |
 | `getComponents<T>(id, keys)` | `ComponentTuple<T>` | Batch-read multiple components |
 | `removeComponent(id, key)` | `void` | Detach component from entity |
 | `query(...keys)` | `IterableIterator<EntityId>` | Find entities with all listed components |
 | **Systems & Simulation** | | |
-| `registerSystem(fn)` | `void` | Add a system to the pipeline |
+| `registerSystem(fnOrConfig)` | `void` | Add a system to the phase-ordered pipeline |
 | `step()` | `void` | Advance one tick (deterministic, ignores pause/speed) |
 | `start()` | `void` | Begin real-time loop |
 | `stop()` | `void` | Stop real-time loop |
@@ -209,6 +212,7 @@ docs/
 | `serialize()` | `WorldSnapshot` | Capture current state as JSON snapshot |
 | `World.deserialize(snapshot, systems?)` | `World` | Restore world from snapshot (static) |
 | `getDiff()` | `TickDiff \| null` | Get last tick's diff |
+| `getMetrics()` | `WorldMetrics \| null` | Get last tick's timing/query/spatial metrics |
 | `onDiff(fn)` | `void` | Subscribe to per-tick diffs |
 | `offDiff(fn)` | `void` | Unsubscribe from diffs |
 | **Entity Lifecycle** | | |

@@ -48,7 +48,18 @@ const pos = world.getComponent<Position>(unit, 'position')!;
 world.setPosition(unit, { x: pos.x + 1, y: pos.y });
 ```
 
-Direct position mutations are allowed, but the spatial grid sees them on the next tick's sync.
+Direct position mutations are allowed, but the spatial grid sees them on the next tick's sync. For large simulations, set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(unit)` after a direct position mutation to avoid the fallback full scan.
+
+## Systems and Metrics
+
+Bare function systems run in the `update` phase. Use registration objects when order needs to be clearer:
+
+```typescript
+world.registerSystem({ phase: 'input', execute: inputSystem });
+world.registerSystem({ name: 'Combat', phase: 'postUpdate', execute: combatSystem });
+```
+
+Use `world.getMetrics()` after `step()` to inspect query cache hits, spatial scan counts, system timings, and total tick time before choosing heavier optimizations.
 
 ## Entity Handles
 

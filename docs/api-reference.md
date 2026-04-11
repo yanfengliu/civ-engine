@@ -75,6 +75,7 @@ interface WorldConfig {
   positionKey?: string;    // Component key used for spatial sync (default: 'position')
   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
   seed?: number | string;  // Deterministic RNG seed
+  detectInPlacePositionMutations?: boolean; // Full-scan fallback (default: true)
 }
 ```
 
@@ -85,7 +86,44 @@ interface WorldConfig {
 type System<TEventMap, TCommandMap> = (world: World<TEventMap, TCommandMap>) => void;
 ```
 
-A system is a pure function that receives the `World` and runs game logic. Systems execute each tick in registration order.
+A system is a pure function that receives the `World` and runs game logic. Systems execute by phase, preserving registration order within each phase. Bare function registrations default to the `update` phase.
+
+### `SystemRegistration`
+
+```typescript
+// src/world.ts
+interface SystemRegistration<TEventMap, TCommandMap> {
+  name?: string;
+  phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
+  execute: System<TEventMap, TCommandMap>;
+}
+```
+
+Optional system registration object for naming systems and assigning a lifecycle phase.
+
+### `WorldMetrics`
+
+```typescript
+// src/world.ts
+interface WorldMetrics {
+  tick: number;
+  entityCount: number;
+  componentStoreCount: number;
+  systems: Array<{ name: string; phase: SystemPhase; durationMs: number }>;
+  query: { calls: number; cacheHits: number; cacheMisses: number; results: number };
+  spatial: { fullScans: number; scannedEntities: number; explicitSyncs: number };
+  durationMs: {
+    total: number;
+    commands: number;
+    spatialSync: number;
+    systems: number;
+    resources: number;
+    diff: number;
+  };
+}
+```
+
+Last-tick instrumentation returned by `world.getMetrics()`.
 
 ### `WorldSnapshot`
 
@@ -359,6 +397,7 @@ Creates a new world with the specified grid dimensions, tick rate, and optional 
 | `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
 | `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
 | `config.seed` | `number \| string` | No | Seed for deterministic `world.random()` sequences |
+| `config.detectInPlacePositionMutations` | `boolean` | No | Whether each tick scans position components to detect direct object mutations (default: `true`) |
 
 **Example:**
 
@@ -497,6 +536,14 @@ setPosition(entity: EntityId, position: Position, key?: string): void
 
 Sets position data and updates the spatial grid immediately when the key is the world's `positionKey`.
 
+#### `markPositionDirty(entity, key?)`
+
+```typescript
+markPositionDirty(entity: EntityId, key?: string): void
+```
+
+Synchronizes a position component that was mutated in place. This is mainly useful when `detectInPlacePositionMutations` is set to `false` and callers want to avoid the per-tick full-scan fallback.
+
 #### `getComponent<T>(entity, key)`
 
 ```typescript
@@ -568,13 +615,17 @@ const soldiers = [...world.query('position', 'health', 'attack')];
 
 ### Systems & Simulation
 
-#### `registerSystem(fn)`
+#### `registerSystem(fnOrConfig)`
 
 ```typescript
-registerSystem(system: System<TEventMap, TCommandMap>): void
+registerSystem(
+  system:
+    | System<TEventMap, TCommandMap>
+    | SystemRegistration<TEventMap, TCommandMap>,
+): void
 ```
 
-Adds a system function to the end of the pipeline. Systems run each tick in registration order.
+Adds a system to the pipeline. Bare functions run in the `update` phase. Registration objects can name systems for metrics and assign a phase. Systems run in this phase order: `input`, `preUpdate`, `update`, `postUpdate`, `output`; registration order is preserved within each phase.
 
 ```typescript
 function movementSystem(w: World): void {
@@ -586,6 +637,11 @@ function movementSystem(w: World): void {
 }
 
 world.registerSystem(movementSystem);
+world.registerSystem({
+  name: 'Combat',
+  phase: 'postUpdate',
+  execute: combatSystem,
+});
 ```
 
 #### `step()`
@@ -601,12 +657,13 @@ Each tick executes in this order:
 1. Clear event buffer
 2. Clear dirty flags (entities, components, resources)
 3. Process commands (drain queue, run handlers)
-4. Sync spatial index (update grid from position components)
-5. Run systems (in registration order)
+4. Sync spatial index (optional direct-position-mutation fallback scan)
+5. Run systems (`input`, `preUpdate`, `update`, `postUpdate`, `output`)
 6. Process resource rates and transfers
 7. Build diff (collect dirty state into `TickDiff`)
-8. Notify diff listeners
-9. Increment tick counter
+8. Update metrics
+9. Notify diff listeners
+10. Increment tick counter
 
 ```typescript
 world.step(); // always executes, even when paused
@@ -1038,7 +1095,7 @@ const json = JSON.stringify(snapshot);
 ```typescript
 static deserialize<TEventMap, TCommandMap>(
   snapshot: WorldSnapshot,
-  systems?: System<TEventMap, TCommandMap>[],
+  systems?: Array<System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>>,
 ): World<TEventMap, TCommandMap>
 ```
 
@@ -1075,6 +1132,20 @@ if (diff) {
   console.log(`Created: ${diff.entities.created}`);
   console.log(`Destroyed: ${diff.entities.destroyed}`);
 }
+```
+
+#### `getMetrics()`
+
+```typescript
+getMetrics(): WorldMetrics | null
+```
+
+Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
+
+```typescript
+world.step();
+const metrics = world.getMetrics();
+console.log(metrics?.query.cacheHits, metrics?.durationMs.total);
 ```
 
 #### `onDiff(fn)`
@@ -1137,7 +1208,7 @@ Unregisters a destroy callback. Pass the exact same function reference used in `
 
 ## SpatialGrid
 
-A 2D flat-array grid that tracks which entities are at each cell. The World automatically syncs entity positions to the grid each tick. You should **read** from the grid but not write to it directly.
+A sparse occupied-cell grid that tracks which entities are at each cell. The World automatically syncs entity positions to the grid. You should **read** from the grid but not write to it directly.
 
 ```typescript
 import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';

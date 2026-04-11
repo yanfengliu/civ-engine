@@ -119,18 +119,19 @@ World.step()
   ┌─ 1. Clear event buffer (events from previous tick are gone)
   ├─ 2. Clear dirty flags (entity, component, resource tracking resets)
   ├─ 3. Process commands (drain queue → run handlers)
-  ├─ 4. Sync spatial index (update grid from position components)
-  ├─ 5. Run systems (your code, in registration order)
+  ├─ 4. Sync spatial index (optional direct-mutation fallback scan)
+  ├─ 5. Run systems (your code, phase ordered)
   ├─ 6. Process resources (production, consumption, transfers)
   ├─ 7. Build diff (collect dirty state into TickDiff)
-  ├─ 8. Notify diff listeners (push TickDiff to subscribers)
-  └─ 9. Increment tick counter
+  ├─ 8. Update metrics (timings, query counts, spatial counts)
+  ├─ 9. Notify diff listeners (push TickDiff to subscribers)
+  └─ 10. Increment tick counter
 ```
 
 ### What this means in practice
 
 - **Commands execute before systems.** If an AI agent submits a `moveUnit` command, the handler runs before your movement system. The system then sees the already-moved entity.
-- **Spatial grid syncs before systems.** By the time your system runs, `world.grid.getAt()` reflects position changes from commands.
+- **Spatial grid syncs before systems.** By the time your system runs, `world.grid.getAt()` reflects position changes from commands. Explicit `setPosition()` calls also sync immediately.
 - **Resources process after systems.** Production, consumption, and transfers happen after your code. If a system adds food to an entity, the production rate still fires on top of that.
 - **Events from the current tick are available during the tick.** A system that emits an event can trigger listeners in the same tick. Events are cleared at the **start** of the next tick.
 - **Diffs capture everything.** The diff includes changes from commands, systems, and resource processing — everything that happened in the tick.
@@ -147,12 +148,12 @@ The engine guarantees that `step()` is deterministic: the same state + the same 
 What makes it deterministic:
 - `step()` ignores real-time (no `Date.now()`, no `setTimeout`)
 - `step()` ignores pause state and speed multiplier
-- System execution order is fixed (registration order)
+- System execution order is fixed (phase order, then registration order within each phase)
 - Entity IDs are assigned predictably (sequential + free-list LIFO)
 - All operations are synchronous
 
 What can break determinism:
-- Using `Math.random()` in systems (use seedable noise instead)
+- Using `Math.random()` in systems (use `world.random()` or seedable noise instead)
 - Reading `Date.now()` or other external state in systems
 - Non-deterministic iteration of `Map`/`Set` (the engine avoids this internally)
 

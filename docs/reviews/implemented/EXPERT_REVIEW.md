@@ -1,7 +1,7 @@
 # Expert Architecture Review & Improvements
 
 **Review Date:** 2026-04-10
-**Status**: IMPLEMENTED
+**Status**: PARTIALLY IMPLEMENTED
 **Perspective:** Seasoned Game Architect
 **Project:** `civ-engine` (Realtime 2D headless civilization simulation engine)
 
@@ -11,6 +11,21 @@ The engine is remarkably robust for an early prototype. It strictly adheres to a
 However, as a simulation scales from a "prototype colony" to a "massive civilization" with 100,000+ entities, several deep architectural limitations in the current design will become fatal bottlenecks.
 
 Here is my roadmap for transforming this solid foundation into a truly production-ready, highly-performant simulation engine.
+
+## Implementation Status
+
+Implemented in the engine:
+- Component-signature query caching.
+- Sparse spatial grid storage.
+- Optional full-scan position mutation detection, with `markPositionDirty()` for explicit in-place position sync.
+- Lightweight system phases: `input`, `preUpdate`, `update`, `postUpdate`, `output`.
+- Deterministic `world.random()` and snapshot v3 RNG state.
+- Per-tick metrics for timings, system durations, query cache activity, and spatial sync work.
+
+Still tracked as future candidates in `docs/reviews/todo/EXPERT_REVIEW_REMAINING.md`:
+- Struct-of-Arrays / `SharedArrayBuffer` component storage.
+- Full dependency graph scheduling and parallel execution.
+- Tick-targeted multiplayer command processing, rollback, and prediction.
 
 ---
 

@@ -18,11 +18,70 @@ export type System<
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > = (world: World<TEventMap, TCommandMap>) => void;
 
+export const SYSTEM_PHASES = [
+  'input',
+  'preUpdate',
+  'update',
+  'postUpdate',
+  'output',
+] as const;
+
+export type SystemPhase = (typeof SYSTEM_PHASES)[number];
+
+export interface SystemRegistration<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+> {
+  name?: string;
+  phase?: SystemPhase;
+  execute: System<TEventMap, TCommandMap>;
+}
+
+export interface WorldMetrics {
+  tick: number;
+  entityCount: number;
+  componentStoreCount: number;
+  systems: Array<{
+    name: string;
+    phase: SystemPhase;
+    durationMs: number;
+  }>;
+  query: {
+    calls: number;
+    cacheHits: number;
+    cacheMisses: number;
+    results: number;
+  };
+  spatial: {
+    fullScans: number;
+    scannedEntities: number;
+    explicitSyncs: number;
+  };
+  durationMs: {
+    total: number;
+    commands: number;
+    spatialSync: number;
+    systems: number;
+    resources: number;
+    diff: number;
+  };
+}
+
 type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
 
 interface QueryCacheEntry {
   readonly mask: bigint;
   readonly entities: EntityId[];
+}
+
+interface RegisteredSystem<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+> {
+  name: string;
+  phase: SystemPhase;
+  execute: System<TEventMap, TCommandMap>;
+  order: number;
 }
 
 export class World<
@@ -35,7 +94,8 @@ export class World<
   private nextComponentBit = 0;
   private entitySignatures: bigint[] = [];
   private queryCache = new Map<string, QueryCacheEntry>();
-  private systems: System<TEventMap, TCommandMap>[] = [];
+  private systems: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+  private nextSystemOrder = 0;
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
   private eventBus = new EventBus<TEventMap>();
@@ -52,7 +112,10 @@ export class World<
   readonly grid: SpatialGridView;
   readonly positionKey: string;
   private readonly seed: number | string | undefined;
+  private readonly detectInPlacePositionMutations: boolean;
   private currentDiff: TickDiff | null = null;
+  private currentMetrics: WorldMetrics | null = null;
+  private activeMetrics: WorldMetrics | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -67,6 +130,8 @@ export class World<
     this.grid = this.spatialGrid;
     this.positionKey = config.positionKey ?? 'position';
     this.seed = config.seed;
+    this.detectInPlacePositionMutations =
+      config.detectInPlacePositionMutations ?? true;
     this.rng = new DeterministicRandom(config.seed);
     this.gameLoop = new GameLoop({
       tps: config.tps,
@@ -214,17 +279,41 @@ export class World<
     this.setComponent(entity, key, { x: position.x, y: position.y });
   }
 
+  markPositionDirty(entity: EntityId, key = this.positionKey): void {
+    this.assertAlive(entity);
+    if (key !== this.positionKey) {
+      throw new Error(`Position key '${key}' is not the world's positionKey`);
+    }
+    const current = this.getComponent<Position>(entity, key);
+    if (current === undefined) {
+      throw new Error(`Entity ${entity} does not have component '${key}'`);
+    }
+    const position = asPosition(current);
+    this.assertPositionInBounds(position);
+    this.syncSpatialEntity(entity, position);
+  }
+
   *query(...keys: string[]): IterableIterator<EntityId> {
     const queryKeys = this.normalizeQueryKeys(keys);
     if (!queryKeys) return;
+    if (this.activeMetrics) {
+      this.activeMetrics.query.calls++;
+    }
     const cache = this.getQueryCache(queryKeys);
     for (const id of cache.entities) {
+      if (this.activeMetrics) {
+        this.activeMetrics.query.results++;
+      }
       yield id;
     }
   }
 
-  registerSystem(system: System<TEventMap, TCommandMap>): void {
-    this.systems.push(system);
+  registerSystem(
+    system:
+      | System<TEventMap, TCommandMap>
+      | SystemRegistration<TEventMap, TCommandMap>,
+  ): void {
+    this.systems.push(this.normalizeSystemRegistration(system));
   }
 
   step(): void {
@@ -353,6 +442,9 @@ export class World<
     if (this.seed !== undefined) {
       config.seed = this.seed;
     }
+    if (!this.detectInPlacePositionMutations) {
+      config.detectInPlacePositionMutations = false;
+    }
 
     return {
       version: 3,
@@ -370,7 +462,9 @@ export class World<
     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   >(
     snapshot: WorldSnapshot,
-    systems?: System<TEventMap, TCommandMap>[],
+    systems?: Array<
+      System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>
+    >,
   ): World<TEventMap, TCommandMap> {
     const version = (snapshot as { version: number }).version;
     if (version !== 1 && version !== 2 && version !== 3) {
@@ -399,13 +493,13 @@ export class World<
     if ('rng' in snapshot) {
       world.rng = DeterministicRandom.fromState(snapshot.rng);
     }
-    world.syncSpatialIndex();
+    world.rebuildSpatialIndex();
 
     world.gameLoop.setTick(snapshot.tick);
 
     if (systems) {
       for (const system of systems) {
-        world.systems.push(system);
+        world.registerSystem(system);
       }
     }
 
@@ -418,6 +512,10 @@ export class World<
 
   getDiff(): TickDiff | null {
     return this.currentDiff;
+  }
+
+  getMetrics(): WorldMetrics | null {
+    return this.currentMetrics ? cloneMetrics(this.currentMetrics) : null;
   }
 
   onDiff(fn: (diff: TickDiff) => void): void {
@@ -543,33 +641,115 @@ export class World<
   }
 
   private executeTick(): void {
-    this.eventBus.clear();
-    this.entityManager.clearDirty();
-    this.clearComponentDirty();
-    this.resourceStore.clearDirty();
-    this.processCommands();
-    this.syncSpatialIndex();
-    for (const system of this.systems) {
-      system(this);
+    const metrics = createMetrics(
+      this.gameLoop.tick + 1,
+      this.entityManager.count,
+      this.componentStores.size,
+    );
+    this.activeMetrics = metrics;
+    const totalStart = now();
+
+    try {
+      this.eventBus.clear();
+      this.entityManager.clearDirty();
+      this.clearComponentDirty();
+      this.resourceStore.clearDirty();
+
+      const commandsStart = now();
+      this.processCommands();
+      metrics.durationMs.commands = now() - commandsStart;
+
+      const spatialStart = now();
+      this.syncSpatialIndex();
+      metrics.durationMs.spatialSync = now() - spatialStart;
+
+      const systemsStart = now();
+      this.executeSystems(metrics);
+      metrics.durationMs.systems = now() - systemsStart;
+
+      const resourcesStart = now();
+      this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
+      metrics.durationMs.resources = now() - resourcesStart;
+
+      const diffStart = now();
+      this.buildDiff();
+      metrics.durationMs.diff = now() - diffStart;
+      metrics.durationMs.total = now() - totalStart;
+      this.currentMetrics = cloneMetrics(metrics);
+    } finally {
+      this.activeMetrics = null;
     }
-    this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
-    this.buildDiff();
+
     for (const listener of this.diffListeners) {
       listener(this.currentDiff!);
     }
   }
 
+  private executeSystems(metrics: WorldMetrics): void {
+    const systems = [...this.systems].sort((a, b) => {
+      const phaseDelta = phaseIndex(a.phase) - phaseIndex(b.phase);
+      return phaseDelta !== 0 ? phaseDelta : a.order - b.order;
+    });
+
+    for (const system of systems) {
+      const start = now();
+      system.execute(this);
+      metrics.systems.push({
+        name: system.name,
+        phase: system.phase,
+        durationMs: now() - start,
+      });
+    }
+  }
+
+  private normalizeSystemRegistration(
+    system:
+      | System<TEventMap, TCommandMap>
+      | SystemRegistration<TEventMap, TCommandMap>,
+  ): RegisteredSystem<TEventMap, TCommandMap> {
+    const order = this.nextSystemOrder++;
+    if (typeof system === 'function') {
+      return {
+        name: system.name || `system#${order}`,
+        phase: 'update',
+        execute: system,
+        order,
+      };
+    }
+
+    const phase = system.phase ?? 'update';
+    if (!isSystemPhase(phase)) {
+      throw new Error(`Unknown system phase '${String(phase)}'`);
+    }
+
+    return {
+      name: system.name ?? system.execute.name ?? `system#${order}`,
+      phase,
+      execute: system.execute,
+      order,
+    };
+  }
+
   private syncSpatialIndex(): void {
+    if (!this.detectInPlacePositionMutations) return;
+
     const posStore = this.componentStores.get(this.positionKey) as
       | ComponentStore<Position>
       | undefined;
     if (!posStore) return;
 
+    if (this.activeMetrics) {
+      this.activeMetrics.spatial.fullScans++;
+    }
     const seen = new Set<EntityId>();
 
     for (const id of posStore.entities()) {
       seen.add(id);
-      const pos = posStore.get(id)!;
+      if (this.activeMetrics) {
+        this.activeMetrics.spatial.scannedEntities++;
+      }
+      const pos = asPosition(posStore.get(id));
+      this.assertPositionInBounds(pos);
       const prev = this.previousPositions.get(id);
 
       if (!prev) {
@@ -591,6 +771,9 @@ export class World<
   }
 
   private syncSpatialEntity(entity: EntityId, pos: Position): void {
+    if (this.activeMetrics) {
+      this.activeMetrics.spatial.explicitSyncs++;
+    }
     const prev = this.previousPositions.get(entity);
     if (!prev) {
       this.spatialGrid.insert(entity, pos.x, pos.y);
@@ -601,6 +784,21 @@ export class World<
       this.spatialGrid.move(entity, prev.x, prev.y, pos.x, pos.y);
       prev.x = pos.x;
       prev.y = pos.y;
+    }
+  }
+
+  private rebuildSpatialIndex(): void {
+    const posStore = this.componentStores.get(this.positionKey) as
+      | ComponentStore<Position>
+      | undefined;
+    if (!posStore) return;
+
+    this.previousPositions.clear();
+    for (const id of posStore.entities()) {
+      const pos = asPosition(posStore.get(id));
+      this.assertPositionInBounds(pos);
+      this.spatialGrid.insert(id, pos.x, pos.y);
+      this.previousPositions.set(id, { x: pos.x, y: pos.y });
     }
   }
 
@@ -690,7 +888,15 @@ export class World<
   private getQueryCache(keys: string[]): QueryCacheEntry {
     const cacheKey = keys.join('\0');
     const cached = this.queryCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      if (this.activeMetrics) {
+        this.activeMetrics.query.cacheHits++;
+      }
+      return cached;
+    }
+    if (this.activeMetrics) {
+      this.activeMetrics.query.cacheMisses++;
+    }
 
     const mask = this.queryMask(keys);
     let smallest = this.componentStores.get(keys[0])!;
@@ -744,6 +950,62 @@ export class World<
   }
 }
 
+function createMetrics(
+  tick: number,
+  entityCount: number,
+  componentStoreCount: number,
+): WorldMetrics {
+  return {
+    tick,
+    entityCount,
+    componentStoreCount,
+    systems: [],
+    query: {
+      calls: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      results: 0,
+    },
+    spatial: {
+      fullScans: 0,
+      scannedEntities: 0,
+      explicitSyncs: 0,
+    },
+    durationMs: {
+      total: 0,
+      commands: 0,
+      spatialSync: 0,
+      systems: 0,
+      resources: 0,
+      diff: 0,
+    },
+  };
+}
+
+function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
+  return {
+    tick: metrics.tick,
+    entityCount: metrics.entityCount,
+    componentStoreCount: metrics.componentStoreCount,
+    systems: metrics.systems.map((system) => ({ ...system })),
+    query: { ...metrics.query },
+    spatial: { ...metrics.spatial },
+    durationMs: { ...metrics.durationMs },
+  };
+}
+
+function now(): number {
+  return performance.now();
+}
+
+function phaseIndex(phase: SystemPhase): number {
+  return SYSTEM_PHASES.indexOf(phase);
+}
+
+function isSystemPhase(value: string): value is SystemPhase {
+  return (SYSTEM_PHASES as readonly string[]).includes(value);
+}
+
 function insertSorted(values: EntityId[], value: EntityId): void {
   let low = 0;
   let high = values.length;
@@ -778,6 +1040,12 @@ function validateWorldConfig(config: WorldConfig): void {
   }
   if (config.positionKey !== undefined && config.positionKey.length === 0) {
     throw new Error('positionKey must not be empty');
+  }
+  if (
+    config.detectInPlacePositionMutations !== undefined &&
+    typeof config.detectInPlacePositionMutations !== 'boolean'
+  ) {
+    throw new Error('detectInPlacePositionMutations must be a boolean');
   }
 }
 

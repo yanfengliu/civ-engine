@@ -15,7 +15,7 @@ This guide covers the 2D spatial grid, how automatic synchronization works, and 
 
 ## Overview
 
-The spatial grid is a 2D flat-array structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` for immediate component and grid updates, or mutate position components directly when next-tick grid sync is acceptable.
+The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` for immediate component and grid updates, or mutate position components directly when next-tick grid sync is acceptable.
 
 The grid exposed as `world.grid` is a read-only view. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API.
 
@@ -26,7 +26,7 @@ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 
 ## Automatic Synchronization
 
-Each tick, before systems run, the World's `syncSpatialIndex()` routine:
+Each tick, before systems run, the World's `syncSpatialIndex()` routine runs the direct-mutation fallback when `detectInPlacePositionMutations` is enabled:
 
 1. Iterates all entities with the configured position component
 2. Compares each entity's current position to its last-synced position
@@ -37,6 +37,7 @@ Each tick, before systems run, the World's `syncSpatialIndex()` routine:
 This means:
 - Direct position component mutations are picked up by the next tick's sync
 - `world.setPosition()` updates the component and grid immediately
+- Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation to avoid the full position-store scan
 - Within the current tick, systems see the grid state from **after** sync
 
 ```typescript

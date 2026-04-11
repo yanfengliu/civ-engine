@@ -12,10 +12,10 @@ The engine provides reusable infrastructure (entities, components, spatial index
 
 | Component      | File                     | Responsibility                                                                         |
 | -------------- | ------------------------ | -------------------------------------------------------------------------------------- |
-| World          | `src/world.ts`           | Top-level API, owns all subsystems, system pipeline, spatial index sync                |
+| World          | `src/world.ts`           | Top-level API, owns all subsystems, phased system pipeline, metrics, spatial index sync |
 | EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
 | ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
-| SpatialGrid    | `src/spatial-grid.ts`    | 2D flat array grid plus read-only view, lazy Set allocation per cell, neighbor/radius queries |
+| SpatialGrid    | `src/spatial-grid.ts`    | Sparse occupied-cell grid plus read-only view, neighbor/radius queries                 |
 | GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop, step() for testing, start()/stop() for real-time, speed multiplier, pause/resume |
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
@@ -42,12 +42,15 @@ World.step()
       -> World.entityManager.clearDirty()
       -> World.clearComponentDirty()   [clear dirty flags on all stores]
       -> World.processCommands()       [drain queue, run handlers]
-      -> World.syncSpatialIndex()      [sync grid with Position components]
-      -> System A(world)               [user systems in registration order]
-      -> System B(world)
-      -> ...
+      -> World.syncSpatialIndex()      [optional direct-mutation fallback scan]
+      -> input systems
+      -> preUpdate systems
+      -> update systems
+      -> postUpdate systems
+      -> output systems
       -> World.resourceStore.processTick()  [production, consumption, transfers]
       -> World.buildDiff()             [collect dirty state into TickDiff]
+      -> World.getMetrics() state updated
       -> notify onDiff listeners
     -> tick++
 ```
@@ -55,11 +58,11 @@ World.step()
 ### Spatial Index Sync
 
 Each tick, before user systems run, `syncSpatialIndex()`:
-1. Iterates all entities with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`)
+1. Iterates all entities with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) when `detectInPlacePositionMutations` is enabled
 2. Compares current position to `previousPositions` map
 3. Inserts new entities into grid, moves changed ones, removes stale ones
 
-Position writes through `world.setPosition()` or `world.setComponent()` with the configured position key update the component store and spatial grid immediately. Direct object mutation is still picked up by the next tick's sync pass.
+Position writes through `world.setPosition()` or `world.setComponent()` with the configured position key update the component store and spatial grid immediately. Direct object mutation is still picked up by the next tick's sync pass by default. Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(entity)` after an in-place position mutation to avoid the full scan.
 
 ### Entity Destruction
 
@@ -72,7 +75,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 ## Boundaries
 
 - **World** is the only public entry point. EntityManager, ComponentStore, GameLoop are internal implementation details.
-- **Systems** are pure functions `(world: World) => void`. No classes, no lifecycle hooks.
+- **Systems** are pure functions `(world: World) => void` or registration objects with a `phase` and `name`. Phases are intentionally lightweight and ordered as `input`, `preUpdate`, `update`, `postUpdate`, `output`.
 - **Components** are pure data interfaces. No methods, no inheritance.
 - **SpatialGrid** is a sparse map of occupied cells and is synced automatically by World's internal spatial index routine. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property exposes only a read-only view.
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
@@ -80,6 +83,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 3 includes resource state and deterministic RNG state; version 1 and 2 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
+- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 - **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
 - **Pathfinding** is a standalone utility. It has no knowledge of the spatial grid, entities, or the tick loop. Game code provides `neighbors`, `cost`, `heuristic`, and `hash` callbacks to wire it to any graph topology.

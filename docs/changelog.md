@@ -20,6 +20,9 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - Read-only `world.grid` view, while `SpatialGrid` remains available as a standalone utility.
 - Resource store snapshot state, including registrations, pools, rates, transfers, and next transfer ID.
 - `world.random()` and `WorldConfig.seed` for deterministic pseudo-random simulation logic.
+- Phase-aware system registration with `input`, `preUpdate`, `update`, `postUpdate`, and `output` phases.
+- `world.getMetrics()` for per-tick timing, query cache, system, and spatial sync instrumentation.
+- `WorldConfig.detectInPlacePositionMutations` and `world.markPositionDirty()` for large simulations that want to avoid the compatibility full-scan spatial sync path.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
 - `ClientAdapter` runtime message guarding, missing-handler rejection, rejection reasons, and optional `onError` callback for send failures.
 - Root package export barrel, declaration build config, npm package metadata, and CI workflow.

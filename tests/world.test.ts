@@ -124,6 +124,38 @@ describe('World', () => {
     expect(order).toEqual(['A', 'B']);
   });
 
+  it('runs systems by phase while preserving registration order within a phase', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const order: string[] = [];
+
+    world.registerSystem({ phase: 'postUpdate', execute: () => order.push('post') });
+    world.registerSystem(() => order.push('update-a'));
+    world.registerSystem({ phase: 'preUpdate', execute: () => order.push('pre') });
+    world.registerSystem(() => order.push('update-b'));
+    world.registerSystem({ phase: 'input', execute: () => order.push('input') });
+    world.registerSystem({ phase: 'output', execute: () => order.push('output') });
+
+    world.step();
+    expect(order).toEqual([
+      'input',
+      'pre',
+      'update-a',
+      'update-b',
+      'post',
+      'output',
+    ]);
+  });
+
+  it('rejects unknown system phases at runtime', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    expect(() =>
+      world.registerSystem({
+        phase: 'bad-phase',
+        execute: () => {},
+      } as never),
+    ).toThrow("Unknown system phase 'bad-phase'");
+  });
+
   it('increments tick on step()', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     expect(world.tick).toBe(0);
@@ -236,6 +268,48 @@ describe('World', () => {
     expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
   });
 
+  it('can disable full-scan position mutation detection and sync explicit dirty positions', () => {
+    const world = new World({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      detectInPlacePositionMutations: false,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.setPosition(id, { x: 1, y: 1 });
+
+    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
+    pos.x = 2;
+    pos.y = 2;
+    world.step();
+
+    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+    expect(world.grid.getAt(2, 2)).toBeNull();
+    expect(world.getMetrics()!.spatial.fullScans).toBe(0);
+
+    world.markPositionDirty(id);
+    expect(world.grid.getAt(1, 1)).toBeNull();
+    expect(world.grid.getAt(2, 2)!.has(id)).toBe(true);
+  });
+
+  it('markPositionDirty validates the current position data', () => {
+    const world = new World({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      detectInPlacePositionMutations: false,
+    });
+    world.registerComponent<{ x: number; y: number }>('position');
+    const id = world.createEntity();
+    world.setPosition(id, { x: 1, y: 1 });
+    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
+    pos.x = 99;
+
+    expect(() => world.markPositionDirty(id)).toThrow(RangeError);
+    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+  });
+
   it('validates world config', () => {
     expect(() => new World({ gridWidth: 0, gridHeight: 10, tps: 60 })).toThrow(
       RangeError,
@@ -246,6 +320,15 @@ describe('World', () => {
     expect(
       () => new World({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: '' }),
     ).toThrow('positionKey must not be empty');
+    expect(
+      () =>
+        new World({
+          gridWidth: 10,
+          gridHeight: 10,
+          tps: 60,
+          detectInPlacePositionMutations: 'yes' as never,
+        }),
+    ).toThrow('detectInPlacePositionMutations must be a boolean');
   });
 
   it('removes entity from grid on destroy even if position was mutated since last sync', () => {
@@ -369,6 +452,50 @@ describe('World', () => {
 
     expect(seqA).toEqual(seqB);
     expect(seqA).not.toEqual(seqC);
+  });
+
+  it('reports per-tick metrics for systems, queries, and spatial sync', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+    world.registerComponent<{ hp: number }>('health');
+    const id = world.createEntity();
+    world.setPosition(id, { x: 1, y: 1 });
+    world.addComponent(id, 'health', { hp: 100 });
+    world.registerSystem({
+      name: 'HealthScan',
+      phase: 'update',
+      execute: (w) => {
+        for (const entity of w.query('position', 'health')) {
+          const pos = w.getComponent<{ x: number; y: number }>(entity, 'position')!;
+          w.setPosition(entity, { x: pos.x + 1, y: pos.y });
+        }
+      },
+    });
+
+    world.step();
+    const first = world.getMetrics()!;
+    expect(first.tick).toBe(1);
+    expect(first.entityCount).toBe(1);
+    expect(first.componentStoreCount).toBe(2);
+    expect(first.query).toMatchObject({
+      calls: 1,
+      cacheHits: 0,
+      cacheMisses: 1,
+      results: 1,
+    });
+    expect(first.spatial.fullScans).toBe(1);
+    expect(first.spatial.scannedEntities).toBe(1);
+    expect(first.spatial.explicitSyncs).toBe(1);
+    expect(first.systems).toHaveLength(1);
+    expect(first.systems[0].name).toBe('HealthScan');
+    expect(first.systems[0].phase).toBe('update');
+    expect(first.durationMs.total).toBeGreaterThanOrEqual(0);
+
+    first.query.calls = 99;
+    expect(world.getMetrics()!.query.calls).toBe(1);
+
+    world.step();
+    expect(world.getMetrics()!.query.cacheHits).toBe(1);
   });
 
   describe('getComponents', () => {

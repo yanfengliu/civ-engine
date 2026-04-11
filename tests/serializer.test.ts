@@ -122,12 +122,19 @@ describe('Serialization', () => {
   });
 
   it('round-trips deterministic random state', () => {
-    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 1234 });
+    const world = new World({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      seed: 1234,
+      detectInPlacePositionMutations: false,
+    });
     world.random();
     const snapshot = world.serialize();
     const next = world.random();
 
     expect(snapshot.config.seed).toBe(1234);
+    expect(snapshot.config.detectInPlacePositionMutations).toBe(false);
     const restored = World.deserialize(JSON.parse(JSON.stringify(snapshot)));
     expect(restored.random()).toBe(next);
   });
