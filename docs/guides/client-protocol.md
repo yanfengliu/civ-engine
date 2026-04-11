@@ -42,6 +42,8 @@ The adapter is **transport-agnostic**. You provide a `send` callback; the adapte
 The adapter uses only World's public API:
 - `serialize()` for snapshots
 - `submitWithResult()` for commands
+- `onCommandExecution()` for tick-time command execution
+- `onTickFailure()` for structured tick failures
 - `onDiff()`/`offDiff()` for streaming diffs
 - `getEvents()` for tick events
 
@@ -75,7 +77,7 @@ For long-lived clients, prefer command payloads that include `EntityRef` values 
 
 `connect()` does two things:
 1. Sends a `snapshot` message with the current full world state
-2. Subscribes to diffs, so `tick` messages are sent after each `step()`
+2. Subscribes to diffs, command execution results, and tick failures
 
 ```typescript
 adapter.connect();
@@ -144,6 +146,8 @@ Sent when a submitted command passed validation and was queued successfully.
 }
 ```
 
+This means the command entered the queue. It does not guarantee that the handler later completed successfully.
+
 ### `commandRejected`
 
 Sent when a submitted command fails validation, has a malformed command type, or names a command type with no registered handler.
@@ -160,6 +164,58 @@ Sent when a submitted command fails validation, has a malformed command type, or
     details: JsonValue | null,
     validatorIndex: number | null
   }
+}
+```
+
+### `commandExecuted`
+
+Sent when a queued client command finishes execution during a tick.
+
+```typescript
+{
+  protocolVersion: 1,
+  type: 'commandExecuted',
+  data: {
+    id: string,
+    commandType: string,
+    submissionSequence: number | null,
+    code: 'executed',
+    message: string,
+    details: JsonValue | null,
+    tick: number
+  }
+}
+```
+
+### `commandFailed`
+
+Sent when a queued client command reaches tick execution but fails, for example because the handler threw or the handler was missing at drain time.
+
+```typescript
+{
+  protocolVersion: 1,
+  type: 'commandFailed',
+  data: {
+    id: string,
+    commandType: string,
+    submissionSequence: number | null,
+    code: string,
+    message: string,
+    details: JsonValue | null,
+    tick: number
+  }
+}
+```
+
+### `tickFailed`
+
+Sent when the world reports a structured tick failure.
+
+```typescript
+{
+  protocolVersion: 1,
+  type: 'tickFailed',
+  data: TickFailure
 }
 ```
 
@@ -182,7 +238,7 @@ Submit a game command:
 }
 ```
 
-The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submitWithResult()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID plus a stable code and optional JSON details. If validation passes, the adapter sends `commandAccepted`.
+The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submitWithResult()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID plus a stable code and optional JSON details. If validation passes, the adapter sends `commandAccepted`, then later emits `commandExecuted` or `commandFailed` after the tick actually processes that queued command.
 
 Every server message includes `protocolVersion`. Client messages may also include `protocolVersion`, but the adapter currently treats that field as compatibility metadata rather than a hard gate.
 
@@ -336,7 +392,11 @@ adapter.handleMessage({
 
 ### Missing handlers
 
-`ClientAdapter` rejects commands whose `commandType` has no registered handler, using `world.hasCommandHandler()` before enqueueing the command. Direct calls to `world.submit()` or `world.submitWithResult()` still need matching handlers before the next tick or `World` will throw when processing the command.
+`ClientAdapter` rejects commands whose `commandType` has no registered handler, using `world.hasCommandHandler()` before enqueueing the command. Direct calls to `world.submit()` or `world.submitWithResult()` still need matching handlers before the next tick or `World` will fail when processing the command.
+
+### Runtime failures
+
+If a queued command later fails during execution, the adapter sends `commandFailed`, followed by `tickFailed` for the containing tick.
 
 ### Malformed messages
 

@@ -43,6 +43,7 @@ Active future work lives in focused plan and review documents rather than a gene
 
 ### Implemented
 
+- [AI Runtime Feedback Plan](reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
 - [AI Final Form Plan](reviews/done/AI_FINAL_FORM_PLAN.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
 - [AI-First Engine Plan](reviews/done/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
 - [RTS Engine Scale Plan](reviews/done/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed

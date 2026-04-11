@@ -238,4 +238,137 @@ describe('ClientAdapter', () => {
       ]);
     }
   });
+
+  it('streams commandExecuted for queued client commands after the tick runs', () => {
+    const { adapter, messages, world } = setup();
+    world.registerHandler('move', () => {});
+    adapter.connect();
+    messages.length = 0;
+
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-exec',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+    world.step();
+
+    expect(messages).toEqual([
+      {
+        protocolVersion: 1,
+        type: 'commandAccepted',
+        data: {
+          id: 'cmd-exec',
+          commandType: 'move',
+          code: 'accepted',
+          message: 'Queued command',
+        },
+      },
+      {
+        protocolVersion: 1,
+        type: 'commandExecuted',
+        data: {
+          id: 'cmd-exec',
+          commandType: 'move',
+          submissionSequence: 0,
+          code: 'executed',
+          message: 'Command handler completed',
+          details: null,
+          tick: 1,
+        },
+      },
+      {
+        protocolVersion: 1,
+        type: 'tick',
+        data: {
+          diff: world.getDiff()!,
+          events: [],
+        },
+      },
+    ]);
+  });
+
+  it('streams commandFailed and tickFailed when a client command crashes during execution', () => {
+    const { adapter, messages, world } = setup();
+    world.registerHandler('move', () => {
+      throw new Error('boom');
+    });
+    adapter.connect();
+    messages.length = 0;
+
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-fail',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(false);
+
+    expect(messages).toEqual([
+      {
+        protocolVersion: 1,
+        type: 'commandAccepted',
+        data: {
+          id: 'cmd-fail',
+          commandType: 'move',
+          code: 'accepted',
+          message: 'Queued command',
+        },
+      },
+      {
+        protocolVersion: 1,
+        type: 'commandFailed',
+        data: {
+          id: 'cmd-fail',
+          commandType: 'move',
+          submissionSequence: 0,
+          code: 'command_handler_threw',
+          message: 'boom',
+          details: {
+            error: {
+              name: 'Error',
+              message: 'boom',
+              stack: expect.any(String),
+            },
+          },
+          tick: 1,
+        },
+      },
+      {
+        protocolVersion: 1,
+        type: 'tickFailed',
+        data: {
+          schemaVersion: 1,
+          tick: 1,
+          phase: 'commands',
+          code: 'command_handler_threw',
+          message: 'boom',
+          subsystem: 'commands',
+          commandType: 'move',
+          submissionSequence: 0,
+          systemName: null,
+          details: {
+            commandType: 'move',
+            submissionSequence: 0,
+            error: {
+              name: 'Error',
+              message: 'boom',
+              stack: expect.any(String),
+            },
+          },
+          error: {
+            name: 'Error',
+            message: 'boom',
+            stack: expect.any(String),
+          },
+        },
+      },
+    ]);
+  });
 });

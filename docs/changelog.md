@@ -30,7 +30,11 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - `WorldDebugger` plus occupancy, visibility, and path queue probe helpers for headless inspection.
 - Machine-readable `WorldDebugger.issues` alongside compatibility `warnings`.
 - `world.submitWithResult()`, structured validator rejections, and command-result listeners.
+- `CommandExecutionResult`, `world.onCommandExecution()`, and submission-sequence tracking so queued commands can be matched to tick-time execution or failure.
 - `WorldHistoryRecorder` for short-horizon command outcomes and tick history capture.
+- `TickFailure`, `WorldStepResult`, `WorldTickFailureError`, `world.stepWithResult()`, and `world.getLastTickFailure()` for structured runtime failure handling without forcing AI loops through thrown exceptions.
+- `WorldDebugger.tickFailure` plus machine-readable runtime error issues derived from the latest failed tick.
+- `WorldHistoryRecorder` capture for command execution results and tick failures, plus range summaries that aggregate execution outcomes and failure codes.
 - Explicit AI contract version exports plus `schemaVersion` markers on command outcomes, debugger snapshots, history state, and scenario results.
 - `summarizeWorldHistoryRange()` for AI-facing tick-window summaries over command outcomes, changed entities, events, and issues.
 - `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results.
@@ -38,6 +42,7 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios and metrics output.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
 - `ClientAdapter` runtime message guarding, structured `commandAccepted`/`commandRejected` outcomes, and optional `onError` callback for send failures.
+- `ClientAdapter` streaming for `commandExecuted`, `commandFailed`, and `tickFailed` messages so remote agents can distinguish queued commands from executed commands and read structured tick failures.
 - Client protocol version markers on server message envelopes.
 - Tick-budget metrics plus `tick-budget-exceeded` debugger issues with slow-system context.
 - Root package export barrel, declaration build config, npm package metadata, and CI workflow.
@@ -54,6 +59,7 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - Added `docs/guides/debugging.md`.
 - Added `docs/reviews/done/AI_FIRST_ENGINE_PLAN.md`.
 - Added `docs/reviews/done/AI_FINAL_FORM_PLAN.md`.
+- Added `docs/reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md`.
 - Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
-- Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command outcomes, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.
+- Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command submission and execution outcomes, structured tick failures, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.

@@ -4,7 +4,7 @@ import type { PathRequestQueueStats } from './path-service.js';
 import type { VisibilityMap, VisibilityPlayerId } from './visibility-map.js';
 import type { TickDiff } from './diff.js';
 import type { EntityId, Position } from './types.js';
-import type { World, WorldMetrics } from './world.js';
+import type { TickFailure, World, WorldMetrics } from './world.js';
 import { WORLD_DEBUG_SCHEMA_VERSION } from './ai-contract.js';
 
 export type DebugSeverity = 'info' | 'warn' | 'error';
@@ -106,6 +106,7 @@ export interface WorldDebugSnapshot {
   spatial: DebugSpatialSummary;
   metrics: WorldMetrics | null;
   diff: DebugDiffSummary | null;
+  tickFailure: TickFailure | null;
   events: DebugEventSummary[];
   probes: Record<string, JsonValue>;
   issues: DebugIssue[];
@@ -141,6 +142,7 @@ export class WorldDebugger<
     const snapshot = this.world.serialize();
     const metrics = this.world.getMetrics();
     const diff = summarizeDiff(this.world.getDiff());
+    const tickFailure = this.world.getLastTickFailure();
     const events = summarizeEvents(this.world.getEvents());
     const entityCount = countAlive(snapshot.entities.alive);
     const components = summarizeComponents(snapshot.components);
@@ -154,7 +156,7 @@ export class WorldDebugger<
       snapshot.config.gridWidth,
     );
     const probes = this.captureProbes();
-    const issues = collectIssues(metrics, diff);
+    const issues = collectIssues(metrics, diff, tickFailure);
 
     const result: WorldDebugSnapshot = {
       schemaVersion: WORLD_DEBUG_SCHEMA_VERSION,
@@ -166,6 +168,7 @@ export class WorldDebugger<
       spatial,
       metrics,
       diff,
+      tickFailure,
       events,
       probes,
       issues,
@@ -379,8 +382,27 @@ function summarizeDiff(diff: TickDiff | null): DebugDiffSummary | null {
 function collectIssues(
   metrics: WorldMetrics | null,
   diff: DebugDiffSummary | null,
+  tickFailure: TickFailure | null,
 ): DebugIssue[] {
   const issues: DebugIssue[] = [];
+
+  if (tickFailure) {
+    issues.push({
+      severity: 'error',
+      code: tickFailure.code,
+      message: tickFailure.message,
+      subsystem: tickFailure.subsystem,
+      details: {
+        phase: tickFailure.phase,
+        commandType: tickFailure.commandType,
+        submissionSequence: tickFailure.submissionSequence,
+        systemName: tickFailure.systemName,
+        error: tickFailure.error,
+        details: tickFailure.details,
+      },
+      suggestedActions: suggestedActionsForTickFailure(tickFailure),
+    });
+  }
 
   if (diff && diff.overlappingEntityIds.length > 0) {
     issues.push({
@@ -456,6 +478,32 @@ function collectIssues(
   }
 
   return issues;
+}
+
+function suggestedActionsForTickFailure(
+  failure: TickFailure,
+): string[] {
+  switch (failure.phase) {
+    case 'commands':
+      return [
+        'Inspect the matching command submission and execution results before retrying the command.',
+        'Verify that the handler exists and that command payload invariants are checked in validators.',
+      ];
+    case 'systems':
+      return [
+        'Inspect the named system and the entities it touches in the recorded tick history.',
+        'Turn repeated assumptions into validators or explicit invariant checks with stable codes.',
+      ];
+    case 'listeners':
+      return [
+        'Inspect diff listeners or adapter callbacks rather than the simulation state itself.',
+        'Treat listener failures as integration bugs and retry after the observer is fixed.',
+      ];
+    default:
+      return [
+        'Inspect the phase-specific runtime failure details before retrying the scenario.',
+      ];
+  }
 }
 
 function sumCellClaims(

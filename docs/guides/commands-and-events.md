@@ -31,6 +31,13 @@ External code  ──submit()──▶  Validators  ──pass──▶  Queue  
                                   └──fail──▶  returns false
 ```
 
+There are now two distinct command feedback stages:
+
+1. submission time: `submitWithResult()` / `onCommandResult()`
+2. tick execution time: `onCommandExecution()`
+
+For AI or transport integrations, do not treat queue acceptance as proof that the command logic succeeded.
+
 ## Defining Command Types
 
 Define command types as a TypeScript record mapping command names to their payload types:
@@ -135,6 +142,16 @@ world.onCommandResult((result) => {
 });
 ```
 
+### Observing command execution
+
+Queued commands may still fail later if the handler is missing at drain time or throws during execution. Subscribe to tick-time execution results when that distinction matters:
+
+```typescript
+world.onCommandExecution((result) => {
+  console.log(result.executed, result.code, result.tick);
+});
+```
+
 ## Handlers
 
 Handlers execute the command logic at the start of the next tick. Exactly one handler per command type.
@@ -153,10 +170,12 @@ world.registerHandler('moveUnit', (data, w) => {
   world.registerHandler('moveUnit', handler2); // Error: Handler already registered
   ```
 
-- **Missing handler** — if a command is queued but no handler is registered when the tick processes it, an error is thrown:
+- **Missing handler** — if a command is queued but no handler is registered when the tick processes it, `world.stepWithResult()` returns a structured `TickFailure` and `world.step()` throws `WorldTickFailureError`:
   ```typescript
   world.submit('moveUnit', data); // queued
-  world.step(); // Error: No handler registered for command 'moveUnit'
+  const step = world.stepWithResult();
+  // step.ok === false
+  // step.failure?.code === 'missing_handler'
   ```
 
 - **Handlers can do anything** — create entities, destroy entities, emit events, modify components, etc.
@@ -177,6 +196,8 @@ Tick N+1:
   processCommands()  ← system A's command is processed here
   ...
 ```
+
+For non-throwing AI loops, pair command submission with `stepWithResult()` so runtime failures stay machine-readable.
 
 ## Events Overview
 

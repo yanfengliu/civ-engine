@@ -13,8 +13,8 @@ describe('CommandQueue', () => {
     queue.push('attack', { targetId: 5 });
     const commands = queue.drain();
     expect(commands).toEqual([
-      { type: 'move', data: { x: 1, y: 2 } },
-      { type: 'attack', data: { targetId: 5 } },
+      { type: 'move', data: { x: 1, y: 2 }, submissionSequence: null },
+      { type: 'attack', data: { targetId: 5 }, submissionSequence: null },
     ]);
   });
 

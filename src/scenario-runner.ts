@@ -25,7 +25,7 @@ type ScenarioEvent<
 export interface ScenarioFailure {
   code: string;
   message: string;
-  source?: 'setup' | 'run' | 'stepUntil' | 'check';
+  source?: 'setup' | 'run' | 'stepUntil' | 'check' | 'tick';
   details?: JsonValue;
 }
 
@@ -242,7 +242,10 @@ function createScenarioContext<
     step: (count = 1) => {
       assertValidStepCount(count);
       for (let index = 0; index < count; index++) {
-        world.step();
+        const result = world.stepWithResult();
+        if (!result.ok && result.failure) {
+          throw new ScenarioTickFailure(result.failure);
+        }
       }
       return context.capture();
     },
@@ -282,7 +285,25 @@ function stepUntil<
 
   let steps = 0;
   while (steps < maxTicks) {
-    context.world.step();
+    const step = context.world.stepWithResult();
+    if (!step.ok) {
+      return {
+        completed: false,
+        steps,
+        tick: context.world.tick,
+        failure: createScenarioFailure(
+          step.failure?.code ?? 'scenario_tick_failed',
+          step.failure?.message ?? 'Scenario tick failed',
+          step.failure
+            ? (cloneJsonValue(
+                step.failure,
+                'scenario tick failure',
+              ) as unknown as JsonValue)
+            : undefined,
+          'tick',
+        ),
+      };
+    }
     steps++;
     if (predicate(context)) {
       return {
@@ -402,6 +423,17 @@ function failureFromError(
   code: string,
   source: ScenarioFailure['source'],
 ): ScenarioFailure {
+  if (error instanceof ScenarioTickFailure) {
+    return createScenarioFailure(
+      error.failure.code,
+      error.failure.message,
+      cloneJsonValue(
+        error.failure,
+        'scenario tick failure',
+      ) as unknown as JsonValue,
+      'tick',
+    );
+  }
   if (error instanceof Error) {
     return createScenarioFailure(code, error.message, {
       name: error.name,
@@ -424,6 +456,16 @@ function normalizeCode(name: string): string {
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
     .slice(0, 64);
+}
+
+class ScenarioTickFailure extends Error {
+  readonly failure: import('./world.js').TickFailure;
+
+  constructor(failure: import('./world.js').TickFailure) {
+    super(failure.message);
+    this.name = 'ScenarioTickFailure';
+    this.failure = failure;
+  }
 }
 
 function cloneJsonValue<T>(value: T, label: string): T {

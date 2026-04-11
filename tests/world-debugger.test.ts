@@ -124,6 +124,7 @@ describe('WorldDebugger', () => {
     });
     expect(debuggerSnapshot.metrics?.tick).toBe(1);
     expect(debuggerSnapshot.diff?.tick).toBe(1);
+    expect(debuggerSnapshot.tickFailure).toBeNull();
     expect(debuggerSnapshot.issues).toEqual([]);
     expect(debuggerSnapshot.warnings).toEqual([]);
   });
@@ -158,6 +159,7 @@ describe('WorldDebugger', () => {
     const debuggerSnapshot = new WorldDebugger({ world }).capture();
 
     expect(debuggerSnapshot.diff?.overlappingEntityIds).toEqual([entity]);
+    expect(debuggerSnapshot.tickFailure).toBeNull();
     expect(debuggerSnapshot.issues).toEqual([
       {
         severity: 'warn',
@@ -228,6 +230,38 @@ describe('WorldDebugger', () => {
           },
         ],
       },
+    });
+  });
+
+  it('surfaces structured tick failures as error issues', () => {
+    type CrashCommands = { explode: { id: number } };
+    const world = new World<Record<string, never>, CrashCommands>({
+      gridWidth: 8,
+      gridHeight: 8,
+      tps: 10,
+      detectInPlacePositionMutations: false,
+    });
+    world.registerHandler('explode', () => {
+      throw new Error('boom');
+    });
+
+    world.submitWithResult('explode', { id: 1 });
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(false);
+
+    const debuggerSnapshot = new WorldDebugger({ world }).capture();
+
+    expect(debuggerSnapshot.tickFailure).toMatchObject({
+      phase: 'commands',
+      code: 'command_handler_threw',
+      message: 'boom',
+      subsystem: 'commands',
+      commandType: 'explode',
+    });
+    expect(debuggerSnapshot.issues[0]).toMatchObject({
+      severity: 'error',
+      code: 'command_handler_threw',
+      subsystem: 'commands',
     });
   });
 });

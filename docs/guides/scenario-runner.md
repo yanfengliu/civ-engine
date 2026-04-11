@@ -108,6 +108,8 @@ The scenario context exposes:
 
 `step(count?)` advances the world and returns a fresh capture of scenario state.
 
+Internally it uses `world.stepWithResult()`. If a tick fails, the runner converts that runtime failure into a structured scenario failure instead of leaking a raw exception into the AI loop.
+
 ### `stepUntil`
 
 Use `stepUntil()` when a scenario should stop on a condition or fail after a bounded number of ticks:
@@ -139,7 +141,7 @@ Each check returns:
 - `false` for generic failure
 - `ctx.fail(...)` for structured failure
 
-Check failures are reported in `result.checks`. They do not overwrite `result.failure`, which is reserved for runner-level failures returned from `run()` or raised by `setup()` / `run()`.
+Check failures are reported in `result.checks`. They do not overwrite `result.failure`, which is reserved for runner-level failures returned from `run()` or raised by `setup()` / `run()`. Tick failures are reported through `result.failure` with `source: 'tick'`.
 
 ## Result Shape
 
@@ -156,6 +158,8 @@ Check failures are reported in `result.checks`. They do not overwrite `result.fa
 - `diff`
 - `events`
 - `issues`
+
+`history` includes command submissions, command executions, and structured tick failures, so the runner result is enough for a fast closed-loop diagnosis without a separate replay system.
 
 This gives an agent a single object it can inspect after each experiment run.
 

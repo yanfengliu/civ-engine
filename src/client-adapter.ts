@@ -1,6 +1,10 @@
 import type { WorldSnapshot } from './serializer.js';
 import type { TickDiff } from './diff.js';
-import type { World } from './world.js';
+import type {
+  CommandExecutionResult,
+  TickFailure,
+  World,
+} from './world.js';
 import type { JsonValue } from './json.js';
 import { CLIENT_PROTOCOL_VERSION } from './ai-contract.js';
 
@@ -41,6 +45,37 @@ export type ServerMessage<TEventMap> =
         details: JsonValue | null;
         validatorIndex: number | null;
       };
+    }
+  | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
+      type: 'commandExecuted';
+      data: {
+        id: string;
+        commandType: string;
+        submissionSequence: number | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        tick: number;
+      };
+    }
+  | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
+      type: 'commandFailed';
+      data: {
+        id: string;
+        commandType: string;
+        submissionSequence: number | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        tick: number;
+      };
+    }
+  | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
+      type: 'tickFailed';
+      data: TickFailure;
     };
 
 export type ClientMessage<TCommandMap> =
@@ -64,6 +99,11 @@ export class ClientAdapter<
   private onError?: (error: unknown) => void;
   private connected = false;
   private diffListener: ((diff: TickDiff) => void) | null = null;
+  private commandExecutionListener:
+    | ((result: CommandExecutionResult<keyof TCommandMap>) => void)
+    | null = null;
+  private tickFailureListener: ((failure: TickFailure) => void) | null = null;
+  private clientCommandIds = new Map<number, string>();
 
   constructor(config: {
     world: World<TEventMap, TCommandMap>;
@@ -100,6 +140,37 @@ export class ClientAdapter<
       });
     };
     this.world.onDiff(this.diffListener);
+
+    this.commandExecutionListener = (result) => {
+      if (result.submissionSequence === null) return;
+      const id = this.clientCommandIds.get(result.submissionSequence);
+      if (!id) return;
+
+      this.safeSend({
+        protocolVersion: CLIENT_PROTOCOL_VERSION,
+        type: result.executed ? 'commandExecuted' : 'commandFailed',
+        data: {
+          id,
+          commandType: String(result.commandType),
+          submissionSequence: result.submissionSequence,
+          code: result.code,
+          message: result.message,
+          details: result.details,
+          tick: result.tick,
+        },
+      });
+      this.clientCommandIds.delete(result.submissionSequence);
+    };
+    this.world.onCommandExecution(this.commandExecutionListener);
+
+    this.tickFailureListener = (failure) => {
+      this.safeSend({
+        protocolVersion: CLIENT_PROTOCOL_VERSION,
+        type: 'tickFailed',
+        data: failure,
+      });
+    };
+    this.world.onTickFailure(this.tickFailureListener);
   }
 
   disconnect(): void {
@@ -109,6 +180,15 @@ export class ClientAdapter<
       this.world.offDiff(this.diffListener);
       this.diffListener = null;
     }
+    if (this.commandExecutionListener) {
+      this.world.offCommandExecution(this.commandExecutionListener);
+      this.commandExecutionListener = null;
+    }
+    if (this.tickFailureListener) {
+      this.world.offTickFailure(this.tickFailureListener);
+      this.tickFailureListener = null;
+    }
+    this.clientCommandIds.clear();
   }
 
   handleMessage(message: ClientMessage<TCommandMap> | unknown): void {
@@ -181,6 +261,7 @@ export class ClientAdapter<
             message: result.message,
           },
         });
+        this.clientCommandIds.set(result.sequence, id);
         break;
       }
       case 'requestSnapshot':

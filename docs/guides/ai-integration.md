@@ -36,6 +36,8 @@ if (!result.accepted) {
 
 `submit()` still exists, but it throws away the structured context that an autonomous agent needs.
 
+Submission is only the first half of the command lifecycle. `accepted` means the command was queued, not that its handler ran successfully.
+
 Validator rejections can be simple booleans or structured objects:
 
 ```typescript
@@ -51,6 +53,39 @@ world.registerValidator('moveUnit', (data, w) => {
 });
 ```
 
+## Command Execution
+
+Use `world.onCommandExecution()` when the agent needs to know whether queued commands actually ran:
+
+```typescript
+world.onCommandExecution((result) => {
+  console.log(result.executed, result.code, result.tick);
+});
+```
+
+This closes the gap between:
+
+- `submitWithResult()` -> queue-time validation outcome
+- `onCommandExecution()` -> tick-time execution outcome
+
+For AI loops, do not infer execution success from diffs alone when an explicit execution result exists.
+
+## Tick Failure Surface
+
+Use `world.stepWithResult()` instead of `world.step()` when the agent needs a non-throwing tick loop:
+
+```typescript
+const step = world.stepWithResult();
+
+if (!step.ok) {
+  console.log(step.failure?.code, step.failure?.phase, step.failure?.subsystem);
+}
+```
+
+`step()` remains available, but it throws `WorldTickFailureError` on runtime failure. `stepWithResult()` is the preferred AI-facing surface because it returns `WorldStepResult` directly.
+
+The most recent runtime failure is also available through `world.getLastTickFailure()`.
+
 ## Transport Protocol
 
 When the agent is outside the process, use `ClientAdapter`.
@@ -61,8 +96,13 @@ The important messages are:
 - `tick`
 - `commandAccepted`
 - `commandRejected`
+- `commandExecuted`
+- `commandFailed`
+- `tickFailed`
 
-`commandRejected` includes `code`, `message`, `details`, and `validatorIndex`. That gives an agent enough structure to decide whether to retry, resync, or change its behavior.
+`commandRejected` includes `code`, `message`, `details`, and `validatorIndex`. That tells the agent why a command never entered the queue.
+
+`commandExecuted` and `commandFailed` report tick-time command outcomes. `tickFailed` carries the structured `TickFailure` for the failed tick.
 
 Server messages also include `protocolVersion`, so a remote agent can verify the transport contract on every envelope.
 
@@ -128,7 +168,9 @@ history.connect();
 The recorder keeps:
 
 - the optional initial snapshot
-- recent command outcomes
+- recent command submission outcomes
+- recent command execution outcomes
+- recent tick failures
 - recent tick diffs
 - events
 - metrics
@@ -146,10 +188,10 @@ For an autonomous agent, the basic loop should be:
 2. If `result.failure` is present, branch on `failure.code`
 3. If checks failed, inspect `result.checks`
 4. Inspect `result.issues`
-5. Inspect `result.history`
+5. Inspect `result.history.executions` and `result.history.failures`
 6. Use `summarizeWorldHistoryRange(result.history, { startTick, endTick })` when the cause is not obvious but the agent needs a shorter machine-readable explanation
 7. Inspect `result.debug.metrics` for `tick-budget-exceeded` and other engine-native issues before assuming the logic is wrong
-8. Fall back to direct `submitWithResult()` plus manual stepping only for interactive or exploratory workflows
+8. Fall back to direct `submitWithResult()` plus `stepWithResult()` only for interactive or exploratory workflows
 9. Change code or commands
 10. Repeat
 

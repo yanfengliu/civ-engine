@@ -191,6 +191,89 @@ interface CommandSubmissionResult<TCommandType extends PropertyKey = string> {
 
 Structured outcome returned by `world.submitWithResult()` and emitted through `world.onCommandResult()`.
 
+### `CommandExecutionResult<TCommandType>`
+
+```typescript
+// src/world.ts
+interface CommandExecutionResult<TCommandType extends PropertyKey = string> {
+  schemaVersion: number;
+  submissionSequence: number | null;
+  executed: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+}
+```
+
+Structured outcome emitted through `world.onCommandExecution()` after a queued command is processed on a tick.
+
+### `TickFailurePhase`
+
+```typescript
+// src/world.ts
+type TickFailurePhase =
+  | 'commands'
+  | 'spatialSync'
+  | 'systems'
+  | 'resources'
+  | 'diff'
+  | 'listeners';
+```
+
+Named phases used by structured tick failures.
+
+### `TickFailure`
+
+```typescript
+// src/world.ts
+interface TickFailure {
+  schemaVersion: number;
+  tick: number;
+  phase: TickFailurePhase;
+  code: string;
+  message: string;
+  subsystem: string;
+  commandType: string | null;
+  submissionSequence: number | null;
+  systemName: string | null;
+  details: JsonValue | null;
+  error: {
+    name: string;
+    message: string;
+    stack: string | null;
+  } | null;
+}
+```
+
+Structured runtime failure for one tick. Returned by `world.stepWithResult()`, emitted through `world.onTickFailure()`, exposed through `world.getLastTickFailure()`, and forwarded by `ClientAdapter`.
+
+### `WorldStepResult`
+
+```typescript
+// src/world.ts
+interface WorldStepResult {
+  schemaVersion: number;
+  ok: boolean;
+  tick: number;
+  failure: TickFailure | null;
+}
+```
+
+Structured result returned by `world.stepWithResult()`.
+
+### `WorldTickFailureError`
+
+```typescript
+// src/world.ts
+class WorldTickFailureError extends Error {
+  readonly failure: TickFailure;
+}
+```
+
+Compatibility error thrown by `world.step()` when the tick fails at runtime.
+
 ### `WorldSnapshot`
 
 ```typescript
@@ -601,6 +684,37 @@ type ServerMessage<TEventMap> =
         details: JsonValue | null;
         validatorIndex: number | null;
       };
+    }
+  | {
+      protocolVersion: number;
+      type: 'commandExecuted';
+      data: {
+        id: string;
+        commandType: string;
+        submissionSequence: number | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        tick: number;
+      };
+    }
+  | {
+      protocolVersion: number;
+      type: 'commandFailed';
+      data: {
+        id: string;
+        commandType: string;
+        submissionSequence: number | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        tick: number;
+      };
+    }
+  | {
+      protocolVersion: number;
+      type: 'tickFailed';
+      data: TickFailure;
     };
 ```
 
@@ -612,6 +726,9 @@ Messages sent from server to client:
 | `tick` | After each `step()` while connected | `protocolVersion` + `TickDiff` + events from the tick |
 | `commandAccepted` | When a submitted command passed validation and was queued | `protocolVersion` + command ID + command type + accepted message |
 | `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | `protocolVersion` + command ID + command type + stable code/message/details |
+| `commandExecuted` | When a queued client command completes during a tick | `protocolVersion` + command ID + command type + submission sequence + execution code/message/details + tick |
+| `commandFailed` | When a queued client command fails during a tick | `protocolVersion` + command ID + command type + submission sequence + failure code/message/details + tick |
+| `tickFailed` | When the world reports a structured tick failure | `protocolVersion` + `TickFailure` |
 
 ### `ClientMessage<TCommandMap>`
 
@@ -936,6 +1053,16 @@ Each tick executes in this order:
 world.step(); // always executes, even when paused
 ```
 
+**Throws:** `WorldTickFailureError` if the tick fails at runtime.
+
+#### `stepWithResult()`
+
+```typescript
+stepWithResult(): WorldStepResult
+```
+
+Advances the simulation by exactly one tick and returns a structured success/failure result instead of throwing on runtime failure. This is the preferred stepping API for AI loops and remote harnesses.
+
 #### `start()`
 
 ```typescript
@@ -1117,7 +1244,7 @@ Sets the handler for a command type. Exactly one handler per type. The handler r
 
 **Throws:** `Error` if a handler is already registered for this command type.
 
-When a command is processed but no handler is registered, an `Error` is thrown. `ClientAdapter` checks this ahead of time and rejects unhandled client commands before they enter the queue.
+When a command is processed but no handler is registered, the tick fails with a structured `TickFailure`. `world.step()` surfaces that failure as `WorldTickFailureError`. `ClientAdapter` checks this ahead of time and rejects unhandled client commands before they enter the queue.
 
 ```typescript
 world.registerHandler('moveUnit', (data, w) => {
@@ -1152,6 +1279,42 @@ offCommandResult(
 ```
 
 Removes a command-result listener.
+
+#### `onCommandExecution(listener)`
+
+```typescript
+onCommandExecution(
+  listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+): void
+```
+
+Subscribes to tick-time command execution results.
+
+#### `offCommandExecution(listener)`
+
+```typescript
+offCommandExecution(
+  listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+): void
+```
+
+Removes a command-execution listener.
+
+#### `onTickFailure(listener)`
+
+```typescript
+onTickFailure(listener: (failure: TickFailure) => void): void
+```
+
+Subscribes to structured tick failures.
+
+#### `offTickFailure(listener)`
+
+```typescript
+offTickFailure(listener: (failure: TickFailure) => void): void
+```
+
+Removes a tick-failure listener.
 
 ### Events
 
@@ -1471,6 +1634,14 @@ world.step();
 const metrics = world.getMetrics();
 console.log(metrics?.query.cacheHits, metrics?.durationMs.total);
 ```
+
+#### `getLastTickFailure()`
+
+```typescript
+getLastTickFailure(): TickFailure | null
+```
+
+Returns the most recent structured tick failure, or `null` if no tick has failed yet.
 
 #### `onDiff(fn)`
 
@@ -2560,7 +2731,7 @@ new ClientAdapter<TEventMap, TCommandMap>(config: {
 connect(): void
 ```
 
-Starts streaming. Immediately sends a `snapshot` message with the full world state, then subscribes to diffs so a `tick` message is sent after each step. No-op if already connected.
+Starts streaming. Immediately sends a `snapshot` message with the full world state, then subscribes to diffs, command execution results, and tick failures. No-op if already connected.
 
 #### `disconnect()`
 
@@ -2580,7 +2751,7 @@ Processes an incoming client message:
 
 | Message type | Behavior |
 |---|---|
-| `command` | Validates the envelope, rejects unhandled command types, then calls `world.submitWithResult()`. Sends `commandAccepted` on success or `commandRejected` with structured error fields on failure |
+| `command` | Validates the envelope, rejects unhandled command types, then calls `world.submitWithResult()`. Sends `commandAccepted` on success or `commandRejected` with structured error fields on failure. If the command was queued, later streams `commandExecuted` or `commandFailed` after tick processing |
 | `requestSnapshot` | Sends a `snapshot` message with the current world state |
 
 Malformed messages without a usable `type` are ignored. Malformed command envelopes with an ID are rejected when the adapter can safely identify which command to reject.
@@ -2792,7 +2963,7 @@ import {
 interface ScenarioFailure {
   code: string;
   message: string;
-  source?: 'setup' | 'run' | 'stepUntil' | 'check';
+  source?: 'setup' | 'run' | 'stepUntil' | 'check' | 'tick';
   details?: JsonValue;
 }
 ```
@@ -2902,6 +3073,7 @@ Runs a scenario and returns the final structured result.
 
 - The runner creates a `WorldHistoryRecorder` and clears it after `setup()`, so the recorded initial snapshot reflects the prepared scenario state.
 - `submit()` inside the scenario context calls `world.submitWithResult()`.
+- `step()` inside the scenario context uses `world.stepWithResult()`, so runtime tick failures are converted into structured scenario failures.
 - `stepUntil()` returns a structured timeout failure instead of forcing the caller to throw.
 - Exceptions thrown by `setup()`, `run()`, or checks are converted into structured runner failures when possible.
 
@@ -2942,6 +3114,7 @@ connect(): void
 ```
 
 Starts recording world diffs and command outcomes. Optionally stores an initial snapshot.
+Starts recording world diffs, command submission outcomes, command execution outcomes, and tick failures. Optionally stores an initial snapshot.
 
 #### `disconnect()`
 
@@ -2975,6 +3148,22 @@ getCommandHistory(): Array<CommandSubmissionResult<keyof TCommandMap>>
 
 Returns cloned recent command outcomes.
 
+#### `getCommandExecutionHistory()`
+
+```typescript
+getCommandExecutionHistory(): Array<CommandExecutionResult<keyof TCommandMap>>
+```
+
+Returns cloned recent command execution outcomes.
+
+#### `getTickFailureHistory()`
+
+```typescript
+getTickFailureHistory(): TickFailure[]
+```
+
+Returns cloned recent tick failures.
+
 #### `findTick(tick)`
 
 ```typescript
@@ -2989,7 +3178,7 @@ Returns one recorded tick entry or `null`.
 getState(): WorldHistoryState<TEventMap, TCommandMap, TDebug>
 ```
 
-Returns the full recorder state: initial snapshot, recent ticks, and recent command outcomes.
+Returns the full recorder state: initial snapshot, recent ticks, recent command submission outcomes, recent command execution outcomes, and recent tick failures.
 The returned `WorldHistoryState` includes `schemaVersion`.
 
 #### `summarizeWorldHistoryRange(state, options?)`
@@ -3001,7 +3190,7 @@ summarizeWorldHistoryRange<TEventMap, TCommandMap>(
 ): WorldHistoryRangeSummary | null
 ```
 
-Aggregates a short tick window into one machine-readable summary covering changed entity IDs, command outcomes, events, diff totals, and debugger issue counts.
+Aggregates a short tick window into one machine-readable summary covering changed entity IDs, command submission outcomes, command execution outcomes, tick-failure codes, events, diff totals, and debugger issue counts.
 
 ---
 
@@ -3059,6 +3248,7 @@ Returns a structured debug snapshot containing:
 - current event counts
 - `world.getMetrics()` output
 - last diff summary
+- `world.getLastTickFailure()` output
 - machine-readable `issues`, including tick-budget diagnostics and diff hazards
 - compatibility `warnings` derived from those issues
 - custom probe payloads

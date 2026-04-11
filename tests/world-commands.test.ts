@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { World } from '../src/world.js';
+import { World, WorldTickFailureError } from '../src/world.js';
 
 describe('World commands', () => {
   it('submit with no validators queues and returns true', () => {
@@ -123,6 +123,34 @@ describe('World commands', () => {
     ]);
   });
 
+  it('emits structured command execution results after handlers run', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const executions: unknown[] = [];
+    world.registerHandler('move', () => {});
+    world.onCommandExecution((result) => executions.push(result));
+
+    const submission = world.submitWithResult('move', { x: 1, y: 2 });
+    world.step();
+
+    expect(executions).toEqual([
+      {
+        schemaVersion: 1,
+        submissionSequence: submission.sequence,
+        executed: true,
+        commandType: 'move',
+        code: 'executed',
+        message: 'Command handler completed',
+        details: null,
+        tick: 1,
+      },
+    ]);
+  });
+
   it('all validators must pass for submit to accept', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({
@@ -202,9 +230,32 @@ describe('World commands', () => {
       tps: 60,
     });
     world.submit('move', { x: 1 });
-    expect(() => world.step()).toThrow(
-      "No handler registered for command 'move'",
-    );
+    expect(() => world.step()).toThrow(WorldTickFailureError);
+  });
+
+  it('stepWithResult returns structured failure instead of throwing', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const submission = world.submitWithResult('move', { x: 1 });
+
+    const result = world.stepWithResult();
+
+    expect(result.ok).toBe(false);
+    expect(result.failure).toMatchObject({
+      schemaVersion: 1,
+      tick: 1,
+      phase: 'commands',
+      code: 'missing_handler',
+      message: "No handler registered for command 'move'",
+      subsystem: 'commands',
+      commandType: 'move',
+      submissionSequence: submission.sequence,
+    });
+    expect(world.getLastTickFailure()).toEqual(result.failure);
   });
 
   it('commands submitted by a system during tick are processed next tick', () => {

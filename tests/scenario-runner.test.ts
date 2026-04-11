@@ -85,6 +85,19 @@ describe('runScenario', () => {
         validatorIndex: null,
       },
     ]);
+    expect(result.history.executions).toEqual([
+      {
+        schemaVersion: 1,
+        submissionSequence: 0,
+        executed: true,
+        commandType: 'move',
+        code: 'executed',
+        message: 'Command handler completed',
+        details: null,
+        tick: 1,
+      },
+    ]);
+    expect(result.history.failures).toEqual([]);
     expect(result.history.ticks).toHaveLength(1);
     expect(result.history.ticks[0].tick).toBe(1);
     expect(result.events).toEqual([
@@ -168,5 +181,32 @@ describe('runScenario', () => {
         },
       },
     ]);
+  });
+
+  it('converts tick failures into structured scenario failures', () => {
+    const world = createWorld();
+
+    const result = runScenario({
+      name: 'handler-crash',
+      world,
+      setup: (ctx) => {
+        ctx.world.registerHandler('move', () => {
+          throw new Error('handler crashed');
+        });
+      },
+      run: (ctx) => {
+        ctx.submit('move', { entity: 1, x: 1, y: 1 });
+        ctx.step();
+      },
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.failure).toMatchObject({
+      code: 'command_handler_threw',
+      message: 'handler crashed',
+      source: 'tick',
+    });
+    expect(result.history.executions).toHaveLength(1);
+    expect(result.history.failures).toHaveLength(1);
   });
 });

@@ -25,7 +25,7 @@ Requires Node.js 18+.
 - **[Getting Started](docs/tutorials/getting-started.md)** — Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
-- **[AI Integration](docs/guides/ai-integration.md)** - Structured command outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
+- **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
@@ -64,7 +64,7 @@ world.step();
 | **Entities & Components**   | Create entities (numeric IDs), attach typed data objects by key                                                       |
 | **Systems**                 | Pure functions `(world) => void` that run each tick in order                                                          |
 | **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries                                                        |
-| **Commands**                | Typed input buffer with validators, structured outcomes, and handlers — how AI agents send instructions               |
+| **Commands**                | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers — how AI agents send instructions |
 | **Events**                  | Typed pub/sub — how systems communicate and how observers read what happened                                          |
 | **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
 | **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
@@ -73,13 +73,13 @@ world.step();
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
-| **Debugging**               | `WorldDebugger`, machine-readable issues, `WorldHistoryRecorder`, range summaries, and probes for headless inspection |
+| **Debugging**               | `WorldDebugger`, machine-readable issues, structured tick failures, `WorldHistoryRecorder`, range summaries, and probes for headless inspection |
 | **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
 | **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
 | **State Diffs**             | Per-tick change sets: what entities/components/resources changed                                                      |
-| **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` outcomes |
+| **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` plus `commandExecuted`/`commandFailed`/`tickFailed` outcomes |
 
 ## Architecture
 
@@ -95,6 +95,8 @@ World.step()
   -> update metrics       (timings, query counts, spatial sync counts)
   -> tick++
 ```
+
+Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
@@ -181,6 +183,7 @@ docs/
 | **Systems & Simulation**                       |                               |                                                                         |
 | `registerSystem(fnOrConfig)`                   | `void`                        | Add a system to the phase-ordered pipeline                              |
 | `step()`                                       | `void`                        | Advance one tick (deterministic, ignores pause/speed)                   |
+| `stepWithResult()`                             | `WorldStepResult`             | Advance one tick and return structured success/failure                  |
 | `start()`                                      | `void`                        | Begin real-time loop                                                    |
 | `stop()`                                       | `void`                        | Stop real-time loop                                                     |
 | **Speed Control**                              |                               |                                                                         |
@@ -197,6 +200,10 @@ docs/
 | `hasCommandHandler(type)`                      | `boolean`                     | Check whether a command handler is registered                           |
 | `onCommandResult(fn)`                          | `void`                        | Subscribe to accepted/rejected command submission results                |
 | `offCommandResult(fn)`                         | `void`                        | Unsubscribe from command submission results                              |
+| `onCommandExecution(fn)`                       | `void`                        | Subscribe to tick-time command execution results                         |
+| `offCommandExecution(fn)`                      | `void`                        | Unsubscribe from command execution results                               |
+| `onTickFailure(fn)`                            | `void`                        | Subscribe to structured tick failures                                    |
+| `offTickFailure(fn)`                           | `void`                        | Unsubscribe from structured tick failures                                |
 | **Events**                                     |                               |                                                                         |
 | `emit(type, data)`                             | `void`                        | Emit an event (from systems)                                            |
 | `on(type, listener)`                           | `void`                        | Subscribe to event type                                                 |
@@ -224,6 +231,7 @@ docs/
 | `World.deserialize(snapshot, systems?)`        | `World`                       | Restore world from snapshot (static)                                    |
 | `getDiff()`                                    | `TickDiff \| null`            | Get last tick's diff                                                    |
 | `getMetrics()`                                 | `WorldMetrics \| null`        | Get last tick's simulation budget, command, timing, query, and spatial metrics |
+| `getLastTickFailure()`                         | `TickFailure \| null`         | Get the most recent structured tick failure                             |
 | `onDiff(fn)`                                   | `void`                        | Subscribe to per-tick diffs                                             |
 | `offDiff(fn)`                                  | `void`                        | Unsubscribe from diffs                                                  |
 | **Entity Lifecycle**                           |                               |                                                                         |
@@ -246,7 +254,7 @@ docs/
 | `random.ts`         | `DeterministicRandom`, `RandomState`                                   | Engine PRNG and serializable RNG state                      |
 | `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector`     | Projection boundary for renderer-facing snapshots and diffs |
 | `ai-contract.ts` | `getAiContractVersions`, schema/protocol version constants                     | Stable version markers for machine-facing contracts          |
-| `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`, `summarizeWorldHistoryRange` | Short-horizon history capture plus AI-facing range summaries |
+| `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`, `summarizeWorldHistoryRange` | Short-horizon history capture including submissions, executions, failures, and AI-facing range summaries |
 | `scenario-runner.ts` | `runScenario`, `ScenarioResult`, `ScenarioContext`, `ScenarioCheck`  | Headless setup/run/check harness for AI and tests           |
 | `cellular.ts`       | `createCellGrid(...)`, `stepCellGrid(...)`                             | Cellular automata                                           |
 | `map-gen.ts`        | `createTileGrid(world)`                                                | Bulk tile entity creation                                   |
@@ -254,8 +262,8 @@ docs/
 | `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer`                              | Resource system types                                       |
 | `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState`                                  | Per-player visible/explored cell tracking                   |
 | `behavior-tree.ts`  | `createBehaviorTree`, `createBTState`, `NodeStatus`                    | Generic behavior tree framework                             |
-| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent`         | Transport-agnostic client protocol with structured outcomes |
-| `world-debugger.ts` | `WorldDebugger`, probe helpers                                         | Structured world/debug snapshots with machine-readable issues |
+| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent`         | Transport-agnostic client protocol with queue-time and tick-time outcomes |
+| `world-debugger.ts` | `WorldDebugger`, probe helpers                                         | Structured world/debug snapshots with machine-readable issues and tick failures |
 
 ### SpatialGrid Methods
 

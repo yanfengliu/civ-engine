@@ -3,7 +3,9 @@ import type { TickDiff } from './diff.js';
 import type { WorldSnapshot } from './serializer.js';
 import type { EntityId } from './types.js';
 import type {
+  CommandExecutionResult,
   CommandSubmissionResult,
+  TickFailure,
   World,
   WorldMetrics,
 } from './world.js';
@@ -39,6 +41,8 @@ export interface WorldHistoryState<
   initialSnapshot: WorldSnapshot | null;
   ticks: Array<WorldHistoryTick<TEventMap, TDebug>>;
   commands: Array<CommandSubmissionResult<keyof TCommandMap>>;
+  executions: Array<CommandExecutionResult<keyof TCommandMap>>;
+  failures: TickFailure[];
 }
 
 export interface WorldHistoryIssueSummary {
@@ -60,8 +64,15 @@ export interface WorldHistoryRangeSummary {
     rejected: number;
     codes: Array<[string, number]>;
   };
+  executionOutcomes: {
+    total: number;
+    executed: number;
+    failed: number;
+    codes: Array<[string, number]>;
+  };
   events: Array<[string, number]>;
   issues: WorldHistoryIssueSummary[];
+  failures: Array<[string, number]>;
   diff: {
     created: number;
     destroyed: number;
@@ -87,12 +98,20 @@ export class WorldHistoryRecorder<
   private readonly commandEntries: Array<
     CommandSubmissionResult<keyof TCommandMap>
   > = [];
+  private readonly executionEntries: Array<
+    CommandExecutionResult<keyof TCommandMap>
+  > = [];
+  private readonly failureEntries: TickFailure[] = [];
   private initialSnapshot: WorldSnapshot | null = null;
   private connected = false;
   private readonly diffListener: (diff: TickDiff) => void;
   private readonly commandListener: (
     result: CommandSubmissionResult<keyof TCommandMap>,
   ) => void;
+  private readonly executionListener: (
+    result: CommandExecutionResult<keyof TCommandMap>,
+  ) => void;
+  private readonly failureListener: (failure: TickFailure) => void;
 
   constructor(config: {
     world: World<TEventMap, TCommandMap>;
@@ -108,6 +127,8 @@ export class WorldHistoryRecorder<
     this.captureInitialSnapshot = config.captureInitialSnapshot ?? true;
     this.diffListener = (diff) => this.recordTick(diff);
     this.commandListener = (result) => this.recordCommand(result);
+    this.executionListener = (result) => this.recordExecution(result);
+    this.failureListener = (failure) => this.recordFailure(failure);
   }
 
   connect(): void {
@@ -120,6 +141,8 @@ export class WorldHistoryRecorder<
 
     this.world.onDiff(this.diffListener);
     this.world.onCommandResult(this.commandListener);
+    this.world.onCommandExecution(this.executionListener);
+    this.world.onTickFailure(this.failureListener);
   }
 
   disconnect(): void {
@@ -127,11 +150,15 @@ export class WorldHistoryRecorder<
     this.connected = false;
     this.world.offDiff(this.diffListener);
     this.world.offCommandResult(this.commandListener);
+    this.world.offCommandExecution(this.executionListener);
+    this.world.offTickFailure(this.failureListener);
   }
 
   clear(): void {
     this.tickEntries.length = 0;
     this.commandEntries.length = 0;
+    this.executionEntries.length = 0;
+    this.failureEntries.length = 0;
     this.initialSnapshot = this.captureInitialSnapshot
       ? cloneJsonValue(this.world.serialize(), 'history initial snapshot')
       : null;
@@ -144,6 +171,18 @@ export class WorldHistoryRecorder<
   getCommandHistory(): Array<CommandSubmissionResult<keyof TCommandMap>> {
     return this.commandEntries.map((entry) =>
       cloneJsonValue(entry, 'history command entry'),
+    );
+  }
+
+  getCommandExecutionHistory(): Array<CommandExecutionResult<keyof TCommandMap>> {
+    return this.executionEntries.map((entry) =>
+      cloneJsonValue(entry, 'history command execution entry'),
+    );
+  }
+
+  getTickFailureHistory(): TickFailure[] {
+    return this.failureEntries.map((entry) =>
+      cloneJsonValue(entry, 'history tick failure entry'),
     );
   }
 
@@ -160,6 +199,8 @@ export class WorldHistoryRecorder<
         : null,
       ticks: this.getTickHistory(),
       commands: this.getCommandHistory(),
+      executions: this.getCommandExecutionHistory(),
+      failures: this.getTickFailureHistory(),
     };
   }
 
@@ -185,6 +226,27 @@ export class WorldHistoryRecorder<
       this.commandEntries,
       cloneJsonValue(result, `history command result ${result.sequence}`),
       this.commandCapacity,
+    );
+  }
+
+  private recordExecution(
+    result: CommandExecutionResult<keyof TCommandMap>,
+  ): void {
+    pushBounded(
+      this.executionEntries,
+      cloneJsonValue(
+        result,
+        `history command execution result ${result.submissionSequence ?? 'none'}:${result.tick}`,
+      ),
+      this.commandCapacity,
+    );
+  }
+
+  private recordFailure(failure: TickFailure): void {
+    pushBounded(
+      this.failureEntries,
+      cloneJsonValue(failure, `history tick failure ${failure.tick}`),
+      this.tickCapacity,
     );
   }
 
@@ -296,6 +358,29 @@ export function summarizeWorldHistoryRange<
     increment(commandCodes, command.code, 1);
   }
 
+  const executions = state.executions.filter(
+    (entry) => entry.tick >= startTick && entry.tick <= endTick,
+  );
+  const executionCodes = new Map<string, number>();
+  let executed = 0;
+  let failed = 0;
+  for (const execution of executions) {
+    if (execution.executed) {
+      executed++;
+    } else {
+      failed++;
+    }
+    increment(executionCodes, execution.code, 1);
+  }
+
+  const failures = state.failures.filter(
+    (entry) => entry.tick >= startTick && entry.tick <= endTick,
+  );
+  const failureCodes = new Map<string, number>();
+  for (const failure of failures) {
+    increment(failureCodes, failure.code, 1);
+  }
+
   const summary: WorldHistoryRangeSummary = {
     schemaVersion: WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION,
     startTick,
@@ -309,6 +394,12 @@ export function summarizeWorldHistoryRange<
       rejected,
       codes: sortTupleCounts(commandCodes),
     },
+    executionOutcomes: {
+      total: executions.length,
+      executed,
+      failed,
+      codes: sortTupleCounts(executionCodes),
+    },
     events: sortTupleCounts(eventCounts),
     issues: [...issueCounts.values()].sort((a, b) => {
       if (a.severity !== b.severity) {
@@ -316,6 +407,7 @@ export function summarizeWorldHistoryRange<
       }
       return a.code.localeCompare(b.code);
     }),
+    failures: sortTupleCounts(failureCodes),
     diff: {
       created,
       destroyed,

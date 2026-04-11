@@ -12,7 +12,12 @@ import { ResourceStore } from './resource-store.js';
 import type { ResourceMax, ResourcePool } from './resource-store.js';
 import { assertJsonCompatible, type JsonValue } from './json.js';
 import { DeterministicRandom } from './random.js';
-import { COMMAND_RESULT_SCHEMA_VERSION } from './ai-contract.js';
+import {
+  COMMAND_EXECUTION_SCHEMA_VERSION,
+  COMMAND_RESULT_SCHEMA_VERSION,
+  TICK_FAILURE_SCHEMA_VERSION,
+  WORLD_STEP_RESULT_SCHEMA_VERSION,
+} from './ai-contract.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -98,6 +103,62 @@ export interface CommandSubmissionResult<
   validatorIndex: number | null;
 }
 
+export interface CommandExecutionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  schemaVersion: typeof COMMAND_EXECUTION_SCHEMA_VERSION;
+  submissionSequence: number | null;
+  executed: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+}
+
+export type TickFailurePhase =
+  | 'commands'
+  | 'spatialSync'
+  | 'systems'
+  | 'resources'
+  | 'diff'
+  | 'listeners';
+
+export interface TickFailure {
+  schemaVersion: typeof TICK_FAILURE_SCHEMA_VERSION;
+  tick: number;
+  phase: TickFailurePhase;
+  code: string;
+  message: string;
+  subsystem: string;
+  commandType: string | null;
+  submissionSequence: number | null;
+  systemName: string | null;
+  details: JsonValue | null;
+  error: {
+    name: string;
+    message: string;
+    stack: string | null;
+  } | null;
+}
+
+export interface WorldStepResult {
+  schemaVersion: typeof WORLD_STEP_RESULT_SCHEMA_VERSION;
+  ok: boolean;
+  tick: number;
+  failure: TickFailure | null;
+}
+
+export class WorldTickFailureError extends Error {
+  readonly failure: TickFailure;
+
+  constructor(failure: TickFailure) {
+    super(failure.message);
+    this.name = 'WorldTickFailureError';
+    this.failure = failure;
+  }
+}
+
 type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
 
 interface QueryCacheEntry {
@@ -149,6 +210,7 @@ export class World<
   private currentDiff: TickDiff | null = null;
   private currentMetrics: WorldMetrics | null = null;
   private activeMetrics: WorldMetrics | null = null;
+  private lastTickFailure: TickFailure | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -156,6 +218,10 @@ export class World<
   private commandResultListeners = new Set<
     (result: CommandSubmissionResult<keyof TCommandMap>) => void
   >();
+  private commandExecutionListeners = new Set<
+    (result: CommandExecutionResult<keyof TCommandMap>) => void
+  >();
+  private tickFailureListeners = new Set<(failure: TickFailure) => void>();
   private destroyCallbacks: Array<
     (id: EntityId, world: World<TEventMap, TCommandMap>) => void
   > = [];
@@ -172,7 +238,7 @@ export class World<
     this.rng = new DeterministicRandom(config.seed);
     this.gameLoop = new GameLoop({
       tps: config.tps,
-      onTick: () => this.executeTick(),
+      onTick: () => this.executeTickOrThrow(),
       maxTicksPerFrame: config.maxTicksPerFrame,
     });
   }
@@ -357,6 +423,14 @@ export class World<
     this.gameLoop.step();
   }
 
+  stepWithResult(): WorldStepResult {
+    const result = this.executeTickResult();
+    if (result.ok) {
+      this.gameLoop.setTick(this.gameLoop.tick + 1);
+    }
+    return result;
+  }
+
   start(): void {
     this.gameLoop.start();
   }
@@ -435,13 +509,15 @@ export class World<
       }
     }
 
-    this.commandQueue.push(type, data);
     const result = this.createCommandSubmissionResult(type, {
       accepted: true,
       code: 'accepted',
       message: 'Queued command',
       details: null,
       validatorIndex: null,
+    });
+    this.commandQueue.push(type, data, {
+      submissionSequence: result.sequence,
     });
     this.emitCommandResult(result);
     return result;
@@ -479,6 +555,18 @@ export class World<
     this.commandResultListeners.delete(listener);
   }
 
+  onCommandExecution(
+    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandExecutionListeners.add(listener);
+  }
+
+  offCommandExecution(
+    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandExecutionListeners.delete(listener);
+  }
+
   registerHandler<K extends keyof TCommandMap>(
     type: K,
     fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
@@ -494,6 +582,14 @@ export class World<
 
   hasCommandHandler(type: keyof TCommandMap): boolean {
     return this.handlers.has(type);
+  }
+
+  onTickFailure(listener: (failure: TickFailure) => void): void {
+    this.tickFailureListeners.add(listener);
+  }
+
+  offTickFailure(listener: (failure: TickFailure) => void): void {
+    this.tickFailureListeners.delete(listener);
   }
 
   getEvents(): ReadonlyArray<{
@@ -603,6 +699,10 @@ export class World<
     return this.currentMetrics ? cloneMetrics(this.currentMetrics) : null;
   }
 
+  getLastTickFailure(): TickFailure | null {
+    return this.lastTickFailure ? cloneTickFailure(this.lastTickFailure) : null;
+  }
+
   onDiff(fn: (diff: TickDiff) => void): void {
     this.diffListeners.add(fn);
   }
@@ -686,59 +786,12 @@ export class World<
     return this.resourceStore.getTransfers(entity);
   }
 
-  private processCommands(): number {
-    const commands = this.commandQueue.drain();
-    for (const command of commands) {
-      const handler = this.handlers.get(command.type);
-      if (!handler) {
-        throw new Error(
-          `No handler registered for command '${String(command.type)}'`,
-        );
-      }
-      handler(command.data as never, this);
-    }
-    return commands.length;
-  }
-
-  private createCommandSubmissionResult<K extends keyof TCommandMap>(
-    type: K,
-    config: {
-      accepted: boolean;
-      code: string;
-      message: string;
-      details: JsonValue | null;
-      validatorIndex: number | null;
-    },
-  ): CommandSubmissionResult<K> {
-    if (config.details !== null) {
-      assertJsonCompatible(config.details, `command result details for '${String(type)}'`);
-    }
-    return {
-      schemaVersion: COMMAND_RESULT_SCHEMA_VERSION,
-      accepted: config.accepted,
-      commandType: type,
-      code: config.code,
-      message: config.message,
-      details: config.details,
-      tick: this.getObservableTick(),
-      sequence: this.nextCommandResultSequence++,
-      validatorIndex: config.validatorIndex,
-    };
-  }
-
-  private emitCommandResult<K extends keyof TCommandMap>(
-    result: CommandSubmissionResult<K>,
-  ): void {
-    for (const listener of this.commandResultListeners) {
-      listener(result as CommandSubmissionResult<keyof TCommandMap>);
-    }
-  }
-
   private getObservableTick(): number {
     return Math.max(
       this.gameLoop.tick,
       this.currentMetrics?.tick ?? 0,
       this.currentDiff?.tick ?? 0,
+      this.lastTickFailure?.tick ?? 0,
     );
   }
 
@@ -768,7 +821,7 @@ export class World<
     };
   }
 
-  private executeTick(): void {
+  private executeTickResult(): WorldStepResult {
     const metrics = createMetrics(
       this.gameLoop.tick + 1,
       this.entityManager.count,
@@ -786,36 +839,330 @@ export class World<
 
       metrics.commandStats.pendingBeforeTick = this.commandQueue.pending;
       const commandsStart = now();
-      metrics.commandStats.processed = this.processCommands();
+      const commandsResult = this.processCommands(metrics.tick);
+      metrics.commandStats.processed = commandsResult.processed;
       metrics.durationMs.commands = now() - commandsStart;
+      if (commandsResult.failure) {
+        return this.finalizeTickFailure(commandsResult.failure, metrics, totalStart);
+      }
 
       const spatialStart = now();
-      this.syncSpatialIndex();
+      try {
+        this.syncSpatialIndex();
+      } catch (error) {
+        return this.finalizeTickFailure(
+          this.createTickFailure({
+            tick: metrics.tick,
+            phase: 'spatialSync',
+            code: 'spatial_sync_threw',
+            message: errorMessage(error),
+            subsystem: 'spatial',
+            error,
+          }),
+          metrics,
+          totalStart,
+        );
+      }
       metrics.durationMs.spatialSync = now() - spatialStart;
 
       const systemsStart = now();
-      this.executeSystems(metrics);
+      const systemsFailure = this.executeSystems(metrics);
       metrics.durationMs.systems = now() - systemsStart;
+      if (systemsFailure) {
+        return this.finalizeTickFailure(systemsFailure, metrics, totalStart);
+      }
 
       const resourcesStart = now();
-      this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
+      try {
+        this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
+      } catch (error) {
+        return this.finalizeTickFailure(
+          this.createTickFailure({
+            tick: metrics.tick,
+            phase: 'resources',
+            code: 'resource_processing_threw',
+            message: errorMessage(error),
+            subsystem: 'resources',
+            error,
+          }),
+          metrics,
+          totalStart,
+        );
+      }
       metrics.durationMs.resources = now() - resourcesStart;
 
       const diffStart = now();
-      this.buildDiff();
+      try {
+        this.buildDiff();
+      } catch (error) {
+        return this.finalizeTickFailure(
+          this.createTickFailure({
+            tick: metrics.tick,
+            phase: 'diff',
+            code: 'diff_build_threw',
+            message: errorMessage(error),
+            subsystem: 'diff',
+            error,
+          }),
+          metrics,
+          totalStart,
+        );
+      }
       metrics.durationMs.diff = now() - diffStart;
       metrics.durationMs.total = now() - totalStart;
       this.currentMetrics = cloneMetrics(metrics);
+      this.lastTickFailure = null;
     } finally {
       this.activeMetrics = null;
     }
 
-    for (const listener of this.diffListeners) {
-      listener(this.currentDiff!);
+    try {
+      for (const listener of this.diffListeners) {
+        listener(this.currentDiff!);
+      }
+    } catch (error) {
+      return this.finalizeTickFailure(
+        this.createTickFailure({
+          tick: metrics.tick,
+          phase: 'listeners',
+          code: 'diff_listener_threw',
+          message: errorMessage(error),
+          subsystem: 'listeners',
+          error,
+        }),
+        metrics,
+        totalStart,
+      );
+    }
+
+    return {
+      schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
+      ok: true,
+      tick: metrics.tick,
+      failure: null,
+    };
+  }
+
+  private processCommands(tick: number): {
+    processed: number;
+    failure: TickFailure | null;
+  } {
+    const commands = this.commandQueue.drain();
+    let processed = 0;
+    for (const command of commands) {
+      const handler = this.handlers.get(command.type);
+      if (!handler) {
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'missing_handler',
+          message: `No handler registered for command '${String(command.type)}'`,
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: null,
+        });
+        this.emitCommandExecutionResult(
+          this.createCommandExecutionResult(command.type, {
+            submissionSequence: command.submissionSequence,
+            executed: false,
+            code: 'missing_handler',
+            message: failure.message,
+            details: null,
+            tick,
+          }),
+        );
+        return { processed, failure };
+      }
+
+      try {
+        handler(command.data as never, this);
+        processed++;
+        this.emitCommandExecutionResult(
+          this.createCommandExecutionResult(command.type, {
+            submissionSequence: command.submissionSequence,
+            executed: true,
+            code: 'executed',
+            message: 'Command handler completed',
+            details: null,
+            tick,
+          }),
+        );
+      } catch (error) {
+        const details = createErrorDetails(error);
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'command_handler_threw',
+          message: errorMessage(error),
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: {
+            commandType: String(command.type),
+            submissionSequence: command.submissionSequence,
+            error: details,
+          },
+          error,
+        });
+        this.emitCommandExecutionResult(
+          this.createCommandExecutionResult(command.type, {
+            submissionSequence: command.submissionSequence,
+            executed: false,
+            code: 'command_handler_threw',
+            message: errorMessage(error),
+            details: {
+              error: details,
+            },
+            tick,
+          }),
+        );
+        return { processed, failure };
+      }
+    }
+
+    return { processed, failure: null };
+  }
+
+  private createCommandSubmissionResult<K extends keyof TCommandMap>(
+    type: K,
+    config: {
+      accepted: boolean;
+      code: string;
+      message: string;
+      details: JsonValue | null;
+      validatorIndex: number | null;
+    },
+  ): CommandSubmissionResult<K> {
+    if (config.details !== null) {
+      assertJsonCompatible(config.details, `command result details for '${String(type)}'`);
+    }
+    return {
+      schemaVersion: COMMAND_RESULT_SCHEMA_VERSION,
+      accepted: config.accepted,
+      commandType: type,
+      code: config.code,
+      message: config.message,
+      details: config.details,
+      tick: this.getObservableTick(),
+      sequence: this.nextCommandResultSequence++,
+      validatorIndex: config.validatorIndex,
+    };
+  }
+
+  private createCommandExecutionResult<K extends keyof TCommandMap>(
+    type: K,
+    config: {
+      submissionSequence: number | null;
+      executed: boolean;
+      code: string;
+      message: string;
+      details: JsonValue | null;
+      tick: number;
+    },
+  ): CommandExecutionResult<K> {
+    if (config.details !== null) {
+      assertJsonCompatible(
+        config.details,
+        `command execution details for '${String(type)}'`,
+      );
+    }
+    return {
+      schemaVersion: COMMAND_EXECUTION_SCHEMA_VERSION,
+      submissionSequence: config.submissionSequence,
+      executed: config.executed,
+      commandType: type,
+      code: config.code,
+      message: config.message,
+      details: config.details,
+      tick: config.tick,
+    };
+  }
+
+  private emitCommandResult<K extends keyof TCommandMap>(
+    result: CommandSubmissionResult<K>,
+  ): void {
+    for (const listener of this.commandResultListeners) {
+      listener(result as CommandSubmissionResult<keyof TCommandMap>);
     }
   }
 
-  private executeSystems(metrics: WorldMetrics): void {
+  private emitCommandExecutionResult<K extends keyof TCommandMap>(
+    result: CommandExecutionResult<K>,
+  ): void {
+    for (const listener of this.commandExecutionListeners) {
+      listener(result as CommandExecutionResult<keyof TCommandMap>);
+    }
+  }
+
+  private emitTickFailure(failure: TickFailure): void {
+    for (const listener of this.tickFailureListeners) {
+      listener(cloneTickFailure(failure));
+    }
+  }
+
+  private finalizeTickFailure(
+    failure: TickFailure,
+    metrics: WorldMetrics,
+    totalStart: number,
+  ): WorldStepResult {
+    metrics.durationMs.total = now() - totalStart;
+    this.currentMetrics = cloneMetrics(metrics);
+    this.lastTickFailure = cloneTickFailure(failure);
+    if (failure.phase !== 'listeners') {
+      this.currentDiff = null;
+    }
+    this.emitTickFailure(failure);
+    return {
+      schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
+      ok: false,
+      tick: metrics.tick,
+      failure: cloneTickFailure(failure),
+    };
+  }
+
+  private createTickFailure(config: {
+    tick: number;
+    phase: TickFailurePhase;
+    code: string;
+    message: string;
+    subsystem: string;
+    commandType?: PropertyKey;
+    submissionSequence?: number | null;
+    systemName?: string;
+    details?: JsonValue | null;
+    error?: unknown;
+  }): TickFailure {
+    if (config.details !== undefined && config.details !== null) {
+      assertJsonCompatible(
+        config.details,
+        `tick failure details for '${config.code}'`,
+      );
+    }
+    return {
+      schemaVersion: TICK_FAILURE_SCHEMA_VERSION,
+      tick: config.tick,
+      phase: config.phase,
+      code: config.code,
+      message: config.message,
+      subsystem: config.subsystem,
+      commandType:
+        config.commandType !== undefined ? String(config.commandType) : null,
+      submissionSequence: config.submissionSequence ?? null,
+      systemName: config.systemName ?? null,
+      details: config.details ?? null,
+      error: config.error !== undefined ? createErrorDetails(config.error) : null,
+    };
+  }
+
+  private executeTickOrThrow(): void {
+    const result = this.executeTickResult();
+    if (!result.ok && result.failure) {
+      throw new WorldTickFailureError(result.failure);
+    }
+  }
+
+  private executeSystems(metrics: WorldMetrics): TickFailure | null {
     const systems = [...this.systems].sort((a, b) => {
       const phaseDelta = phaseIndex(a.phase) - phaseIndex(b.phase);
       return phaseDelta !== 0 ? phaseDelta : a.order - b.order;
@@ -823,13 +1170,32 @@ export class World<
 
     for (const system of systems) {
       const start = now();
-      system.execute(this);
+      try {
+        system.execute(this);
+      } catch (error) {
+        return this.createTickFailure({
+          tick: metrics.tick,
+          phase: 'systems',
+          code: 'system_threw',
+          message: errorMessage(error),
+          subsystem: 'systems',
+          systemName: system.name,
+          details: {
+            systemName: system.name,
+            systemPhase: system.phase,
+            error: createErrorDetails(error),
+          },
+          error,
+        });
+      }
       metrics.systems.push({
         name: system.name,
         phase: system.phase,
         durationMs: now() - start,
       });
     }
+
+    return null;
   }
 
   private normalizeSystemRegistration(
@@ -1178,6 +1544,34 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
     spatial: { ...metrics.spatial },
     durationMs: { ...metrics.durationMs },
   };
+}
+
+function cloneTickFailure(failure: TickFailure): TickFailure {
+  return JSON.parse(JSON.stringify(failure)) as TickFailure;
+}
+
+function createErrorDetails(error: unknown): {
+  name: string;
+  message: string;
+  stack: string | null;
+} {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+    };
+  }
+
+  return {
+    name: 'Error',
+    message: String(error),
+    stack: null,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return createErrorDetails(error).message;
 }
 
 function now(): number {

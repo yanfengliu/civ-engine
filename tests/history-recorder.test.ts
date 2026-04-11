@@ -57,6 +57,19 @@ describe('WorldHistoryRecorder', () => {
     expect(state.schemaVersion).toBe(1);
     expect(state.initialSnapshot?.tick).toBe(0);
     expect(state.commands).toEqual([rejected, accepted]);
+    expect(state.executions).toEqual([
+      {
+        schemaVersion: 1,
+        submissionSequence: accepted.sequence,
+        executed: true,
+        commandType: 'move',
+        code: 'executed',
+        message: 'Command handler completed',
+        details: null,
+        tick: 1,
+      },
+    ]);
+    expect(state.failures).toEqual([]);
     expect(state.ticks).toHaveLength(1);
     expect(state.ticks[0].tick).toBe(1);
     expect(state.ticks[0].events).toEqual([
@@ -87,6 +100,12 @@ describe('WorldHistoryRecorder', () => {
 
     expect(recorder.getCommandHistory()).toHaveLength(2);
     expect(recorder.getCommandHistory().map((entry) => entry.sequence)).toEqual([1, 2]);
+    expect(recorder.getCommandExecutionHistory()).toHaveLength(2);
+    expect(
+      recorder
+        .getCommandExecutionHistory()
+        .map((entry) => entry.submissionSequence),
+    ).toEqual([1, 2]);
     expect(recorder.getTickHistory()).toHaveLength(2);
     expect(recorder.getTickHistory().map((entry) => entry.tick)).toEqual([2, 3]);
   });
@@ -142,8 +161,15 @@ describe('WorldHistoryRecorder', () => {
           ['blocked_target', 1],
         ],
       },
+      executionOutcomes: {
+        total: 2,
+        executed: 2,
+        failed: 0,
+        codes: [['executed', 2]],
+      },
       events: [['moved', 2]],
       issues: [],
+      failures: [],
       diff: {
         created: 0,
         destroyed: 0,

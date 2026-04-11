@@ -14,6 +14,7 @@ The short version: use `WorldDebugger` for a structured snapshot of world state,
 - spatial density summary from the world's position component
 - last-tick metrics from `world.getMetrics()`
 - last diff summary from `world.getDiff()`
+- last structured runtime failure from `world.getLastTickFailure()`
 - event counts from `world.getEvents()`
 - machine-readable `issues` for engine-level edge cases such as same-tick ID recycling and tick-budget overruns
 - compatibility `warnings` derived from those issues
@@ -54,7 +55,7 @@ const summary = summarizeWorldHistoryRange(history.getState(), {
 });
 ```
 
-The recorder state also carries `schemaVersion`. For automated analysis, `summarizeWorldHistoryRange()` can collapse a window of recorded ticks into one object covering command outcomes, changed entities, event counts, and aggregated issues.
+The recorder state also carries `schemaVersion`. For automated analysis, `summarizeWorldHistoryRange()` can collapse a window of recorded ticks into one object covering command submissions, command executions, tick failures, changed entities, event counts, and aggregated issues.
 
 ## Probes
 
@@ -142,10 +143,11 @@ It is a debugger first, not a production renderer. The point is to prove the ren
 ## Recommended Workflow
 
 1. Use `submitWithResult()` or `ClientAdapter` so command submissions always return structured outcomes.
-2. Attach a `WorldDebugger` and inspect `issues` before falling back to ad hoc logs.
-3. Treat `tick-budget-exceeded` as an engine-level signal, not a game-rule failure. Check the listed slow systems before changing scenario logic.
-4. Add a `WorldHistoryRecorder` when you need short-horizon command and tick history for automated diagnosis.
-5. Use `summarizeWorldHistoryRange()` when the raw history is too noisy for the current loop.
-6. Use `RenderAdapter` with a minimal projector when you need a visual debug surface.
-7. Keep the same projector contract when moving to the real renderer.
-8. Add game-specific probes when a new subsystem becomes hard to reason about.
+2. Use `world.stepWithResult()` when the caller needs a non-throwing runtime failure path. Reserve `step()` for compatibility callers that are already exception-driven.
+3. Attach a `WorldDebugger` and inspect `tickFailure` and `issues` before falling back to ad hoc logs.
+4. Treat `tick-budget-exceeded` as an engine-level signal, not a game-rule failure. Check the listed slow systems before changing scenario logic.
+5. Add a `WorldHistoryRecorder` when you need short-horizon submission, execution, and tick-failure history for automated diagnosis.
+6. Use `summarizeWorldHistoryRange()` when the raw history is too noisy for the current loop.
+7. Use `RenderAdapter` with a minimal projector when you need a visual debug surface.
+8. Keep the same projector contract when moving to the real renderer.
+9. Add game-specific probes when a new subsystem becomes hard to reason about.
