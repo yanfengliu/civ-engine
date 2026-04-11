@@ -19,6 +19,9 @@ Complete reference for every public type, method, and module in civ-engine.
   - [Entity Lifecycle Hooks](#entity-lifecycle-hooks)
 - [SpatialGrid](#spatialgrid)
 - [Pathfinding](#pathfinding)
+- [OccupancyGrid](#occupancygrid)
+- [Path Service](#path-service)
+- [VisibilityMap](#visibilitymap)
 - [Noise](#noise)
 - [Cellular Automata](#cellular-automata)
 - [Map Generation](#map-generation)
@@ -250,6 +253,190 @@ interface PathResult<T> {
   explored?: number; // Number of nodes explored (only if trackExplored was true)
 }
 ```
+
+### `OccupancyRect`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+```
+
+Rectangular footprint used for buildings and other multi-tile claims.
+
+### `OccupancyArea`
+
+```typescript
+// src/occupancy-grid.ts
+type OccupancyArea = OccupancyRect | ReadonlyArray<Position>;
+```
+
+Area input accepted by occupancy APIs. Use a rectangle for dense footprints or a list of positions for arbitrary shapes.
+
+### `OccupancyQueryOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyQueryOptions {
+  ignoreEntity?: EntityId;
+  includeReservations?: boolean;
+}
+```
+
+Options for occupancy checks. `ignoreEntity` is useful when checking whether a moving entity can continue through its current footprint.
+
+### `OccupancyGridState`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyGridState {
+  width: number;
+  height: number;
+  blocked: number[];
+  occupied: Array<[EntityId, number[]]>;
+  reservations: Array<[EntityId, number[]]>;
+  version: number;
+}
+```
+
+Serializable occupancy snapshot used by `OccupancyGrid.getState()` and `OccupancyGrid.fromState()`.
+
+### `GridPathConfig`
+
+```typescript
+// src/path-service.ts
+interface GridPathConfig {
+  start: Position;
+  goal: Position;
+  width?: number;
+  height?: number;
+  occupancy?: OccupancyGrid;
+  movingEntity?: EntityId;
+  includeReservations?: boolean;
+  allowDiagonal?: boolean;
+  preventCornerCutting?: boolean;
+  blocked?: (x: number, y: number) => boolean;
+  cost?: (from: Position, to: Position) => number;
+  heuristic?: (node: Position, goal: Position) => number;
+  maxCost?: number;
+  maxIterations?: number;
+  trackExplored?: boolean;
+}
+```
+
+Configuration for `findGridPath()`. Supply `width` and `height` directly, or pass an `OccupancyGrid` and dimensions are inferred.
+
+### `GridPathRequest`
+
+```typescript
+// src/path-service.ts
+interface GridPathRequest extends GridPathConfig {
+  passabilityVersion?: number;
+  cacheKey?: string;
+}
+```
+
+Request shape accepted by `PathRequestQueue` when used through `createGridPathQueue()`. `passabilityVersion` lets callers invalidate cached results when custom passability rules change.
+
+### `PathRequestQueueEntry<TRequest, TResult>`
+
+```typescript
+// src/path-service.ts
+interface PathRequestQueueEntry<TRequest, TResult> {
+  id: number;
+  request: TRequest;
+  result: TResult;
+  fromCache: boolean;
+}
+```
+
+Completed queue entry returned from `process()`.
+
+### `PathRequestQueueStats`
+
+```typescript
+// src/path-service.ts
+interface PathRequestQueueStats {
+  enqueued: number;
+  processed: number;
+  cacheHits: number;
+  cacheMisses: number;
+  pending: number;
+  cacheSize: number;
+}
+```
+
+Queue counters returned by `PathRequestQueue.getStats()`.
+
+### `PathRequestQueueOptions<TRequest, TResult>`
+
+```typescript
+// src/path-service.ts
+interface PathRequestQueueOptions<TRequest, TResult> {
+  resolve: (request: TRequest) => TResult;
+  cacheKey?: (request: TRequest) => string | undefined;
+  passabilityVersion?: (request: TRequest) => number;
+  cloneResult?: (result: TResult) => TResult;
+}
+```
+
+Constructor options for the generic deterministic request queue.
+
+### `VisibilityPlayerId`
+
+```typescript
+// src/visibility-map.ts
+type VisibilityPlayerId = number | string;
+```
+
+Player key used by `VisibilityMap`.
+
+### `VisionSourceId`
+
+```typescript
+// src/visibility-map.ts
+type VisionSourceId = number | string;
+```
+
+Identifier for an individual vision source within one player's visibility state.
+
+### `VisionSource`
+
+```typescript
+// src/visibility-map.ts
+interface VisionSource {
+  x: number;
+  y: number;
+  radius: number;
+}
+```
+
+Circular reveal source used by `VisibilityMap`.
+
+### `VisibilityMapState`
+
+```typescript
+// src/visibility-map.ts
+interface VisibilityMapState {
+  width: number;
+  height: number;
+  players: Array<
+    [
+      VisibilityPlayerId,
+      {
+        sources: Array<[VisionSourceId, VisionSource]>;
+        explored: number[];
+      },
+    ]
+  >;
+}
+```
+
+Serializable visibility snapshot used by `VisibilityMap.getState()` and `VisibilityMap.fromState()`.
 
 ### `CellGrid`
 
@@ -1373,6 +1560,465 @@ const result = findPath<string>({
   hash: (city) => city,
 });
 ```
+
+---
+
+## OccupancyGrid
+
+Deterministic blocked-cell, footprint, occupancy, and reservation tracking. Standalone utility that answers "can something stand here?" rather than "who is nearby?".
+
+```typescript
+import {
+  OccupancyGrid,
+  type OccupancyArea,
+  type OccupancyGridState,
+  type OccupancyQueryOptions,
+  type OccupancyRect,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new OccupancyGrid(width: number, height: number)
+```
+
+Creates an empty occupancy model for a fixed grid size.
+
+| Parameter | Description |
+|---|---|
+| `width` | Positive integer grid width |
+| `height` | Positive integer grid height |
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `width` | `number` | Grid width (read-only) |
+| `height` | `number` | Grid height (read-only) |
+| `version` | `number` | Monotonic passability version incremented on mutations |
+
+### Methods
+
+#### `setBlocked(area, blocked)`
+
+```typescript
+setBlocked(area: OccupancyArea, blocked: boolean): void
+```
+
+Sets blocked status for a footprint or list of cells. Throws if a blocked write would overlap an occupied or reserved cell.
+
+#### `block(area)`
+
+```typescript
+block(area: OccupancyArea): void
+```
+
+Marks cells as blocked.
+
+#### `unblock(area)`
+
+```typescript
+unblock(area: OccupancyArea): void
+```
+
+Clears blocked cells.
+
+#### `isBlocked(x, y, options?)`
+
+```typescript
+isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean
+```
+
+Returns `true` if the cell is blocked, occupied by another entity, or reserved by another entity.
+
+#### `canOccupy(entity, area, options?)`
+
+```typescript
+canOccupy(
+  entity: EntityId,
+  area: OccupancyArea,
+  options?: { includeReservations?: boolean },
+): boolean
+```
+
+Checks whether an entity may claim a footprint as occupied.
+
+#### `occupy(entity, area)`
+
+```typescript
+occupy(entity: EntityId, area: OccupancyArea): boolean
+```
+
+Claims a footprint for an entity. Returns `false` on conflict instead of throwing.
+
+#### `canReserve(entity, area)`
+
+```typescript
+canReserve(entity: EntityId, area: OccupancyArea): boolean
+```
+
+Checks whether an entity may reserve a footprint.
+
+#### `reserve(entity, area)`
+
+```typescript
+reserve(entity: EntityId, area: OccupancyArea): boolean
+```
+
+Creates or replaces a reservation for an entity. Returns `false` on conflict.
+
+#### `clearReservation(entity)`
+
+```typescript
+clearReservation(entity: EntityId): void
+```
+
+Clears only the reservation owned by the entity.
+
+#### `release(entity)`
+
+```typescript
+release(entity: EntityId): void
+```
+
+Clears both occupancy and reservation state for an entity.
+
+#### `getOccupant(x, y)`
+
+```typescript
+getOccupant(x: number, y: number): EntityId | null
+```
+
+Returns the entity occupying a cell, or `null`.
+
+#### `getReservationOwner(x, y)`
+
+```typescript
+getReservationOwner(x: number, y: number): EntityId | null
+```
+
+Returns the entity reserving a cell, or `null`.
+
+#### `getOccupiedCells(entity)`
+
+```typescript
+getOccupiedCells(entity: EntityId): Position[]
+```
+
+Returns the claimed occupied cells for an entity as positions.
+
+#### `getReservedCells(entity)`
+
+```typescript
+getReservedCells(entity: EntityId): Position[]
+```
+
+Returns the claimed reserved cells for an entity as positions.
+
+#### `getState()`
+
+```typescript
+getState(): OccupancyGridState
+```
+
+Returns a JSON-safe deterministic snapshot of the occupancy model.
+
+#### `OccupancyGrid.fromState(state)`
+
+```typescript
+OccupancyGrid.fromState(state: OccupancyGridState): OccupancyGrid
+```
+
+Restores an occupancy model from serialized state.
+
+---
+
+## Path Service
+
+Grid-first path utilities and deterministic request processing built on top of the generic `findPath()` implementation.
+
+```typescript
+import {
+  PathCache,
+  PathRequestQueue,
+  createGridPathCacheKey,
+  createGridPathQueue,
+  findGridPath,
+  gridPathPassabilityVersion,
+  type GridPathConfig,
+  type GridPathRequest,
+  type PathRequestQueueEntry,
+  type PathRequestQueueOptions,
+  type PathRequestQueueStats,
+} from 'civ-engine';
+```
+
+### `findGridPath(config)`
+
+```typescript
+findGridPath(config: GridPathConfig): PathResult<Position> | null
+```
+
+Finds a path on a 2D grid using integer `Position` coordinates.
+
+**Behavior details:**
+- Requires either `width` and `height`, or an `occupancy` grid
+- Treats blocked occupancy cells as impassable
+- Uses orthogonal movement by default
+- Uses diagonal movement with octile heuristic when `allowDiagonal` is `true`
+- Prevents diagonal corner cutting by default
+- Returns positions instead of flat cell indices
+
+```typescript
+const result = findGridPath({
+  occupancy,
+  movingEntity: unitId,
+  start: { x: 12, y: 8 },
+  goal: { x: 40, y: 25 },
+  allowDiagonal: false,
+});
+```
+
+### `PathCache<TResult>`
+
+Reusable cache keyed by request identity and passability version.
+
+#### Constructor
+
+```typescript
+new PathCache<TResult>()
+```
+
+#### Methods
+
+```typescript
+get(key: string, version: number): TResult | undefined
+set(key: string, version: number, result: TResult): void
+clear(): void
+delete(key: string): void
+```
+
+#### Property
+
+```typescript
+size: number
+```
+
+### `PathRequestQueue<TRequest, TResult>`
+
+Deterministic FIFO queue for spreading expensive request resolution across ticks.
+
+#### Constructor
+
+```typescript
+new PathRequestQueue<TRequest, TResult>(
+  options: PathRequestQueueOptions<TRequest, TResult>,
+)
+```
+
+#### Methods
+
+##### `enqueue(request)`
+
+```typescript
+enqueue(request: TRequest): number
+```
+
+Adds a request and returns its queue ID.
+
+##### `process(maxRequests?)`
+
+```typescript
+process(maxRequests?: number): Array<PathRequestQueueEntry<TRequest, TResult>>
+```
+
+Processes up to `maxRequests` queued items in FIFO order. Defaults to `1`.
+
+##### `clearPending()`
+
+```typescript
+clearPending(): void
+```
+
+Drops requests that have not been processed yet.
+
+##### `clearCache()`
+
+```typescript
+clearCache(): void
+```
+
+Clears cached resolved results.
+
+##### `getStats()`
+
+```typescript
+getStats(): PathRequestQueueStats
+```
+
+Returns queue and cache counters.
+
+#### Property
+
+##### `pendingCount`
+
+```typescript
+pendingCount: number
+```
+
+Number of requests still waiting to be processed.
+
+### `createGridPathQueue(defaults?)`
+
+```typescript
+createGridPathQueue(
+  defaults?: Omit<Partial<GridPathRequest>, 'start' | 'goal'>,
+): PathRequestQueue<GridPathRequest, PathResult<Position> | null>
+```
+
+Creates a `PathRequestQueue` specialized for `findGridPath()`, with automatic cache-key generation and passability-version tracking.
+
+### `createGridPathCacheKey(request)`
+
+```typescript
+createGridPathCacheKey(request: GridPathRequest): string | undefined
+```
+
+Builds the default cache key used by `createGridPathQueue()`. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
+
+### `gridPathPassabilityVersion(request)`
+
+```typescript
+gridPathPassabilityVersion(request: GridPathRequest): number
+```
+
+Returns the passability version used for cache invalidation. Defaults to `request.passabilityVersion`, then `request.occupancy?.version`, then `0`.
+
+---
+
+## VisibilityMap
+
+Per-player visible and explored cell tracking for fog-of-war style systems. Standalone utility with no renderer dependency.
+
+```typescript
+import {
+  VisibilityMap,
+  type VisibilityMapState,
+  type VisibilityPlayerId,
+  type VisionSource,
+  type VisionSourceId,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new VisibilityMap(width: number, height: number)
+```
+
+Creates an empty visibility state for a fixed grid size.
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `width` | `number` | Grid width (read-only) |
+| `height` | `number` | Grid height (read-only) |
+
+### Methods
+
+#### `setSource(playerId, sourceId, source)`
+
+```typescript
+setSource(
+  playerId: VisibilityPlayerId,
+  sourceId: VisionSourceId,
+  source: VisionSource,
+): void
+```
+
+Adds or updates a circular vision source for one player.
+
+#### `removeSource(playerId, sourceId)`
+
+```typescript
+removeSource(playerId: VisibilityPlayerId, sourceId: VisionSourceId): void
+```
+
+Removes one source from a player's visibility state.
+
+#### `clearPlayer(playerId)`
+
+```typescript
+clearPlayer(playerId: VisibilityPlayerId): void
+```
+
+Removes all visibility state for one player.
+
+#### `update()`
+
+```typescript
+update(): void
+```
+
+Recomputes visibility for players with dirty sources.
+
+#### `isVisible(playerId, x, y)`
+
+```typescript
+isVisible(playerId: VisibilityPlayerId, x: number, y: number): boolean
+```
+
+Returns `true` if a cell is currently visible to the player.
+
+#### `isExplored(playerId, x, y)`
+
+```typescript
+isExplored(playerId: VisibilityPlayerId, x: number, y: number): boolean
+```
+
+Returns `true` if a cell has ever been visible to the player.
+
+#### `getVisibleCells(playerId)`
+
+```typescript
+getVisibleCells(playerId: VisibilityPlayerId): Position[]
+```
+
+Returns current visible cells as positions.
+
+#### `getExploredCells(playerId)`
+
+```typescript
+getExploredCells(playerId: VisibilityPlayerId): Position[]
+```
+
+Returns explored cells as positions.
+
+#### `getSources(playerId)`
+
+```typescript
+getSources(playerId: VisibilityPlayerId): Array<[VisionSourceId, VisionSource]>
+```
+
+Returns the player's current sources in deterministic order.
+
+#### `getState()`
+
+```typescript
+getState(): VisibilityMapState
+```
+
+Returns a JSON-safe visibility snapshot.
+
+#### `VisibilityMap.fromState(state)`
+
+```typescript
+VisibilityMap.fromState(state: VisibilityMapState): VisibilityMap
+```
+
+Restores a visibility map from serialized state.
 
 ---
 

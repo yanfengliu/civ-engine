@@ -65,6 +65,9 @@ world.step();
 | **Resources** | Numeric pools (current/max) per entity with production, consumption, transfers |
 | **Map Generation** | Seedable simplex noise, octave layering, cellular automata, tile grid helper |
 | **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
+| **Occupancy & Reservation** | Deterministic blocked-cell, footprint, and reservation tracking for RTS movement/building rules |
+| **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
+| **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |
 | **Behavior Trees** | Generic BT framework with action, condition, selector, sequence nodes |
 | **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
 | **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state |
@@ -104,9 +107,12 @@ src/
   diff.ts             TickDiff type
   resource-store.ts   Resource pools, rates, transfers
   noise.ts            Seedable 2D simplex noise
+  occupancy-grid.ts   Blocked cells, footprints, and temporary reservations
+  path-service.ts     Grid path helper, cache, and queued path request processing
   cellular.ts         Cellular automata
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
+  visibility-map.ts   Per-player visible and explored cell tracking
   behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
   types.ts            Shared types (EntityId, EntityRef, Position, WorldConfig)
@@ -217,12 +223,15 @@ docs/
 | Module | Exports | Description |
 |---|---|---|
 | `pathfinding.ts` | `findPath<T>(config)` | Generic A* pathfinding |
+| `occupancy-grid.ts` | `OccupancyGrid`, `OccupancyGridState` | Deterministic occupancy, footprints, and reservations |
+| `path-service.ts` | `findGridPath`, `PathCache`, `PathRequestQueue`, `createGridPathQueue` | Grid path helper and deterministic queued path processing |
 | `noise.ts` | `createNoise2D(seed)`, `octaveNoise2D(...)` | Seedable simplex noise |
 | `random.ts` | `DeterministicRandom`, `RandomState` | Engine PRNG and serializable RNG state |
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
 | `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer` | Resource system types |
+| `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState` | Per-player visible/explored cell tracking |
 | `behavior-tree.ts` | `createBehaviorTree`, `createBTState`, `NodeStatus` | Generic behavior tree framework |
 | `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
 

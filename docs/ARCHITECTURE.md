@@ -22,11 +22,14 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
+| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, occupancy, and reservation tracking             |
 | JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
 | Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
 | Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
 | MapGen         | `src/map-gen.ts`         | MapGenerator interface, createTileGrid bulk tile-entity helper                         |
 | Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
+| Path Service   | `src/path-service.ts`    | Grid path helper, deterministic path queue, and cache for batched request handling     |
+| VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
 | ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
 | BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, Action, Condition, BTState, createBehaviorTree |
 | Public exports | `src/index.ts`           | Barrel export for the intended package API                                             |
@@ -87,7 +90,10 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **Rendering** belongs outside the engine. Renderer clients should consume snapshots and tick diffs through `ClientAdapter`, keep visual objects in renderer-owned state, and submit input back as commands. See `docs/guides/rendering.md` for the recommended renderer boundary and Pixi-first reference client shape.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 - **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
+- **OccupancyGrid** is a standalone utility. It models blocked cells, occupied footprints, and temporary reservations. It is intentionally separate from `SpatialGrid`, which answers proximity rather than passability.
 - **Pathfinding** is a standalone utility. It has no knowledge of the spatial grid, entities, or the tick loop. Game code provides `neighbors`, `cost`, `heuristic`, and `hash` callbacks to wire it to any graph topology.
+- **Path Service** is a standalone utility built on top of `findPath`. It provides `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for deterministic batched path processing.
+- **VisibilityMap** is a standalone utility. It tracks per-player visible and explored cells and remains independent of rendering and UI code.
 - **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined — the engine does not prescribe what context contains beyond a BTState accessor.
 - **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submit`).
 
@@ -131,4 +137,5 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 | 2026-04-06 | Added getComponents batch API      | Reduces verbosity when systems need multiple components per entity        |
 | 2026-04-06 | Added entity destroy hooks           | onDestroy/offDestroy callbacks fire before component removal for relationship cleanup |
 | 2026-04-06 | Added behavior tree framework        | Standalone generic BT with ECS-compatible state (BTState) and game-defined TContext    |
+| 2026-04-10 | Added RTS-scale standalone primitives | OccupancyGrid, queued grid path helpers, VisibilityMap, and benchmark harness |
 | 2026-04-10 | Hardened engine invariants           | Added JSON-safe component/resource state, entity refs, explicit write APIs, read-only grid exposure, resource snapshot v2, package exports/build, and CI |

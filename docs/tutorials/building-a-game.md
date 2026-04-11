@@ -34,7 +34,7 @@ interface Colonist {
 }
 
 interface MoveTo {
-  path: number[];  // flat-index waypoints
+  path: Position[];
   step: number;    // current index in path
 }
 
@@ -173,8 +173,8 @@ function movementSystem(w: World<GameEvents, GameCommands>): void {
     }
 
     // Move one step along the path
-    const nextNode = moveTo.path[moveTo.step];
-    w.setPosition(id, { x: nextNode % WIDTH, y: Math.floor(nextNode / WIDTH) });
+    const next = moveTo.path[moveTo.step];
+    w.setPosition(id, next);
     moveTo.step++;
     colonist.state = 'moving';
   }
@@ -232,7 +232,7 @@ world.registerSystem(gatheringSystem);
 Commands are how AI agents or UI send instructions to the game. They are validated on submit and executed at the start of the next tick.
 
 ```typescript
-import { findPath } from 'civ-engine';
+import { findGridPath } from 'civ-engine';
 
 // Validator: entity must be alive and a colonist
 world.registerValidator('moveColonist', (data, w) => {
@@ -244,35 +244,15 @@ world.registerValidator('moveColonist', (data, w) => {
 // Handler: compute path and attach moveTo component
 world.registerHandler('moveColonist', (data, w) => {
   const pos = w.getComponent<Position>(data.entityId, 'position')!;
-  const startNode = pos.y * WIDTH + pos.x;
-  const goalNode = data.targetY * WIDTH + data.targetX;
-
-  const result = findPath<number>({
-    start: startNode,
-    goal: goalNode,
-    neighbors: (node) => {
-      const x = node % WIDTH;
-      const y = Math.floor(node / WIDTH);
-      const result: number[] = [];
-      if (x > 0) result.push(node - 1);
-      if (x < WIDTH - 1) result.push(node + 1);
-      if (y > 0) result.push(node - WIDTH);
-      if (y < HEIGHT - 1) result.push(node + WIDTH);
-      return result;
-    },
-    cost: () => 1,
-    heuristic: (node, goal) => {
-      const nx = node % WIDTH;
-      const ny = Math.floor(node / WIDTH);
-      const gx = goal % WIDTH;
-      const gy = Math.floor(goal / WIDTH);
-      return Math.abs(nx - gx) + Math.abs(ny - gy);
-    },
-    hash: (node) => node,
+  const result = findGridPath({
+    width: WIDTH,
+    height: HEIGHT,
+    start: pos,
+    goal: { x: data.targetX, y: data.targetY },
   });
 
   if (result) {
-    // Skip the first node (current position)
+    // Skip the first waypoint (current position)
     w.addComponent(data.entityId, 'moveTo', {
       path: result.path.slice(1),
       step: 0,
@@ -320,48 +300,15 @@ world.on('settlementStarving', (event) => {
 The pathfinding module is generic — it works on any graph. Here's a reusable helper for grid pathfinding:
 
 ```typescript
-import { findPath, type PathResult } from 'civ-engine';
+import { findGridPath } from 'civ-engine';
 
-function findGridPath(
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-  width: number,
-  height: number,
-  isBlocked?: (x: number, y: number) => boolean,
-): PathResult<number> | null {
-  return findPath<number>({
-    start: fromY * width + fromX,
-    goal: toY * width + toX,
-    neighbors: (node) => {
-      const x = node % width;
-      const y = Math.floor(node / width);
-      const result: number[] = [];
-      if (x > 0) result.push(node - 1);
-      if (x < width - 1) result.push(node + 1);
-      if (y > 0) result.push(node - width);
-      if (y < height - 1) result.push(node + width);
-      return result;
-    },
-    cost: (_from, to) => {
-      const x = to % width;
-      const y = Math.floor(to / width);
-      return isBlocked?.(x, y) ? Infinity : 1;
-    },
-    heuristic: (node, goal) => {
-      const nx = node % width;
-      const ny = Math.floor(node / width);
-      const gx = goal % width;
-      const gy = Math.floor(goal / width);
-      return Math.abs(nx - gx) + Math.abs(ny - gy);
-    },
-    hash: (node) => node,
-  });
-}
+const path = findGridPath({
+  width: WIDTH,
+  height: HEIGHT,
+  start: { x: 0, y: 0 },
+  goal: { x: 10, y: 10 },
+});
 
-// Usage:
-const path = findGridPath(0, 0, 10, 10, WIDTH, HEIGHT);
 if (path) {
   console.log(`Path found: ${path.path.length} steps, cost ${path.cost}`);
 }

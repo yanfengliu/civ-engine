@@ -23,6 +23,10 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - Phase-aware system registration with `input`, `preUpdate`, `update`, `postUpdate`, and `output` phases.
 - `world.getMetrics()` for per-tick timing, query cache, system, and spatial sync instrumentation.
 - `WorldConfig.detectInPlacePositionMutations` and `world.markPositionDirty()` for large simulations that want to avoid the compatibility full-scan spatial sync path.
+- `OccupancyGrid` for deterministic blocked-cell, footprint, occupancy, and reservation tracking.
+- `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for RTS-scale deterministic grid path processing.
+- `VisibilityMap` for per-player visible and explored cell tracking.
+- `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios and metrics output.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
 - `ClientAdapter` runtime message guarding, missing-handler rejection, rejection reasons, and optional `onError` callback for send failures.
 - Root package export barrel, declaration build config, npm package metadata, and CI workflow.
@@ -33,5 +37,6 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - Added `docs/ENGINE_HARDENING_PLAN.md`.
 - Added `docs/guides/public-api-and-invariants.md`.
 - Added `docs/guides/rendering.md`.
+- Added `docs/guides/rts-primitives.md`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, JSON-compatible component data, resource `max: null`, snapshot v3, and client-adapter error handling.

@@ -25,16 +25,22 @@ This is the navigation hub for `civ-engine` documentation.
 - [Serialization & Diffs](guides/serialization-and-diffs.md)
 - [Client Protocol](guides/client-protocol.md)
 - [Renderer Integration](guides/rendering.md)
+- [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)
 - [Pathfinding](guides/pathfinding.md)
 - [Behavior Trees](guides/behavior-trees.md)
 
-## Current Plans and Reviews
+## Plans and Reviews
 
 Active future work lives in focused plan and review documents rather than a generic roadmap page.
 
-- [RTS Engine Scale Plan](reviews/todo/RTS_ENGINE_SCALE_PLAN.md) - Current forward-looking engine work for RTS-scale support
+### Active
+
 - [Expert Review Remaining Candidates](reviews/todo/EXPERT_REVIEW_REMAINING.md) - Deferred review items not yet selected for implementation
+
+### Implemented
+
+- [RTS Engine Scale Plan](reviews/implemented/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
 - [Expert Review](reviews/implemented/EXPERT_REVIEW.md) - Review findings already addressed
 - [Engine Design Review](reviews/implemented/ENGINE_DESIGN_REVIEW.md) - Broader engine assessment
 - [Engine Hardening Plan](reviews/implemented/ENGINE_HARDENING_PLAN.md) - Hardening work that has already landed

@@ -1,11 +1,17 @@
 # RTS Engine Scale Plan
 
-Status: Proposed
+Status: Implemented
 Scope: Single-player, headless RTS simulation support. Multiplayer tick-locking, rollback, prediction, and binary rewind snapshots are out of scope.
 
 ## Goal
 
 Add generic RTS-scale engine primitives without hard-coding any specific game rules. The engine should be able to support an Age of Empires-like simulation core through reusable infrastructure for scale measurement, occupancy, pathfinding, and visibility.
+
+Implementation status:
+- Landed `OccupancyGrid` for blocked cells, footprints, occupancy, and reservations.
+- Landed `findGridPath()`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue()`.
+- Landed `VisibilityMap` for per-player visible and explored cells.
+- Landed `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios.
 
 ## 1. Large-Map Performance Proof
 
@@ -118,3 +124,5 @@ Commit each completed milestone after:
 - `npm.cmd run build` passes.
 - `npm.cmd run lint` passes.
 - `npm.cmd test` passes, unless the milestone is docs-only.
+
+Result: completed and retained here as the implementation record for the shipped work.
