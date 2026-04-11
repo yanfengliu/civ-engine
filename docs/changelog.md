@@ -2,7 +2,7 @@
 
 ## 0.2.0 - 2026-04-10
 
-This release hardens the engine API and package boundary for reusable 2D civilization simulation projects.
+This release hardens the engine API and package boundary while adding RTS-scale primitives, render/debug infrastructure, and a browser reference debug client for reusable 2D civilization simulation projects.
 
 ### Breaking Changes
 
@@ -37,7 +37,7 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 ### Documentation
 
 - Added `docs/README.md`.
-- Added `docs/ENGINE_HARDENING_PLAN.md`.
+- Added `docs/reviews/implemented/ENGINE_HARDENING_PLAN.md`.
 - Added `docs/guides/public-api-and-invariants.md`.
 - Added `docs/guides/rendering.md`.
 - Added `docs/guides/rts-primitives.md`.
