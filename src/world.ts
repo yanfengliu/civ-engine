@@ -182,8 +182,10 @@ interface RegisteredSystem<
   order: number;
 }
 
+type TickMetricsProfile = 'full' | 'minimal' | 'none';
+
 interface TickRunOptions {
-  collectMetrics: boolean;
+  metricsProfile: TickMetricsProfile;
 }
 
 export class World<
@@ -436,7 +438,7 @@ export class World<
   }
 
   stepWithResult(): WorldStepResult {
-    const failure = this.runTick({ collectMetrics: true });
+    const failure = this.runTick({ metricsProfile: 'full' });
     if (!failure) {
       this.gameLoop.setTick(this.gameLoop.tick + 1);
       return {
@@ -502,7 +504,7 @@ export class World<
 
   submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
     if (
-      this.instrumentationProfile === 'release' &&
+      this.instrumentationProfile !== 'full' &&
       this.commandResultListeners.size === 0
     ) {
       const rejection = this.validateCommand(type, data);
@@ -849,7 +851,9 @@ export class World<
   }
 
   private runTick(options: TickRunOptions): TickFailure | null {
-    const metrics = options.collectMetrics
+    const collectMetrics = options.metricsProfile !== 'none';
+    const collectDetailedTimings = options.metricsProfile === 'full';
+    const metrics = collectMetrics
       ? createMetrics(
           this.gameLoop.tick + 1,
           this.entityManager.count,
@@ -869,18 +873,20 @@ export class World<
       if (metrics) {
         metrics.commandStats.pendingBeforeTick = this.commandQueue.pending;
       }
-      const commandsStart = metrics ? now() : 0;
+      const commandsStart = collectDetailedTimings ? now() : 0;
       const tick = metrics?.tick ?? this.gameLoop.tick + 1;
       const commandsResult = this.processCommands(tick);
       if (metrics) {
         metrics.commandStats.processed = commandsResult.processed;
+      }
+      if (collectDetailedTimings && metrics) {
         metrics.durationMs.commands = now() - commandsStart;
       }
       if (commandsResult.failure) {
         return this.finalizeTickFailure(commandsResult.failure, metrics, totalStart);
       }
 
-      const spatialStart = metrics ? now() : 0;
+      const spatialStart = collectDetailedTimings ? now() : 0;
       try {
         this.syncSpatialIndex();
       } catch (error) {
@@ -897,20 +903,24 @@ export class World<
           totalStart,
         );
       }
-      if (metrics) {
+      if (collectDetailedTimings && metrics) {
         metrics.durationMs.spatialSync = now() - spatialStart;
       }
 
-      const systemsStart = metrics ? now() : 0;
-      const systemsFailure = this.executeSystems(tick, metrics);
-      if (metrics) {
+      const systemsStart = collectDetailedTimings ? now() : 0;
+      const systemsFailure = this.executeSystems(
+        tick,
+        metrics,
+        collectDetailedTimings,
+      );
+      if (collectDetailedTimings && metrics) {
         metrics.durationMs.systems = now() - systemsStart;
       }
       if (systemsFailure) {
         return this.finalizeTickFailure(systemsFailure, metrics, totalStart);
       }
 
-      const resourcesStart = metrics ? now() : 0;
+      const resourcesStart = collectDetailedTimings ? now() : 0;
       try {
         this.resourceStore.processTick((id) => this.entityManager.isAlive(id));
       } catch (error) {
@@ -927,11 +937,11 @@ export class World<
           totalStart,
         );
       }
-      if (metrics) {
+      if (collectDetailedTimings && metrics) {
         metrics.durationMs.resources = now() - resourcesStart;
       }
 
-      const diffStart = metrics ? now() : 0;
+      const diffStart = collectDetailedTimings ? now() : 0;
       try {
         this.buildDiff();
       } catch (error) {
@@ -948,8 +958,10 @@ export class World<
           totalStart,
         );
       }
-      if (metrics) {
+      if (collectDetailedTimings && metrics) {
         metrics.durationMs.diff = now() - diffStart;
+      }
+      if (metrics) {
         metrics.durationMs.total = now() - totalStart;
       }
       this.currentMetrics = metrics;
@@ -1186,7 +1198,7 @@ export class World<
 
   private executeTickOrThrow(): void {
     const failure = this.runTick({
-      collectMetrics: this.instrumentationProfile !== 'release',
+      metricsProfile: getImplicitMetricsProfile(this.instrumentationProfile),
     });
     if (failure) {
       throw new WorldTickFailureError(failure);
@@ -1196,6 +1208,7 @@ export class World<
   private executeSystems(
     tick: number,
     metrics: WorldMetrics | null,
+    collectDetailedTimings: boolean,
   ): TickFailure | null {
     const systems = [...this.systems].sort((a, b) => {
       const phaseDelta = phaseIndex(a.phase) - phaseIndex(b.phase);
@@ -1203,7 +1216,7 @@ export class World<
     });
 
     for (const system of systems) {
-      const start = metrics ? now() : 0;
+      const start = collectDetailedTimings ? now() : 0;
       try {
         system.execute(this);
       } catch (error) {
@@ -1222,7 +1235,7 @@ export class World<
           error,
         });
       }
-      if (metrics) {
+      if (collectDetailedTimings && metrics) {
         metrics.systems.push({
           name: system.name,
           phase: system.phase,
@@ -1570,6 +1583,19 @@ function createMetrics(
   };
 }
 
+function getImplicitMetricsProfile(
+  instrumentationProfile: InstrumentationProfile,
+): TickMetricsProfile {
+  switch (instrumentationProfile) {
+    case 'full':
+      return 'full';
+    case 'minimal':
+      return 'minimal';
+    case 'release':
+      return 'none';
+  }
+}
+
 function normalizeCommandValidationResult(
   result: CommandValidationResult,
   validatorIndex: number,
@@ -1713,9 +1739,12 @@ function validateWorldConfig(config: WorldConfig): void {
   if (
     config.instrumentationProfile !== undefined &&
     config.instrumentationProfile !== 'full' &&
+    config.instrumentationProfile !== 'minimal' &&
     config.instrumentationProfile !== 'release'
   ) {
-    throw new Error("instrumentationProfile must be 'full' or 'release'");
+    throw new Error(
+      "instrumentationProfile must be 'full', 'minimal', or 'release'",
+    );
   }
 }
 

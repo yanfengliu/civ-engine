@@ -75,12 +75,13 @@ Standard 2D position interface used for spatial grid synchronization. The compon
 
 ```typescript
 // src/types.ts
-type InstrumentationProfile = 'full' | 'release';
+type InstrumentationProfile = 'full' | 'minimal' | 'release';
 ```
 
 Controls how much implicit runtime instrumentation the engine keeps on the hot path.
 
-- `full` keeps the normal development behavior. `step()` records per-tick metrics and `submit()` preserves the compatibility wrapper over `submitWithResult()`.
+- `full` keeps the normal development behavior. `step()` records detailed per-tick metrics and `submit()` preserves the compatibility wrapper over `submitWithResult()`.
+- `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries. `submit()` takes the lower-overhead boolean fast path when no command-result listeners are attached.
 - `release` removes avoidable observation work from the implicit `step()` and `submit()` paths. Explicit AI/debug APIs such as `stepWithResult()` and `submitWithResult()` still return structured results when you call them.
 
 ### `WorldConfig`
@@ -145,7 +146,7 @@ interface WorldMetrics {
 }
 ```
 
-Last-tick instrumentation returned by `world.getMetrics()`. In `instrumentationProfile: 'release'`, implicit `step()` calls leave this as `null`; explicit `stepWithResult()` still refreshes it.
+Last-tick instrumentation returned by `world.getMetrics()`. In `instrumentationProfile: 'minimal'`, implicit `step()` refreshes only the coarse metrics fields. In `instrumentationProfile: 'release'`, implicit `step()` leaves this as `null`; explicit `stepWithResult()` still refreshes the full metrics payload.
 
 ### `getAiContractVersions()`
 
@@ -1068,7 +1069,7 @@ world.step(); // always executes, even when paused
 
 **Throws:** `WorldTickFailureError` if the tick fails at runtime.
 
-When `instrumentationProfile` is `'release'`, `step()` skips implicit per-tick metrics collection to reduce hot-path overhead. Use `stepWithResult()` when the caller explicitly wants structured runtime diagnostics.
+When `instrumentationProfile` is `'minimal'`, `step()` records only coarse implicit metrics. When it is `'release'`, `step()` skips implicit per-tick metrics collection entirely. Use `stepWithResult()` when the caller explicitly wants structured runtime diagnostics.
 
 #### `stepWithResult()`
 
@@ -1187,7 +1188,7 @@ Submits a command. All registered validators for this command type are run immed
 
 **Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`.
 
-When `instrumentationProfile` is `'release'` and no command-result listeners are attached, `submit()` takes a boolean fast path and does not allocate a `CommandSubmissionResult`. Use `submitWithResult()` when the caller explicitly needs the structured outcome.
+When `instrumentationProfile` is `'minimal'` or `'release'` and no command-result listeners are attached, `submit()` takes a boolean fast path and does not allocate a `CommandSubmissionResult`. Use `submitWithResult()` when the caller explicitly needs the structured outcome.
 
 ```typescript
 const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
@@ -1646,7 +1647,7 @@ getMetrics(): WorldMetrics | null
 
 Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
 
-In `instrumentationProfile: 'release'`, implicit `step()` calls leave this as `null` so the shipping runtime does not pay for per-tick metrics. Explicit `stepWithResult()` calls still populate metrics for callers that deliberately opt into richer diagnostics.
+In `instrumentationProfile: 'minimal'`, implicit `step()` still updates counts and total duration, but leaves detailed phase timings and per-system timing entries empty. In `instrumentationProfile: 'release'`, implicit `step()` leaves this as `null` so the shipping runtime does not pay for per-tick metrics. Explicit `stepWithResult()` calls still populate the full metrics payload for callers that deliberately opt into richer diagnostics.
 
 ```typescript
 world.step();

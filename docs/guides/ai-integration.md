@@ -86,7 +86,7 @@ if (!step.ok) {
 
 The most recent runtime failure is also available through `world.getLastTickFailure()`.
 
-## Release Profile
+## Runtime Profiles
 
 Keep AI loops on the default `instrumentationProfile: 'full'`.
 
@@ -101,7 +101,19 @@ const world = new World({
 });
 ```
 
-In release mode:
+The intended split is:
+
+- `full` for AI development
+- `minimal` for QA and staging
+- `release` for shipping builds
+
+In `minimal` mode:
+
+- implicit `step()` keeps counts and total tick duration
+- detailed phase timings and per-system timing entries are skipped
+- `submit()` uses the lower-overhead boolean fast path when no command-result listeners are attached
+
+In `release` mode:
 
 - implicit `step()` skips per-tick metrics collection
 - `submit()` uses a boolean fast path when no command-result listeners are attached

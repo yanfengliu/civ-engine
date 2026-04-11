@@ -337,7 +337,7 @@ describe('World', () => {
           tps: 60,
           instrumentationProfile: 'debug' as never,
         }),
-    ).toThrow("instrumentationProfile must be 'full' or 'release'");
+    ).toThrow("instrumentationProfile must be 'full', 'minimal', or 'release'");
   });
 
   it('removes entity from grid on destroy even if position was mutated since last sync', () => {
@@ -530,6 +530,33 @@ describe('World', () => {
     expect(result.ok).toBe(true);
     expect(world.getMetrics()).not.toBeNull();
     expect(world.getMetrics()!.tick).toBe(2);
+  });
+
+  it('minimal instrumentation keeps coarse implicit metrics and full explicit diagnostics', () => {
+    const world = new World({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'minimal',
+    });
+    world.registerSystem({ name: 'Noop', execute: () => {} });
+
+    expect(world.getInstrumentationProfile()).toBe('minimal');
+
+    world.step();
+    const implicit = world.getMetrics()!;
+    expect(implicit.tick).toBe(1);
+    expect(implicit.durationMs.total).toBeGreaterThanOrEqual(0);
+    expect(implicit.durationMs.commands).toBe(0);
+    expect(implicit.durationMs.systems).toBe(0);
+    expect(implicit.systems).toEqual([]);
+
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(true);
+    const explicit = world.getMetrics()!;
+    expect(explicit.tick).toBe(2);
+    expect(explicit.systems).toHaveLength(1);
+    expect(explicit.systems[0].name).toBe('Noop');
   });
 
   describe('getComponents', () => {

@@ -151,6 +151,25 @@ describe('World commands', () => {
     ]);
   });
 
+  it('minimal-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'minimal',
+    });
+    world.registerHandler('move', () => {});
+    const createResultSpy = vi.spyOn(
+      world as unknown as { createCommandSubmissionResult: () => unknown },
+      'createCommandSubmissionResult',
+    );
+
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+    expect(createResultSpy).not.toHaveBeenCalled();
+    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
+  });
+
   it('release-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({

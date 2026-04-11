@@ -61,7 +61,13 @@ world.registerSystem({ name: 'Combat', phase: 'postUpdate', execute: combatSyste
 
 Use `world.getMetrics()` after `step()` to inspect query cache hits, spatial scan counts, system timings, and total tick time before choosing heavier optimizations.
 
-For shipping builds, set `instrumentationProfile: 'release'` in `WorldConfig`. That keeps simulation semantics the same while dropping implicit `step()` metrics and the boolean `submit()` wrapper allocation from the hot path. Keep AI harnesses and diagnosis tools on the default `full` profile.
+Use the instrumentation profiles deliberately:
+
+- `full` for AI development and diagnosis
+- `minimal` for QA/staging when you still want coarse tick metrics
+- `release` for shipping when implicit metrics should disappear from the hot path
+
+All three keep simulation semantics the same. They only change how much implicit observability work the engine does on `step()` and `submit()`.
 
 ## Entity Handles
 

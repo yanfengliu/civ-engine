@@ -56,7 +56,7 @@ World.step()
       -> output systems
       -> World.resourceStore.processTick()  [production, consumption, transfers]
       -> World.buildDiff()             [collect dirty state into TickDiff]
-      -> World.getMetrics() state updated   [skipped by implicit `step()` in `instrumentationProfile: 'release'`]
+      -> World.getMetrics() state updated   [detailed in `full`, coarse in `minimal`, skipped by implicit `step()` in `release`]
       -> notify onDiff listeners
     -> tick++
 ```
@@ -89,7 +89,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()` or `world.submitWithResult()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
 - **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 3 includes resource state and deterministic RNG state; version 1 and 2 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
-- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts. `instrumentationProfile: 'release'` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
+- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts. `instrumentationProfile: 'full'` keeps the detailed implicit metrics path, `minimal` keeps coarse implicit metrics, and `release` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
 - **Rendering** belongs outside the engine. Renderer clients should consume snapshots and tick diffs through `ClientAdapter`, keep visual objects in renderer-owned state, and submit input back as commands. See `docs/guides/rendering.md` for the recommended renderer boundary and Pixi-first reference client shape.
 - **RenderAdapter** is an optional projection helper. It turns current world state plus `TickDiff` into renderer-facing `renderSnapshot` and `renderTick` messages using game-owned callbacks. It does not own renderer objects or backend assumptions.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
