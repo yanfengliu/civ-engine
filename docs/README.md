@@ -43,6 +43,7 @@ Active future work lives in focused plan and review documents rather than a gene
 
 ### Implemented
 
+- [AI Final Form Plan](reviews/done/AI_FINAL_FORM_PLAN.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
 - [AI-First Engine Plan](reviews/done/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
 - [RTS Engine Scale Plan](reviews/done/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
 - [Expert Review](reviews/done/EXPERT_REVIEW.md) - Review findings already addressed

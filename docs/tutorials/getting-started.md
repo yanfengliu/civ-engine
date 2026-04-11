@@ -283,21 +283,21 @@ const adapter = new ClientAdapter<Events, Commands>({
 adapter.connect();
 
 world.step();
-// send callback fires with: { type: 'tick', data: { diff, events } }
+// send callback fires with: { protocolVersion: 1, type: 'tick', data: { diff, events } }
 
 // Handle incoming client messages
 adapter.handleMessage({ type: 'requestSnapshot' });
-// send callback fires with: { type: 'snapshot', data: worldSnapshot }
+// send callback fires with: { protocolVersion: 1, type: 'snapshot', data: worldSnapshot }
 
 adapter.handleMessage({
   type: 'command',
   data: { id: 'cmd-1', commandType: 'moveUnit', payload: { entityId: 0, targetX: 5, targetY: 3 } },
 });
 // If validation passes, send callback fires with:
-// { type: 'commandAccepted', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'accepted', message: 'Queued command' } }
+// { protocolVersion: 1, type: 'commandAccepted', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'accepted', message: 'Queued command' } }
 //
 // If validation fails, send callback fires with a structured rejection:
-// { type: 'commandRejected', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'validation_failed', message: 'Validation failed', details: null, validatorIndex: 0 } }
+// { protocolVersion: 1, type: 'commandRejected', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'validation_failed', message: 'Validation failed', details: null, validatorIndex: 0 } }
 
 // Stop streaming
 adapter.disconnect();

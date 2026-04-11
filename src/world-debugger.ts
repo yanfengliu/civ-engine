@@ -5,6 +5,7 @@ import type { VisibilityMap, VisibilityPlayerId } from './visibility-map.js';
 import type { TickDiff } from './diff.js';
 import type { EntityId, Position } from './types.js';
 import type { World, WorldMetrics } from './world.js';
+import { WORLD_DEBUG_SCHEMA_VERSION } from './ai-contract.js';
 
 export type DebugSeverity = 'info' | 'warn' | 'error';
 
@@ -96,6 +97,7 @@ export interface DebugProbe<TValue = unknown> {
 }
 
 export interface WorldDebugSnapshot {
+  schemaVersion: typeof WORLD_DEBUG_SCHEMA_VERSION;
   tick: number;
   entityCount: number;
   componentStoreCount: number;
@@ -155,6 +157,7 @@ export class WorldDebugger<
     const issues = collectIssues(metrics, diff);
 
     const result: WorldDebugSnapshot = {
+      schemaVersion: WORLD_DEBUG_SCHEMA_VERSION,
       tick: snapshot.tick,
       entityCount,
       componentStoreCount: Object.keys(snapshot.components).length,
@@ -414,6 +417,42 @@ function collectIssues(
         'If mutating position objects in place with full-scan disabled, call markPositionDirty().',
       ],
     });
+  }
+
+  if (metrics) {
+    const overBudgetMs =
+      metrics.durationMs.total - metrics.simulation.tickBudgetMs;
+    const warningThresholdMs = Math.max(1, metrics.simulation.tickBudgetMs * 0.25);
+    if (overBudgetMs > warningThresholdMs) {
+      issues.push({
+        severity: 'warn',
+        code: 'tick-budget-exceeded',
+        message:
+          'The last tick exceeded the configured tick budget. An AI client should inspect slow systems before trusting real-time pacing assumptions.',
+        subsystem: 'performance',
+        details: {
+          tps: metrics.simulation.tps,
+          tickBudgetMs: round(metrics.simulation.tickBudgetMs),
+          totalMs: round(metrics.durationMs.total),
+          overBudgetMs: round(overBudgetMs),
+          pendingCommands: metrics.commandStats.pendingBeforeTick,
+          processedCommands: metrics.commandStats.processed,
+          slowSystems: metrics.systems
+            .slice()
+            .sort((a, b) => b.durationMs - a.durationMs)
+            .slice(0, 3)
+            .map((system) => ({
+              name: system.name,
+              phase: system.phase,
+              durationMs: round(system.durationMs),
+            })),
+        },
+        suggestedActions: [
+          'Inspect the slowSystems list and move the hottest logic behind narrower queries or cheaper data paths.',
+          'Reduce work per tick or lower TPS if the current real-time budget is not required.',
+        ],
+      });
+    }
   }
 
   return issues;

@@ -15,6 +15,8 @@ An AI agent needs four things from the engine:
 
 `civ-engine` now provides all four at a practical baseline.
 
+It also exports explicit version markers through `getAiContractVersions()`, so an external agent can pin its parser to the current machine-facing contracts.
+
 ## Command Submission
 
 Use `world.submitWithResult()` instead of `world.submit()` when the agent needs more than a pass/fail bit:
@@ -29,6 +31,8 @@ if (!result.accepted) {
   console.log(result.code, result.message, result.details);
 }
 ```
+
+`CommandSubmissionResult` now includes `schemaVersion`, which lets an agent verify the result shape before branching on codes.
 
 `submit()` still exists, but it throws away the structured context that an autonomous agent needs.
 
@@ -59,6 +63,8 @@ The important messages are:
 - `commandRejected`
 
 `commandRejected` includes `code`, `message`, `details`, and `validatorIndex`. That gives an agent enough structure to decide whether to retry, resync, or change its behavior.
+
+Server messages also include `protocolVersion`, so a remote agent can verify the transport contract on every envelope.
 
 ## Scenario Runner
 
@@ -130,6 +136,8 @@ The recorder keeps:
 
 This is intentionally short-horizon. It is for fast diagnosis, not archival replay.
 
+When the agent needs a condensed answer instead of raw ticks, call `summarizeWorldHistoryRange()` on recorder state. That returns one range summary covering command outcomes, changed entity IDs, diff totals, event counts, and aggregated debugger issues.
+
 ## Recommended Closed Loop
 
 For an autonomous agent, the basic loop should be:
@@ -138,10 +146,12 @@ For an autonomous agent, the basic loop should be:
 2. If `result.failure` is present, branch on `failure.code`
 3. If checks failed, inspect `result.checks`
 4. Inspect `result.issues`
-5. Inspect `result.history` when the cause is not obvious
-6. Fall back to direct `submitWithResult()` plus manual stepping only for interactive or exploratory workflows
-7. Change code or commands
-8. Repeat
+5. Inspect `result.history`
+6. Use `summarizeWorldHistoryRange(result.history, { startTick, endTick })` when the cause is not obvious but the agent needs a shorter machine-readable explanation
+7. Inspect `result.debug.metrics` for `tick-budget-exceeded` and other engine-native issues before assuming the logic is wrong
+8. Fall back to direct `submitWithResult()` plus manual stepping only for interactive or exploratory workflows
+9. Change code or commands
+10. Repeat
 
 That loop works in-process, across a worker boundary, or over a transport protocol without changing the semantics.
 

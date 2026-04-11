@@ -8,13 +8,14 @@ The short version: use `WorldDebugger` for a structured snapshot of world state,
 
 `WorldDebugger` captures:
 
+- `schemaVersion`
 - tick and entity counts
 - component and resource summaries
 - spatial density summary from the world's position component
 - last-tick metrics from `world.getMetrics()`
 - last diff summary from `world.getDiff()`
 - event counts from `world.getEvents()`
-- machine-readable `issues` for engine-level edge cases such as same-tick ID recycling
+- machine-readable `issues` for engine-level edge cases such as same-tick ID recycling and tick-budget overruns
 - compatibility `warnings` derived from those issues
 - custom probe output
 
@@ -32,7 +33,11 @@ const snapshot = debuggerView.capture();
 Use `WorldHistoryRecorder` when an AI agent or test harness needs recent command outcomes and tick traces without building a full replay system.
 
 ```typescript
-import { WorldDebugger, WorldHistoryRecorder } from 'civ-engine';
+import {
+  WorldDebugger,
+  WorldHistoryRecorder,
+  summarizeWorldHistoryRange,
+} from 'civ-engine';
 
 const debuggerView = new WorldDebugger({ world });
 const history = new WorldHistoryRecorder({
@@ -42,7 +47,14 @@ const history = new WorldHistoryRecorder({
 });
 
 history.connect();
+
+const summary = summarizeWorldHistoryRange(history.getState(), {
+  startTick: 10,
+  endTick: 14,
+});
 ```
+
+The recorder state also carries `schemaVersion`. For automated analysis, `summarizeWorldHistoryRange()` can collapse a window of recorded ticks into one object covering command outcomes, changed entities, event counts, and aggregated issues.
 
 ## Probes
 
@@ -131,7 +143,9 @@ It is a debugger first, not a production renderer. The point is to prove the ren
 
 1. Use `submitWithResult()` or `ClientAdapter` so command submissions always return structured outcomes.
 2. Attach a `WorldDebugger` and inspect `issues` before falling back to ad hoc logs.
-3. Add a `WorldHistoryRecorder` when you need short-horizon command and tick history for automated diagnosis.
-4. Use `RenderAdapter` with a minimal projector when you need a visual debug surface.
-5. Keep the same projector contract when moving to the real renderer.
-6. Add game-specific probes when a new subsystem becomes hard to reason about.
+3. Treat `tick-budget-exceeded` as an engine-level signal, not a game-rule failure. Check the listed slow systems before changing scenario logic.
+4. Add a `WorldHistoryRecorder` when you need short-horizon command and tick history for automated diagnosis.
+5. Use `summarizeWorldHistoryRange()` when the raw history is too noisy for the current loop.
+6. Use `RenderAdapter` with a minimal projector when you need a visual debug surface.
+7. Keep the same projector contract when moving to the real renderer.
+8. Add game-specific probes when a new subsystem becomes hard to reason about.

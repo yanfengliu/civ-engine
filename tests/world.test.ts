@@ -477,6 +477,12 @@ describe('World', () => {
     expect(first.tick).toBe(1);
     expect(first.entityCount).toBe(1);
     expect(first.componentStoreCount).toBe(2);
+    expect(first.simulation.tps).toBe(60);
+    expect(first.simulation.tickBudgetMs).toBeCloseTo(1000 / 60, 6);
+    expect(first.commandStats).toEqual({
+      pendingBeforeTick: 0,
+      processed: 0,
+    });
     expect(first.query).toMatchObject({
       calls: 1,
       cacheHits: 0,

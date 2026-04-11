@@ -4,6 +4,8 @@ This guide covers `runScenario()`, the headless harness for executing a prepared
 
 Use it when an AI agent, test harness, or debug workflow needs a repeatable experiment instead of ad hoc setup code.
 
+Scenario results now include `schemaVersion`, and their nested history/debug payloads carry their own schema markers as well.
+
 ## What It Does
 
 `runScenario()` combines:
@@ -143,6 +145,7 @@ Check failures are reported in `result.checks`. They do not overwrite `result.fa
 
 `runScenario()` returns:
 
+- `schemaVersion`
 - `passed`
 - `failure`
 - `checks`
@@ -155,6 +158,8 @@ Check failures are reported in `result.checks`. They do not overwrite `result.fa
 - `issues`
 
 This gives an agent a single object it can inspect after each experiment run.
+
+When that single object is still too verbose, pair it with `summarizeWorldHistoryRange(result.history, { startTick, endTick })` to collapse several recorded ticks into one machine-readable explanation.
 
 ## Recommended AI Loop
 

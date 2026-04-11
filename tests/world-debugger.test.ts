@@ -65,6 +65,7 @@ describe('WorldDebugger', () => {
       ],
     }).capture();
 
+    expect(debuggerSnapshot.schemaVersion).toBe(1);
     expect(debuggerSnapshot.entityCount).toBe(2);
     expect(debuggerSnapshot.componentStoreCount).toBe(2);
     expect(debuggerSnapshot.components).toEqual([
@@ -182,5 +183,51 @@ describe('WorldDebugger', () => {
           'The last diff both destroyed and created at least one entity ID. Raw TickDiff clients should resync or use generation-aware projections.',
       },
     ]);
+  });
+
+  it('reports a performance issue when a tick exceeds its budget', () => {
+    const world = new World<Events, Commands>({
+      gridWidth: 8,
+      gridHeight: 8,
+      tps: 1000,
+      detectInPlacePositionMutations: false,
+    });
+
+    world.registerSystem({
+      name: 'BusySystem',
+      phase: 'update',
+      execute: () => {
+        const start = performance.now();
+        while (performance.now() - start < 3) {
+          // busy wait for a deterministic budget breach in tests
+        }
+      },
+    });
+
+    world.step();
+
+    const debuggerSnapshot = new WorldDebugger({ world }).capture();
+    const issue = debuggerSnapshot.issues.find(
+      (candidate) => candidate.code === 'tick-budget-exceeded',
+    );
+
+    expect(issue).toBeDefined();
+    expect(issue).toMatchObject({
+      severity: 'warn',
+      code: 'tick-budget-exceeded',
+      subsystem: 'performance',
+      details: {
+        tps: 1000,
+        tickBudgetMs: 1,
+        pendingCommands: 0,
+        processedCommands: 0,
+        slowSystems: [
+          {
+            name: 'BusySystem',
+            phase: 'update',
+          },
+        ],
+      },
+    });
   });
 });

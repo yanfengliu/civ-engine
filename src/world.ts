@@ -12,6 +12,7 @@ import { ResourceStore } from './resource-store.js';
 import type { ResourceMax, ResourcePool } from './resource-store.js';
 import { assertJsonCompatible, type JsonValue } from './json.js';
 import { DeterministicRandom } from './random.js';
+import { COMMAND_RESULT_SCHEMA_VERSION } from './ai-contract.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -41,6 +42,14 @@ export interface WorldMetrics {
   tick: number;
   entityCount: number;
   componentStoreCount: number;
+  simulation: {
+    tps: number;
+    tickBudgetMs: number;
+  };
+  commandStats: {
+    pendingBeforeTick: number;
+    processed: number;
+  };
   systems: Array<{
     name: string;
     phase: SystemPhase;
@@ -78,6 +87,7 @@ export type CommandValidationResult = boolean | CommandValidationRejection;
 export interface CommandSubmissionResult<
   TCommandType extends PropertyKey = string,
 > {
+  schemaVersion: typeof COMMAND_RESULT_SCHEMA_VERSION;
   accepted: boolean;
   commandType: TCommandType;
   code: string;
@@ -676,7 +686,7 @@ export class World<
     return this.resourceStore.getTransfers(entity);
   }
 
-  private processCommands(): void {
+  private processCommands(): number {
     const commands = this.commandQueue.drain();
     for (const command of commands) {
       const handler = this.handlers.get(command.type);
@@ -687,6 +697,7 @@ export class World<
       }
       handler(command.data as never, this);
     }
+    return commands.length;
   }
 
   private createCommandSubmissionResult<K extends keyof TCommandMap>(
@@ -703,6 +714,7 @@ export class World<
       assertJsonCompatible(config.details, `command result details for '${String(type)}'`);
     }
     return {
+      schemaVersion: COMMAND_RESULT_SCHEMA_VERSION,
       accepted: config.accepted,
       commandType: type,
       code: config.code,
@@ -761,6 +773,7 @@ export class World<
       this.gameLoop.tick + 1,
       this.entityManager.count,
       this.componentStores.size,
+      this.gameLoop.tps,
     );
     this.activeMetrics = metrics;
     const totalStart = now();
@@ -771,8 +784,9 @@ export class World<
       this.clearComponentDirty();
       this.resourceStore.clearDirty();
 
+      metrics.commandStats.pendingBeforeTick = this.commandQueue.pending;
       const commandsStart = now();
-      this.processCommands();
+      metrics.commandStats.processed = this.processCommands();
       metrics.durationMs.commands = now() - commandsStart;
 
       const spatialStart = now();
@@ -1070,11 +1084,20 @@ function createMetrics(
   tick: number,
   entityCount: number,
   componentStoreCount: number,
+  tps: number,
 ): WorldMetrics {
   return {
     tick,
     entityCount,
     componentStoreCount,
+    simulation: {
+      tps,
+      tickBudgetMs: 1000 / tps,
+    },
+    commandStats: {
+      pendingBeforeTick: 0,
+      processed: 0,
+    },
     systems: [],
     query: {
       calls: 0,
@@ -1148,6 +1171,8 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
     tick: metrics.tick,
     entityCount: metrics.entityCount,
     componentStoreCount: metrics.componentStoreCount,
+    simulation: { ...metrics.simulation },
+    commandStats: { ...metrics.commandStats },
     systems: metrics.systems.map((system) => ({ ...system })),
     query: { ...metrics.query },
     spatial: { ...metrics.spatial },

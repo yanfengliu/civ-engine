@@ -2,6 +2,7 @@ import type { WorldSnapshot } from './serializer.js';
 import type { TickDiff } from './diff.js';
 import type { World } from './world.js';
 import type { JsonValue } from './json.js';
+import { CLIENT_PROTOCOL_VERSION } from './ai-contract.js';
 
 export type GameEvent<TEventMap> = {
   type: keyof TEventMap;
@@ -9,9 +10,18 @@ export type GameEvent<TEventMap> = {
 };
 
 export type ServerMessage<TEventMap> =
-  | { type: 'snapshot'; data: WorldSnapshot }
-  | { type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
   | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
+      type: 'snapshot';
+      data: WorldSnapshot;
+    }
+  | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
+      type: 'tick';
+      data: { diff: TickDiff; events: GameEvent<TEventMap>[] };
+    }
+  | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
       type: 'commandAccepted';
       data: {
         id: string;
@@ -21,6 +31,7 @@ export type ServerMessage<TEventMap> =
       };
     }
   | {
+      protocolVersion: typeof CLIENT_PROTOCOL_VERSION;
       type: 'commandRejected';
       data: {
         id: string;
@@ -34,6 +45,7 @@ export type ServerMessage<TEventMap> =
 
 export type ClientMessage<TCommandMap> =
   | {
+      protocolVersion?: number;
       type: 'command';
       data: {
         id: string;
@@ -41,7 +53,7 @@ export type ClientMessage<TCommandMap> =
         payload: TCommandMap[keyof TCommandMap];
       };
     }
-  | { type: 'requestSnapshot' };
+  | { protocolVersion?: number; type: 'requestSnapshot' };
 
 export class ClientAdapter<
   TEventMap extends Record<keyof TEventMap, unknown>,
@@ -67,12 +79,19 @@ export class ClientAdapter<
     if (this.connected) return;
     this.connected = true;
 
-    if (!this.safeSend({ type: 'snapshot', data: this.world.serialize() })) {
+    if (
+      !this.safeSend({
+        protocolVersion: CLIENT_PROTOCOL_VERSION,
+        type: 'snapshot',
+        data: this.world.serialize(),
+      })
+    ) {
       return;
     }
 
     this.diffListener = (diff: TickDiff) => {
       this.safeSend({
+        protocolVersion: CLIENT_PROTOCOL_VERSION,
         type: 'tick',
         data: {
           diff,
@@ -103,6 +122,7 @@ export class ClientAdapter<
         }
         if (typeof message.data.commandType !== 'string') {
           this.safeSend({
+            protocolVersion: CLIENT_PROTOCOL_VERSION,
             type: 'commandRejected',
             data: {
               id: message.data.id,
@@ -119,6 +139,7 @@ export class ClientAdapter<
         const type = commandType as keyof TCommandMap;
         if (!this.world.hasCommandHandler(type)) {
           this.safeSend({
+            protocolVersion: CLIENT_PROTOCOL_VERSION,
             type: 'commandRejected',
             data: {
               id,
@@ -137,6 +158,7 @@ export class ClientAdapter<
         );
         if (!result.accepted) {
           this.safeSend({
+            protocolVersion: CLIENT_PROTOCOL_VERSION,
             type: 'commandRejected',
             data: {
               id,
@@ -150,6 +172,7 @@ export class ClientAdapter<
           return;
         }
         this.safeSend({
+          protocolVersion: CLIENT_PROTOCOL_VERSION,
           type: 'commandAccepted',
           data: {
             id,
@@ -161,7 +184,11 @@ export class ClientAdapter<
         break;
       }
       case 'requestSnapshot':
-        this.safeSend({ type: 'snapshot', data: this.world.serialize() });
+        this.safeSend({
+          protocolVersion: CLIENT_PROTOCOL_VERSION,
+          type: 'snapshot',
+          data: this.world.serialize(),
+        });
         break;
     }
   }

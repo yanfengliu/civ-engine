@@ -8,6 +8,7 @@ import {
   type DebugProbe,
   type WorldDebugSnapshot,
 } from './world-debugger.js';
+import { SCENARIO_RESULT_SCHEMA_VERSION } from './ai-contract.js';
 import type {
   CommandSubmissionResult,
   World,
@@ -50,6 +51,7 @@ export interface ScenarioCapture<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > {
+  schemaVersion: typeof SCENARIO_RESULT_SCHEMA_VERSION;
   tick: number;
   snapshot: WorldSnapshot;
   debug: WorldDebugSnapshot;
@@ -326,6 +328,7 @@ function captureScenarioState<
   ) as Array<ScenarioEvent<TEventMap>>;
 
   return {
+    schemaVersion: SCENARIO_RESULT_SCHEMA_VERSION,
     tick: snapshot.tick,
     snapshot,
     debug,

@@ -79,10 +79,10 @@ For long-lived clients, prefer command payloads that include `EntityRef` values 
 
 ```typescript
 adapter.connect();
-// send callback fires with: { type: 'snapshot', data: worldSnapshot }
+// send callback fires with: { protocolVersion: 1, type: 'snapshot', data: worldSnapshot }
 
 world.step();
-// send callback fires with: { type: 'tick', data: { diff, events } }
+// send callback fires with: { protocolVersion: 1, type: 'tick', data: { diff, events } }
 ```
 
 ### Disconnect
@@ -106,6 +106,7 @@ Full world state. Sent on `connect()` and on `requestSnapshot`.
 
 ```typescript
 {
+  protocolVersion: 1,
   type: 'snapshot',
   data: WorldSnapshot  // full JSON-serializable state
 }
@@ -117,6 +118,7 @@ Per-tick update. Sent after each `step()` while connected.
 
 ```typescript
 {
+  protocolVersion: 1,
   type: 'tick',
   data: {
     diff: TickDiff,      // what changed this tick
@@ -131,6 +133,7 @@ Sent when a submitted command passed validation and was queued successfully.
 
 ```typescript
 {
+  protocolVersion: 1,
   type: 'commandAccepted',
   data: {
     id: string,
@@ -147,6 +150,7 @@ Sent when a submitted command fails validation, has a malformed command type, or
 
 ```typescript
 {
+  protocolVersion: 1,
   type: 'commandRejected',
   data: {
     id: string,
@@ -179,6 +183,8 @@ Submit a game command:
 ```
 
 The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submitWithResult()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID plus a stable code and optional JSON details. If validation passes, the adapter sends `commandAccepted`.
+
+Every server message includes `protocolVersion`. Client messages may also include `protocolVersion`, but the adapter currently treats that field as compatibility metadata rather than a hard gate.
 
 ### `requestSnapshot`
 

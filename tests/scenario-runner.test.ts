@@ -59,6 +59,8 @@ describe('runScenario', () => {
 
     expect(result.passed).toBe(true);
     expect(result.failure).toBeNull();
+    expect(result.schemaVersion).toBe(1);
+    expect(result.history.schemaVersion).toBe(1);
     expect(result.checks).toEqual([
       {
         name: 'unit reaches target',
@@ -72,6 +74,7 @@ describe('runScenario', () => {
     ]);
     expect(result.history.commands).toEqual([
       {
+        schemaVersion: 1,
         accepted: true,
         commandType: 'move',
         code: 'accepted',

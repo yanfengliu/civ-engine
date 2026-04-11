@@ -1,3 +1,4 @@
+export * from './ai-contract.js';
 export * from './behavior-tree.js';
 export * from './cellular.js';
 export * from './client-adapter.js';

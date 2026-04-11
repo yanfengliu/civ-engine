@@ -122,6 +122,7 @@ const result = world.submitWithResult('moveUnit', {
 // result.accepted === false
 // result.code === 'dead_entity'
 // result.details === { entityId: deadUnit }
+// result.schemaVersion === 1
 ```
 
 ### Observing command outcomes

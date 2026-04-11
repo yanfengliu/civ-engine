@@ -26,6 +26,7 @@ describe('ClientAdapter', () => {
     adapter.connect();
     expect(messages).toHaveLength(1);
     expect(messages[0].type).toBe('snapshot');
+    expect(messages[0].protocolVersion).toBe(1);
     if (messages[0].type === 'snapshot') {
       expect(messages[0].data).toEqual(world.serialize());
     }
@@ -87,6 +88,7 @@ describe('ClientAdapter', () => {
 
     expect(messages).toEqual([
       {
+        protocolVersion: 1,
         type: 'commandAccepted',
         data: {
           id: 'cmd-1',
@@ -118,6 +120,7 @@ describe('ClientAdapter', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toEqual({
+      protocolVersion: 1,
       type: 'commandRejected',
       data: {
         id: 'cmd-42',
@@ -144,6 +147,7 @@ describe('ClientAdapter', () => {
 
     expect(messages).toEqual([
       {
+        protocolVersion: 1,
         type: 'commandRejected',
         data: {
           id: 'cmd-missing',
@@ -163,6 +167,7 @@ describe('ClientAdapter', () => {
     adapter.handleMessage({ type: 'command', data: { id: 'bad' } });
     expect(messages).toEqual([
       {
+        protocolVersion: 1,
         type: 'commandRejected',
         data: {
           id: 'bad',
@@ -210,6 +215,7 @@ describe('ClientAdapter', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0].type).toBe('snapshot');
+    expect(messages[0].protocolVersion).toBe(1);
     if (messages[0].type === 'snapshot') {
       expect(messages[0].data).toEqual(world.serialize());
     }

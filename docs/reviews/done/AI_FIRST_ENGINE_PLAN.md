@@ -43,6 +43,5 @@ This plan focuses on engine-native machine interfaces and their documentation:
 
 ## Follow-up Candidates
 
-- Add richer built-in issue codes for common RTS failures such as blocked move targets or stale selection refs.
-- Add diff/tick comparison helpers on top of the history recorder.
-- Add a thin MCP adapter only after the engine-native schemas settle.
+- Final-form contract versioning, history range summaries, and budget-aware diagnostics are now tracked by `docs/reviews/done/AI_FINAL_FORM_PLAN.md`.
+- A thin MCP adapter remains optional and should stay a wrapper over the existing engine-native contracts.

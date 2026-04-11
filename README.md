@@ -25,7 +25,7 @@ Requires Node.js 18+.
 - **[Getting Started](docs/tutorials/getting-started.md)** — Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
-- **[AI Integration](docs/guides/ai-integration.md)** - Structured command outcomes, debugger issues, and history for closed-loop agents
+- **[AI Integration](docs/guides/ai-integration.md)** - Structured command outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
@@ -73,13 +73,13 @@ world.step();
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
-| **Debugging**               | `WorldDebugger`, machine-readable issues, `WorldHistoryRecorder`, and probes for headless inspection                  |
+| **Debugging**               | `WorldDebugger`, machine-readable issues, `WorldHistoryRecorder`, range summaries, and probes for headless inspection |
 | **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
 | **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
 | **State Diffs**             | Per-tick change sets: what entities/components/resources changed                                                      |
-| **Client Protocol**         | Transport-agnostic typed messages, including structured `commandAccepted`/`commandRejected` outcomes                  |
+| **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` outcomes |
 
 ## Architecture
 
@@ -120,6 +120,7 @@ src/
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
   render-adapter.ts   Renderer-facing projected snapshot/diff streaming
+  ai-contract.ts      Version markers for machine-facing AI contracts
   history-recorder.ts Short-horizon tick and command history for AI/debug loops
   scenario-runner.ts  Headless scenario harness for AI/test iteration
   visibility-map.ts   Per-player visible and explored cell tracking
@@ -222,7 +223,7 @@ docs/
 | `serialize()`                                  | `WorldSnapshot`               | Capture current state as JSON snapshot                                  |
 | `World.deserialize(snapshot, systems?)`        | `World`                       | Restore world from snapshot (static)                                    |
 | `getDiff()`                                    | `TickDiff \| null`            | Get last tick's diff                                                    |
-| `getMetrics()`                                 | `WorldMetrics \| null`        | Get last tick's timing/query/spatial metrics                            |
+| `getMetrics()`                                 | `WorldMetrics \| null`        | Get last tick's simulation budget, command, timing, query, and spatial metrics |
 | `onDiff(fn)`                                   | `void`                        | Subscribe to per-tick diffs                                             |
 | `offDiff(fn)`                                  | `void`                        | Unsubscribe from diffs                                                  |
 | **Entity Lifecycle**                           |                               |                                                                         |
@@ -244,7 +245,8 @@ docs/
 | `noise.ts`          | `createNoise2D(seed)`, `octaveNoise2D(...)`                            | Seedable simplex noise                                      |
 | `random.ts`         | `DeterministicRandom`, `RandomState`                                   | Engine PRNG and serializable RNG state                      |
 | `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector`     | Projection boundary for renderer-facing snapshots and diffs |
-| `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`      | Short-horizon tick and command history capture              |
+| `ai-contract.ts` | `getAiContractVersions`, schema/protocol version constants                     | Stable version markers for machine-facing contracts          |
+| `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`, `summarizeWorldHistoryRange` | Short-horizon history capture plus AI-facing range summaries |
 | `scenario-runner.ts` | `runScenario`, `ScenarioResult`, `ScenarioContext`, `ScenarioCheck`  | Headless setup/run/check harness for AI and tests           |
 | `cellular.ts`       | `createCellGrid(...)`, `stepCellGrid(...)`                             | Cellular automata                                           |
 | `map-gen.ts`        | `createTileGrid(world)`                                                | Bulk tile entity creation                                   |

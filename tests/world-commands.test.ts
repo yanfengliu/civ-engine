@@ -48,6 +48,7 @@ describe('World commands', () => {
     world.registerHandler('move', () => {});
 
     expect(world.submitWithResult('move', { x: 1, y: 2 })).toEqual({
+      schemaVersion: 1,
       accepted: true,
       commandType: 'move',
       code: 'accepted',
@@ -79,6 +80,7 @@ describe('World commands', () => {
     world.registerHandler('move', () => {});
 
     expect(world.submitWithResult('move', { x: -1, y: 2 })).toEqual({
+      schemaVersion: 1,
       accepted: false,
       commandType: 'move',
       code: 'out_of_bounds_target',
@@ -108,6 +110,7 @@ describe('World commands', () => {
 
     expect(results).toEqual([
       {
+        schemaVersion: 1,
         accepted: false,
         commandType: 'move',
         code: 'validation_failed',

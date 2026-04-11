@@ -116,6 +116,8 @@ interface WorldMetrics {
   tick: number;
   entityCount: number;
   componentStoreCount: number;
+  simulation: { tps: number; tickBudgetMs: number };
+  commandStats: { pendingBeforeTick: number; processed: number };
   systems: Array<{ name: string; phase: SystemPhase; durationMs: number }>;
   query: { calls: number; cacheHits: number; cacheMisses: number; results: number };
   spatial: { fullScans: number; scannedEntities: number; explicitSyncs: number };
@@ -131,6 +133,22 @@ interface WorldMetrics {
 ```
 
 Last-tick instrumentation returned by `world.getMetrics()`.
+
+### `getAiContractVersions()`
+
+```typescript
+// src/ai-contract.ts
+function getAiContractVersions(): {
+  commandResult: number;
+  worldDebug: number;
+  worldHistory: number;
+  worldHistoryRangeSummary: number;
+  scenarioResult: number;
+  clientProtocol: number;
+}
+```
+
+Returns the current version markers for the engine's machine-facing AI contracts.
 
 ### `CommandValidationRejection`
 
@@ -159,6 +177,7 @@ Validators may still return `true` or `false`. Returning a rejection object pres
 ```typescript
 // src/world.ts
 interface CommandSubmissionResult<TCommandType extends PropertyKey = string> {
+  schemaVersion: number;
   accepted: boolean;
   commandType: TCommandType;
   code: string;
@@ -564,13 +583,15 @@ type GameEvent<TEventMap> = {
 ```typescript
 // src/client-adapter.ts
 type ServerMessage<TEventMap> =
-  | { type: 'snapshot'; data: WorldSnapshot }
-  | { type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
+  | { protocolVersion: number; type: 'snapshot'; data: WorldSnapshot }
+  | { protocolVersion: number; type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
   | {
+      protocolVersion: number;
       type: 'commandAccepted';
       data: { id: string; commandType: string; code: 'accepted'; message: string };
     }
   | {
+      protocolVersion: number;
       type: 'commandRejected';
       data: {
         id: string;
@@ -587,26 +608,26 @@ Messages sent from server to client:
 
 | Type | When sent | Payload |
 |---|---|---|
-| `snapshot` | On `connect()` or `requestSnapshot` | Full `WorldSnapshot` |
-| `tick` | After each `step()` while connected | `TickDiff` + events from the tick |
-| `commandAccepted` | When a submitted command passed validation and was queued | Command ID + command type + accepted message |
-| `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | Command ID + command type + stable code/message/details |
+| `snapshot` | On `connect()` or `requestSnapshot` | `protocolVersion` + full `WorldSnapshot` |
+| `tick` | After each `step()` while connected | `protocolVersion` + `TickDiff` + events from the tick |
+| `commandAccepted` | When a submitted command passed validation and was queued | `protocolVersion` + command ID + command type + accepted message |
+| `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | `protocolVersion` + command ID + command type + stable code/message/details |
 
 ### `ClientMessage<TCommandMap>`
 
 ```typescript
 // src/client-adapter.ts
 type ClientMessage<TCommandMap> =
-  | { type: 'command'; data: { id: string; commandType: keyof TCommandMap; payload: TCommandMap[keyof TCommandMap] } }
-  | { type: 'requestSnapshot' };
+  | { protocolVersion?: number; type: 'command'; data: { id: string; commandType: keyof TCommandMap; payload: TCommandMap[keyof TCommandMap] } }
+  | { protocolVersion?: number; type: 'requestSnapshot' };
 ```
 
 Messages sent from client to server:
 
 | Type | Purpose | Payload |
 |---|---|---|
-| `command` | Submit a game command | Command ID, type, and payload |
-| `requestSnapshot` | Request a full state resync | (none) |
+| `command` | Submit a game command | Optional `protocolVersion`, command ID, type, and payload |
+| `requestSnapshot` | Request a full state resync | Optional `protocolVersion` |
 
 ---
 
@@ -1443,7 +1464,7 @@ if (diff) {
 getMetrics(): WorldMetrics | null
 ```
 
-Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
+Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
 
 ```typescript
 world.step();
@@ -2852,6 +2873,7 @@ interface ScenarioResult<TEventMap, TCommandMap>
 ```
 
 Final machine-readable result from `runScenario()`.
+`ScenarioCapture` and `ScenarioResult` include `schemaVersion`.
 
 ### `runScenario(config)`
 
@@ -2892,6 +2914,8 @@ Short-horizon recorder for recent command outcomes and tick traces. Useful for A
 ```typescript
 import {
   WorldHistoryRecorder,
+  summarizeWorldHistoryRange,
+  type WorldHistoryRangeSummary,
   type WorldHistoryState,
   type WorldHistoryTick,
 } from 'civ-engine';
@@ -2966,6 +2990,18 @@ getState(): WorldHistoryState<TEventMap, TCommandMap, TDebug>
 ```
 
 Returns the full recorder state: initial snapshot, recent ticks, and recent command outcomes.
+The returned `WorldHistoryState` includes `schemaVersion`.
+
+#### `summarizeWorldHistoryRange(state, options?)`
+
+```typescript
+summarizeWorldHistoryRange<TEventMap, TCommandMap>(
+  state: WorldHistoryState<TEventMap, TCommandMap, WorldDebugSnapshot>,
+  options?: { startTick?: number; endTick?: number },
+): WorldHistoryRangeSummary | null
+```
+
+Aggregates a short tick window into one machine-readable summary covering changed entity IDs, command outcomes, events, diff totals, and debugger issue counts.
 
 ---
 
@@ -3017,12 +3053,13 @@ capture(): WorldDebugSnapshot
 
 Returns a structured debug snapshot containing:
 
+- `schemaVersion`
 - world/entity/component/resource summaries
 - spatial density information
 - current event counts
 - `world.getMetrics()` output
 - last diff summary
-- machine-readable `issues`
+- machine-readable `issues`, including tick-budget diagnostics and diff hazards
 - compatibility `warnings` derived from those issues
 - custom probe payloads
 
