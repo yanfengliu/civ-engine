@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>civ-engine debug client</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="toolbar">
+        <div class="toolbar__title">
+          <h1>civ-engine debug client</h1>
+          <p>Left click selects. Right click assigns a target to the selected unit.</p>
+        </div>
+        <div class="toolbar__controls">
+          <button id="toggle-run" type="button">Pause</button>
+          <button id="step" type="button">Step</button>
+          <button id="snapshot" type="button">Resync Snapshot</button>
+          <button id="randomize" type="button">Shuffle Goals</button>
+          <label class="control control--slider" for="tick-rate">
+            <span>Tick ms</span>
+            <input id="tick-rate" type="range" min="120" max="420" step="20" value="180">
+            <output id="tick-rate-value" for="tick-rate">180</output>
+          </label>
+          <label class="control"><input id="toggle-grid" type="checkbox" checked> Grid</label>
+          <label class="control"><input id="toggle-fog" type="checkbox" checked> Fog</label>
+          <label class="control"><input id="toggle-occupancy" type="checkbox" checked> Occupancy</label>
+          <label class="control"><input id="toggle-reservations" type="checkbox" checked> Reservations</label>
+          <label class="control"><input id="toggle-paths" type="checkbox" checked> Paths</label>
+          <label class="control"><input id="toggle-hidden" type="checkbox"> Hidden Units</label>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="playfield">
+          <canvas id="viewport"></canvas>
+          <div class="playfield__status playfield__status--info" id="status-banner">Connecting to worker...</div>
+          <div class="playfield__legend">
+            <span><i class="legend-swatch legend-swatch--blue"></i> Blue team</span>
+            <span><i class="legend-swatch legend-swatch--red"></i> Red team</span>
+            <span><i class="legend-swatch legend-swatch--amber"></i> Reservations</span>
+            <span><i class="legend-swatch legend-swatch--fog"></i> Fog</span>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="sidebar__section">
+            <h2>Frame</h2>
+            <dl class="data-grid" id="frame-summary"></dl>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Selection</h2>
+            <pre class="panel-json" id="selection-json">No selection</pre>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Warnings</h2>
+            <div class="panel-list" id="warning-list">No warnings.</div>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Last Diff</h2>
+            <div class="panel-list" id="diff-summary">No diff yet.</div>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Metrics</h2>
+            <div class="panel-list" id="metrics-summary">No metrics yet.</div>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Events</h2>
+            <div class="panel-list" id="event-summary">No events yet.</div>
+          </section>
+
+          <section class="sidebar__section">
+            <h2>Probe Summary</h2>
+            <div class="panel-list" id="probe-summary">No probe data yet.</div>
+          </section>
+
+          <section class="sidebar__section sidebar__section--grow">
+            <h2>Raw Debug Payload</h2>
+            <pre class="panel-json panel-json--grow" id="raw-debug">Waiting for debugger payload...</pre>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

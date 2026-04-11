@@ -28,6 +28,7 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - `VisibilityMap` for per-player visible and explored cell tracking.
 - `RenderAdapter` for renderer-facing projected snapshots and diffs with generation-aware entity refs.
 - `WorldDebugger` plus occupancy, visibility, and path queue probe helpers for headless inspection.
+- A browser debug client example backed by a worker-owned simulation, `RenderAdapter`, and `WorldDebugger`.
 - `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios and metrics output.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
 - `ClientAdapter` runtime message guarding, missing-handler rejection, rejection reasons, and optional `onError` callback for send failures.
@@ -41,5 +42,6 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - Added `docs/guides/rendering.md`.
 - Added `docs/guides/rts-primitives.md`.
 - Added `docs/guides/debugging.md`.
+- Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter error handling, render projection, and debugging helpers.

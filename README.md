@@ -14,6 +14,7 @@ npm test        # run all tests
 npm run lint    # lint
 npm run typecheck
 npm run build   # emit dist package files
+npm run debug:client   # build and serve the browser debug client example
 ```
 
 Requires Node.js 18+.
@@ -24,6 +25,7 @@ Requires Node.js 18+.
 - **[Getting Started](docs/tutorials/getting-started.md)** — Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
+- **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
 ## What You Can Build
@@ -122,6 +124,8 @@ src/
   types.ts            Shared types (EntityId, EntityRef, Position, WorldConfig)
 tests/
   *.test.ts           Unit and integration tests per module
+examples/
+  debug-client/       Browser debug viewer backed by RenderAdapter and WorldDebugger
 docs/
   README.md           Documentation hub
   ARCHITECTURE.md     Detailed architecture documentation

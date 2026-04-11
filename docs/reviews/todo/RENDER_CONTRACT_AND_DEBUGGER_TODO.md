@@ -17,6 +17,8 @@ Add a renderer-facing contract and a more comprehensive debugger without making 
 - [x] Add debugger probes for `OccupancyGrid`, `VisibilityMap`, and `PathRequestQueue`.
 - [x] Cover ID recycling, render-only entity removal, and debug probe capture with tests.
 - [x] Update guides and API reference to document the render/debug boundary.
+- [x] Add a browser reference debug client that consumes `renderSnapshot` and `renderTick` messages from a worker-owned simulation.
+- [x] Make the reference debugger comprehensive enough to inspect occupancy, reservations, visibility, paths, entity state, metrics, events, warnings, and the raw payload in one place.
 
 ## Landed Files
 
@@ -24,7 +26,12 @@ Add a renderer-facing contract and a more comprehensive debugger without making 
 - `src/world-debugger.ts`
 - `tests/render-adapter.test.ts`
 - `tests/world-debugger.test.ts`
+- `examples/debug-client/index.html`
+- `examples/debug-client/styles.css`
+- `examples/debug-client/app.js`
+- `examples/debug-client/worker.js`
+- `scripts/serve-debug-client.mjs`
 
 ## Next Practical Step
 
-Use `RenderAdapter` plus a game-owned projector module to feed a reference renderer client. Start with a debug-first client, then layer in a real PixiJS scene adapter on top of the same projected contract.
+Use the same projector boundary to build a real scene adapter on top of PixiJS or another chosen runtime. The debug client should remain the first stop for protocol and simulation debugging, while the production renderer focuses on assets, animation, culling, and UI.

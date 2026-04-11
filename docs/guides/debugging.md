@@ -88,9 +88,30 @@ That gives a debug client one message stream containing:
 
 This is a good way to build a first viewer before a real renderer exists.
 
+## Reference Debug Client
+
+The repository now includes a browser reference viewer at `examples/debug-client/`.
+
+Run it from the repository root:
+
+```bash
+npm run debug:client
+```
+
+That command builds `dist/`, starts the static debug server, and serves the viewer at `/examples/debug-client/`.
+
+The reference client is intentionally plain:
+
+- a worker owns the `World`, `RenderAdapter`, `WorldDebugger`, `OccupancyGrid`, `VisibilityMap`, and queued path service
+- the main thread consumes `renderSnapshot` and `renderTick` messages only
+- the canvas renders projected entities, fog, occupancy, reservations, and path overlays
+- the sidebar shows warnings, last diff summary, metrics, event counts, probe summaries, and the raw debug payload
+
+It is a debugger first, not a production renderer. The point is to prove the render/debug contract and make simulation faults visible without committing to PixiJS or another scene backend yet.
+
 ## Recommended Workflow
 
 1. Use `RenderAdapter` with a minimal projector.
-2. Build a debug-first client that can inspect projected entities, frame state, and debugger payloads.
+2. Start with the reference debug client or build a similarly small viewer that can inspect projected entities, frame state, and debugger payloads.
 3. Keep the same projector contract when moving to the real renderer.
 4. Add game-specific probes when a new subsystem becomes hard to reason about.

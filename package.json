@@ -18,6 +18,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "benchmark:rts": "npm run build && node scripts/rts-benchmark.mjs",
+    "debug:client": "npm run build && node scripts/serve-debug-client.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src tests --no-error-on-unmatched-pattern",

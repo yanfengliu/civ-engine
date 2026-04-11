@@ -169,6 +169,8 @@ This is the intended split:
 - engine: world state, projection transport, debugging helpers
 - game: projector rules, command mapping, scene adapter, backend renderer
 
+The repository now also ships a browser debug client under `examples/debug-client/`. It uses `RenderAdapter` plus `WorldDebugger` over a worker boundary, then renders the projected state in a plain canvas viewer. Use it as the reference implementation for message flow and debug surface expectations, not as the final production renderer.
+
 ## Snapshot and Diff Flow
 
 Use full snapshots for initial sync and recovery. Use tick diffs for normal rendering.
