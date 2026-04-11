@@ -79,7 +79,7 @@ world.getResource(city, 'food'); // { current: 50, max: null }
 
 Resource amounts, rates, finite maxima, and transfer rates must be non-negative finite numbers.
 
-Snapshot version 2 restores resource registrations, pools, rates, transfers, and transfer IDs. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks. Version 1 snapshots still load, but without resource state.
+Snapshot version 3 restores resource registrations, pools, rates, transfers, transfer IDs, and deterministic RNG state. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks. Version 1 and 2 snapshots still load for compatibility.
 
 ## Client Adapter
 

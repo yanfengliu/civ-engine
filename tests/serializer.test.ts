@@ -19,7 +19,7 @@ describe('Serialization', () => {
 
     const snapshot = world.serialize();
 
-    expect(snapshot.version).toBe(2);
+    expect(snapshot.version).toBe(3);
     expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
@@ -32,7 +32,7 @@ describe('Serialization', () => {
     expect(snapshot.components['health']).toEqual([
       [0, { hp: 100 }],
     ]);
-    if (snapshot.version !== 2) throw new Error('Expected version 2 snapshot');
+    if (snapshot.version !== 3) throw new Error('Expected version 3 snapshot');
     expect(snapshot.resources).toEqual({
       registered: [],
       pools: {},
@@ -41,6 +41,7 @@ describe('Serialization', () => {
       transfers: [],
       nextTransferId: 0,
     });
+    expect(snapshot.rng.state).toEqual(expect.any(Number));
   });
 
   it('round-trip: serialize then deserialize preserves all state', () => {
@@ -118,6 +119,17 @@ describe('Serialization', () => {
     expect(restored.getTransfers(a)).toEqual([
       { id: 0, from: a, to: b, resource: 'food', rate: 3 },
     ]);
+  });
+
+  it('round-trips deterministic random state', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 1234 });
+    world.random();
+    const snapshot = world.serialize();
+    const next = world.random();
+
+    expect(snapshot.config.seed).toBe(1234);
+    const restored = World.deserialize(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored.random()).toBe(next);
   });
 
   it('serialize rejects direct mutations that make components non-JSON', () => {

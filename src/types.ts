@@ -16,4 +16,5 @@ export interface WorldConfig {
   tps: number;
   positionKey?: string;
   maxTicksPerFrame?: number;
+  seed?: number | string;
 }

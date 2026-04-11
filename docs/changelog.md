@@ -10,7 +10,7 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - Component data must be JSON-compatible. Components containing `undefined`, non-finite numbers, functions, symbols, bigints, class instances, or circular references are rejected.
 - Component and resource writes through `World` now validate entity liveness and throw for dead or never-created entities.
 - Position writes validate integer grid bounds before mutating component state.
-- `WorldSnapshot` is now version 2 and includes resource state. Version 1 snapshots still load, but without resource state.
+- `WorldSnapshot` is now version 3 and includes resource state plus deterministic RNG state. Version 1 and 2 snapshots still load for compatibility.
 
 ### Added
 
@@ -19,6 +19,7 @@ This release hardens the engine API and package boundary for reusable 2D civiliz
 - In-place component mutation detection for tick diffs.
 - Read-only `world.grid` view, while `SpatialGrid` remains available as a standalone utility.
 - Resource store snapshot state, including registrations, pools, rates, transfers, and next transfer ID.
+- `world.random()` and `WorldConfig.seed` for deterministic pseudo-random simulation logic.
 - Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
 - `ClientAdapter` runtime message guarding, missing-handler rejection, rejection reasons, and optional `onError` callback for send failures.
 - Root package export barrel, declaration build config, npm package metadata, and CI workflow.

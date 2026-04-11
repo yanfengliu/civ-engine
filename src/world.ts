@@ -11,6 +11,7 @@ import { CommandQueue } from './command-queue.js';
 import { ResourceStore } from './resource-store.js';
 import type { ResourceMax, ResourcePool } from './resource-store.js';
 import { assertJsonCompatible } from './json.js';
+import { DeterministicRandom } from './random.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -19,12 +20,21 @@ export type System<
 
 type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
 
+interface QueryCacheEntry {
+  readonly mask: bigint;
+  readonly entities: EntityId[];
+}
+
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
+  private componentBits = new Map<string, bigint>();
+  private nextComponentBit = 0;
+  private entitySignatures: bigint[] = [];
+  private queryCache = new Map<string, QueryCacheEntry>();
   private systems: System<TEventMap, TCommandMap>[] = [];
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
@@ -41,10 +51,14 @@ export class World<
   private spatialGrid: SpatialGrid;
   readonly grid: SpatialGridView;
   readonly positionKey: string;
+  private readonly seed: number | string | undefined;
   private currentDiff: TickDiff | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
-  private destroyCallbacks: Array<(id: EntityId, world: World<TEventMap, TCommandMap>) => void> = [];
+  private rng: DeterministicRandom;
+  private destroyCallbacks: Array<
+    (id: EntityId, world: World<TEventMap, TCommandMap>) => void
+  > = [];
 
   constructor(config: WorldConfig) {
     validateWorldConfig(config);
@@ -52,6 +66,8 @@ export class World<
     this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
     this.grid = this.spatialGrid;
     this.positionKey = config.positionKey ?? 'position';
+    this.seed = config.seed;
+    this.rng = new DeterministicRandom(config.seed);
     this.gameLoop = new GameLoop({
       tps: config.tps,
       onTick: () => this.executeTick(),
@@ -60,7 +76,9 @@ export class World<
   }
 
   createEntity(): EntityId {
-    return this.entityManager.create();
+    const id = this.entityManager.create();
+    this.entitySignatures[id] = 0n;
+    return id;
   }
 
   destroyEntity(id: EntityId): void {
@@ -75,6 +93,7 @@ export class World<
       this.spatialGrid.remove(id, prev.x, prev.y);
       this.previousPositions.delete(id);
     }
+    this.setEntitySignature(id, 0n);
     for (const store of this.componentStores.values()) {
       store.remove(id);
     }
@@ -118,6 +137,7 @@ export class World<
       throw new Error(`Component '${key}' is already registered`);
     }
     this.componentStores.set(key, new ComponentStore<T>());
+    this.registerComponentBit(key);
   }
 
   addComponent<T>(entity: EntityId, key: string, data: T): void {
@@ -131,7 +151,11 @@ export class World<
       this.assertPositionInBounds(position);
     }
     const store = this.getStore<T>(key);
+    const hadComponent = store.has(entity);
     store.set(entity, data);
+    if (!hadComponent) {
+      this.setEntityComponentSignature(entity, key, true);
+    }
     if (position) {
       this.syncSpatialEntity(entity, position);
     }
@@ -157,7 +181,11 @@ export class World<
   removeComponent(entity: EntityId, key: string): void {
     this.assertAlive(entity);
     const store = this.componentStores.get(key);
+    const hadComponent = store?.has(entity) ?? false;
     store?.remove(entity);
+    if (hadComponent) {
+      this.setEntityComponentSignature(entity, key, false);
+    }
     if (key === this.positionKey) {
       this.removeFromSpatialIndex(entity);
     }
@@ -187,25 +215,11 @@ export class World<
   }
 
   *query(...keys: string[]): IterableIterator<EntityId> {
-    if (keys.length === 0) return;
-
-    const stores = keys.map((k) => {
-      const store = this.componentStores.get(k);
-      if (!store) throw new Error(`Component '${k}' is not registered`);
-      return store;
-    });
-
-    let smallest = stores[0];
-    for (let i = 1; i < stores.length; i++) {
-      if (stores[i].size < smallest.size) {
-        smallest = stores[i];
-      }
-    }
-
-    for (const id of smallest.entities()) {
-      if (stores.every((s) => s.has(id))) {
-        yield id;
-      }
+    const queryKeys = this.normalizeQueryKeys(keys);
+    if (!queryKeys) return;
+    const cache = this.getQueryCache(queryKeys);
+    for (const id of cache.entities) {
+      yield id;
     }
   }
 
@@ -317,6 +331,10 @@ export class World<
     return this.eventBus.getEvents();
   }
 
+  random(): number {
+    return this.rng.random();
+  }
+
   serialize(): WorldSnapshot {
     const components: Record<string, Array<[EntityId, unknown]>> = {};
     for (const [key, store] of this.componentStores) {
@@ -326,18 +344,24 @@ export class World<
       }
       components[key] = entries;
     }
+    const config: WorldConfig = {
+      gridWidth: this.spatialGrid.width,
+      gridHeight: this.spatialGrid.height,
+      tps: this.gameLoop.tps,
+      positionKey: this.positionKey,
+    };
+    if (this.seed !== undefined) {
+      config.seed = this.seed;
+    }
+
     return {
-      version: 2,
-      config: {
-        gridWidth: this.spatialGrid.width,
-        gridHeight: this.spatialGrid.height,
-        tps: this.gameLoop.tps,
-        positionKey: this.positionKey,
-      },
+      version: 3,
+      config,
       tick: this.gameLoop.tick,
       entities: this.entityManager.getState(),
       components,
       resources: this.resourceStore.getState(),
+      rng: this.rng.getState(),
     };
   }
 
@@ -349,7 +373,7 @@ export class World<
     systems?: System<TEventMap, TCommandMap>[],
   ): World<TEventMap, TCommandMap> {
     const version = (snapshot as { version: number }).version;
-    if (version !== 1 && version !== 2) {
+    if (version !== 1 && version !== 2 && version !== 3) {
       throw new Error(`Unsupported snapshot version: ${version}`);
     }
     if (
@@ -368,8 +392,12 @@ export class World<
         ComponentStore.fromEntries(entries as Array<[number, unknown]>),
       );
     }
-    if (snapshot.version === 2) {
+    world.rebuildComponentSignatures();
+    if ('resources' in snapshot) {
       world.resourceStore = ResourceStore.fromState(snapshot.resources);
+    }
+    if ('rng' in snapshot) {
+      world.rng = DeterministicRandom.fromState(snapshot.rng);
     }
     world.syncSpatialIndex();
 
@@ -597,6 +625,138 @@ export class World<
 
   private assertPositionInBounds(position: Position): void {
     this.spatialGrid.getAt(position.x, position.y);
+  }
+
+  private registerComponentBit(key: string): bigint {
+    const existing = this.componentBits.get(key);
+    if (existing !== undefined) return existing;
+    const bit = 1n << BigInt(this.nextComponentBit);
+    this.nextComponentBit++;
+    this.componentBits.set(key, bit);
+    return bit;
+  }
+
+  private setEntityComponentSignature(
+    entity: EntityId,
+    key: string,
+    hasComponent: boolean,
+  ): void {
+    const bit = this.registerComponentBit(key);
+    const current = this.entitySignatures[entity] ?? 0n;
+    const next = hasComponent ? current | bit : current & ~bit;
+    this.setEntitySignature(entity, next);
+  }
+
+  private setEntitySignature(entity: EntityId, next: bigint): void {
+    const previous = this.entitySignatures[entity] ?? 0n;
+    if (previous === next) return;
+    this.entitySignatures[entity] = next;
+    this.updateQueryCacheMembership(entity, previous, next);
+  }
+
+  private updateQueryCacheMembership(
+    entity: EntityId,
+    previous: bigint,
+    next: bigint,
+  ): void {
+    for (const cache of this.queryCache.values()) {
+      const didMatch = (previous & cache.mask) === cache.mask;
+      const doesMatch = (next & cache.mask) === cache.mask;
+      if (didMatch === doesMatch) continue;
+      if (doesMatch) {
+        insertSorted(cache.entities, entity);
+      } else {
+        const index = cache.entities.indexOf(entity);
+        if (index !== -1) {
+          cache.entities.splice(index, 1);
+        }
+      }
+    }
+  }
+
+  private normalizeQueryKeys(keys: string[]): string[] | null {
+    if (keys.length === 0) return null;
+
+    const unique = [...new Set(keys)];
+    unique.sort();
+    for (const key of unique) {
+      if (!this.componentStores.has(key)) {
+        throw new Error(`Component '${key}' is not registered`);
+      }
+    }
+    return unique;
+  }
+
+  private getQueryCache(keys: string[]): QueryCacheEntry {
+    const cacheKey = keys.join('\0');
+    const cached = this.queryCache.get(cacheKey);
+    if (cached) return cached;
+
+    const mask = this.queryMask(keys);
+    let smallest = this.componentStores.get(keys[0])!;
+    for (let i = 1; i < keys.length; i++) {
+      const store = this.componentStores.get(keys[i])!;
+      if (store.size < smallest.size) {
+        smallest = store;
+      }
+    }
+
+    const entities: EntityId[] = [];
+    for (const id of smallest.entities()) {
+      if (((this.entitySignatures[id] ?? 0n) & mask) === mask) {
+        entities.push(id);
+      }
+    }
+
+    const entry = { mask, entities };
+    this.queryCache.set(cacheKey, entry);
+    return entry;
+  }
+
+  private queryMask(keys: string[]): bigint {
+    let mask = 0n;
+    for (const key of keys) {
+      const bit = this.componentBits.get(key);
+      if (bit === undefined) {
+        throw new Error(`Component '${key}' is not registered`);
+      }
+      mask |= bit;
+    }
+    return mask;
+  }
+
+  private rebuildComponentSignatures(): void {
+    this.componentBits.clear();
+    this.nextComponentBit = 0;
+    this.entitySignatures = [];
+    this.queryCache.clear();
+
+    for (const key of this.componentStores.keys()) {
+      this.registerComponentBit(key);
+    }
+    for (const [key, store] of this.componentStores) {
+      const bit = this.componentBits.get(key)!;
+      for (const entity of store.entities()) {
+        this.entitySignatures[entity] =
+          (this.entitySignatures[entity] ?? 0n) | bit;
+      }
+    }
+  }
+}
+
+function insertSorted(values: EntityId[], value: EntityId): void {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (values[mid] < value) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  if (values[low] !== value) {
+    values.splice(low, 0, value);
   }
 }
 

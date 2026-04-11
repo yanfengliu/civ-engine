@@ -84,7 +84,7 @@ world.step();
 | **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
 | **Behavior Trees** | Generic BT framework with action, condition, selector, sequence nodes |
 | **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
-| **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()` |
+| **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state |
 | **State Diffs** | Per-tick change sets: what entities/components/resources changed |
 | **Client Protocol** | Transport-agnostic typed messages, ClientAdapter bridges World to any transport |
 
@@ -145,6 +145,7 @@ docs/
 | `config.tps`             | `number` | (required)     | Ticks per second (e.g., 10 for sims)  |
 | `config.positionKey`     | `string` | `'position'`   | Component key used for spatial sync   |
 | `config.maxTicksPerFrame`| `number` | `4`            | Spiral-of-death cap for real-time loop|
+| `config.seed`            | `number \| string` | default seed | Seed for deterministic `world.random()` |
 
 ### World Methods
 
@@ -187,6 +188,7 @@ docs/
 | `on(type, listener)` | `void` | Subscribe to event type |
 | `off(type, listener)` | `void` | Unsubscribe from event type |
 | `getEvents()` | `ReadonlyArray` | Get all events from current tick |
+| `random()` | `number` | Deterministic pseudo-random number in `[0, 1)` |
 | **Resources** | | |
 | `registerResource(key, options?)` | `void` | Register a resource type |
 | `addResource(entity, key, amount)` | `number` | Add to resource pool (returns amount added) |
@@ -224,6 +226,7 @@ docs/
 |---|---|---|
 | `pathfinding.ts` | `findPath<T>(config)` | Generic A* pathfinding |
 | `noise.ts` | `createNoise2D(seed)`, `octaveNoise2D(...)` | Seedable simplex noise |
+| `random.ts` | `DeterministicRandom`, `RandomState` | Engine PRNG and serializable RNG state |
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |

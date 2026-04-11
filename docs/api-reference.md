@@ -74,6 +74,7 @@ interface WorldConfig {
   tps: number;             // Ticks per second for real-time loop (required)
   positionKey?: string;    // Component key used for spatial sync (default: 'position')
   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
+  seed?: number | string;  // Deterministic RNG seed
 }
 ```
 
@@ -91,7 +92,7 @@ A system is a pure function that receives the `World` and runs game logic. Syste
 ```typescript
 // src/serializer.ts
 interface WorldSnapshot {
-  version: 2;
+  version: 3;
   config: WorldConfig;
   tick: number;
   entities: {
@@ -101,10 +102,11 @@ interface WorldSnapshot {
   };
   components: Record<string, Array<[EntityId, unknown]>>;
   resources: ResourceStoreState;
+  rng: RandomState;
 }
 ```
 
-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 and 2 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
 
 ### `TickDiff`
 
@@ -155,7 +157,18 @@ interface ResourceStoreState {
 }
 ```
 
-Serializable resource subsystem state included in snapshot version 2.
+Serializable resource subsystem state included in snapshot versions 2 and 3.
+
+### `RandomState`
+
+```typescript
+// src/random.ts
+interface RandomState {
+  state: number;
+}
+```
+
+Serializable deterministic RNG state included in snapshot version 3.
 
 ### `Transfer`
 
@@ -345,6 +358,7 @@ Creates a new world with the specified grid dimensions, tick rate, and optional 
 | `config.tps` | `number` | Yes | Ticks per second for the real-time loop |
 | `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
 | `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
+| `config.seed` | `number \| string` | No | Seed for deterministic `world.random()` sequences |
 
 **Example:**
 
@@ -536,7 +550,7 @@ world.removeComponent(unit, 'velocity');
 *query(...keys: string[]): IterableIterator<EntityId>
 ```
 
-Returns an iterator over all entity IDs that have **every** specified component. Uses the smallest component store as the iteration base for efficiency.
+Returns an iterator over all entity IDs that have **every** specified component. Query membership is cached by component signature and updated as components are added, removed, or entities are destroyed.
 
 **Throws:** `Error` if any component key is not registered.
 
@@ -811,6 +825,21 @@ for (const event of world.getEvents()) {
 }
 ```
 
+### Randomness
+
+#### `random()`
+
+```typescript
+random(): number
+```
+
+Returns a deterministic pseudo-random number in `[0, 1)`. Worlds created with the same `seed` produce the same sequence, and snapshot version 3 stores the RNG state so `World.deserialize()` resumes from the exact next value.
+
+```typescript
+const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10, seed: 'map-42' });
+const roll = world.random();
+```
+
 ### Resources
 
 Resources are numeric pools (current/max) attached to entities with automatic production, consumption, and inter-entity transfers. Resource rates and transfers are processed after systems each tick.
@@ -1018,10 +1047,10 @@ Restores a world from a snapshot. Optionally accepts systems to re-register. Aft
 - Event listeners
 
 **Throws:**
-- `Error` if `snapshot.version` is not `1` or `2`
+- `Error` if `snapshot.version` is not `1`, `2`, or `3`
 - `Error` if entity state arrays have mismatched lengths
 
-Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID.
+Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state.
 
 ```typescript
 const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);

@@ -5,6 +5,7 @@ export * from './diff.js';
 export * from './map-gen.js';
 export * from './noise.js';
 export * from './pathfinding.js';
+export * from './random.js';
 export * from './resource-store.js';
 export * from './serializer.js';
 export * from './spatial-grid.js';

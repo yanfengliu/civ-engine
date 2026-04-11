@@ -91,6 +91,30 @@ describe('World', () => {
     expect(result).toEqual([e1, e2]);
   });
 
+  it('keeps cached query results current across component membership changes', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position');
+    world.registerComponent<{ hp: number }>('health');
+
+    const e1 = world.createEntity();
+    world.addComponent(e1, 'position', { x: 0, y: 0 });
+    world.addComponent(e1, 'health', { hp: 100 });
+
+    const e2 = world.createEntity();
+    world.addComponent(e2, 'position', { x: 1, y: 1 });
+
+    expect([...world.query('position', 'health')]).toEqual([e1]);
+
+    world.addComponent(e2, 'health', { hp: 50 });
+    expect([...world.query('position', 'health')]).toEqual([e1, e2]);
+
+    world.removeComponent(e1, 'health');
+    expect([...world.query('position', 'health')]).toEqual([e2]);
+
+    world.destroyEntity(e2);
+    expect([...world.query('position', 'health')]).toEqual([]);
+  });
+
   it('runs systems in registration order on step()', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     const order: string[] = [];
@@ -332,6 +356,19 @@ describe('World', () => {
     world.pause();
     world.step();
     expect(world.tick).toBe(1);
+  });
+
+  it('provides deterministic random sequences from a seed', () => {
+    const a = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'map-42' });
+    const b = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'map-42' });
+    const c = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'map-43' });
+
+    const seqA = [a.random(), a.random(), a.random()];
+    const seqB = [b.random(), b.random(), b.random()];
+    const seqC = [c.random(), c.random(), c.random()];
+
+    expect(seqA).toEqual(seqB);
+    expect(seqA).not.toEqual(seqC);
   });
 
   describe('getComponents', () => {

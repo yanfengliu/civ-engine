@@ -45,27 +45,33 @@ export interface SpatialGridView {
 export class SpatialGrid {
   readonly width: number;
   readonly height: number;
-  private cells: (Set<EntityId> | null)[];
+  private cells = new Map<number, Set<EntityId>>();
 
   constructor(width: number, height: number) {
     assertPositiveInteger(width, 'width');
     assertPositiveInteger(height, 'height');
     this.width = width;
     this.height = height;
-    this.cells = new Array<Set<EntityId> | null>(width * height).fill(null);
   }
 
   insert(entity: EntityId, x: number, y: number): void {
-    const idx = this.index(x, y);
-    if (this.cells[idx] === null) {
-      this.cells[idx] = new Set();
+    const key = this.key(x, y);
+    let cell = this.cells.get(key);
+    if (!cell) {
+      cell = new Set();
+      this.cells.set(key, cell);
     }
-    this.cells[idx]!.add(entity);
+    cell.add(entity);
   }
 
   remove(entity: EntityId, x: number, y: number): void {
-    const idx = this.index(x, y);
-    this.cells[idx]?.delete(entity);
+    const key = this.key(x, y);
+    const cell = this.cells.get(key);
+    if (!cell) return;
+    cell.delete(entity);
+    if (cell.size === 0) {
+      this.cells.delete(key);
+    }
   }
 
   move(
@@ -80,7 +86,7 @@ export class SpatialGrid {
   }
 
   getAt(x: number, y: number): ReadonlySet<EntityId> | null {
-    return this.cells[this.index(x, y)];
+    return this.cells.get(this.key(x, y)) ?? null;
   }
 
   getNeighbors(
@@ -94,7 +100,7 @@ export class SpatialGrid {
       const nx = x + dx;
       const ny = y + dy;
       if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
-        const cell = this.cells[ny * this.width + nx];
+        const cell = this.cells.get(this.uncheckedKey(nx, ny));
         if (cell) {
           for (const entity of cell) {
             result.push(entity);
@@ -132,7 +138,7 @@ export class SpatialGrid {
             ? Math.abs(dx) + Math.abs(dy) <= radius
             : dx * dx + dy * dy <= radiusSq;
         if (!inRange) continue;
-        const cell = this.cells[y * this.width + x];
+        const cell = this.cells.get(this.uncheckedKey(x, y));
         if (cell) {
           for (const entity of cell) {
             result.push(entity);
@@ -152,8 +158,12 @@ export class SpatialGrid {
     }
   }
 
-  private index(x: number, y: number): number {
+  private key(x: number, y: number): number {
     this.assertBounds(x, y);
+    return this.uncheckedKey(x, y);
+  }
+
+  private uncheckedKey(x: number, y: number): number {
     return y * this.width + x;
   }
 }

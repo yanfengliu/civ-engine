@@ -50,8 +50,8 @@ Components must already be JSON-compatible plain data. `serialize()` rejects non
 
 ```typescript
 interface WorldSnapshot {
-  version: 2;                    // format version
-  config: WorldConfig;           // grid dimensions, TPS, positionKey
+  version: 3;                    // format version
+  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed
   tick: number;                  // current tick count
   entities: {
     generations: number[];       // per-slot generation counters
@@ -61,6 +61,7 @@ interface WorldSnapshot {
   components: Record<string, Array<[EntityId, unknown]>>;
   // e.g., { position: [[0, {x:5,y:3}], [1, {x:2,y:7}]], health: [[0, {hp:100}]] }
   resources: ResourceStoreState; // registrations, pools, rates, transfers
+  rng: RandomState;              // deterministic RNG state
 }
 ```
 
@@ -102,10 +103,10 @@ restored.onDestroy(cleanupCallback);
 
 `World.deserialize()` validates the snapshot:
 
-- Throws if `version` is not `1` or `2`
+- Throws if `version` is not `1`, `2`, or `3`
 - Throws if entity state arrays have mismatched lengths
 
-Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store. Version 2 snapshots include resource registrations, pools, rates, transfers, and the next transfer ID.
+Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store. Version 2 snapshots include resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also include deterministic RNG state so restored worlds resume the same random sequence.
 
 ## What's Included and Excluded
 
@@ -115,10 +116,12 @@ Version 1 snapshots still load for backward compatibility, but they restore with
 |---|---|
 | Grid config (width, height, TPS) | `snapshot.config` |
 | Position key | `snapshot.config.positionKey` |
+| Seed config | `snapshot.config.seed` |
 | Tick count | `snapshot.tick` |
 | Entity IDs, alive states, generations | `snapshot.entities` |
 | All component data | `snapshot.components` |
 | Resource registrations, pools, rates, transfers | `snapshot.resources` |
+| Deterministic RNG state | `snapshot.rng` |
 
 ### Excluded (must be re-registered)
 
