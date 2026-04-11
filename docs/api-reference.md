@@ -71,6 +71,18 @@ interface Position {
 
 Standard 2D position interface used for spatial grid synchronization. The component key for spatial tracking is configurable via `WorldConfig.positionKey` (default `'position'`).
 
+### `InstrumentationProfile`
+
+```typescript
+// src/types.ts
+type InstrumentationProfile = 'full' | 'release';
+```
+
+Controls how much implicit runtime instrumentation the engine keeps on the hot path.
+
+- `full` keeps the normal development behavior. `step()` records per-tick metrics and `submit()` preserves the compatibility wrapper over `submitWithResult()`.
+- `release` removes avoidable observation work from the implicit `step()` and `submit()` paths. Explicit AI/debug APIs such as `stepWithResult()` and `submitWithResult()` still return structured results when you call them.
+
 ### `WorldConfig`
 
 ```typescript
@@ -83,6 +95,7 @@ interface WorldConfig {
   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
   seed?: number | string;  // Deterministic RNG seed
   detectInPlacePositionMutations?: boolean; // Full-scan fallback (default: true)
+  instrumentationProfile?: InstrumentationProfile; // Implicit instrumentation level (default: 'full')
 }
 ```
 
@@ -132,7 +145,7 @@ interface WorldMetrics {
 }
 ```
 
-Last-tick instrumentation returned by `world.getMetrics()`.
+Last-tick instrumentation returned by `world.getMetrics()`. In `instrumentationProfile: 'release'`, implicit `step()` calls leave this as `null`; explicit `stepWithResult()` still refreshes it.
 
 ### `getAiContractVersions()`
 
@@ -1055,6 +1068,8 @@ world.step(); // always executes, even when paused
 
 **Throws:** `WorldTickFailureError` if the tick fails at runtime.
 
+When `instrumentationProfile` is `'release'`, `step()` skips implicit per-tick metrics collection to reduce hot-path overhead. Use `stepWithResult()` when the caller explicitly wants structured runtime diagnostics.
+
 #### `stepWithResult()`
 
 ```typescript
@@ -1171,6 +1186,8 @@ submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean
 Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator rejects, the command is not queued.
 
 **Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`.
+
+When `instrumentationProfile` is `'release'` and no command-result listeners are attached, `submit()` takes a boolean fast path and does not allocate a `CommandSubmissionResult`. Use `submitWithResult()` when the caller explicitly needs the structured outcome.
 
 ```typescript
 const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
@@ -1629,11 +1646,21 @@ getMetrics(): WorldMetrics | null
 
 Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
 
+In `instrumentationProfile: 'release'`, implicit `step()` calls leave this as `null` so the shipping runtime does not pay for per-tick metrics. Explicit `stepWithResult()` calls still populate metrics for callers that deliberately opt into richer diagnostics.
+
 ```typescript
 world.step();
 const metrics = world.getMetrics();
 console.log(metrics?.query.cacheHits, metrics?.durationMs.total);
 ```
+
+#### `getInstrumentationProfile()`
+
+```typescript
+getInstrumentationProfile(): InstrumentationProfile
+```
+
+Returns the active instrumentation profile for this `World`.
 
 #### `getLastTickFailure()`
 

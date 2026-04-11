@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { World, WorldTickFailureError } from '../src/world.js';
 
 describe('World commands', () => {
@@ -149,6 +149,73 @@ describe('World commands', () => {
         tick: 1,
       },
     ]);
+  });
+
+  it('release-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'release',
+    });
+    world.registerHandler('move', () => {});
+    const createResultSpy = vi.spyOn(
+      world as unknown as { createCommandSubmissionResult: () => unknown },
+      'createCommandSubmissionResult',
+    );
+
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+    expect(createResultSpy).not.toHaveBeenCalled();
+    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
+  });
+
+  it('release-mode submit still emits structured results when listeners are attached', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'release',
+    });
+    const results: unknown[] = [];
+    world.registerHandler('move', () => {});
+    world.onCommandResult((result) => results.push(result));
+
+    expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+    expect(results).toEqual([
+      {
+        schemaVersion: 1,
+        accepted: true,
+        commandType: 'move',
+        code: 'accepted',
+        message: 'Queued command',
+        details: null,
+        tick: 0,
+        sequence: 0,
+        validatorIndex: null,
+      },
+    ]);
+  });
+
+  it('release-mode skips command execution result allocation when nothing is listening', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'release',
+    });
+    world.registerHandler('move', () => {});
+    const createExecutionSpy = vi.spyOn(
+      world as unknown as { createCommandExecutionResult: () => unknown },
+      'createCommandExecutionResult',
+    );
+
+    world.submit('move', { x: 1, y: 2 });
+    world.step();
+
+    expect(createExecutionSpy).not.toHaveBeenCalled();
   });
 
   it('all validators must pass for submit to accept', () => {

@@ -86,6 +86,27 @@ if (!step.ok) {
 
 The most recent runtime failure is also available through `world.getLastTickFailure()`.
 
+## Release Profile
+
+Keep AI loops on the default `instrumentationProfile: 'full'`.
+
+When the gameplay stack is stable enough for a shipping runtime, create the world with:
+
+```typescript
+const world = new World({
+  gridWidth: 128,
+  gridHeight: 128,
+  tps: 20,
+  instrumentationProfile: 'release',
+});
+```
+
+In release mode:
+
+- implicit `step()` skips per-tick metrics collection
+- `submit()` uses a boolean fast path when no command-result listeners are attached
+- explicit AI/debug APIs such as `submitWithResult()` and `stepWithResult()` still produce structured results when you call them
+
 ## Transport Protocol
 
 When the agent is outside the process, use `ClientAdapter`.

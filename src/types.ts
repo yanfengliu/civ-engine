@@ -10,6 +10,8 @@ export interface Position {
   y: number;
 }
 
+export type InstrumentationProfile = 'full' | 'release';
+
 export interface WorldConfig {
   gridWidth: number;
   gridHeight: number;
@@ -18,4 +20,5 @@ export interface WorldConfig {
   maxTicksPerFrame?: number;
   seed?: number | string;
   detectInPlacePositionMutations?: boolean;
+  instrumentationProfile?: InstrumentationProfile;
 }

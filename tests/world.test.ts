@@ -329,6 +329,15 @@ describe('World', () => {
           detectInPlacePositionMutations: 'yes' as never,
         }),
     ).toThrow('detectInPlacePositionMutations must be a boolean');
+    expect(
+      () =>
+        new World({
+          gridWidth: 10,
+          gridHeight: 10,
+          tps: 60,
+          instrumentationProfile: 'debug' as never,
+        }),
+    ).toThrow("instrumentationProfile must be 'full' or 'release'");
   });
 
   it('removes entity from grid on destroy even if position was mutated since last sync', () => {
@@ -502,6 +511,25 @@ describe('World', () => {
 
     world.step();
     expect(world.getMetrics()!.query.cacheHits).toBe(1);
+  });
+
+  it('release instrumentation skips implicit metrics but preserves explicit stepWithResult diagnostics', () => {
+    const world = new World({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'release',
+    });
+
+    expect(world.getInstrumentationProfile()).toBe('release');
+
+    world.step();
+    expect(world.getMetrics()).toBeNull();
+
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(true);
+    expect(world.getMetrics()).not.toBeNull();
+    expect(world.getMetrics()!.tick).toBe(2);
   });
 
   describe('getComponents', () => {

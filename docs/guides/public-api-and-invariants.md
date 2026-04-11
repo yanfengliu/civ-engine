@@ -61,6 +61,8 @@ world.registerSystem({ name: 'Combat', phase: 'postUpdate', execute: combatSyste
 
 Use `world.getMetrics()` after `step()` to inspect query cache hits, spatial scan counts, system timings, and total tick time before choosing heavier optimizations.
 
+For shipping builds, set `instrumentationProfile: 'release'` in `WorldConfig`. That keeps simulation semantics the same while dropping implicit `step()` metrics and the boolean `submit()` wrapper allocation from the hot path. Keep AI harnesses and diagnosis tools on the default `full` profile.
+
 ## Entity Handles
 
 Entity IDs are recycled. External clients, UIs, and AI agents that hold an entity across ticks should use `EntityRef`:

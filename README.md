@@ -98,6 +98,8 @@ World.step()
 
 Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 
+For shipping builds, set `instrumentationProfile: 'release'` in `WorldConfig` to drop implicit per-tick metrics and boolean-command wrapper allocations from the hot path while keeping explicit AI/debug APIs available when you call them.
+
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
 ## Repository Layout

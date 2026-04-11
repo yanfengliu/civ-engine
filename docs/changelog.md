@@ -45,6 +45,8 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - `ClientAdapter` streaming for `commandExecuted`, `commandFailed`, and `tickFailed` messages so remote agents can distinguish queued commands from executed commands and read structured tick failures.
 - Client protocol version markers on server message envelopes.
 - Tick-budget metrics plus `tick-budget-exceeded` debugger issues with slow-system context.
+- `InstrumentationProfile` and `WorldConfig.instrumentationProfile` with a `release` mode for lower-overhead implicit `step()` and `submit()` paths.
+- Lazy command execution feedback allocation so runtime execution results are only built when listeners are attached.
 - Root package export barrel, declaration build config, npm package metadata, and CI workflow.
 
 ### Documentation
@@ -64,3 +66,4 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 - Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command submission and execution outcomes, structured tick failures, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.
+- Documented the release instrumentation profile and the boundary between explicit AI diagnostics (`submitWithResult()`, `stepWithResult()`) and lower-overhead shipping runtime paths (`submit()`, `step()` in release mode).

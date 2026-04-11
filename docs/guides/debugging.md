@@ -4,6 +4,8 @@ This guide covers the headless debugging surface for `civ-engine`.
 
 The short version: use `WorldDebugger` for a structured snapshot of world state, metrics, diff summaries, issues, and custom probe data. Pair it with `WorldHistoryRecorder` when you need short-horizon traces, and with `RenderAdapter` when you want a debug-first client before a production renderer exists.
 
+For shipping runtimes created with `instrumentationProfile: 'release'`, implicit `step()` calls do not refresh `world.getMetrics()`. Keep debugger-driven workflows on the default profile, or use `stepWithResult()` when you deliberately need diagnostics in a release-configured world.
+
 ## What It Captures
 
 `WorldDebugger` captures:
