@@ -20,10 +20,15 @@ Requires Node.js 18+.
 
 ## Documentation
 
+- **[Documentation Hub](docs/README.md)** - Central map of tutorials, guides, plans, reviews, and history
+- **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
+
+### Reference
+
 - **[Changelog](docs/changelog.md)** - Release notes and breaking changes
 - **[API Reference](docs/api-reference.md)** — Complete reference for every public type, method, and module
 
-### Tutorials
+### Start Here
 
 - **[Getting Started](docs/tutorials/getting-started.md)** — Core concepts, minimal example, and feature walkthrough
 - **[Building a Complete Game](docs/tutorials/building-a-game.md)** — Step-by-step tutorial building a colony survival simulation using every engine feature
@@ -43,6 +48,12 @@ Requires Node.js 18+.
 - **[Behavior Trees](docs/guides/behavior-trees.md)** — AI decision-making, ECS integration, shared trees
 - **[Client Protocol](docs/guides/client-protocol.md)** — Transport-agnostic client streaming, WebSocket/stdio examples
 - **[Renderer Integration](docs/guides/rendering.md)** - Snapshot/diff rendering architecture, renderer contract, and Pixi-first reference renderer guidance
+
+### Plans and Reviews
+
+- **[RTS Engine Scale Plan](docs/reviews/todo/RTS_ENGINE_SCALE_PLAN.md)** - Planned engine work for RTS-scale support
+- **[Expert Review Remaining Candidates](docs/reviews/todo/EXPERT_REVIEW_REMAINING.md)** - Deferred review items not yet selected for implementation
+- **[Expert Review](docs/reviews/implemented/EXPERT_REVIEW.md)** - Review findings already addressed
 
 ## What You Can Build
 
@@ -131,9 +142,14 @@ src/
 tests/
   *.test.ts           Unit and integration tests per module
 docs/
+  README.md           Documentation hub
   ARCHITECTURE.md     Detailed architecture documentation
-  ROADMAP.md          Feature tracker
-  tutorials/          Getting started guide and game-building tutorial
+  api-reference.md    Public API contract
+  changelog.md        Release notes and breaking changes
+  guides/             How-to and integration guides
+  tutorials/          Guided walkthroughs
+  reviews/            Implemented and pending review docs
+  superpowers/        Historical design and implementation artifacts
 ```
 
 ## API Reference
