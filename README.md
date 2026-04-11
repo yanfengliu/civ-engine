@@ -68,6 +68,8 @@ world.step();
 | **Occupancy & Reservation** | Deterministic blocked-cell, footprint, and reservation tracking for RTS movement/building rules |
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
 | **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |
+| **Render Projection** | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
+| **Debugging** | `WorldDebugger` plus occupancy, visibility, and path queue probes for headless inspection |
 | **Behavior Trees** | Generic BT framework with action, condition, selector, sequence nodes |
 | **Speed Control** | Runtime speed multiplier, pause/resume; `step()` ignores both for testing |
 | **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state |
@@ -112,9 +114,11 @@ src/
   cellular.ts         Cellular automata
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
+  render-adapter.ts   Renderer-facing projected snapshot/diff streaming
   visibility-map.ts   Per-player visible and explored cell tracking
   behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
+  world-debugger.ts   Structured debug snapshots and probe helpers
   types.ts            Shared types (EntityId, EntityRef, Position, WorldConfig)
 tests/
   *.test.ts           Unit and integration tests per module
@@ -227,6 +231,7 @@ docs/
 | `path-service.ts` | `findGridPath`, `PathCache`, `PathRequestQueue`, `createGridPathQueue` | Grid path helper and deterministic queued path processing |
 | `noise.ts` | `createNoise2D(seed)`, `octaveNoise2D(...)` | Seedable simplex noise |
 | `random.ts` | `DeterministicRandom`, `RandomState` | Engine PRNG and serializable RNG state |
+| `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector` | Projection boundary for renderer-facing snapshots and diffs |
 | `cellular.ts` | `createCellGrid(...)`, `stepCellGrid(...)` | Cellular automata |
 | `map-gen.ts` | `createTileGrid(world)` | Bulk tile entity creation |
 | `spatial-grid.ts` | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS` | Direction offset presets |
@@ -234,6 +239,7 @@ docs/
 | `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState` | Per-player visible/explored cell tracking |
 | `behavior-tree.ts` | `createBehaviorTree`, `createBTState`, `NodeStatus` | Generic behavior tree framework |
 | `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent` | Transport-agnostic client protocol |
+| `world-debugger.ts` | `WorldDebugger`, probe helpers | Structured world/debug snapshots for headless inspection |
 
 ### SpatialGrid Methods
 

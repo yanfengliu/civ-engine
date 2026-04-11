@@ -27,6 +27,8 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Map Generation](#map-generation)
 - [Behavior Tree](#behavior-tree)
 - [Client Adapter](#client-adapter)
+- [Render Adapter](#render-adapter)
+- [World Debugger](#world-debugger)
 
 ---
 
@@ -2491,3 +2493,211 @@ rl.on('line', (line) => {
 
 adapter.connect();
 ```
+
+---
+
+## Render Adapter
+
+Projection boundary for renderer-facing snapshots and per-tick diffs. The engine stays headless; the game provides projection callbacks that decide what render state each entity exposes.
+
+```typescript
+import {
+  RenderAdapter,
+  type RenderDiff,
+  type RenderEntity,
+  type RenderProjector,
+  type RenderServerMessage,
+  type RenderSnapshot,
+} from 'civ-engine';
+```
+
+### Core Types
+
+#### `RenderEntity<TView>`
+
+```typescript
+interface RenderEntity<TView> {
+  ref: EntityRef;
+  view: TView;
+}
+```
+
+Projected renderable entity with a generation-aware entity reference.
+
+#### `RenderSnapshot<TView, TFrame>`
+
+```typescript
+interface RenderSnapshot<TView, TFrame> {
+  tick: number;
+  entities: Array<RenderEntity<TView>>;
+  frame: TFrame | null;
+}
+```
+
+Full projected render state for initial sync or resync.
+
+#### `RenderDiff<TView, TFrame>`
+
+```typescript
+interface RenderDiff<TView, TFrame> {
+  tick: number;
+  created: Array<RenderEntity<TView>>;
+  updated: Array<RenderEntity<TView>>;
+  destroyed: EntityRef[];
+  frame: TFrame | null;
+}
+```
+
+Incremental projected render update for one simulation tick.
+
+#### `RenderEntityChange`
+
+```typescript
+interface RenderEntityChange {
+  id: EntityId;
+  created: boolean;
+  destroyed: boolean;
+  componentKeys: string[];
+  resourceKeys: string[];
+  previousRef: EntityRef | null;
+  currentRef: EntityRef | null;
+}
+```
+
+Summary of why an entity was considered for re-projection on a tick.
+
+#### `RenderProjector<TEventMap, TCommandMap, TView, TFrame>`
+
+```typescript
+interface RenderProjector<TEventMap, TCommandMap, TView, TFrame> {
+  projectEntity(
+    ref: EntityRef,
+    world: World<TEventMap, TCommandMap>,
+    change: RenderEntityChange | null,
+  ): TView | null;
+  projectFrame?(
+    world: World<TEventMap, TCommandMap>,
+    diff: TickDiff | null,
+  ): TFrame | null;
+  shouldProjectChange?(change: RenderEntityChange): boolean;
+}
+```
+
+Game-owned callbacks that map simulation state to render-facing state.
+
+#### `RenderServerMessage<TView, TFrame, TDebug>`
+
+```typescript
+type RenderServerMessage<TView, TFrame, TDebug> =
+  | { type: 'renderSnapshot'; data: { render: RenderSnapshot<TView, TFrame>; debug: TDebug | null } }
+  | { type: 'renderTick'; data: { render: RenderDiff<TView, TFrame>; debug: TDebug | null } };
+```
+
+Message union emitted by `RenderAdapter`.
+
+### Constructor
+
+```typescript
+new RenderAdapter<TEventMap, TCommandMap, TView, TFrame, TDebug>(config: {
+  world: World<TEventMap, TCommandMap>;
+  projector: RenderProjector<TEventMap, TCommandMap, TView, TFrame>;
+  send: (message: RenderServerMessage<TView, TFrame, TDebug>) => void;
+  onError?: (error: unknown) => void;
+  debug?: { capture(): TDebug | null };
+})
+```
+
+### Methods
+
+#### `connect()`
+
+```typescript
+connect(): void
+```
+
+Immediately sends a `renderSnapshot` message, then subscribes to world diffs and emits `renderTick` messages after each step.
+
+#### `disconnect()`
+
+```typescript
+disconnect(): void
+```
+
+Stops streaming render messages.
+
+### Behavior Notes
+
+- Render messages use `EntityRef` values so same-tick ID recycling is unambiguous.
+- `projectEntity()` returning `null` removes an entity from the render surface without destroying it in the simulation.
+- `debug.capture()` is optional and can attach structured debugger output to each render message.
+
+---
+
+## World Debugger
+
+Structured headless debugger for inspecting world state, last diff summary, metrics, and optional probe data.
+
+```typescript
+import {
+  WorldDebugger,
+  createOccupancyDebugProbe,
+  createPathQueueDebugProbe,
+  createVisibilityDebugProbe,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new WorldDebugger<TEventMap, TCommandMap>(config: {
+  world: World<TEventMap, TCommandMap>;
+  probes?: Array<DebugProbe>;
+})
+```
+
+### Methods
+
+#### `addProbe(probe)`
+
+```typescript
+addProbe(probe: DebugProbe): void
+```
+
+Registers a custom JSON-compatible debug probe.
+
+#### `removeProbe(key)`
+
+```typescript
+removeProbe(key: string): void
+```
+
+Removes a probe by key.
+
+#### `capture()`
+
+```typescript
+capture(): WorldDebugSnapshot
+```
+
+Returns a structured debug snapshot containing:
+
+- world/entity/component/resource summaries
+- spatial density information
+- current event counts
+- `world.getMetrics()` output
+- last diff summary
+- warnings for important edge cases
+- custom probe payloads
+
+### Probe Helpers
+
+```typescript
+createOccupancyDebugProbe(key: string, occupancy: OccupancyGrid): DebugProbe
+createVisibilityDebugProbe(key: string, visibility: VisibilityMap): DebugProbe
+createPathQueueDebugProbe(
+  key: string,
+  queue: { getStats(): PathRequestQueueStats },
+): DebugProbe
+```
+
+These helpers expose standalone utility state through the same debugger surface.

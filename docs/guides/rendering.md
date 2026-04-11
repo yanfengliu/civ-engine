@@ -2,7 +2,7 @@
 
 This guide explains how to connect `civ-engine` to a renderer and how to build a renderer that fits the engine's purpose.
 
-The short version: keep `civ-engine` headless, make snapshots and tick diffs the renderer input, and build a first-party renderer adapter around a proven 2D graphics layer. For the first reference renderer, prefer TypeScript plus PixiJS over raw WebGL/WebGPU, Godot, or Unreal.
+The short version: keep `civ-engine` headless, make snapshots and tick diffs or projected render messages the renderer input, and build a first-party renderer adapter around a proven 2D graphics layer. For the first reference renderer, prefer TypeScript plus PixiJS over raw WebGL/WebGPU, Godot, or Unreal.
 
 ## Table of Contents
 
@@ -10,15 +10,16 @@ The short version: keep `civ-engine` headless, make snapshots and tick diffs the
 2. [Architecture](#architecture)
 3. [Renderer Stack Recommendation](#renderer-stack-recommendation)
 4. [Render Data Contract](#render-data-contract)
-5. [Snapshot and Diff Flow](#snapshot-and-diff-flow)
-6. [Renderer Package Shape](#renderer-package-shape)
-7. [Transport Patterns](#transport-patterns)
-8. [Render Loop and Interpolation](#render-loop-and-interpolation)
-9. [Input Flow](#input-flow)
-10. [RTS Renderer Requirements](#rts-renderer-requirements)
-11. [Backend Adapter Boundary](#backend-adapter-boundary)
-12. [Validation Checklist](#validation-checklist)
-13. [References](#references)
+5. [Shipped Helpers](#shipped-helpers)
+6. [Snapshot and Diff Flow](#snapshot-and-diff-flow)
+7. [Renderer Package Shape](#renderer-package-shape)
+8. [Transport Patterns](#transport-patterns)
+9. [Render Loop and Interpolation](#render-loop-and-interpolation)
+10. [Input Flow](#input-flow)
+11. [RTS Renderer Requirements](#rts-renderer-requirements)
+12. [Backend Adapter Boundary](#backend-adapter-boundary)
+13. [Validation Checklist](#validation-checklist)
+14. [References](#references)
 
 ---
 
@@ -49,7 +50,7 @@ Use a one-way state stream and an explicit command stream:
 
 ```text
 World systems
-  -> ClientAdapter
+  -> ClientAdapter or RenderAdapter
   -> transport
   -> RenderClient
   -> RenderStore
@@ -127,6 +128,46 @@ Keep the contract intentionally boring:
 - `selection` can live in renderer state if it is purely local UI state. Store it in the engine only if selection is part of the saveable or AI-readable game state.
 
 Unknown components should be ignored by the renderer. That lets game-specific systems grow without forcing every renderer to understand every gameplay component.
+
+## Shipped Helpers
+
+The engine now ships two helpers for this boundary:
+
+- `RenderAdapter`: streams projected `renderSnapshot` and `renderTick` messages using generation-aware entity refs.
+- `WorldDebugger`: captures structured debug state that can be attached to the render stream or inspected separately.
+
+The key point is that the engine still does not own the renderer. The game owns the projector callback.
+
+```typescript
+import { RenderAdapter, WorldDebugger } from 'civ-engine';
+
+const debuggerView = new WorldDebugger({ world });
+
+const adapter = new RenderAdapter({
+  world,
+  projector: {
+    projectEntity: (ref, w) => {
+      const position = w.getComponent(ref.id, 'position');
+      const renderable = w.getComponent(ref.id, 'renderable');
+      if (!position || !renderable) return null;
+      return {
+        asset: renderable.asset,
+        x: position.x,
+        y: position.y,
+        layer: renderable.layer,
+      };
+    },
+    projectFrame: (w) => ({ tick: w.tick }),
+  },
+  debug: debuggerView,
+  send: (message) => transport.send(message),
+});
+```
+
+This is the intended split:
+
+- engine: world state, projection transport, debugging helpers
+- game: projector rules, command mapping, scene adapter, backend renderer
 
 ## Snapshot and Diff Flow
 

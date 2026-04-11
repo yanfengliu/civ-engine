@@ -24,6 +24,7 @@ This is the navigation hub for `civ-engine` documentation.
 - [Resources](guides/resources.md)
 - [Serialization & Diffs](guides/serialization-and-diffs.md)
 - [Client Protocol](guides/client-protocol.md)
+- [Debugging](guides/debugging.md)
 - [Renderer Integration](guides/rendering.md)
 - [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)
