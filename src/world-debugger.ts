@@ -14,6 +14,13 @@ export interface DebugWarning {
   message: string;
 }
 
+export interface DebugIssue extends DebugWarning {
+  subsystem: string;
+  entityIds?: EntityId[];
+  details?: JsonValue | null;
+  suggestedActions?: string[];
+}
+
 export interface DebugComponentSummary {
   key: string;
   entityCount: number;
@@ -99,6 +106,7 @@ export interface WorldDebugSnapshot {
   diff: DebugDiffSummary | null;
   events: DebugEventSummary[];
   probes: Record<string, JsonValue>;
+  issues: DebugIssue[];
   warnings: DebugWarning[];
 }
 
@@ -144,7 +152,7 @@ export class WorldDebugger<
       snapshot.config.gridWidth,
     );
     const probes = this.captureProbes();
-    const warnings = collectWarnings(metrics, diff);
+    const issues = collectIssues(metrics, diff);
 
     const result: WorldDebugSnapshot = {
       tick: snapshot.tick,
@@ -157,7 +165,12 @@ export class WorldDebugger<
       diff,
       events,
       probes,
-      warnings,
+      issues,
+      warnings: issues.map(({ severity, code, message }) => ({
+        severity,
+        code,
+        message,
+      })),
     };
     assertJsonCompatible(result, 'world debugger snapshot');
     return result;
@@ -360,31 +373,50 @@ function summarizeDiff(diff: TickDiff | null): DebugDiffSummary | null {
   };
 }
 
-function collectWarnings(
+function collectIssues(
   metrics: WorldMetrics | null,
   diff: DebugDiffSummary | null,
-): DebugWarning[] {
-  const warnings: DebugWarning[] = [];
+): DebugIssue[] {
+  const issues: DebugIssue[] = [];
 
   if (diff && diff.overlappingEntityIds.length > 0) {
-    warnings.push({
+    issues.push({
       severity: 'warn',
       code: 'entity-id-recycled-in-diff',
       message:
         'The last diff both destroyed and created at least one entity ID. Raw TickDiff clients should resync or use generation-aware projections.',
+      subsystem: 'diff',
+      entityIds: diff.overlappingEntityIds,
+      details: {
+        overlappingEntityIds: diff.overlappingEntityIds,
+      },
+      suggestedActions: [
+        'Request a fresh snapshot before continuing from raw TickDiff state.',
+        'Prefer generation-aware projections through RenderAdapter.',
+      ],
     });
   }
 
   if (metrics && metrics.spatial.fullScans > 0) {
-    warnings.push({
+    issues.push({
       severity: 'info',
       code: 'spatial-full-scan',
       message:
         'The last tick used the compatibility full-scan spatial sync path. Consider explicit position writes or markPositionDirty() for larger simulations.',
+      subsystem: 'spatial',
+      details: {
+        fullScans: metrics.spatial.fullScans,
+        scannedEntities: metrics.spatial.scannedEntities,
+        explicitSyncs: metrics.spatial.explicitSyncs,
+      },
+      suggestedActions: [
+        'Call world.setPosition() for movement writes when possible.',
+        'If mutating position objects in place with full-scan disabled, call markPositionDirty().',
+      ],
     });
   }
 
-  return warnings;
+  return issues;
 }
 
 function sumCellClaims(

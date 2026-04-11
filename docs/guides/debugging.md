@@ -2,7 +2,7 @@
 
 This guide covers the headless debugging surface for `civ-engine`.
 
-The short version: use `WorldDebugger` for a structured snapshot of world state, metrics, diff summaries, and custom probe data. Pair it with `RenderAdapter` when you want a debug-first client before a production renderer exists.
+The short version: use `WorldDebugger` for a structured snapshot of world state, metrics, diff summaries, issues, and custom probe data. Pair it with `WorldHistoryRecorder` when you need short-horizon traces, and with `RenderAdapter` when you want a debug-first client before a production renderer exists.
 
 ## What It Captures
 
@@ -14,7 +14,8 @@ The short version: use `WorldDebugger` for a structured snapshot of world state,
 - last-tick metrics from `world.getMetrics()`
 - last diff summary from `world.getDiff()`
 - event counts from `world.getEvents()`
-- warnings for engine-level edge cases such as same-tick ID recycling
+- machine-readable `issues` for engine-level edge cases such as same-tick ID recycling
+- compatibility `warnings` derived from those issues
 - custom probe output
 
 ## Basic Usage
@@ -24,6 +25,23 @@ import { WorldDebugger } from 'civ-engine';
 
 const debuggerView = new WorldDebugger({ world });
 const snapshot = debuggerView.capture();
+```
+
+## History Recorder
+
+Use `WorldHistoryRecorder` when an AI agent or test harness needs recent command outcomes and tick traces without building a full replay system.
+
+```typescript
+import { WorldDebugger, WorldHistoryRecorder } from 'civ-engine';
+
+const debuggerView = new WorldDebugger({ world });
+const history = new WorldHistoryRecorder({
+  world,
+  capacity: 32,
+  debug: debuggerView,
+});
+
+history.connect();
 ```
 
 ## Probes
@@ -105,13 +123,15 @@ The reference client is intentionally plain:
 - a worker owns the `World`, `RenderAdapter`, `WorldDebugger`, `OccupancyGrid`, `VisibilityMap`, and queued path service
 - the main thread consumes `renderSnapshot` and `renderTick` messages only
 - the canvas renders projected entities, fog, occupancy, reservations, and path overlays
-- the sidebar shows warnings, last diff summary, metrics, event counts, probe summaries, and the raw debug payload
+- the sidebar shows warnings, issues, last diff summary, metrics, event counts, probe summaries, and the raw debug payload
 
 It is a debugger first, not a production renderer. The point is to prove the render/debug contract and make simulation faults visible without committing to PixiJS or another scene backend yet.
 
 ## Recommended Workflow
 
-1. Use `RenderAdapter` with a minimal projector.
-2. Start with the reference debug client or build a similarly small viewer that can inspect projected entities, frame state, and debugger payloads.
-3. Keep the same projector contract when moving to the real renderer.
-4. Add game-specific probes when a new subsystem becomes hard to reason about.
+1. Use `submitWithResult()` or `ClientAdapter` so command submissions always return structured outcomes.
+2. Attach a `WorldDebugger` and inspect `issues` before falling back to ad hoc logs.
+3. Add a `WorldHistoryRecorder` when you need short-horizon command and tick history for automated diagnosis.
+4. Use `RenderAdapter` with a minimal projector when you need a visual debug surface.
+5. Keep the same projector contract when moving to the real renderer.
+6. Add game-specific probes when a new subsystem becomes hard to reason about.

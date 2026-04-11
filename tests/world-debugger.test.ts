@@ -123,6 +123,7 @@ describe('WorldDebugger', () => {
     });
     expect(debuggerSnapshot.metrics?.tick).toBe(1);
     expect(debuggerSnapshot.diff?.tick).toBe(1);
+    expect(debuggerSnapshot.issues).toEqual([]);
     expect(debuggerSnapshot.warnings).toEqual([]);
   });
 
@@ -156,6 +157,23 @@ describe('WorldDebugger', () => {
     const debuggerSnapshot = new WorldDebugger({ world }).capture();
 
     expect(debuggerSnapshot.diff?.overlappingEntityIds).toEqual([entity]);
+    expect(debuggerSnapshot.issues).toEqual([
+      {
+        severity: 'warn',
+        code: 'entity-id-recycled-in-diff',
+        message:
+          'The last diff both destroyed and created at least one entity ID. Raw TickDiff clients should resync or use generation-aware projections.',
+        subsystem: 'diff',
+        entityIds: [entity],
+        details: {
+          overlappingEntityIds: [entity],
+        },
+        suggestedActions: [
+          'Request a fresh snapshot before continuing from raw TickDiff state.',
+          'Prefer generation-aware projections through RenderAdapter.',
+        ],
+      },
+    ]);
     expect(debuggerSnapshot.warnings).toEqual([
       {
         severity: 'warn',

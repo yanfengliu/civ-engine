@@ -10,7 +10,7 @@ import { EventBus } from './event-bus.js';
 import { CommandQueue } from './command-queue.js';
 import { ResourceStore } from './resource-store.js';
 import type { ResourceMax, ResourcePool } from './resource-store.js';
-import { assertJsonCompatible } from './json.js';
+import { assertJsonCompatible, type JsonValue } from './json.js';
 import { DeterministicRandom } from './random.js';
 
 export type System<
@@ -67,6 +67,27 @@ export interface WorldMetrics {
   };
 }
 
+export interface CommandValidationRejection {
+  code: string;
+  message?: string;
+  details?: JsonValue;
+}
+
+export type CommandValidationResult = boolean | CommandValidationRejection;
+
+export interface CommandSubmissionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  sequence: number;
+  validatorIndex: number | null;
+}
+
 type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
 
 interface QueryCacheEntry {
@@ -102,7 +123,9 @@ export class World<
   private commandQueue = new CommandQueue<TCommandMap>();
   private validators = new Map<
     keyof TCommandMap,
-    Array<(data: never, world: World<TEventMap, TCommandMap>) => boolean>
+    Array<
+      (data: never, world: World<TEventMap, TCommandMap>) => CommandValidationResult
+    >
   >();
   private handlers = new Map<
     keyof TCommandMap,
@@ -119,6 +142,10 @@ export class World<
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
+  private nextCommandResultSequence = 0;
+  private commandResultListeners = new Set<
+    (result: CommandSubmissionResult<keyof TCommandMap>) => void
+  >();
   private destroyCallbacks: Array<
     (id: EntityId, world: World<TEventMap, TCommandMap>) => void
   > = [];
@@ -367,33 +394,79 @@ export class World<
   }
 
   submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
+    return this.submitWithResult(type, data).accepted;
+  }
+
+  submitWithResult<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+  ): CommandSubmissionResult<K> {
     const fns = this.validators.get(type);
     if (fns) {
-      for (const fn of fns) {
-        if (
-          !(fn as (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean)(
-            data,
-            this,
-          )
-        ) {
-          return false;
+      for (let index = 0; index < fns.length; index++) {
+        const validation = (
+          fns[index] as (
+            data: TCommandMap[K],
+            world: World<TEventMap, TCommandMap>,
+          ) => CommandValidationResult
+        )(data, this);
+        const rejection = normalizeCommandValidationResult(validation, index);
+        if (rejection) {
+          const result = this.createCommandSubmissionResult(type, {
+            accepted: false,
+            code: rejection.code,
+            message: rejection.message,
+            details: rejection.details,
+            validatorIndex: rejection.validatorIndex,
+          });
+          this.emitCommandResult(result);
+          return result;
         }
       }
     }
+
     this.commandQueue.push(type, data);
-    return true;
+    const result = this.createCommandSubmissionResult(type, {
+      accepted: true,
+      code: 'accepted',
+      message: 'Queued command',
+      details: null,
+      validatorIndex: null,
+    });
+    this.emitCommandResult(result);
+    return result;
   }
 
   registerValidator<K extends keyof TCommandMap>(
     type: K,
-    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean,
+    fn: (
+      data: TCommandMap[K],
+      world: World<TEventMap, TCommandMap>,
+    ) => CommandValidationResult,
   ): void {
     let fns = this.validators.get(type);
     if (!fns) {
       fns = [];
       this.validators.set(type, fns);
     }
-    fns.push(fn as (data: never, world: World<TEventMap, TCommandMap>) => boolean);
+    fns.push(
+      fn as (
+        data: never,
+        world: World<TEventMap, TCommandMap>,
+      ) => CommandValidationResult,
+    );
+  }
+
+  onCommandResult(
+    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandResultListeners.add(listener);
+  }
+
+  offCommandResult(
+    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandResultListeners.delete(listener);
   }
 
   registerHandler<K extends keyof TCommandMap>(
@@ -446,10 +519,12 @@ export class World<
       config.detectInPlacePositionMutations = false;
     }
 
+    const snapshotTick = this.getObservableTick();
+
     return {
       version: 3,
       config,
-      tick: this.gameLoop.tick,
+      tick: snapshotTick,
       entities: this.entityManager.getState(),
       components,
       resources: this.resourceStore.getState(),
@@ -612,6 +687,47 @@ export class World<
       }
       handler(command.data as never, this);
     }
+  }
+
+  private createCommandSubmissionResult<K extends keyof TCommandMap>(
+    type: K,
+    config: {
+      accepted: boolean;
+      code: string;
+      message: string;
+      details: JsonValue | null;
+      validatorIndex: number | null;
+    },
+  ): CommandSubmissionResult<K> {
+    if (config.details !== null) {
+      assertJsonCompatible(config.details, `command result details for '${String(type)}'`);
+    }
+    return {
+      accepted: config.accepted,
+      commandType: type,
+      code: config.code,
+      message: config.message,
+      details: config.details,
+      tick: this.getObservableTick(),
+      sequence: this.nextCommandResultSequence++,
+      validatorIndex: config.validatorIndex,
+    };
+  }
+
+  private emitCommandResult<K extends keyof TCommandMap>(
+    result: CommandSubmissionResult<K>,
+  ): void {
+    for (const listener of this.commandResultListeners) {
+      listener(result as CommandSubmissionResult<keyof TCommandMap>);
+    }
+  }
+
+  private getObservableTick(): number {
+    return Math.max(
+      this.gameLoop.tick,
+      this.currentMetrics?.tick ?? 0,
+      this.currentDiff?.tick ?? 0,
+    );
   }
 
   private clearComponentDirty(): void {
@@ -979,6 +1095,51 @@ function createMetrics(
       resources: 0,
       diff: 0,
     },
+  };
+}
+
+function normalizeCommandValidationResult(
+  result: CommandValidationResult,
+  validatorIndex: number,
+): {
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  validatorIndex: number;
+} | null {
+  if (result === true) {
+    return null;
+  }
+
+  if (result === false) {
+    return {
+      code: 'validation_failed',
+      message: 'Validation failed',
+      details: null,
+      validatorIndex,
+    };
+  }
+
+  if (!result || typeof result !== 'object' || typeof result.code !== 'string') {
+    throw new Error('Command validators must return boolean or a rejection object');
+  }
+
+  if (result.code.length === 0) {
+    throw new Error('Command rejection code must not be empty');
+  }
+
+  if (result.details !== undefined) {
+    assertJsonCompatible(
+      result.details,
+      `command rejection details for validator ${validatorIndex}`,
+    );
+  }
+
+  return {
+    code: result.code,
+    message: result.message ?? 'Validation failed',
+    details: (result.details ?? null) as JsonValue | null,
+    validatorIndex,
   };
 }
 

@@ -41,7 +41,7 @@ The adapter is **transport-agnostic**. You provide a `send` callback; the adapte
 
 The adapter uses only World's public API:
 - `serialize()` for snapshots
-- `submit()` for commands
+- `submitWithResult()` for commands
 - `onDiff()`/`offDiff()` for streaming diffs
 - `getEvents()` for tick events
 
@@ -125,6 +125,22 @@ Per-tick update. Sent after each `step()` while connected.
 }
 ```
 
+### `commandAccepted`
+
+Sent when a submitted command passed validation and was queued successfully.
+
+```typescript
+{
+  type: 'commandAccepted',
+  data: {
+    id: string,
+    commandType: string,
+    code: 'accepted',
+    message: string
+  }
+}
+```
+
 ### `commandRejected`
 
 Sent when a submitted command fails validation, has a malformed command type, or names a command type with no registered handler.
@@ -133,8 +149,12 @@ Sent when a submitted command fails validation, has a malformed command type, or
 {
   type: 'commandRejected',
   data: {
-    id: string,       // the command ID from the client
-    reason?: string   // optional rejection reason
+    id: string,
+    commandType: string | null,
+    code: string,
+    message: string,
+    details: JsonValue | null,
+    validatorIndex: number | null
   }
 }
 ```
@@ -158,7 +178,7 @@ Submit a game command:
 }
 ```
 
-The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submit()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID and a reason.
+The adapter validates the message envelope, checks that a handler exists for `commandType`, then calls `world.submitWithResult()`. If validation fails or no handler is registered, a `commandRejected` message is sent back with the command's ID plus a stable code and optional JSON details. If validation passes, the adapter sends `commandAccepted`.
 
 ### `requestSnapshot`
 
@@ -281,7 +301,7 @@ Each connected adapter subscribes to diffs independently. All receive the same t
 
 ### Invalid commands
 
-If a client sends a command that fails validation, has a malformed command type, or names a command type with no registered handler, the adapter sends a `commandRejected` message. The client can use the `id` field to match rejections to submitted commands.
+If a client sends a command that fails validation, has a malformed command type, or names a command type with no registered handler, the adapter sends a `commandRejected` message. The client can use the `id` field to match rejections to submitted commands and the `code` field to decide what to do next.
 
 ```typescript
 // Client submits invalid command
@@ -295,12 +315,22 @@ adapter.handleMessage({
 });
 
 // send callback receives:
-// { type: 'commandRejected', data: { id: 'cmd-123', reason: 'Validation failed' } }
+// {
+//   type: 'commandRejected',
+//   data: {
+//     id: 'cmd-123',
+//     commandType: 'moveUnit',
+//     code: 'validation_failed',
+//     message: 'Validation failed',
+//     details: null,
+//     validatorIndex: 0,
+//   },
+// }
 ```
 
 ### Missing handlers
 
-`ClientAdapter` rejects commands whose `commandType` has no registered handler, using `world.hasCommandHandler()` before enqueueing the command. Direct calls to `world.submit()` still need matching handlers before the next tick or `World` will throw when processing the command.
+`ClientAdapter` rejects commands whose `commandType` has no registered handler, using `world.hasCommandHandler()` before enqueueing the command. Direct calls to `world.submit()` or `world.submitWithResult()` still need matching handlers before the next tick or `World` will throw when processing the command.
 
 ### Malformed messages
 

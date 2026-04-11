@@ -17,6 +17,7 @@ This is the navigation hub for `civ-engine` documentation.
 
 ## Guides
 
+- [AI Integration](guides/ai-integration.md)
 - [Entities & Components](guides/entities-and-components.md)
 - [Systems & Simulation](guides/systems-and-simulation.md)
 - [Spatial Grid](guides/spatial-grid.md)
@@ -41,6 +42,7 @@ Active future work lives in focused plan and review documents rather than a gene
 
 ### Implemented
 
+- [AI-First Engine Plan](reviews/implemented/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
 - [RTS Engine Scale Plan](reviews/implemented/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
 - [Expert Review](reviews/implemented/EXPERT_REVIEW.md) - Review findings already addressed
 - [Engine Design Review](reviews/implemented/ENGINE_DESIGN_REVIEW.md) - Broader engine assessment

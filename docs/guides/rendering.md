@@ -61,7 +61,7 @@ InputMapper
   -> ClientMessage command
   -> transport
   -> ClientAdapter.handleMessage()
-  -> world.submit()
+  -> world.submitWithResult()
 ```
 
 The renderer should not query `World` directly during normal play. It should render from the latest snapshot plus applied diffs. Direct `World` access is acceptable for local debugging, but it should not become the production architecture because it couples the visual frame loop to the simulation internals.
@@ -289,8 +289,11 @@ function handleServerMessage(message: ServerMessage<GameEvents>): ClientMessage<
       }
       handleEvents(message.data.events);
       return null;
+    case 'commandAccepted':
+      markCommandQueued(message.data.id);
+      return null;
     case 'commandRejected':
-      markCommandRejected(message.data.id, message.data.reason);
+      markCommandRejected(message.data.id, message.data.code, message.data.details);
       return null;
   }
 }
@@ -533,7 +536,8 @@ Before calling the renderer usable, validate these behaviors:
 - Applying a tick diff updates only changed entities.
 - Component removals remove visuals and overlays.
 - Destroyed entities remove sprites, health bars, selection outlines, and queued effects.
-- `commandRejected` clears optimistic UI state.
+- `commandAccepted` clears pending command state or confirms optimistic UI state.
+- `commandRejected` clears optimistic UI state using the rejection code and details.
 - Renderer state survives a `requestSnapshot` resync.
 - Camera pan/zoom does not affect simulation coordinates.
 - Selection hit testing ignores fog-hidden or non-selectable entities.

@@ -85,13 +85,26 @@ describe('ClientAdapter', () => {
       },
     });
 
-    const rejected = messages.filter((m) => m.type === 'commandRejected');
-    expect(rejected).toHaveLength(0);
+    expect(messages).toEqual([
+      {
+        type: 'commandAccepted',
+        data: {
+          id: 'cmd-1',
+          commandType: 'move',
+          code: 'accepted',
+          message: 'Queued command',
+        },
+      },
+    ]);
   });
 
   it('handleMessage with command sends commandRejected when validation fails', () => {
     const { adapter, messages, world } = setup();
-    world.registerValidator('move', () => false);
+    world.registerValidator('move', () => ({
+      code: 'blocked_target',
+      message: 'Cell is blocked',
+      details: { x: 1, y: 1 },
+    }));
     world.registerHandler('move', () => {});
 
     adapter.handleMessage({
@@ -106,7 +119,14 @@ describe('ClientAdapter', () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]).toEqual({
       type: 'commandRejected',
-      data: { id: 'cmd-42', reason: 'Validation failed' },
+      data: {
+        id: 'cmd-42',
+        commandType: 'move',
+        code: 'blocked_target',
+        message: 'Cell is blocked',
+        details: { x: 1, y: 1 },
+        validatorIndex: 0,
+      },
     });
   });
 
@@ -127,7 +147,11 @@ describe('ClientAdapter', () => {
         type: 'commandRejected',
         data: {
           id: 'cmd-missing',
-          reason: "No handler registered for command 'move'",
+          commandType: 'move',
+          code: 'missing_handler',
+          message: "No handler registered for command 'move'",
+          details: null,
+          validatorIndex: null,
         },
       },
     ]);
@@ -140,7 +164,14 @@ describe('ClientAdapter', () => {
     expect(messages).toEqual([
       {
         type: 'commandRejected',
-        data: { id: 'bad', reason: 'Malformed command type' },
+        data: {
+          id: 'bad',
+          commandType: null,
+          code: 'malformed_command_type',
+          message: 'Malformed command type',
+          details: null,
+          validatorIndex: null,
+        },
       },
     ]);
   });

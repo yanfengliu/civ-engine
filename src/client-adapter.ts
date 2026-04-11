@@ -1,6 +1,7 @@
 import type { WorldSnapshot } from './serializer.js';
 import type { TickDiff } from './diff.js';
 import type { World } from './world.js';
+import type { JsonValue } from './json.js';
 
 export type GameEvent<TEventMap> = {
   type: keyof TEventMap;
@@ -10,7 +11,26 @@ export type GameEvent<TEventMap> = {
 export type ServerMessage<TEventMap> =
   | { type: 'snapshot'; data: WorldSnapshot }
   | { type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
-  | { type: 'commandRejected'; data: { id: string; reason?: string } };
+  | {
+      type: 'commandAccepted';
+      data: {
+        id: string;
+        commandType: string;
+        code: 'accepted';
+        message: string;
+      };
+    }
+  | {
+      type: 'commandRejected';
+      data: {
+        id: string;
+        commandType: string | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        validatorIndex: number | null;
+      };
+    };
 
 export type ClientMessage<TCommandMap> =
   | {
@@ -84,7 +104,14 @@ export class ClientAdapter<
         if (typeof message.data.commandType !== 'string') {
           this.safeSend({
             type: 'commandRejected',
-            data: { id: message.data.id, reason: 'Malformed command type' },
+            data: {
+              id: message.data.id,
+              commandType: null,
+              code: 'malformed_command_type',
+              message: 'Malformed command type',
+              details: null,
+              validatorIndex: null,
+            },
           });
           return;
         }
@@ -93,17 +120,44 @@ export class ClientAdapter<
         if (!this.world.hasCommandHandler(type)) {
           this.safeSend({
             type: 'commandRejected',
-            data: { id, reason: `No handler registered for command '${commandType}'` },
+            data: {
+              id,
+              commandType,
+              code: 'missing_handler',
+              message: `No handler registered for command '${commandType}'`,
+              details: null,
+              validatorIndex: null,
+            },
           });
           return;
         }
-        const accepted = this.world.submit(type, payload as TCommandMap[keyof TCommandMap]);
-        if (!accepted) {
+        const result = this.world.submitWithResult(
+          type,
+          payload as TCommandMap[keyof TCommandMap],
+        );
+        if (!result.accepted) {
           this.safeSend({
             type: 'commandRejected',
-            data: { id, reason: 'Validation failed' },
+            data: {
+              id,
+              commandType,
+              code: result.code,
+              message: result.message,
+              details: result.details,
+              validatorIndex: result.validatorIndex,
+            },
           });
+          return;
         }
+        this.safeSend({
+          type: 'commandAccepted',
+          data: {
+            id,
+            commandType,
+            code: 'accepted',
+            message: result.message,
+          },
+        });
         break;
       }
       case 'requestSnapshot':

@@ -48,7 +48,7 @@ const world = new World<Record<string, never>, GameCommands>({
 });
 ```
 
-The second type parameter of `World` is the command map. This gives you type-safe `submit()`, `registerValidator()`, and `registerHandler()` calls.
+The second type parameter of `World` is the command map. This gives you type-safe `submit()`, `submitWithResult()`, `registerValidator()`, and `registerHandler()` calls.
 
 ### Stale entity references
 
@@ -72,13 +72,17 @@ Bare `EntityId` is still fine for short-lived internal system work where the ID 
 
 ## Validators
 
-Validators run synchronously when `submit()` is called. They decide whether a command is valid and should be queued.
+Validators run synchronously when `submit()` or `submitWithResult()` is called. They decide whether a command is valid and should be queued.
 
 ```typescript
 world.registerValidator('moveUnit', (data, w) => {
-  // Entity must exist
-  if (!w.isAlive(data.entityId)) return false;
-  // Target must be in bounds
+  if (!w.isAlive(data.entityId)) {
+    return {
+      code: 'dead_entity',
+      message: 'Entity is not alive',
+      details: { entityId: data.entityId },
+    };
+  }
   if (data.targetX < 0 || data.targetX >= w.grid.width) return false;
   if (data.targetY < 0 || data.targetY >= w.grid.height) return false;
   return true;
@@ -87,7 +91,7 @@ world.registerValidator('moveUnit', (data, w) => {
 
 ### Multiple validators
 
-You can register multiple validators for the same command type. They run in registration order and **short-circuit** on the first `false`:
+You can register multiple validators for the same command type. They run in registration order and **short-circuit** on the first rejection:
 
 ```typescript
 // Validator 1: entity must be alive
@@ -107,15 +111,27 @@ world.registerValidator('moveUnit', (data, w) => {
 
 ### Validation result
 
-`submit()` returns `true` if all validators pass, `false` if any reject:
+`submit()` returns `true` if all validators pass, `false` if any reject. Use `submitWithResult()` when an agent or client needs a stable machine-readable outcome:
 
 ```typescript
-const accepted = world.submit('moveUnit', {
+const result = world.submitWithResult('moveUnit', {
   entityId: deadUnit,
   targetX: 5,
   targetY: 3,
 });
-// accepted = false (entity is dead)
+// result.accepted === false
+// result.code === 'dead_entity'
+// result.details === { entityId: deadUnit }
+```
+
+### Observing command outcomes
+
+External tooling can subscribe to every accepted or rejected submission:
+
+```typescript
+world.onCommandResult((result) => {
+  auditLog.push(result);
+});
 ```
 
 ## Handlers

@@ -25,6 +25,7 @@ Requires Node.js 18+.
 - **[Getting Started](docs/tutorials/getting-started.md)** — Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** — Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
+- **[AI Integration](docs/guides/ai-integration.md)** - Structured command outcomes, debugger issues, and history for closed-loop agents
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
@@ -62,7 +63,7 @@ world.step();
 | **Entities & Components**   | Create entities (numeric IDs), attach typed data objects by key                                                       |
 | **Systems**                 | Pure functions `(world) => void` that run each tick in order                                                          |
 | **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries                                                        |
-| **Commands**                | Typed input buffer with validators and handlers — how AI agents send instructions                                     |
+| **Commands**                | Typed input buffer with validators, structured outcomes, and handlers — how AI agents send instructions               |
 | **Events**                  | Typed pub/sub — how systems communicate and how observers read what happened                                          |
 | **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
 | **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
@@ -71,12 +72,12 @@ world.step();
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
-| **Debugging**               | `WorldDebugger` plus occupancy, visibility, and path queue probes for headless inspection                             |
+| **Debugging**               | `WorldDebugger`, machine-readable issues, `WorldHistoryRecorder`, and probes for headless inspection                  |
 | **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
 | **State Diffs**             | Per-tick change sets: what entities/components/resources changed                                                      |
-| **Client Protocol**         | Transport-agnostic typed messages, ClientAdapter bridges World to any transport                                       |
+| **Client Protocol**         | Transport-agnostic typed messages, including structured `commandAccepted`/`commandRejected` outcomes                  |
 
 ## Architecture
 
@@ -117,6 +118,7 @@ src/
   map-gen.ts          MapGenerator interface, createTileGrid helper
   pathfinding.ts      Generic A* pathfinding
   render-adapter.ts   Renderer-facing projected snapshot/diff streaming
+  history-recorder.ts Short-horizon tick and command history for AI/debug loops
   visibility-map.ts   Per-player visible and explored cell tracking
   behavior-tree.ts    Generic behavior tree framework
   client-adapter.ts   Transport-agnostic client protocol
@@ -184,10 +186,13 @@ docs/
 | `resume()`                                     | `void`                        | Unfreeze at current speed                                               |
 | `isPaused`                                     | `boolean`                     | Whether simulation is paused                                            |
 | **Commands**                                   |                               |                                                                         |
-| `submit(type, data)`                           | `boolean`                     | Submit a command (validated, queued)                                    |
-| `registerValidator(type, fn)`                  | `void`                        | Add a validator for a command type                                      |
+| `submit(type, data)`                           | `boolean`                     | Submit a command (compatibility wrapper over structured outcomes)        |
+| `submitWithResult(type, data)`                 | `CommandSubmissionResult`     | Submit a command and receive stable outcome code/message/details         |
+| `registerValidator(type, fn)`                  | `void`                        | Add a validator that returns `boolean` or a structured rejection object |
 | `registerHandler(type, fn)`                    | `void`                        | Set the handler for a command type                                      |
 | `hasCommandHandler(type)`                      | `boolean`                     | Check whether a command handler is registered                           |
+| `onCommandResult(fn)`                          | `void`                        | Subscribe to accepted/rejected command submission results                |
+| `offCommandResult(fn)`                         | `void`                        | Unsubscribe from command submission results                              |
 | **Events**                                     |                               |                                                                         |
 | `emit(type, data)`                             | `void`                        | Emit an event (from systems)                                            |
 | `on(type, listener)`                           | `void`                        | Subscribe to event type                                                 |
@@ -236,14 +241,15 @@ docs/
 | `noise.ts`          | `createNoise2D(seed)`, `octaveNoise2D(...)`                            | Seedable simplex noise                                      |
 | `random.ts`         | `DeterministicRandom`, `RandomState`                                   | Engine PRNG and serializable RNG state                      |
 | `render-adapter.ts` | `RenderAdapter`, `RenderSnapshot`, `RenderDiff`, `RenderProjector`     | Projection boundary for renderer-facing snapshots and diffs |
+| `history-recorder.ts` | `WorldHistoryRecorder`, `WorldHistoryTick`, `WorldHistoryState`      | Short-horizon tick and command history capture              |
 | `cellular.ts`       | `createCellGrid(...)`, `stepCellGrid(...)`                             | Cellular automata                                           |
 | `map-gen.ts`        | `createTileGrid(world)`                                                | Bulk tile entity creation                                   |
 | `spatial-grid.ts`   | `ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS`                             | Direction offset presets                                    |
 | `resource-store.ts` | `ResourcePool`, `ResourceMax`, `Transfer`                              | Resource system types                                       |
 | `visibility-map.ts` | `VisibilityMap`, `VisibilityMapState`                                  | Per-player visible/explored cell tracking                   |
 | `behavior-tree.ts`  | `createBehaviorTree`, `createBTState`, `NodeStatus`                    | Generic behavior tree framework                             |
-| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent`         | Transport-agnostic client protocol                          |
-| `world-debugger.ts` | `WorldDebugger`, probe helpers                                         | Structured world/debug snapshots for headless inspection    |
+| `client-adapter.ts` | `ClientAdapter`, `ServerMessage`, `ClientMessage`, `GameEvent`         | Transport-agnostic client protocol with structured outcomes |
+| `world-debugger.ts` | `WorldDebugger`, probe helpers                                         | Structured world/debug snapshots with machine-readable issues |
 
 ### SpatialGrid Methods
 

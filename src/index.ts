@@ -2,6 +2,7 @@ export * from './behavior-tree.js';
 export * from './cellular.js';
 export * from './client-adapter.js';
 export * from './diff.js';
+export * from './history-recorder.js';
 export * from './map-gen.js';
 export * from './noise.js';
 export * from './occupancy-grid.js';

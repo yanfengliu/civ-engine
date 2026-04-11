@@ -140,6 +140,8 @@ const accepted = world.submit('moveUnit', { entityId: unit, targetX: 5, targetY:
 world.step(); // command executes here
 ```
 
+If you need machine-readable rejection details, use `submitWithResult()` instead of `submit()`.
+
 ## Events (System Communication)
 
 Events let systems communicate within a tick and let external observers know what happened.
@@ -291,13 +293,17 @@ adapter.handleMessage({
   type: 'command',
   data: { id: 'cmd-1', commandType: 'moveUnit', payload: { entityId: 0, targetX: 5, targetY: 3 } },
 });
-// If validation fails, send callback fires with: { type: 'commandRejected', data: { id: 'cmd-1', reason: 'Validation failed' } }
+// If validation passes, send callback fires with:
+// { type: 'commandAccepted', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'accepted', message: 'Queued command' } }
+//
+// If validation fails, send callback fires with a structured rejection:
+// { type: 'commandRejected', data: { id: 'cmd-1', commandType: 'moveUnit', code: 'validation_failed', message: 'Validation failed', details: null, validatorIndex: 0 } }
 
 // Stop streaming
 adapter.disconnect();
 ```
 
-Server messages: `snapshot` (full state), `tick` (diff + events), `commandRejected` (failed validation, malformed command, or missing handler).
+Server messages: `snapshot` (full state), `tick` (diff + events), `commandAccepted` (command queued), `commandRejected` (failed validation, malformed command, or missing handler).
 Client messages: `command` (submit a game command), `requestSnapshot` (request full state).
 
 ## Next Steps

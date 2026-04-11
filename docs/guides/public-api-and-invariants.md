@@ -94,7 +94,7 @@ Snapshot version 3 restores resource registrations, pools, rates, transfers, tra
 
 ## Client Adapter
 
-Register handlers before accepting client commands. `ClientAdapter` rejects malformed commands, unhandled command types, and validator failures with `commandRejected`. If `send` throws, the adapter calls `onError` and disconnects itself.
+Register handlers before accepting client commands. `ClientAdapter` rejects malformed commands, unhandled command types, and validator failures with structured `commandRejected` messages, and acknowledges queued commands with `commandAccepted`. If `send` throws, the adapter calls `onError` and disconnects itself.
 
 ```typescript
 const adapter = new ClientAdapter({

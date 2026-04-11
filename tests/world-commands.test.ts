@@ -38,6 +38,88 @@ describe('World commands', () => {
     expect(world.submit('move', { x: -1, y: 2 })).toBe(false);
   });
 
+  it('submitWithResult returns a structured accepted outcome', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', () => {});
+
+    expect(world.submitWithResult('move', { x: 1, y: 2 })).toEqual({
+      accepted: true,
+      commandType: 'move',
+      code: 'accepted',
+      message: 'Queued command',
+      details: null,
+      tick: 0,
+      sequence: 0,
+      validatorIndex: null,
+    });
+  });
+
+  it('structured validator rejections preserve code, message, and details', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerValidator('move', (data) => {
+      if (data.x >= 0 && data.y >= 0) return true;
+      return {
+        code: 'out_of_bounds_target',
+        message: 'Move target must stay inside the positive quadrant',
+        details: {
+          target: { x: data.x, y: data.y },
+        },
+      };
+    });
+    world.registerHandler('move', () => {});
+
+    expect(world.submitWithResult('move', { x: -1, y: 2 })).toEqual({
+      accepted: false,
+      commandType: 'move',
+      code: 'out_of_bounds_target',
+      message: 'Move target must stay inside the positive quadrant',
+      details: {
+        target: { x: -1, y: 2 },
+      },
+      tick: 0,
+      sequence: 0,
+      validatorIndex: 0,
+    });
+  });
+
+  it('emits structured command results to listeners', () => {
+    type Cmds = { move: { x: number; y: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const results: unknown[] = [];
+    world.registerValidator('move', () => false);
+    world.registerHandler('move', () => {});
+    world.onCommandResult((result) => results.push(result));
+
+    world.submitWithResult('move', { x: 1, y: 2 });
+
+    expect(results).toEqual([
+      {
+        accepted: false,
+        commandType: 'move',
+        code: 'validation_failed',
+        message: 'Validation failed',
+        details: null,
+        tick: 0,
+        sequence: 0,
+        validatorIndex: 0,
+      },
+    ]);
+  });
+
   it('all validators must pass for submit to accept', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({

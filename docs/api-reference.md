@@ -28,6 +28,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Behavior Tree](#behavior-tree)
 - [Client Adapter](#client-adapter)
 - [Render Adapter](#render-adapter)
+- [World History Recorder](#world-history-recorder)
 - [World Debugger](#world-debugger)
 
 ---
@@ -129,6 +130,46 @@ interface WorldMetrics {
 ```
 
 Last-tick instrumentation returned by `world.getMetrics()`.
+
+### `CommandValidationRejection`
+
+```typescript
+// src/world.ts
+interface CommandValidationRejection {
+  code: string;
+  message?: string;
+  details?: JsonValue;
+}
+```
+
+Structured validator rejection used by `registerValidator()` and `submitWithResult()`.
+
+### `CommandValidationResult`
+
+```typescript
+// src/world.ts
+type CommandValidationResult = boolean | CommandValidationRejection;
+```
+
+Validators may still return `true` or `false`. Returning a rejection object preserves stable machine-readable details.
+
+### `CommandSubmissionResult<TCommandType>`
+
+```typescript
+// src/world.ts
+interface CommandSubmissionResult<TCommandType extends PropertyKey = string> {
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  sequence: number;
+  validatorIndex: number | null;
+}
+```
+
+Structured outcome returned by `world.submitWithResult()` and emitted through `world.onCommandResult()`.
 
 ### `WorldSnapshot`
 
@@ -524,7 +565,21 @@ type GameEvent<TEventMap> = {
 type ServerMessage<TEventMap> =
   | { type: 'snapshot'; data: WorldSnapshot }
   | { type: 'tick'; data: { diff: TickDiff; events: GameEvent<TEventMap>[] } }
-  | { type: 'commandRejected'; data: { id: string; reason?: string } };
+  | {
+      type: 'commandAccepted';
+      data: { id: string; commandType: string; code: 'accepted'; message: string };
+    }
+  | {
+      type: 'commandRejected';
+      data: {
+        id: string;
+        commandType: string | null;
+        code: string;
+        message: string;
+        details: JsonValue | null;
+        validatorIndex: number | null;
+      };
+    };
 ```
 
 Messages sent from server to client:
@@ -533,7 +588,8 @@ Messages sent from server to client:
 |---|---|---|
 | `snapshot` | On `connect()` or `requestSnapshot` | Full `WorldSnapshot` |
 | `tick` | After each `step()` while connected | `TickDiff` + events from the tick |
-| `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | Command ID + optional reason |
+| `commandAccepted` | When a submitted command passed validation and was queued | Command ID + command type + accepted message |
+| `commandRejected` | When the adapter rejects a malformed, unhandled, or validation-failed command | Command ID + command type + stable code/message/details |
 
 ### `ClientMessage<TCommandMap>`
 
@@ -963,13 +1019,32 @@ Commands are validated-and-queued input from external code (AI agents, UI). They
 submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean
 ```
 
-Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator returns `false`, the command is rejected and not queued.
+Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator rejects, the command is not queued.
 
-**Returns:** `true` if the command passed all validators and was queued, `false` if rejected.
+**Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`.
 
 ```typescript
 const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
 // accepted: true if validation passed
+```
+
+#### `submitWithResult<K>(type, data)`
+
+```typescript
+submitWithResult<K extends keyof TCommandMap>(
+  type: K,
+  data: TCommandMap[K],
+): CommandSubmissionResult<K>
+```
+
+Submits a command and returns the full structured outcome.
+
+```typescript
+const result = world.submitWithResult('moveUnit', {
+  entityId: 0,
+  targetX: 5,
+  targetY: 3,
+});
 ```
 
 #### `registerValidator<K>(type, fn)`
@@ -977,7 +1052,10 @@ const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 
 ```typescript
 registerValidator<K extends keyof TCommandMap>(
   type: K,
-  fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => boolean,
+  fn: (
+    data: TCommandMap[K],
+    world: World<TEventMap, TCommandMap>,
+  ) => CommandValidationResult,
 ): void
 ```
 
@@ -986,6 +1064,21 @@ Adds a validator for a command type. Multiple validators can be registered per t
 ```typescript
 world.registerValidator('moveUnit', (data, w) => {
   return w.isAlive(data.entityId);
+});
+```
+
+Validators may also return a structured rejection object:
+
+```typescript
+world.registerValidator('moveUnit', (data, w) => {
+  if (!w.isAlive(data.entityId)) {
+    return {
+      code: 'dead_entity',
+      message: 'Entity is not alive',
+      details: { entityId: data.entityId },
+    };
+  }
+  return true;
 });
 ```
 
@@ -1017,6 +1110,26 @@ hasCommandHandler(type: keyof TCommandMap): boolean
 ```
 
 Returns whether a handler is registered for the command type. This is primarily useful for transport adapters that need to reject unhandled commands before enqueueing them.
+
+#### `onCommandResult(listener)`
+
+```typescript
+onCommandResult(
+  listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+): void
+```
+
+Subscribes to accepted and rejected command submission results.
+
+#### `offCommandResult(listener)`
+
+```typescript
+offCommandResult(
+  listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+): void
+```
+
+Removes a command-result listener.
 
 ### Events
 
@@ -2445,7 +2558,7 @@ Processes an incoming client message:
 
 | Message type | Behavior |
 |---|---|
-| `command` | Validates the envelope, rejects unhandled command types, then calls `world.submit()`. If rejected, sends a `commandRejected` message with the command's ID and reason |
+| `command` | Validates the envelope, rejects unhandled command types, then calls `world.submitWithResult()`. Sends `commandAccepted` on success or `commandRejected` with structured error fields on failure |
 | `requestSnapshot` | Sends a `snapshot` message with the current world state |
 
 Malformed messages without a usable `type` are ignored. Malformed command envelopes with an ID are rejected when the adapter can safely identify which command to reject.
@@ -2633,6 +2746,90 @@ Stops streaming render messages.
 
 ---
 
+## World History Recorder
+
+Short-horizon recorder for recent command outcomes and tick traces. Useful for AI agents, tests, and debug tooling that need recent history without building a full replay system.
+
+```typescript
+import {
+  WorldHistoryRecorder,
+  type WorldHistoryState,
+  type WorldHistoryTick,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new WorldHistoryRecorder<TEventMap, TCommandMap, TDebug>(config: {
+  world: World<TEventMap, TCommandMap>;
+  capacity?: number;
+  commandCapacity?: number;
+  debug?: { capture(): TDebug | null };
+  captureInitialSnapshot?: boolean;
+})
+```
+
+### Methods
+
+#### `connect()`
+
+```typescript
+connect(): void
+```
+
+Starts recording world diffs and command outcomes. Optionally stores an initial snapshot.
+
+#### `disconnect()`
+
+```typescript
+disconnect(): void
+```
+
+Stops recording.
+
+#### `clear()`
+
+```typescript
+clear(): void
+```
+
+Clears recorded history and refreshes the initial snapshot if `captureInitialSnapshot` is enabled.
+
+#### `getTickHistory()`
+
+```typescript
+getTickHistory(): Array<WorldHistoryTick<TEventMap, TDebug>>
+```
+
+Returns cloned recent tick entries.
+
+#### `getCommandHistory()`
+
+```typescript
+getCommandHistory(): Array<CommandSubmissionResult<keyof TCommandMap>>
+```
+
+Returns cloned recent command outcomes.
+
+#### `findTick(tick)`
+
+```typescript
+findTick(tick: number): WorldHistoryTick<TEventMap, TDebug> | null
+```
+
+Returns one recorded tick entry or `null`.
+
+#### `getState()`
+
+```typescript
+getState(): WorldHistoryState<TEventMap, TCommandMap, TDebug>
+```
+
+Returns the full recorder state: initial snapshot, recent ticks, and recent command outcomes.
+
+---
+
 ## World Debugger
 
 Structured headless debugger for inspecting world state, last diff summary, metrics, and optional probe data.
@@ -2686,7 +2883,8 @@ Returns a structured debug snapshot containing:
 - current event counts
 - `world.getMetrics()` output
 - last diff summary
-- warnings for important edge cases
+- machine-readable `issues`
+- compatibility `warnings` derived from those issues
 - custom probe payloads
 
 ### Probe Helpers

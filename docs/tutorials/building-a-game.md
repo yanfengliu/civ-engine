@@ -451,6 +451,7 @@ function attachClient(ws: WebSocket, world: World<GameEvents, GameCommands>): Cl
 The client receives:
 - A `snapshot` message on connect (full world state)
 - A `tick` message after each step (diff + events from that tick)
+- A `commandAccepted` message when a submitted command is queued successfully
 - A `commandRejected` message if a submitted command fails validation, is malformed, or names a command with no registered handler
 
 The client sends:
