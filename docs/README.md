@@ -24,6 +24,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Entities & Components](guides/entities-and-components.md)
 - [Systems & Simulation](guides/systems-and-simulation.md)
 - [Spatial Grid](guides/spatial-grid.md)
+- [Sub-Grid Movement & Grid Resolution](guides/sub-grid-movement.md)
 - [Commands & Events](guides/commands-and-events.md)
 - [Resources](guides/resources.md)
 - [Serialization & Diffs](guides/serialization-and-diffs.md)
@@ -41,7 +42,7 @@ Active future work lives in focused plan and review documents rather than a gene
 
 ### Active
 
-- [Expert Review Remaining Candidates](reviews/todo/EXPERT_REVIEW_REMAINING.md) - Deferred review items not yet selected for implementation
+- No active review TODOs at the moment. Re-open a focused plan only when benchmark data or a concrete game workload justifies it.
 
 ### Implemented
 
@@ -50,6 +51,7 @@ Active future work lives in focused plan and review documents rather than a gene
 - [AI-First Engine Plan](reviews/done/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
 - [Render Contract and Debugger Plan](reviews/done/RENDER_CONTRACT_AND_DEBUGGER_PLAN.md) - Render-facing projection and debugger support work that has already landed
 - [RTS Engine Scale Plan](reviews/done/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
+- [Expert Review Remaining Candidates](reviews/done/EXPERT_REVIEW_REMAINING.md) - Archived on 2026-04-11; remaining SoA and dependency-graph ideas stay deferred until measured workloads justify them
 - [Expert Review](reviews/done/EXPERT_REVIEW.md) - Review findings already addressed
 - [Engine Design Review](reviews/done/ENGINE_DESIGN_REVIEW.md) - Broader engine assessment
 - [Engine Hardening Plan](reviews/done/ENGINE_HARDENING_PLAN.md) - Hardening work that has already landed

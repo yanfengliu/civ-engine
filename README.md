@@ -28,6 +28,7 @@ Requires Node.js 18+.
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
+- **[Sub-Grid Movement Guide](docs/guides/sub-grid-movement.md)** - Recommended fine-grid simulation, coarse building placement, and renderer-owned smooth motion
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
 ## What You Can Build

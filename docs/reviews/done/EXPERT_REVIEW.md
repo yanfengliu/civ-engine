@@ -22,7 +22,7 @@ Implemented in the engine:
 - Deterministic `world.random()` and snapshot v3 RNG state.
 - Per-tick metrics for timings, system durations, query cache activity, and spatial sync work.
 
-Still tracked as future candidates in `docs/reviews/todo/EXPERT_REVIEW_REMAINING.md`:
+Still deferred as future candidates in `docs/reviews/done/EXPERT_REVIEW_REMAINING.md`:
 - Struct-of-Arrays / `SharedArrayBuffer` component storage.
 - Full dependency graph scheduling and parallel execution.
 - Tick-targeted multiplayer command processing, rollback, and prediction.
