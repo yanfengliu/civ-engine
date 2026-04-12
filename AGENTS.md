@@ -3,6 +3,7 @@
 - **NEVER use compound shell commands.** Do not use `&&`, `|`, or `;` to chain commands together in a single Bash execution.
 - If you need to run multiple commands (e.g., compiling then testing), execute them as separate, sequential tool calls.
 - Do not use command substitution $(...) because it prompts for my permission and interrupts your flow.
+- Always run all the tests instead of just a subset of tests.
 
 # Git Command Rules
 - CRITICAL: You are strictly forbidden from using compound commands with `cd` and `git` (e.g., `cd path && git commit`). This triggers a hardcoded CLI security block that halts automation. 
