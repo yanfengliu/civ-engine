@@ -283,6 +283,9 @@ export class World<
       tps: config.tps,
       onTick: () => this.executeTickOrThrow(),
       maxTicksPerFrame: config.maxTicksPerFrame,
+      onError: () => {
+        this.gameLoop.pause();
+      },
     });
   }
 

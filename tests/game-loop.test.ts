@@ -135,4 +135,44 @@ describe('GameLoop', () => {
       loop.stop();
     }).not.toThrow();
   });
+
+  it('step() propagates errors when no onError is set', () => {
+    const loop = new GameLoop({
+      tps: 60,
+      onTick: () => { throw new Error('boom'); },
+    });
+    expect(() => loop.step()).toThrow('boom');
+  });
+
+  it('onError is called and loop stops when onTick throws during loop', async () => {
+    let tickCount = 0;
+    const errors: unknown[] = [];
+    const loop = new GameLoop({
+      tps: 60,
+      onTick: () => {
+        tickCount++;
+        if (tickCount === 1) throw new Error('system failure');
+      },
+      onError: (err) => { errors.push(err); },
+    });
+    loop.start();
+    // Wait for the loop to fire and catch the error
+    await new Promise((r) => setTimeout(r, 50));
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('system failure');
+    expect(tickCount).toBe(1);
+    loop.stop();
+  });
+
+  it('step() still throws even with onError (onError is for loop only)', () => {
+    const errors: unknown[] = [];
+    const loop = new GameLoop({
+      tps: 60,
+      onTick: () => { throw new Error('direct step'); },
+      onError: (err) => { errors.push(err); },
+    });
+    // Direct step() always throws — onError only guards the async loop
+    expect(() => loop.step()).toThrow('direct step');
+    expect(errors).toHaveLength(0);
+  });
 });

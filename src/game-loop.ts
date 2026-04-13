@@ -3,6 +3,7 @@ export class GameLoop {
   private readonly _tps: number;
   private readonly tickDuration: number;
   private readonly onTick: () => void;
+  private readonly onError: ((error: unknown) => void) | null;
   private readonly maxTicksPerFrame: number;
   private running = false;
   private lastTime = 0;
@@ -15,6 +16,7 @@ export class GameLoop {
     tps: number;
     onTick: () => void;
     maxTicksPerFrame?: number;
+    onError?: (error: unknown) => void;
   }) {
     if (!Number.isFinite(config.tps) || config.tps <= 0) {
       throw new Error('TPS must be a finite positive number');
@@ -28,6 +30,7 @@ export class GameLoop {
     this._tps = config.tps;
     this.tickDuration = 1000 / config.tps;
     this.onTick = config.onTick;
+    this.onError = config.onError ?? null;
     this.maxTicksPerFrame = config.maxTicksPerFrame ?? 4;
   }
 
@@ -109,7 +112,16 @@ export class GameLoop {
       this.accumulated >= this.tickDuration &&
       ticksThisFrame < this.maxTicksPerFrame
     ) {
-      this.step();
+      try {
+        this.step();
+      } catch (error) {
+        if (this.onError) {
+          this.stop();
+          this.onError(error);
+          return;
+        }
+        throw error;
+      }
       this.accumulated -= this.tickDuration;
       ticksThisFrame++;
     }
