@@ -87,7 +87,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
 - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
 - **CommandQueue** is owned by World. External code submits commands via `world.submit()` or `world.submitWithResult()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
-- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 3 includes resource state and deterministic RNG state; version 1 and 2 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
+- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 4 (WorldSnapshotV4) includes state, tags, and metadata fields alongside components and resources; version 3 includes resource state and deterministic RNG state; version 1 and 2 snapshots remain readable for compatibility. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
 - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick.
 - **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts. `instrumentationProfile: 'full'` keeps the detailed implicit metrics path, `minimal` keeps coarse implicit metrics, and `release` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
 - **Rendering** belongs outside the engine. Renderer clients should consume snapshots and tick diffs through `ClientAdapter`, keep visual objects in renderer-owned state, and submit input back as commands. See `docs/guides/rendering.md` for the recommended renderer boundary and Pixi-first reference client shape.
@@ -102,6 +102,9 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **ScenarioRunner** is a standalone orchestration utility. It pairs prepared setup, deterministic stepping, checks, debugger output, and short-horizon history into one machine-readable result for AI agents and harnesses.
 - **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined — the engine does not prescribe what context contains beyond a BTState accessor.
 - **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submitWithResult`).
+- **World State** is owned by World as a private Map. Systems read/write via `world.setState()`/`world.getState()`. State is non-entity structured data (terrain config, simulation time, etc.). Included in serialization and diffs.
+- **Tags & Metadata** are owned by World. Tags are string labels with reverse-index lookup via `world.getByTag()`. Metadata is key-value per entity with unique reverse-index via `world.getByMeta()`. Both cleaned up on entity destruction, included in serialization and diffs.
+- **System Ordering** supports optional `before`/`after` named constraints in `SystemRegistration`. Constraints resolve via topological sort within each phase at first tick (or after dynamic registration). Cross-phase constraints are errors.
 
 ## Technology Map
 
@@ -124,6 +127,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 | 6   | 2026-04-04 | Spatial index as internal World routine               | Non-bypassable, invisible to user systems, runs before all systems         |
 | 7   | 2026-04-04 | destroyEntity uses previousPositions for grid cleanup | Handles the case where position was mutated between ticks without stepping |
 | 8   | 2026-04-06 | BT state separated from tree structure via BTState   | Enables shared tree blueprints across entities while keeping per-entity state serializable in ECS |
+| 9   | 2026-04-12 | Optional typed component registry via TComponents generic | Type-safe component access without runtime overhead; backward-compatible with existing string-based API |
 
 ## Drift Log
 
@@ -147,3 +151,4 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 | 2026-04-10 | Added render projection and debugger helpers | RenderAdapter for renderer-facing projections and WorldDebugger with probe support |
 | 2026-04-10 | Hardened engine invariants           | Added JSON-safe component/resource state, entity refs, explicit write APIs, read-only grid exposure, resource snapshot v2, package exports/build, and CI |
 | 2026-04-11 | Added scenario runner harness        | `runScenario()` for deterministic setup/run/check orchestration over the AI-facing debug/history surfaces |
+| 2026-04-12 | Added 6 engine ergonomics features | Typed component registry, loose system typing, world-level state store, spatial query helpers, system ordering constraints, entity tags & metadata — addressing civ-sim-web integration friction |

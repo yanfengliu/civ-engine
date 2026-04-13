@@ -41,4 +41,21 @@ export interface WorldSnapshotV3 {
   rng: RandomState;
 }
 
-export type WorldSnapshot = WorldSnapshotV1 | WorldSnapshotV2 | WorldSnapshotV3;
+export interface WorldSnapshotV4 {
+  version: 4;
+  config: WorldConfig;
+  tick: number;
+  entities: {
+    generations: number[];
+    alive: boolean[];
+    freeList: number[];
+  };
+  components: Record<string, Array<[EntityId, unknown]>>;
+  resources: ResourceStoreState;
+  rng: RandomState;
+  state: Record<string, unknown>;
+  tags: Record<number, string[]>;
+  metadata: Record<number, Record<string, string | number>>;
+}
+
+export type WorldSnapshot = WorldSnapshotV1 | WorldSnapshotV2 | WorldSnapshotV3 | WorldSnapshotV4;

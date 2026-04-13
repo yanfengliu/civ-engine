@@ -16,7 +16,7 @@ import { EventBus } from './event-bus.js';
 import { CommandQueue } from './command-queue.js';
 import { ResourceStore } from './resource-store.js';
 import type { ResourceMax, ResourcePool } from './resource-store.js';
-import { assertJsonCompatible, type JsonValue } from './json.js';
+import { assertJsonCompatible, jsonFingerprint, type JsonValue } from './json.js';
 import { DeterministicRandom } from './random.js';
 import {
   COMMAND_EXECUTION_SCHEMA_VERSION,
@@ -29,6 +29,17 @@ export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
 > = (world: World<TEventMap, TCommandMap>) => void;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type LooseSystem = (world: World<any, any>) => void;
+
+export interface LooseSystemRegistration {
+  name?: string;
+  phase?: SystemPhase;
+  execute: LooseSystem;
+  before?: string[];
+  after?: string[];
+}
 
 export const SYSTEM_PHASES = [
   'input',
@@ -47,6 +58,8 @@ export interface SystemRegistration<
   name?: string;
   phase?: SystemPhase;
   execute: System<TEventMap, TCommandMap>;
+  before?: string[];
+  after?: string[];
 }
 
 export interface WorldMetrics {
@@ -180,6 +193,8 @@ interface RegisteredSystem<
   phase: SystemPhase;
   execute: System<TEventMap, TCommandMap>;
   order: number;
+  before: string[];
+  after: string[];
 }
 
 type TickMetricsProfile = 'full' | 'minimal' | 'none';
@@ -188,9 +203,12 @@ interface TickRunOptions {
   metricsProfile: TickMetricsProfile;
 }
 
+export type ComponentRegistry = Record<string, unknown>;
+
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
 > {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
@@ -199,6 +217,7 @@ export class World<
   private entitySignatures: bigint[] = [];
   private queryCache = new Map<string, QueryCacheEntry>();
   private systems: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap>> | null = null;
   private nextSystemOrder = 0;
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
@@ -238,6 +257,16 @@ export class World<
   private destroyCallbacks: Array<
     (id: EntityId, world: World<TEventMap, TCommandMap>) => void
   > = [];
+  private stateStore = new Map<string, unknown>();
+  private stateDirtyKeys = new Set<string>();
+  private stateRemovedKeys = new Set<string>();
+  private stateBaseline = new Map<string, string>();
+  private entityTags = new Map<EntityId, Set<string>>();
+  private tagIndex = new Map<string, Set<EntityId>>();
+  private entityMeta = new Map<EntityId, Map<string, string | number>>();
+  private metaIndex = new Map<string, Map<string | number, EntityId>>();
+  private tagsDirtyEntities = new Set<EntityId>();
+  private metaDirtyEntities = new Set<EntityId>();
 
   constructor(config: WorldConfig) {
     validateWorldConfig(config);
@@ -280,6 +309,8 @@ export class World<
       store.remove(id);
     }
     this.resourceStore.removeEntity(id);
+    this.removeEntityTags(id);
+    this.removeEntityMeta(id);
     this.entityManager.destroy(id);
   }
 
@@ -314,25 +345,32 @@ export class World<
     }
   }
 
-  registerComponent<T>(key: string): void {
+  registerComponent<K extends keyof TComponents & string>(key: K): void;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  registerComponent<T>(key: string): void;
+  registerComponent(key: string): void {
     if (this.componentStores.has(key)) {
       throw new Error(`Component '${key}' is already registered`);
     }
-    this.componentStores.set(key, new ComponentStore<T>());
+    this.componentStores.set(key, new ComponentStore<unknown>());
     this.registerComponentBit(key);
   }
 
-  addComponent<T>(entity: EntityId, key: string, data: T): void {
+  addComponent<K extends keyof TComponents & string>(entity: EntityId, key: K, data: TComponents[K]): void;
+  addComponent<T>(entity: EntityId, key: string, data: T): void;
+  addComponent(entity: EntityId, key: string, data: unknown): void {
     this.setComponent(entity, key, data);
   }
 
-  setComponent<T>(entity: EntityId, key: string, data: T): void {
+  setComponent<K extends keyof TComponents & string>(entity: EntityId, key: K, data: TComponents[K]): void;
+  setComponent<T>(entity: EntityId, key: string, data: T): void;
+  setComponent(entity: EntityId, key: string, data: unknown): void {
     this.assertAlive(entity);
     const position = key === this.positionKey ? asPosition(data) : null;
     if (position) {
       this.assertPositionInBounds(position);
     }
-    const store = this.getStore<T>(key);
+    const store = this.getStore<unknown>(key);
     const hadComponent = store.has(entity);
     store.set(entity, data);
     if (!hadComponent) {
@@ -343,10 +381,10 @@ export class World<
     }
   }
 
-  getComponent<T>(entity: EntityId, key: string): T | undefined {
-    const store = this.componentStores.get(key) as
-      | ComponentStore<T>
-      | undefined;
+  getComponent<K extends keyof TComponents & string>(entity: EntityId, key: K): TComponents[K] | undefined;
+  getComponent<T>(entity: EntityId, key: string): T | undefined;
+  getComponent(entity: EntityId, key: string): unknown {
+    const store = this.componentStores.get(key);
     return store?.get(entity);
   }
 
@@ -360,6 +398,8 @@ export class World<
     }) as ComponentTuple<T>;
   }
 
+  removeComponent<K extends keyof TComponents & string>(entity: EntityId, key: K): void;
+  removeComponent(entity: EntityId, key: string): void;
   removeComponent(entity: EntityId, key: string): void {
     this.assertAlive(entity);
     const store = this.componentStores.get(key);
@@ -373,13 +413,14 @@ export class World<
     }
   }
 
-  patchComponent<T>(
-    entity: EntityId,
-    key: string,
-    patch: (data: T) => T | void,
-  ): T {
+  patchComponent<K extends keyof TComponents & string>(
+    entity: EntityId, key: K, patch: (data: TComponents[K]) => TComponents[K] | void,
+  ): TComponents[K];
+  patchComponent<T>(entity: EntityId, key: string, patch: (data: T) => T | void): T;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  patchComponent(entity: EntityId, key: string, patch: (data: any) => any): any {
     this.assertAlive(entity);
-    const current = this.getComponent<T>(entity, key);
+    const current = this.getComponent(entity, key);
     if (current === undefined) {
       throw new Error(`Entity ${entity} does not have component '${key}'`);
     }
@@ -410,6 +451,8 @@ export class World<
     this.syncSpatialEntity(entity, position);
   }
 
+  query<K extends keyof TComponents & string>(...keys: K[]): IterableIterator<EntityId>;
+  query(...keys: string[]): IterableIterator<EntityId>;
   *query(...keys: string[]): IterableIterator<EntityId> {
     const queryKeys = this.normalizeQueryKeys(keys);
     if (!queryKeys) return;
@@ -425,10 +468,69 @@ export class World<
     }
   }
 
+  *queryInRadius(
+    cx: number,
+    cy: number,
+    radius: number,
+    ...components: string[]
+  ): IterableIterator<EntityId> {
+    const entityIds = this.spatialGrid.getInRadius(cx, cy, radius);
+    if (components.length === 0) {
+      yield* entityIds;
+      return;
+    }
+    const mask = this.queryMask(components);
+    for (const id of entityIds) {
+      const sig = this.entitySignatures[id] ?? 0n;
+      if ((sig & mask) === mask) {
+        yield id;
+      }
+    }
+  }
+
+  findNearest(
+    cx: number,
+    cy: number,
+    ...components: string[]
+  ): EntityId | undefined {
+    const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
+    const mask = components.length > 0 ? this.queryMask(components) : 0n;
+    for (let r = 0; r <= maxRadius; r++) {
+      const entityIds = this.spatialGrid.getInRadius(cx, cy, r);
+      let bestId: EntityId | undefined;
+      let bestDistSq = Infinity;
+      for (const id of entityIds) {
+        if (components.length > 0) {
+          const sig = this.entitySignatures[id] ?? 0n;
+          if ((sig & mask) !== mask) continue;
+        }
+        const pos = this.getComponent<Position>(id, this.positionKey);
+        if (!pos) continue;
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < bestDistSq) {
+          bestDistSq = distSq;
+          bestId = id;
+        }
+      }
+      if (bestId !== undefined) return bestId;
+    }
+    return undefined;
+  }
+
+  registerSystem(
+    system: System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>,
+  ): void;
+  registerSystem(
+    system: LooseSystem | LooseSystemRegistration,
+  ): void;
   registerSystem(
     system:
       | System<TEventMap, TCommandMap>
-      | SystemRegistration<TEventMap, TCommandMap>,
+      | SystemRegistration<TEventMap, TCommandMap>
+      | LooseSystem
+      | LooseSystemRegistration,
   ): void {
     this.systems.push(this.normalizeSystemRegistration(system));
   }
@@ -652,28 +754,57 @@ export class World<
 
     const snapshotTick = this.getObservableTick();
 
+    const state: Record<string, unknown> = {};
+    for (const [key, value] of this.stateStore) {
+      assertJsonCompatible(value, `state '${key}'`);
+      state[key] = value;
+    }
+
+    const tags: Record<number, string[]> = {};
+    for (const [entityId, tagSet] of this.entityTags) {
+      if (tagSet.size > 0) {
+        tags[entityId] = [...tagSet];
+      }
+    }
+
+    const metadata: Record<number, Record<string, string | number>> = {};
+    for (const [entityId, metaMap] of this.entityMeta) {
+      if (metaMap.size > 0) {
+        const record: Record<string, string | number> = {};
+        for (const [k, v] of metaMap) {
+          record[k] = v;
+        }
+        metadata[entityId] = record;
+      }
+    }
+
     return {
-      version: 3,
+      version: 4,
       config,
       tick: snapshotTick,
       entities: this.entityManager.getState(),
       components,
       resources: this.resourceStore.getState(),
       rng: this.rng.getState(),
+      state,
+      tags,
+      metadata,
     };
   }
 
   static deserialize<
     TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TComponents extends ComponentRegistry = Record<string, unknown>,
   >(
     snapshot: WorldSnapshot,
     systems?: Array<
       System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>
+      | LooseSystem | LooseSystemRegistration
     >,
-  ): World<TEventMap, TCommandMap> {
+  ): World<TEventMap, TCommandMap, TComponents> {
     const version = (snapshot as { version: number }).version;
-    if (version !== 1 && version !== 2 && version !== 3) {
+    if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
       throw new Error(`Unsupported snapshot version: ${version}`);
     }
     if (
@@ -682,7 +813,7 @@ export class World<
       throw new Error('Invalid entity state: array length mismatch');
     }
 
-    const world = new World<TEventMap, TCommandMap>(snapshot.config);
+    const world = new World<TEventMap, TCommandMap, TComponents>(snapshot.config);
     world.entityManager = EntityManager.fromState(snapshot.entities);
 
     world.componentStores.clear();
@@ -698,6 +829,27 @@ export class World<
     }
     if ('rng' in snapshot) {
       world.rng = DeterministicRandom.fromState(snapshot.rng);
+    }
+    if ('state' in snapshot) {
+      for (const [key, value] of Object.entries(snapshot.state)) {
+        world.stateStore.set(key, value);
+      }
+    }
+    if ('tags' in snapshot) {
+      for (const [entityIdStr, tagList] of Object.entries(snapshot.tags)) {
+        const entityId = Number(entityIdStr);
+        for (const tag of tagList as string[]) {
+          world.addTagInternal(entityId, tag);
+        }
+      }
+    }
+    if ('metadata' in snapshot) {
+      for (const [entityIdStr, metaRecord] of Object.entries(snapshot.metadata)) {
+        const entityId = Number(entityIdStr);
+        for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {
+          world.setMetaInternal(entityId, key, value);
+        }
+      }
     }
     world.rebuildSpatialIndex();
 
@@ -815,6 +967,97 @@ export class World<
     return this.resourceStore.getTransfers(entity);
   }
 
+  setState<K extends keyof TComponents & string>(key: K, value: TComponents[K]): void;
+  setState(key: string, value: unknown): void;
+  setState(key: string, value: unknown): void {
+    assertJsonCompatible(value, `state '${key}'`);
+    this.stateStore.set(key, value);
+    this.stateDirtyKeys.add(key);
+    this.stateRemovedKeys.delete(key);
+  }
+
+  getState<K extends keyof TComponents & string>(key: K): TComponents[K] | undefined;
+  getState(key: string): unknown;
+  getState(key: string): unknown {
+    return this.stateStore.get(key);
+  }
+
+  deleteState(key: string): void {
+    if (this.stateStore.has(key)) {
+      this.stateStore.delete(key);
+      this.stateDirtyKeys.delete(key);
+      this.stateRemovedKeys.add(key);
+    }
+  }
+
+  hasState(key: string): boolean {
+    return this.stateStore.has(key);
+  }
+
+  addTag(entity: EntityId, tag: string): void {
+    this.assertAlive(entity);
+    this.addTagInternal(entity, tag);
+    this.tagsDirtyEntities.add(entity);
+  }
+
+  removeTag(entity: EntityId, tag: string): void {
+    this.assertAlive(entity);
+    const tags = this.entityTags.get(entity);
+    if (!tags || !tags.has(tag)) return;
+    tags.delete(tag);
+    if (tags.size === 0) this.entityTags.delete(entity);
+    const indexed = this.tagIndex.get(tag);
+    if (indexed) {
+      indexed.delete(entity);
+      if (indexed.size === 0) this.tagIndex.delete(tag);
+    }
+    this.tagsDirtyEntities.add(entity);
+  }
+
+  hasTag(entity: EntityId, tag: string): boolean {
+    return this.entityTags.get(entity)?.has(tag) ?? false;
+  }
+
+  getByTag(tag: string): ReadonlySet<EntityId> {
+    return this.tagIndex.get(tag) ?? EMPTY_SET;
+  }
+
+  getTags(entity: EntityId): ReadonlySet<string> {
+    return this.entityTags.get(entity) ?? EMPTY_STRING_SET;
+  }
+
+  setMeta(entity: EntityId, key: string, value: string | number): void {
+    this.assertAlive(entity);
+    this.setMetaInternal(entity, key, value);
+    this.metaDirtyEntities.add(entity);
+  }
+
+  getMeta(entity: EntityId, key: string): string | number | undefined {
+    return this.entityMeta.get(entity)?.get(key);
+  }
+
+  deleteMeta(entity: EntityId, key: string): void {
+    this.assertAlive(entity);
+    const meta = this.entityMeta.get(entity);
+    if (!meta) return;
+    const value = meta.get(key);
+    if (value === undefined) return;
+    meta.delete(key);
+    if (meta.size === 0) this.entityMeta.delete(entity);
+    const keyIndex = this.metaIndex.get(key);
+    if (keyIndex) {
+      if (keyIndex.get(value) === entity) {
+        keyIndex.delete(value);
+      }
+      if (keyIndex.size === 0) this.metaIndex.delete(key);
+    }
+    this.metaDirtyEntities.add(entity);
+  }
+
+  getByMeta(key: string, value: string | number): EntityId | undefined {
+    return this.metaIndex.get(key)?.get(value);
+  }
+
   private getObservableTick(): number {
     return Math.max(
       this.gameLoop.tick,
@@ -828,6 +1071,101 @@ export class World<
     for (const store of this.componentStores.values()) {
       store.clearDirty();
     }
+    this.clearStateDirty();
+    this.tagsDirtyEntities.clear();
+    this.metaDirtyEntities.clear();
+  }
+
+  private clearStateDirty(): void {
+    this.stateDirtyKeys.clear();
+    this.stateRemovedKeys.clear();
+    this.stateBaseline.clear();
+    for (const [key, value] of this.stateStore) {
+      this.stateBaseline.set(key, jsonFingerprint(value, `state '${key}'`));
+    }
+  }
+
+  private removeEntityTags(entity: EntityId): void {
+    const tags = this.entityTags.get(entity);
+    if (!tags) return;
+    for (const tag of tags) {
+      const indexed = this.tagIndex.get(tag);
+      if (indexed) {
+        indexed.delete(entity);
+        if (indexed.size === 0) this.tagIndex.delete(tag);
+      }
+    }
+    this.entityTags.delete(entity);
+  }
+
+  private removeEntityMeta(entity: EntityId): void {
+    const meta = this.entityMeta.get(entity);
+    if (!meta) return;
+    for (const [key, value] of meta) {
+      const keyIndex = this.metaIndex.get(key);
+      if (keyIndex) {
+        if (keyIndex.get(value) === entity) {
+          keyIndex.delete(value);
+        }
+        if (keyIndex.size === 0) this.metaIndex.delete(key);
+      }
+    }
+    this.entityMeta.delete(entity);
+  }
+
+  private addTagInternal(entity: EntityId, tag: string): void {
+    let tags = this.entityTags.get(entity);
+    if (!tags) {
+      tags = new Set();
+      this.entityTags.set(entity, tags);
+    }
+    tags.add(tag);
+    let indexed = this.tagIndex.get(tag);
+    if (!indexed) {
+      indexed = new Set();
+      this.tagIndex.set(tag, indexed);
+    }
+    indexed.add(entity);
+  }
+
+  private setMetaInternal(entity: EntityId, key: string, value: string | number): void {
+    let meta = this.entityMeta.get(entity);
+    if (!meta) {
+      meta = new Map();
+      this.entityMeta.set(entity, meta);
+    }
+    const oldValue = meta.get(key);
+    if (oldValue !== undefined) {
+      const keyIndex = this.metaIndex.get(key);
+      if (keyIndex) keyIndex.delete(oldValue);
+    }
+    meta.set(key, value);
+    let keyIndex = this.metaIndex.get(key);
+    if (!keyIndex) {
+      keyIndex = new Map();
+      this.metaIndex.set(key, keyIndex);
+    }
+    keyIndex.set(value, entity);
+  }
+
+  private getStateDirty(): { set: Record<string, unknown>; removed: string[] } {
+    const changed = new Set(this.stateDirtyKeys);
+    for (const [key, value] of this.stateStore) {
+      if (changed.has(key)) continue;
+      const prev = this.stateBaseline.get(key);
+      const current = jsonFingerprint(value, `state '${key}'`);
+      if (prev !== current) {
+        changed.add(key);
+      }
+    }
+    const set: Record<string, unknown> = {};
+    for (const key of changed) {
+      const value = this.stateStore.get(key);
+      if (value !== undefined) {
+        set[key] = value;
+      }
+    }
+    return { set, removed: [...this.stateRemovedKeys] };
   }
 
   private buildDiff(): void {
@@ -842,11 +1180,28 @@ export class World<
         components[key] = dirty;
       }
     }
+    const tagsDiff: Array<{ entity: EntityId; tags: string[] }> = [];
+    for (const entityId of this.tagsDirtyEntities) {
+      const tags = this.entityTags.get(entityId);
+      tagsDiff.push({ entity: entityId, tags: tags ? [...tags] : [] });
+    }
+    const metaDiff: Array<{ entity: EntityId; meta: Record<string, string | number> }> = [];
+    for (const entityId of this.metaDirtyEntities) {
+      const meta = this.entityMeta.get(entityId);
+      const record: Record<string, string | number> = {};
+      if (meta) {
+        for (const [k, v] of meta) record[k] = v;
+      }
+      metaDiff.push({ entity: entityId, meta: record });
+    }
     this.currentDiff = {
       tick: this.gameLoop.tick + 1,
       entities,
       components,
       resources: this.resourceStore.getDirty(),
+      state: this.getStateDirty(),
+      tags: tagsDiff,
+      metadata: metaDiff,
     };
   }
 
@@ -1210,10 +1565,10 @@ export class World<
     metrics: WorldMetrics | null,
     collectDetailedTimings: boolean,
   ): TickFailure | null {
-    const systems = [...this.systems].sort((a, b) => {
-      const phaseDelta = phaseIndex(a.phase) - phaseIndex(b.phase);
-      return phaseDelta !== 0 ? phaseDelta : a.order - b.order;
-    });
+    if (!this.resolvedSystemOrder) {
+      this.resolvedSystemOrder = this.resolveSystemOrder();
+    }
+    const systems = this.resolvedSystemOrder;
 
     for (const system of systems) {
       const start = collectDetailedTimings ? now() : 0;
@@ -1245,6 +1600,55 @@ export class World<
     }
 
     return null;
+  }
+
+  private resolveSystemOrder(): Array<RegisteredSystem<TEventMap, TCommandMap>> {
+    const byPhase = new Map<SystemPhase, Array<RegisteredSystem<TEventMap, TCommandMap>>>();
+    for (const phase of SYSTEM_PHASES) {
+      byPhase.set(phase, []);
+    }
+    const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap>>();
+    for (const sys of this.systems) {
+      byPhase.get(sys.phase)!.push(sys);
+      if (sys.name) {
+        nameToSystem.set(sys.name, sys);
+      }
+    }
+
+    const hasConstraints = this.systems.some(
+      (s) => s.before.length > 0 || s.after.length > 0,
+    );
+    if (!hasConstraints) {
+      return [...this.systems].sort((a, b) => {
+        const phaseDelta = phaseIndex(a.phase) - phaseIndex(b.phase);
+        return phaseDelta !== 0 ? phaseDelta : a.order - b.order;
+      });
+    }
+
+    for (const sys of this.systems) {
+      for (const ref of [...sys.before, ...sys.after]) {
+        const target = nameToSystem.get(ref);
+        if (!target) {
+          throw new Error(
+            `System '${sys.name}' references non-existent system '${ref}'`,
+          );
+        }
+        if (target.phase !== sys.phase) {
+          throw new Error(
+            `System '${sys.name}' (phase '${sys.phase}') has a cross-phase constraint on '${ref}' (phase '${target.phase}')`,
+          );
+        }
+      }
+    }
+
+    const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+    for (const phase of SYSTEM_PHASES) {
+      const phaseSystems = byPhase.get(phase)!;
+      if (phaseSystems.length === 0) continue;
+      const sorted = topologicalSort(phaseSystems, nameToSystem);
+      result.push(...sorted);
+    }
+    return result;
   }
 
   private validateCommand<K extends keyof TCommandMap>(
@@ -1297,15 +1701,20 @@ export class World<
   private normalizeSystemRegistration(
     system:
       | System<TEventMap, TCommandMap>
-      | SystemRegistration<TEventMap, TCommandMap>,
+      | SystemRegistration<TEventMap, TCommandMap>
+      | LooseSystem
+      | LooseSystemRegistration,
   ): RegisteredSystem<TEventMap, TCommandMap> {
     const order = this.nextSystemOrder++;
+    this.resolvedSystemOrder = null;
     if (typeof system === 'function') {
       return {
         name: system.name || `system#${order}`,
         phase: 'update',
-        execute: system,
+        execute: system as System<TEventMap, TCommandMap>,
         order,
+        before: [],
+        after: [],
       };
     }
 
@@ -1317,8 +1726,10 @@ export class World<
     return {
       name: system.name ?? system.execute.name ?? `system#${order}`,
       phase,
-      execute: system.execute,
+      execute: system.execute as System<TEventMap, TCommandMap>,
       order,
+      before: system.before ?? [],
+      after: system.after ?? [],
     };
   }
 
@@ -1711,6 +2122,9 @@ function insertSorted(values: EntityId[], value: EntityId): void {
   }
 }
 
+const EMPTY_SET: ReadonlySet<EntityId> = new Set();
+const EMPTY_STRING_SET: ReadonlySet<string> = new Set();
+
 function validateWorldConfig(config: WorldConfig): void {
   if (!Number.isInteger(config.gridWidth) || config.gridWidth <= 0) {
     throw new RangeError('gridWidth must be a positive integer');
@@ -1767,4 +2181,69 @@ function asPosition(value: unknown): Position {
     throw new RangeError('Position coordinates must be integers');
   }
   return { x: position.x, y: position.y };
+}
+
+function topologicalSort<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+>(
+  systems: Array<RegisteredSystem<TEventMap, TCommandMap>>,
+  nameToSystem: Map<string, RegisteredSystem<TEventMap, TCommandMap>>,
+): Array<RegisteredSystem<TEventMap, TCommandMap>> {
+  const edges = new Map<RegisteredSystem<TEventMap, TCommandMap>, Set<RegisteredSystem<TEventMap, TCommandMap>>>();
+  for (const sys of systems) {
+    edges.set(sys, new Set());
+  }
+
+  for (const sys of systems) {
+    for (const beforeName of sys.before) {
+      const target = nameToSystem.get(beforeName)!;
+      edges.get(sys)!.add(target);
+    }
+    for (const afterName of sys.after) {
+      const target = nameToSystem.get(afterName)!;
+      edges.get(target)!.add(sys);
+    }
+  }
+
+  const inDegree = new Map<RegisteredSystem<TEventMap, TCommandMap>, number>();
+  for (const sys of systems) {
+    inDegree.set(sys, 0);
+  }
+  for (const deps of edges.values()) {
+    for (const dep of deps) {
+      inDegree.set(dep, (inDegree.get(dep) ?? 0) + 1);
+    }
+  }
+
+  const queue = systems
+    .filter((s) => inDegree.get(s) === 0)
+    .sort((a, b) => a.order - b.order);
+
+  const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+  while (queue.length > 0) {
+    const sys = queue.shift()!;
+    result.push(sys);
+    const deps = [...edges.get(sys)!].sort((a, b) => a.order - b.order);
+    for (const dep of deps) {
+      const newDeg = inDegree.get(dep)! - 1;
+      inDegree.set(dep, newDeg);
+      if (newDeg === 0) {
+        const insertIdx = queue.findIndex((q) => q.order > dep.order);
+        if (insertIdx === -1) {
+          queue.push(dep);
+        } else {
+          queue.splice(insertIdx, 0, dep);
+        }
+      }
+    }
+  }
+
+  if (result.length !== systems.length) {
+    const inCycle = systems.filter((s) => !result.includes(s));
+    const names = inCycle.map((s) => s.name).join(' -> ');
+    throw new Error(`Cycle detected in system ordering: ${names}`);
+  }
+
+  return result;
 }

@@ -63,8 +63,9 @@ world.step();
 | Feature                     | What it does                                                                                                          |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | **Entities & Components**   | Create entities (numeric IDs), attach typed data objects by key                                                       |
-| **Systems**                 | Pure functions `(world) => void` that run each tick in order                                                          |
-| **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries                                                        |
+| **Systems**                 | Pure functions `(world) => void` with optional phase, `before`/`after` ordering constraints                           |
+| **Typed Components**        | Optional `ComponentRegistry` type param for type-safe `getComponent`/`setComponent`/`query` without manual generics   |
+| **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries, `queryInRadius`, `findNearest`                        |
 | **Commands**                | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers - how AI agents send instructions |
 | **Events**                  | Typed pub/sub - how systems communicate and how observers read what happened                                          |
 | **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
@@ -78,8 +79,10 @@ world.step();
 | **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
 | **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
-| **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including deterministic RNG state                          |
-| **State Diffs**             | Per-tick change sets: what entities/components/resources changed                                                      |
+| **World State**             | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc.                          |
+| **Tags & Metadata**         | Entity labels with reverse-index (`getByTag`), per-entity metadata with unique lookup (`getByMeta`)                   |
+| **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including state, tags, metadata, and RNG                   |
+| **State Diffs**             | Per-tick change sets: entities, components, resources, state, tags, and metadata changes                              |
 | **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` plus `commandExecuted`/`commandFailed`/`tickFailed` outcomes |
 
 ## Architecture

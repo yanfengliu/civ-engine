@@ -23,4 +23,10 @@ export interface TickDiff {
       removed: EntityId[];
     }
   >;
+  state: {
+    set: Record<string, unknown>;
+    removed: string[];
+  };
+  tags: Array<{ entity: EntityId; tags: string[] }>;
+  metadata: Array<{ entity: EntityId; meta: Record<string, string | number> }>;
 }

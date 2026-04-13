@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { World } from '../src/world.js';
+import { World, type LooseSystem } from '../src/world.js';
 
 describe('World', () => {
   it('creates and tracks entities', () => {
@@ -609,6 +609,142 @@ describe('World', () => {
 
       const [hp] = world.getComponents<[{ hp: number }]>(id, ['health']);
       expect(hp).toEqual({ hp: 75 });
+    });
+  });
+
+  describe('loose system typing', () => {
+    it('accepts a system typed as LooseSystem', () => {
+      type Events = { hit: { target: number } };
+      type Commands = { move: { dx: number } };
+      const world = new World<Events, Commands>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      const calls: number[] = [];
+      const looseSystem: LooseSystem = (w) => {
+        expect(w).toBeDefined();
+        calls.push(1);
+      };
+      world.registerSystem(looseSystem);
+      world.step();
+      expect(calls).toEqual([1]);
+    });
+
+    it('accepts a bare World-typed function', () => {
+      type Events = { ping: null };
+      const world = new World<Events>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      const calls: number[] = [];
+      const system: LooseSystem = (w) => {
+        expect(w).toBeDefined();
+        calls.push(2);
+      };
+      world.registerSystem(system);
+      world.step();
+      expect(calls).toEqual([2]);
+    });
+
+    it('accepts a LooseSystemRegistration', () => {
+      type Events = { ping: null };
+      const world = new World<Events>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      const calls: string[] = [];
+      const looseExecute: LooseSystem = (w) => {
+        expect(w).toBeDefined();
+        calls.push('loose');
+      };
+      world.registerSystem({
+        name: 'loose-reg',
+        phase: 'preUpdate',
+        execute: looseExecute,
+      });
+      world.step();
+      expect(calls).toEqual(['loose']);
+    });
+
+    it('coexists with strict-typed systems', () => {
+      type Events = { hit: { target: number } };
+      type Commands = { move: { dx: number } };
+      const world = new World<Events, Commands>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      const order: string[] = [];
+      const loose: LooseSystem = () => { order.push('loose'); };
+      world.registerSystem(loose);
+      world.registerSystem((w: World<Events, Commands>) => {
+        expect(w).toBeDefined();
+        order.push('strict');
+      });
+      world.step();
+      expect(order).toEqual(['loose', 'strict']);
+    });
+  });
+
+  describe('typed component registry', () => {
+    type Health = { hp: number };
+    type Position = { x: number; y: number };
+    type Components = { health: Health; position: Position };
+
+    it('getComponent infers return type from registry key', () => {
+      const world = new World<Record<string, never>, Record<string, never>, Components>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      world.registerComponent('health');
+      world.registerComponent('position');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 100 });
+      world.addComponent(id, 'position', { x: 3, y: 4 });
+
+      const health = world.getComponent(id, 'health');
+      expect(health).toEqual({ hp: 100 });
+
+      const pos = world.getComponent(id, 'position');
+      expect(pos).toEqual({ x: 3, y: 4 });
+    });
+
+    it('setComponent enforces registry types', () => {
+      const world = new World<Record<string, never>, Record<string, never>, Components>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      world.registerComponent('health');
+      const id = world.createEntity();
+      world.setComponent(id, 'health', { hp: 50 });
+      expect(world.getComponent(id, 'health')).toEqual({ hp: 50 });
+    });
+
+    it('patchComponent works with typed registry', () => {
+      const world = new World<Record<string, never>, Record<string, never>, Components>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      world.registerComponent('health');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 100 });
+      const patched = world.patchComponent(id, 'health', (h) => ({ hp: h.hp - 10 }));
+      expect(patched).toEqual({ hp: 90 });
+    });
+
+    it('query constrains keys to registry', () => {
+      const world = new World<Record<string, never>, Record<string, never>, Components>({
+        gridWidth: 10, gridHeight: 10, tps: 60,
+      });
+      world.registerComponent('health');
+      world.registerComponent('position');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 100 });
+      world.addComponent(id, 'position', { x: 0, y: 0 });
+
+      const results = [...world.query('health', 'position')];
+      expect(results).toEqual([id]);
+    });
+
+    it('falls back to manual generics when no registry is specified', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<Health>('health');
+      const id = world.createEntity();
+      world.addComponent(id, 'health', { hp: 100 });
+      const health = world.getComponent<Health>(id, 'health');
+      expect(health).toEqual({ hp: 100 });
     });
   });
 });

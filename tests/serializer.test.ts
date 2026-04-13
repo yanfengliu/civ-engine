@@ -19,7 +19,7 @@ describe('Serialization', () => {
 
     const snapshot = world.serialize();
 
-    expect(snapshot.version).toBe(3);
+    expect(snapshot.version).toBe(4);
     expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
@@ -32,7 +32,7 @@ describe('Serialization', () => {
     expect(snapshot.components['health']).toEqual([
       [0, { hp: 100 }],
     ]);
-    if (snapshot.version !== 3) throw new Error('Expected version 3 snapshot');
+    if (snapshot.version !== 4) throw new Error('Expected version 4 snapshot');
     expect(snapshot.resources).toEqual({
       registered: [],
       pools: {},

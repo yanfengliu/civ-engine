@@ -14,6 +14,9 @@ Complete reference for every public type, method, and module in civ-engine.
   - [Commands](#commands)
   - [Events](#events)
   - [Resources](#resources)
+  - [World State](#world-state)
+  - [Tags & Metadata](#tags--metadata)
+  - [Spatial Queries](#spatial-queries)
   - [State Serialization](#state-serialization)
   - [State Diffs](#state-diffs)
   - [Entity Lifecycle Hooks](#entity-lifecycle-hooks)
@@ -116,11 +119,46 @@ A system is a pure function that receives the `World` and runs game logic. Syste
 interface SystemRegistration<TEventMap, TCommandMap> {
   name?: string;
   phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
+  before?: string[];
+  after?: string[];
   execute: System<TEventMap, TCommandMap>;
 }
 ```
 
-Optional system registration object for naming systems and assigning a lifecycle phase.
+Optional system registration object for naming systems and assigning a lifecycle phase. The `before` and `after` fields declare ordering constraints between named systems within the same phase (see [System Ordering Constraints](#registersystemfnorconfig)).
+
+### `LooseSystem`
+
+```typescript
+// src/world.ts
+type LooseSystem = (world: World<any, any>) => void;
+```
+
+A system typed against a bare `World` that does not need explicit casts when registered into a generically typed world. Useful for utility systems that do not depend on specific event or command maps.
+
+### `LooseSystemRegistration`
+
+```typescript
+// src/world.ts
+interface LooseSystemRegistration {
+  name?: string;
+  phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
+  before?: string[];
+  after?: string[];
+  execute: LooseSystem;
+}
+```
+
+Same shape as `SystemRegistration` but uses `LooseSystem` instead.
+
+### `ComponentRegistry`
+
+```typescript
+// src/types.ts
+type ComponentRegistry = Record<string, unknown>;
+```
+
+Optional third type parameter to `World<TEventMap, TCommandMap, TComponents>`. When specified, component methods (`addComponent`, `getComponent`, `setComponent`, `patchComponent`, `removeComponent`, `query`) infer value types from the registry keys, eliminating manual generic annotations.
 
 ### `WorldMetrics`
 
@@ -293,7 +331,7 @@ Compatibility error thrown by `world.step()` when the tick fails at runtime.
 ```typescript
 // src/serializer.ts
 interface WorldSnapshot {
-  version: 3;
+  version: 4;
   config: WorldConfig;
   tick: number;
   entities: {
@@ -304,10 +342,13 @@ interface WorldSnapshot {
   components: Record<string, Array<[EntityId, unknown]>>;
   resources: ResourceStoreState;
   rng: RandomState;
+  state: Record<string, unknown>;
+  tags: Record<string, EntityId[]>;
+  metadata: Record<string, Array<[EntityId, Record<string, string | number>]>>;
 }
 ```
 
-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 and 2 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 4 adds world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1, 2, and 3 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
 
 ### `TickDiff`
 
@@ -327,10 +368,19 @@ interface TickDiff {
     set: Array<[EntityId, ResourcePool]>;
     removed: EntityId[];
   }>;
+  state: Record<string, { set?: unknown; removed?: true }>;
+  tags: Record<string, {
+    added: EntityId[];
+    removed: EntityId[];
+  }>;
+  metadata: Record<string, {
+    set: Array<[EntityId, string | number]>;
+    removed: EntityId[];
+  }>;
 }
 ```
 
-Per-tick change set capturing every entity, component, and resource that changed. Only component types and resource types that actually changed appear in the record.
+Per-tick change set capturing every entity, component, resource, world state, tag, and metadata entry that changed. Only types/keys that actually changed appear in the record.
 
 ### `ResourcePool`
 
@@ -764,7 +814,7 @@ Messages sent from client to server:
 
 ## World
 
-`World<TEventMap, TCommandMap>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
+`World<TEventMap, TCommandMap, TComponents>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
 
 ```typescript
 import { World } from 'civ-engine';
@@ -776,11 +826,12 @@ import { World } from 'civ-engine';
 |---|---|---|---|
 | `TEventMap` | `Record<keyof TEventMap, unknown>` | `Record<string, never>` | Map of event type names to event data types |
 | `TCommandMap` | `Record<keyof TCommandMap, unknown>` | `Record<string, never>` | Map of command type names to command data types |
+| `TComponents` | `ComponentRegistry` | `Record<string, unknown>` | Optional component registry. When specified, component methods infer value types from registry keys |
 
 ### Constructor
 
 ```typescript
-new World<TEventMap, TCommandMap>(config: WorldConfig)
+new World<TEventMap, TCommandMap, TComponents>(config: WorldConfig)
 ```
 
 Creates a new world with the specified grid dimensions, tick rate, and optional configuration.
@@ -832,7 +883,8 @@ Immediately destroys an entity. Performs full cleanup in this order:
 2. Removes entity from the spatial grid using its last-synced position
 3. Removes all components from all stores
 4. Removes all resource pools, production rates, consumption rates, and transfers
-5. Marks the entity as dead in the entity manager (ID becomes available for recycling)
+5. Removes all tags and metadata associated with the entity
+6. Marks the entity as dead in the entity manager (ID becomes available for recycling)
 
 **No-op** if the entity is already dead.
 
@@ -1019,11 +1071,27 @@ const soldiers = [...world.query('position', 'health', 'attack')];
 registerSystem(
   system:
     | System<TEventMap, TCommandMap>
-    | SystemRegistration<TEventMap, TCommandMap>,
+    | SystemRegistration<TEventMap, TCommandMap>
+    | LooseSystem
+    | LooseSystemRegistration,
 ): void
 ```
 
 Adds a system to the pipeline. Bare functions run in the `update` phase. Registration objects can name systems for metrics and assign a phase. Systems run in this phase order: `input`, `preUpdate`, `update`, `postUpdate`, `output`; registration order is preserved within each phase.
+
+The overload accepting `LooseSystem | LooseSystemRegistration` allows systems typed against `World<any, any>` to be registered without casts, which is useful for generic utility systems.
+
+**Ordering constraints:** `SystemRegistration` (and `LooseSystemRegistration`) support optional `before` and `after` arrays to declare ordering dependencies between named systems within the same phase. Constraints are resolved via topological sort.
+
+| Field | Type | Description |
+|---|---|---|
+| `before` | `string[]` | Run this system before the named systems |
+| `after` | `string[]` | Run this system after the named systems |
+
+**Throws:**
+- `Error` if a constraint creates a cycle within a phase
+- `Error` if a constraint references a system in a different phase
+- `Error` if a constraint references a non-existent system name
 
 ```typescript
 function movementSystem(w: World): void {
@@ -1039,6 +1107,20 @@ world.registerSystem({
   name: 'Combat',
   phase: 'postUpdate',
   execute: combatSystem,
+});
+
+// Ordering: Movement runs before Combat within the same phase
+world.registerSystem({
+  name: 'Movement',
+  phase: 'update',
+  before: ['Collision'],
+  execute: movementSystem,
+});
+world.registerSystem({
+  name: 'Collision',
+  phase: 'update',
+  after: ['Movement'],
+  execute: collisionSystem,
 });
 ```
 
@@ -1580,6 +1662,216 @@ for (const id of world.getResourceEntities('food')) {
 }
 ```
 
+### World State
+
+Non-entity structured state stored at the world level. Values must be JSON-compatible. World state is included in serialization (snapshot v4) and tick diffs.
+
+#### `setState(key, value)`
+
+```typescript
+setState(key: string, value: unknown): void
+```
+
+Stores a world-level state value under the given key. Overwrites any existing value for that key. The value must be JSON-compatible.
+
+```typescript
+world.setState('turnNumber', 1);
+world.setState('diplomacy', { alliances: [], wars: [] });
+```
+
+#### `getState(key)`
+
+```typescript
+getState(key: string): unknown
+```
+
+Retrieves a world-level state value by key, or `undefined` if the key does not exist.
+
+```typescript
+const turn = world.getState('turnNumber'); // 1
+```
+
+#### `deleteState(key)`
+
+```typescript
+deleteState(key: string): void
+```
+
+Removes a world-level state entry. No-op if the key does not exist.
+
+```typescript
+world.deleteState('diplomacy');
+```
+
+#### `hasState(key)`
+
+```typescript
+hasState(key: string): boolean
+```
+
+Returns `true` if the world has a state entry for the given key.
+
+```typescript
+if (world.hasState('turnNumber')) {
+  // ...
+}
+```
+
+### Tags & Metadata
+
+String tags and key-value metadata attached to individual entities. Both are cleaned up automatically on `destroyEntity()` and included in serialization (snapshot v4) and tick diffs.
+
+#### `addTag(entity, tag)`
+
+```typescript
+addTag(entity: EntityId, tag: string): void
+```
+
+Adds a string label to an entity. No-op if the entity already has the tag.
+
+```typescript
+world.addTag(unit, 'selected');
+world.addTag(unit, 'military');
+```
+
+#### `removeTag(entity, tag)`
+
+```typescript
+removeTag(entity: EntityId, tag: string): void
+```
+
+Removes a tag from an entity. No-op if the entity does not have the tag.
+
+```typescript
+world.removeTag(unit, 'selected');
+```
+
+#### `hasTag(entity, tag)`
+
+```typescript
+hasTag(entity: EntityId, tag: string): boolean
+```
+
+Returns `true` if the entity has the given tag.
+
+```typescript
+if (world.hasTag(unit, 'military')) {
+  // ...
+}
+```
+
+#### `getByTag(tag)`
+
+```typescript
+getByTag(tag: string): ReadonlySet<EntityId>
+```
+
+Returns all entities that have the given tag. The returned set is read-only.
+
+```typescript
+for (const id of world.getByTag('military')) {
+  // process each military entity
+}
+```
+
+#### `getTags(entity)`
+
+```typescript
+getTags(entity: EntityId): ReadonlySet<string>
+```
+
+Returns all tags for an entity. The returned set is read-only.
+
+```typescript
+const tags = world.getTags(unit); // ReadonlySet<string>
+```
+
+#### `setMeta(entity, key, value)`
+
+```typescript
+setMeta(entity: EntityId, key: string, value: string | number): void
+```
+
+Sets a metadata key-value pair on an entity. Metadata values are restricted to `string` or `number`.
+
+```typescript
+world.setMeta(unit, 'owner', 'player1');
+world.setMeta(unit, 'level', 3);
+```
+
+#### `getMeta(entity, key)`
+
+```typescript
+getMeta(entity: EntityId, key: string): string | number | undefined
+```
+
+Returns the metadata value for the given entity and key, or `undefined` if not set.
+
+```typescript
+const owner = world.getMeta(unit, 'owner'); // 'player1'
+```
+
+#### `deleteMeta(entity, key)`
+
+```typescript
+deleteMeta(entity: EntityId, key: string): void
+```
+
+Removes a metadata entry from an entity. No-op if the key does not exist.
+
+```typescript
+world.deleteMeta(unit, 'owner');
+```
+
+#### `getByMeta(key, value)`
+
+```typescript
+getByMeta(key: string, value: string | number): EntityId | undefined
+```
+
+Reverse lookup: finds the entity that has the given metadata key-value pair. Returns `undefined` if no entity matches.
+
+```typescript
+const player1Unit = world.getByMeta('owner', 'player1');
+```
+
+### Spatial Queries
+
+Higher-level spatial query helpers built on top of the spatial grid and component stores.
+
+#### `queryInRadius(cx, cy, radius, ...components)`
+
+```typescript
+queryInRadius(
+  cx: number,
+  cy: number,
+  radius: number,
+  ...components: string[]
+): EntityId[]
+```
+
+Returns all entities within the given radius of `(cx, cy)` that match all specified components. Uses Euclidean distance.
+
+```typescript
+const nearby = world.queryInRadius(10, 10, 5, 'position', 'health');
+```
+
+#### `findNearest(cx, cy, ...components)`
+
+```typescript
+findNearest(
+  cx: number,
+  cy: number,
+  ...components: string[]
+): EntityId | undefined
+```
+
+Returns the closest entity to `(cx, cy)` that matches all specified components, or `undefined` if no entity matches. Uses Euclidean distance.
+
+```typescript
+const closest = world.findNearest(10, 10, 'position', 'enemy');
+```
+
 ### State Serialization
 
 #### `serialize()`
@@ -1609,10 +1901,10 @@ Restores a world from a snapshot. Optionally accepts systems to re-register. Aft
 - Event listeners
 
 **Throws:**
-- `Error` if `snapshot.version` is not `1`, `2`, or `3`
+- `Error` if `snapshot.version` is not `1`, `2`, `3`, or `4`
 - `Error` if entity state arrays have mismatched lengths
 
-Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state.
+Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata.
 
 ```typescript
 const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);
