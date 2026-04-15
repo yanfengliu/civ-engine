@@ -4,9 +4,9 @@ This is the navigation hub for `civ-engine` documentation.
 
 ## Start Here
 
-- [Getting Started](tutorials/getting-started.md) - Minimal setup, core concepts, and first-world walkthrough
+- [Getting Started](guides/getting-started.md) - Minimal setup, core concepts, and first-world walkthrough
 - [Core Concepts](guides/concepts.md) - Headless ECS model, tick lifecycle, determinism, and engine boundaries
-- [Building a Complete Game](tutorials/building-a-game.md) - End-to-end example using the engine as a game foundation
+- [Building a Complete Game](guides/building-a-game.md) - End-to-end example using the engine as a game foundation
 
 ## Reference
 

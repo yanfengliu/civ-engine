@@ -22,7 +22,7 @@ Requires Node.js 18+.
 ## Documentation
 
 - **[Documentation Hub](docs/README.md)** - Full navigation for tutorials, guides, plans, reviews, and project history
-- **[Getting Started](docs/tutorials/getting-started.md)** - Fastest way to get productive with the engine
+- **[Getting Started](docs/guides/getting-started.md)** - Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** - Public types, methods, and standalone utilities
 - **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents

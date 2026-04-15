@@ -12,7 +12,6 @@
 # Documentation Maintenance Rules
 - **When you add, remove, or change a public API** (new method on World, new standalone utility, changed function signature), update the relevant documentation:
   - `README.md` — API Reference tables, Feature Overview table, Project Structure
-  - `docs/tutorials/`
   - `docs/guides/`
 - **When you add a new module**, add it to the Project Structure section in README.md and the Component Map in ARCHITECTURE.md.
 - **Tutorials must always compile.** If you change an API that tutorial code uses, update the tutorial code to match. Broken tutorials are worse than no tutorials.
