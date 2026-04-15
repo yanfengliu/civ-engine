@@ -165,70 +165,9 @@ const result = runScenario({
 
 The runner gives the agent one structured result object containing final state, debug output, issues, recent history, and check results.
 
-## Debugger Surface
+## Debugging and Diagnosis
 
-Use `WorldDebugger` for machine-readable diagnosis:
-
-```typescript
-const debuggerView = new WorldDebugger({ world });
-const debug = debuggerView.capture();
-
-for (const issue of debug.issues) {
-  console.log(issue.code, issue.subsystem, issue.details);
-}
-```
-
-Prefer `issues` over `warnings`. `warnings` is a compatibility view that only preserves severity, code, and message.
-
-## History Recorder
-
-Use `WorldHistoryRecorder` when the agent needs to answer questions like:
-
-- what happened in the last few ticks?
-- which commands were rejected recently?
-- did the last fix change the diff pattern?
-
-```typescript
-const history = new WorldHistoryRecorder({
-  world,
-  capacity: 64,
-  debug: debuggerView,
-});
-
-history.connect();
-```
-
-The recorder keeps:
-
-- the optional initial snapshot
-- recent command submission outcomes
-- recent command execution outcomes
-- recent tick failures
-- recent tick diffs
-- events
-- metrics
-- optional debug payloads
-
-This is intentionally short-horizon. It is for fast diagnosis, not archival replay.
-
-When the agent needs a condensed answer instead of raw ticks, call `summarizeWorldHistoryRange()` on recorder state. That returns one range summary covering command outcomes, changed entity IDs, diff totals, event counts, and aggregated debugger issues.
-
-## Recommended Closed Loop
-
-For an autonomous agent, the basic loop should be:
-
-1. Prefer `runScenario()` for repeatable experiments
-2. If `result.failure` is present, branch on `failure.code`
-3. If checks failed, inspect `result.checks`
-4. Inspect `result.issues`
-5. Inspect `result.history.executions` and `result.history.failures`
-6. Use `summarizeWorldHistoryRange(result.history, { startTick, endTick })` when the cause is not obvious but the agent needs a shorter machine-readable explanation
-7. Inspect `result.debug.metrics` for `tick-budget-exceeded` and other engine-native issues before assuming the logic is wrong
-8. Fall back to direct `submitWithResult()` plus `stepWithResult()` only for interactive or exploratory workflows
-9. Change code or commands
-10. Repeat
-
-That loop works in-process, across a worker boundary, or over a transport protocol without changing the semantics.
+For diagnostic workflows, error code reference, debugging scenarios, and the recommended closed loop, see the [Debugging Guide](./debugging.md).
 
 ## MCP and Wrappers
 

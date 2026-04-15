@@ -165,16 +165,6 @@ This gives an agent a single object it can inspect after each experiment run.
 
 When that single object is still too verbose, pair it with `summarizeWorldHistoryRange(result.history, { startTick, endTick })` to collapse several recorded ticks into one machine-readable explanation.
 
-## Recommended AI Loop
+## Debugging Scenario Results
 
-For autonomous iteration:
-
-1. Create a prepared scenario around the target behavior
-2. Run it with `runScenario()`
-3. If `failure` is present, branch on `failure.code`
-4. If checks failed, inspect `checks`
-5. Inspect `issues`
-6. Inspect `history` for recent command outcomes and diffs
-7. Change code and rerun the same scenario
-
-That is the intended closed feedback loop for AI-first engine usage.
+For the recommended AI diagnosis loop, error code reference, and worked debugging examples using `runScenario()`, see the [Debugging Guide](./debugging.md).
