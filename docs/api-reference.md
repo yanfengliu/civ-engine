@@ -23,6 +23,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [SpatialGrid](#spatialgrid)
 - [Pathfinding](#pathfinding)
 - [OccupancyGrid](#occupancygrid)
+- [SubcellOccupancyGrid](#subcelloccupancygrid)
 - [Path Service](#path-service)
 - [VisibilityMap](#visibilitymap)
 - [Noise](#noise)
@@ -514,6 +515,98 @@ interface OccupancyGridState {
 ```
 
 Serializable occupancy snapshot used by `OccupancyGrid.getState()` and `OccupancyGrid.fromState()`.
+
+### `SubcellSlotOffset`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellSlotOffset {
+  x: number;
+  y: number;
+}
+```
+
+Relative offset inside one integer cell. The default `SubcellOccupancyGrid` layout uses four quarter-cell offsets.
+
+### `SubcellPlacement`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellPlacement {
+  position: Position;
+  slot: number;
+  offset: SubcellSlotOffset;
+}
+```
+
+Resolved slot assignment for one entity in one cell. Returned by `bestSlotForUnit()`, `occupy()`, and `getOccupiedPlacement()`.
+
+### `SubcellNeighborSpace`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellNeighborSpace {
+  position: Position;
+  freeSlots: number;
+  bestSlot: SubcellPlacement;
+}
+```
+
+Neighbor cell with remaining crowding capacity. Returned by `neighborsWithSpace()`.
+
+### `SubcellOccupancyOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellOccupancyOptions extends OccupancyQueryOptions {
+  preferredSlot?: number;
+  preferredOffset?: SubcellSlotOffset;
+}
+```
+
+Options for slot-based crowding queries. `preferredSlot` biases toward one slot index; `preferredOffset` biases toward the nearest slot geometry inside the cell.
+
+### `SubcellNeighborOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellNeighborOptions extends SubcellOccupancyOptions {
+  offsets?: ReadonlyArray<Position>;
+}
+```
+
+Neighbor-query options for `SubcellOccupancyGrid.neighborsWithSpace()`. Defaults to cardinal neighbor offsets.
+
+### `SubcellOccupancyGridOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellOccupancyGridOptions {
+  slots?: ReadonlyArray<SubcellSlotOffset>;
+  isCellBlocked?: (
+    x: number,
+    y: number,
+    options?: OccupancyQueryOptions,
+  ) => boolean;
+}
+```
+
+Constructor options for `SubcellOccupancyGrid`. Use `slots` to define a custom packing layout, and `isCellBlocked` to consult whole-cell blockers such as `OccupancyGrid`, terrain, or scenario rules.
+
+### `SubcellOccupancyGridState`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellOccupancyGridState {
+  width: number;
+  height: number;
+  slots: SubcellSlotOffset[];
+  occupied: Array<[EntityId, { cell: number; slot: number }]>;
+  version: number;
+}
+```
+
+Serializable slot-crowding snapshot used by `SubcellOccupancyGrid.getState()` and `SubcellOccupancyGrid.fromState()`.
 
 ### `GridPathConfig`
 
@@ -2359,6 +2452,145 @@ OccupancyGrid.fromState(state: OccupancyGridState): OccupancyGrid
 ```
 
 Restores an occupancy model from serialized state.
+
+---
+
+## SubcellOccupancyGrid
+
+Deterministic slot-based crowding for units smaller than a full integer cell. Use it alongside `OccupancyGrid` when whole-cell blockers and smaller-than-cell unit packing need to stay separate.
+
+```typescript
+import {
+  SubcellOccupancyGrid,
+  type SubcellNeighborOptions,
+  type SubcellNeighborSpace,
+  type SubcellOccupancyGridOptions,
+  type SubcellOccupancyGridState,
+  type SubcellOccupancyOptions,
+  type SubcellPlacement,
+  type SubcellSlotOffset,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new SubcellOccupancyGrid(
+  width: number,
+  height: number,
+  options?: SubcellOccupancyGridOptions,
+)
+```
+
+Creates a slot-based crowding model for a fixed grid size.
+
+| Parameter | Description |
+|---|---|
+| `width` | Positive integer grid width |
+| `height` | Positive integer grid height |
+| `options` | Optional custom slot layout and whole-cell blocker callback |
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `width` | `number` | Grid width (read-only) |
+| `height` | `number` | Grid height (read-only) |
+| `slots` | `ReadonlyArray<SubcellSlotOffset>` | Slot offsets used inside each cell |
+| `version` | `number` | Monotonic crowding version incremented on mutations |
+
+### Methods
+
+#### `canOccupy(entity, position, options?)`
+
+```typescript
+canOccupy(
+  entity: EntityId,
+  position: Position,
+  options?: SubcellOccupancyOptions,
+): boolean
+```
+
+Checks whether the entity can claim at least one slot in the target cell.
+
+#### `bestSlotForUnit(entity, position, options?)`
+
+```typescript
+bestSlotForUnit(
+  entity: EntityId,
+  position: Position,
+  options?: SubcellOccupancyOptions,
+): SubcellPlacement | null
+```
+
+Returns the best available slot for the entity in that cell, or `null` if the cell is blocked or full.
+
+#### `occupy(entity, position, options?)`
+
+```typescript
+occupy(
+  entity: EntityId,
+  position: Position,
+  options?: SubcellOccupancyOptions,
+): SubcellPlacement | null
+```
+
+Claims the best available slot for an entity and returns the resolved placement. Returns `null` on conflict instead of throwing.
+
+#### `release(entity)`
+
+```typescript
+release(entity: EntityId): void
+```
+
+Clears the slot assignment for an entity.
+
+#### `getSlotOccupant(x, y, slot)`
+
+```typescript
+getSlotOccupant(x: number, y: number, slot: number): EntityId | null
+```
+
+Returns the entity occupying a specific slot in a cell, or `null`.
+
+#### `getOccupiedPlacement(entity)`
+
+```typescript
+getOccupiedPlacement(entity: EntityId): SubcellPlacement | null
+```
+
+Returns the current slot assignment for an entity, or `null`.
+
+#### `neighborsWithSpace(entity, origin, options?)`
+
+```typescript
+neighborsWithSpace(
+  entity: EntityId,
+  origin: Position,
+  options?: SubcellNeighborOptions,
+): SubcellNeighborSpace[]
+```
+
+Returns neighboring cells that still have room for the entity, along with free-slot counts and the best slot in each cell.
+
+#### `getState()`
+
+```typescript
+getState(): SubcellOccupancyGridState
+```
+
+Returns a JSON-safe deterministic snapshot of the crowding model.
+
+#### `SubcellOccupancyGrid.fromState(state, options?)`
+
+```typescript
+SubcellOccupancyGrid.fromState(
+  state: SubcellOccupancyGridState,
+  options?: Omit<SubcellOccupancyGridOptions, 'slots'>,
+): SubcellOccupancyGrid
+```
+
+Restores a crowding model from serialized state. The slot layout comes from the snapshot; `options` can supply a fresh `isCellBlocked` callback.
 
 ---
 

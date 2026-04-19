@@ -1,13 +1,14 @@
 # RTS Primitives Guide
 
-This guide covers the engine-level utilities that make an RTS-scale simulation practical: occupancy and reservation, queued path requests, fog and visibility, and the benchmark harness.
+This guide covers the engine-level utilities that make an RTS-scale simulation practical: occupancy and reservation, sub-cell crowding, queued path requests, fog and visibility, and the benchmark harness.
 
 ## Table of Contents
 
 1. [Occupancy and Reservation](#occupancy-and-reservation)
-2. [Grid Pathfinding and Queues](#grid-pathfinding-and-queues)
-3. [Fog and Visibility](#fog-and-visibility)
-4. [Benchmarking](#benchmarking)
+2. [Sub-Cell Crowding](#sub-cell-crowding)
+3. [Grid Pathfinding and Queues](#grid-pathfinding-and-queues)
+4. [Fog and Visibility](#fog-and-visibility)
+5. [Benchmarking](#benchmarking)
 
 ---
 
@@ -48,6 +49,51 @@ The grid is deterministic and serializable:
 const snapshot = occupancy.getState();
 const restored = OccupancyGrid.fromState(snapshot);
 ```
+
+## Sub-Cell Crowding
+
+Use `SubcellOccupancyGrid` when multiple units may share one coarse cell but still need deterministic slot assignment.
+
+It is designed to layer on top of whole-cell blockers:
+
+- `OccupancyGrid` still owns building footprints, terrain blockers, and reservations.
+- `SubcellOccupancyGrid` answers whether a smaller-than-cell unit can pack into a cell, which slot it should take, and which neighboring cells still have room.
+
+```typescript
+import { OccupancyGrid, SubcellOccupancyGrid } from 'civ-engine';
+
+const blockedCells = new OccupancyGrid(128, 128);
+const crowding = new SubcellOccupancyGrid(128, 128, {
+  isCellBlocked: (x, y, options) => blockedCells.isBlocked(x, y, options),
+});
+
+blockedCells.occupy(100, { x: 20, y: 20, width: 4, height: 4 }); // building
+
+const placement = crowding.occupy(200, { x: 24, y: 20 });
+if (placement) {
+  placement.slot;   // deterministic slot index
+  placement.offset; // relative offset within the cell
+}
+
+const egress = crowding.neighborsWithSpace(200, { x: 24, y: 20 });
+```
+
+Useful APIs:
+
+- `canOccupy(entity, position, options?)`
+- `bestSlotForUnit(entity, position, options?)`
+- `occupy(entity, position, options?)`
+- `neighborsWithSpace(entity, origin, options?)`
+- `release(entity)`
+
+By default the grid uses four quarter-cell slots:
+
+- `{ x: 0, y: 0 }`
+- `{ x: 0.5, y: 0 }`
+- `{ x: 0, y: 0.5 }`
+- `{ x: 0.5, y: 0.5 }`
+
+You can provide a custom `slots` array if your game wants a different packing pattern.
 
 ## Grid Pathfinding and Queues
 

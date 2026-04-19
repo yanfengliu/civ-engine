@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { OccupancyGrid } from '../src/occupancy-grid.js';
+import {
+  OccupancyGrid,
+  SubcellOccupancyGrid,
+} from '../src/occupancy-grid.js';
 
 describe('OccupancyGrid', () => {
   it('occupies a single cell and reports blocking', () => {
@@ -105,6 +108,126 @@ describe('OccupancyGrid', () => {
     expect(restored.getOccupant(4, 4)).toBe(1);
     expect(restored.getReservationOwner(6, 6)).toBe(2);
     expect(restored.isBlocked(0, 1)).toBe(true);
+    expect(restored.version).toBe(grid.version);
+  });
+});
+
+describe('SubcellOccupancyGrid', () => {
+  it('packs multiple entities into deterministic quarter-cell slots', () => {
+    const grid = new SubcellOccupancyGrid(4, 4);
+
+    expect(grid.occupy(4, { x: 1, y: 1 })).toEqual({
+      position: { x: 1, y: 1 },
+      slot: 0,
+      offset: { x: 0, y: 0 },
+    });
+    expect(grid.occupy(5, { x: 1, y: 1 })).toEqual({
+      position: { x: 1, y: 1 },
+      slot: 1,
+      offset: { x: 0.5, y: 0 },
+    });
+    expect(grid.occupy(6, { x: 1, y: 1 })).toEqual({
+      position: { x: 1, y: 1 },
+      slot: 2,
+      offset: { x: 0, y: 0.5 },
+    });
+    expect(grid.occupy(7, { x: 1, y: 1 })).toEqual({
+      position: { x: 1, y: 1 },
+      slot: 3,
+      offset: { x: 0.5, y: 0.5 },
+    });
+
+    expect(grid.canOccupy(8, { x: 1, y: 1 })).toBe(false);
+    expect(grid.getSlotOccupant(1, 1, 2)).toBe(6);
+  });
+
+  it('keeps an entity in the same slot when moving between cells', () => {
+    const grid = new SubcellOccupancyGrid(4, 4);
+
+    expect(grid.occupy(5, { x: 0, y: 0 })?.slot).toBe(1);
+    expect(grid.occupy(5, { x: 1, y: 0 })?.slot).toBe(1);
+    expect(grid.getSlotOccupant(0, 0, 1)).toBeNull();
+    expect(grid.getSlotOccupant(1, 0, 1)).toBe(5);
+
+    grid.release(5);
+    expect(grid.getOccupiedPlacement(5)).toBeNull();
+    expect(grid.getSlotOccupant(1, 0, 1)).toBeNull();
+  });
+
+  it('chooses the nearest free slot to a preferred offset', () => {
+    const grid = new SubcellOccupancyGrid(4, 4);
+
+    grid.occupy(7, { x: 2, y: 2 }, { preferredSlot: 1 });
+    const placement = grid.bestSlotForUnit(8, { x: 2, y: 2 }, {
+      preferredOffset: { x: 0.49, y: 0.09 },
+    });
+
+    expect(placement).toEqual({
+      position: { x: 2, y: 2 },
+      slot: 3,
+      offset: { x: 0.5, y: 0.5 },
+    });
+  });
+
+  it('filters neighbor cells by base blockers and reports remaining slot capacity', () => {
+    const blocked = new Set(['2,1']);
+    const grid = new SubcellOccupancyGrid(4, 4, {
+      isCellBlocked: (x, y) => blocked.has(`${x},${y}`),
+    });
+
+    grid.occupy(10, { x: 1, y: 0 });
+    grid.occupy(11, { x: 1, y: 0 });
+    grid.occupy(12, { x: 1, y: 2 });
+
+    expect(grid.neighborsWithSpace(4, { x: 1, y: 1 })).toEqual([
+      {
+        position: { x: 0, y: 1 },
+        freeSlots: 4,
+        bestSlot: {
+          position: { x: 0, y: 1 },
+          slot: 0,
+          offset: { x: 0, y: 0 },
+        },
+      },
+      {
+        position: { x: 1, y: 2 },
+        freeSlots: 3,
+        bestSlot: {
+          position: { x: 1, y: 2 },
+          slot: 1,
+          offset: { x: 0.5, y: 0 },
+        },
+      },
+      {
+        position: { x: 1, y: 0 },
+        freeSlots: 2,
+        bestSlot: {
+          position: { x: 1, y: 0 },
+          slot: 0,
+          offset: { x: 0, y: 0 },
+        },
+      },
+    ]);
+  });
+
+  it('round-trips occupied slot assignments and version', () => {
+    const grid = new SubcellOccupancyGrid(4, 4);
+
+    grid.occupy(4, { x: 3, y: 1 });
+    grid.occupy(5, { x: 3, y: 1 });
+
+    const restored = SubcellOccupancyGrid.fromState(grid.getState());
+
+    expect(restored.getOccupiedPlacement(4)).toEqual({
+      position: { x: 3, y: 1 },
+      slot: 0,
+      offset: { x: 0, y: 0 },
+    });
+    expect(restored.getOccupiedPlacement(5)).toEqual({
+      position: { x: 3, y: 1 },
+      slot: 1,
+      offset: { x: 0.5, y: 0 },
+    });
     expect(restored.version).toBe(grid.version);
   });
 });

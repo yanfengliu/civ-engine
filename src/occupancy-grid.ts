@@ -23,6 +23,63 @@ export interface OccupancyGridState {
   version: number;
 }
 
+export interface SubcellSlotOffset {
+  x: number;
+  y: number;
+}
+
+export interface SubcellPlacement {
+  position: Position;
+  slot: number;
+  offset: SubcellSlotOffset;
+}
+
+export interface SubcellNeighborSpace {
+  position: Position;
+  freeSlots: number;
+  bestSlot: SubcellPlacement;
+}
+
+export interface SubcellOccupancyOptions extends OccupancyQueryOptions {
+  preferredSlot?: number;
+  preferredOffset?: SubcellSlotOffset;
+}
+
+export interface SubcellNeighborOptions extends SubcellOccupancyOptions {
+  offsets?: ReadonlyArray<Position>;
+}
+
+export interface SubcellOccupancyGridOptions {
+  slots?: ReadonlyArray<SubcellSlotOffset>;
+  isCellBlocked?: (
+    x: number,
+    y: number,
+    options?: OccupancyQueryOptions,
+  ) => boolean;
+}
+
+export interface SubcellOccupancyGridState {
+  width: number;
+  height: number;
+  slots: SubcellSlotOffset[];
+  occupied: Array<[EntityId, { cell: number; slot: number }]>;
+  version: number;
+}
+
+const DEFAULT_SUBCELL_SLOT_OFFSETS: ReadonlyArray<SubcellSlotOffset> = [
+  { x: 0, y: 0 },
+  { x: 0.5, y: 0 },
+  { x: 0, y: 0.5 },
+  { x: 0.5, y: 0.5 },
+];
+
+const DEFAULT_SUBCELL_NEIGHBOR_OFFSETS: ReadonlyArray<Position> = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+
 export class OccupancyGrid {
   readonly width: number;
   readonly height: number;
@@ -371,6 +428,319 @@ export class OccupancyGrid {
   }
 }
 
+export class SubcellOccupancyGrid {
+  readonly width: number;
+  readonly height: number;
+  readonly slots: ReadonlyArray<SubcellSlotOffset>;
+  private readonly isCellBlockedFn?: (
+    x: number,
+    y: number,
+    options?: OccupancyQueryOptions,
+  ) => boolean;
+  private occupiedByCellSlot = new Map<number, EntityId>();
+  private occupiedByEntity = new Map<EntityId, { cell: number; slot: number }>();
+  private _version = 0;
+
+  constructor(
+    width: number,
+    height: number,
+    options: SubcellOccupancyGridOptions = {},
+  ) {
+    assertPositiveInteger(width, 'width');
+    assertPositiveInteger(height, 'height');
+    this.width = width;
+    this.height = height;
+    this.slots = normalizeSubcellSlots(
+      options.slots ?? DEFAULT_SUBCELL_SLOT_OFFSETS,
+    );
+    this.isCellBlockedFn = options.isCellBlocked;
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  canOccupy(
+    entity: EntityId,
+    position: Position,
+    options?: SubcellOccupancyOptions,
+  ): boolean {
+    return this.findBestSlot(entity, position, options) !== null;
+  }
+
+  bestSlotForUnit(
+    entity: EntityId,
+    position: Position,
+    options?: SubcellOccupancyOptions,
+  ): SubcellPlacement | null {
+    const bestSlot = this.findBestSlot(entity, position, options);
+    if (bestSlot === null) {
+      return null;
+    }
+
+    const cell = this.toIndex(position.x, position.y);
+    return this.toPlacement(cell, bestSlot);
+  }
+
+  occupy(
+    entity: EntityId,
+    position: Position,
+    options?: SubcellOccupancyOptions,
+  ): SubcellPlacement | null {
+    const bestSlot = this.findBestSlot(entity, position, options);
+    if (bestSlot === null) {
+      return null;
+    }
+
+    const nextCell = this.toIndex(position.x, position.y);
+    const current = this.occupiedByEntity.get(entity);
+    if (current && current.cell === nextCell && current.slot === bestSlot) {
+      return this.toPlacement(nextCell, bestSlot);
+    }
+
+    if (current) {
+      this.occupiedByCellSlot.delete(this.toCellSlotKey(current.cell, current.slot));
+    }
+
+    this.occupiedByCellSlot.set(this.toCellSlotKey(nextCell, bestSlot), entity);
+    this.occupiedByEntity.set(entity, { cell: nextCell, slot: bestSlot });
+    this._version++;
+    return this.toPlacement(nextCell, bestSlot);
+  }
+
+  release(entity: EntityId): void {
+    const current = this.occupiedByEntity.get(entity);
+    if (!current) {
+      return;
+    }
+
+    this.occupiedByCellSlot.delete(this.toCellSlotKey(current.cell, current.slot));
+    this.occupiedByEntity.delete(entity);
+    this._version++;
+  }
+
+  getSlotOccupant(x: number, y: number, slot: number): EntityId | null {
+    return (
+      this.occupiedByCellSlot.get(
+        this.toCellSlotKey(this.toIndex(x, y), normalizeSubcellSlotIndex(slot, this.slots.length)),
+      ) ?? null
+    );
+  }
+
+  getOccupiedPlacement(entity: EntityId): SubcellPlacement | null {
+    const current = this.occupiedByEntity.get(entity);
+    if (!current) {
+      return null;
+    }
+
+    return this.toPlacement(current.cell, current.slot);
+  }
+
+  neighborsWithSpace(
+    entity: EntityId,
+    origin: Position,
+    options?: SubcellNeighborOptions,
+  ): SubcellNeighborSpace[] {
+    assertGridPoint(origin.x, origin.y, this.width, this.height);
+    const offsets = options?.offsets ?? DEFAULT_SUBCELL_NEIGHBOR_OFFSETS;
+    const seen = new Set<number>();
+    const neighbors: SubcellNeighborSpace[] = [];
+
+    for (const offset of offsets) {
+      if (!Number.isInteger(offset.x) || !Number.isInteger(offset.y)) {
+        throw new Error('Neighbor offsets must use integer grid coordinates');
+      }
+
+      const x = origin.x + offset.x;
+      const y = origin.y + offset.y;
+      if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+        continue;
+      }
+
+      const cell = this.toIndex(x, y);
+      if (seen.has(cell)) {
+        continue;
+      }
+      seen.add(cell);
+
+      const placement = this.bestSlotForUnit(entity, { x, y }, options);
+      if (!placement) {
+        continue;
+      }
+
+      neighbors.push({
+        position: placement.position,
+        freeSlots: this.countFreeSlots(entity, cell),
+        bestSlot: placement,
+      });
+    }
+
+    return neighbors;
+  }
+
+  getState(): SubcellOccupancyGridState {
+    return {
+      width: this.width,
+      height: this.height,
+      slots: this.slots.map((slot) => ({ ...slot })),
+      occupied: [...this.occupiedByEntity.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([entity, claim]) => [entity, { cell: claim.cell, slot: claim.slot }]),
+      version: this._version,
+    };
+  }
+
+  static fromState(
+    state: SubcellOccupancyGridState,
+    options: Omit<SubcellOccupancyGridOptions, 'slots'> = {},
+  ): SubcellOccupancyGrid {
+    const grid = new SubcellOccupancyGrid(state.width, state.height, {
+      ...options,
+      slots: state.slots,
+    });
+
+    assertNonNegativeInteger(state.version, 'version');
+    for (const [entity, claim] of state.occupied) {
+      assertCellIndex(claim.cell, grid.width, grid.height);
+      normalizeSubcellSlotIndex(claim.slot, grid.slots.length);
+
+      const position = grid.toPosition(claim.cell);
+      if (grid.isBlocked(position.x, position.y, entity, undefined)) {
+        throw new Error(
+          `Invalid subcell occupancy for entity ${entity} at blocked cell (${position.x}, ${position.y})`,
+        );
+      }
+
+      if (grid.occupiedByEntity.has(entity)) {
+        throw new Error(`Duplicate subcell occupancy for entity ${entity}`);
+      }
+
+      const key = grid.toCellSlotKey(claim.cell, claim.slot);
+      if (grid.occupiedByCellSlot.has(key)) {
+        throw new Error(
+          `Duplicate subcell slot ${claim.slot} at cell (${position.x}, ${position.y})`,
+        );
+      }
+
+      grid.occupiedByEntity.set(entity, { cell: claim.cell, slot: claim.slot });
+      grid.occupiedByCellSlot.set(key, entity);
+    }
+
+    grid._version = state.version;
+    return grid;
+  }
+
+  private findBestSlot(
+    entity: EntityId,
+    position: Position,
+    options?: SubcellOccupancyOptions,
+  ): number | null {
+    const cell = this.toIndex(position.x, position.y);
+    if (this.isBlocked(position.x, position.y, entity, options)) {
+      return null;
+    }
+
+    const current = this.occupiedByEntity.get(entity);
+    const preferredSlot = normalizePreferredSubcellSlot(
+      options?.preferredSlot,
+      current?.slot ?? defaultSubcellSlot(entity, this.slots.length),
+      this.slots.length,
+    );
+
+    for (const slot of this.rankSlots(preferredSlot, options?.preferredOffset)) {
+      const occupant = this.occupiedByCellSlot.get(this.toCellSlotKey(cell, slot));
+      if (occupant === undefined || occupant === entity) {
+        return slot;
+      }
+    }
+
+    return null;
+  }
+
+  private rankSlots(
+    preferredSlot: number,
+    preferredOffset?: SubcellSlotOffset,
+  ): number[] {
+    const slots = [...this.slots.keys()];
+    if (!preferredOffset) {
+      return slots.map((_, index) => (preferredSlot + index) % this.slots.length);
+    }
+
+    assertFiniteNumber(preferredOffset.x, 'preferredOffset.x');
+    assertFiniteNumber(preferredOffset.y, 'preferredOffset.y');
+
+    return slots.sort((a, b) => {
+      const distanceA = squaredDistance(this.slots[a]!, preferredOffset);
+      const distanceB = squaredDistance(this.slots[b]!, preferredOffset);
+      if (distanceA !== distanceB) {
+        return distanceA - distanceB;
+      }
+
+      const orderA = slotPreferenceDistance(a, preferredSlot, this.slots.length);
+      const orderB = slotPreferenceDistance(b, preferredSlot, this.slots.length);
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+
+      return a - b;
+    });
+  }
+
+  private countFreeSlots(entity: EntityId, cell: number): number {
+    let freeSlots = 0;
+    for (let slot = 0; slot < this.slots.length; slot++) {
+      const occupant = this.occupiedByCellSlot.get(this.toCellSlotKey(cell, slot));
+      if (occupant === undefined || occupant === entity) {
+        freeSlots++;
+      }
+    }
+    return freeSlots;
+  }
+
+  private isBlocked(
+    x: number,
+    y: number,
+    entity: EntityId,
+    options?: SubcellOccupancyOptions,
+  ): boolean {
+    if (!this.isCellBlockedFn) {
+      return false;
+    }
+
+    const queryOptions: OccupancyQueryOptions = {
+      ignoreEntity: options?.ignoreEntity ?? entity,
+    };
+    if (options?.includeReservations !== undefined) {
+      queryOptions.includeReservations = options.includeReservations;
+    }
+    return this.isCellBlockedFn(x, y, queryOptions);
+  }
+
+  private toPlacement(cell: number, slot: number): SubcellPlacement {
+    return {
+      position: this.toPosition(cell),
+      slot,
+      offset: { ...this.slots[slot]! },
+    };
+  }
+
+  private toCellSlotKey(cell: number, slot: number): number {
+    return cell * this.slots.length + slot;
+  }
+
+  private toIndex(x: number, y: number): number {
+    assertGridPoint(x, y, this.width, this.height);
+    return y * this.width + x;
+  }
+
+  private toPosition(index: number): Position {
+    return {
+      x: index % this.width,
+      y: Math.floor(index / this.width),
+    };
+  }
+}
+
 function isOccupancyRect(area: OccupancyArea): area is OccupancyRect {
   return !Array.isArray(area);
 }
@@ -399,6 +769,70 @@ function normalizeIndexes(
   return [...unique].sort((a, b) => a - b);
 }
 
+function normalizeSubcellSlots(
+  slots: ReadonlyArray<SubcellSlotOffset>,
+): ReadonlyArray<SubcellSlotOffset> {
+  if (slots.length === 0) {
+    throw new Error('Subcell slot offsets must not be empty');
+  }
+
+  const seen = new Set<string>();
+  return Object.freeze(
+    slots.map((slot) => {
+      assertFiniteNumber(slot.x, 'Subcell slot x');
+      assertFiniteNumber(slot.y, 'Subcell slot y');
+      if (slot.x < 0 || slot.x >= 1 || slot.y < 0 || slot.y >= 1) {
+        throw new RangeError(
+          `Subcell slot offset (${slot.x}, ${slot.y}) must be within [0, 1)`,
+        );
+      }
+
+      const key = `${slot.x},${slot.y}`;
+      if (seen.has(key)) {
+        throw new Error(`Duplicate subcell slot offset (${slot.x}, ${slot.y})`);
+      }
+      seen.add(key);
+      return Object.freeze({ x: slot.x, y: slot.y });
+    }),
+  );
+}
+
+function normalizeSubcellSlotIndex(slot: number, slotCount: number): number {
+  if (!Number.isInteger(slot) || slot < 0 || slot >= slotCount) {
+    throw new RangeError(`Subcell slot ${slot} is out of bounds`);
+  }
+  return slot;
+}
+
+function normalizePreferredSubcellSlot(
+  preferredSlot: number | undefined,
+  fallbackSlot: number,
+  slotCount: number,
+): number {
+  if (preferredSlot === undefined) {
+    return fallbackSlot;
+  }
+  return normalizeSubcellSlotIndex(preferredSlot, slotCount);
+}
+
+function defaultSubcellSlot(entity: EntityId, slotCount: number): number {
+  return ((entity % slotCount) + slotCount) % slotCount;
+}
+
+function slotPreferenceDistance(
+  slot: number,
+  preferredSlot: number,
+  slotCount: number,
+): number {
+  return (slot - preferredSlot + slotCount) % slotCount;
+}
+
+function squaredDistance(a: SubcellSlotOffset, b: SubcellSlotOffset): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
 function assertCellIndex(index: number, width: number, height: number): void {
   if (
     !Number.isInteger(index) ||
@@ -418,6 +852,12 @@ function assertPositiveInteger(value: number, label: string): void {
 function assertNonNegativeInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer`);
+  }
+}
+
+function assertFiniteNumber(value: number, label: string): void {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
   }
 }
 

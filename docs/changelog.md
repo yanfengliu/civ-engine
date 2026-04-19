@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `SubcellOccupancyGrid` for deterministic slot-based crowding on top of coarse cell blockers, including `bestSlotForUnit()`, `occupy()`, and `neighborsWithSpace()` for smaller-than-cell unit packing.
+
+### Documentation
+
+- Updated the README, API reference, RTS primitives guide, and sub-grid movement guide to document slot-based crowding alongside the existing `OccupancyGrid` model.
+
 ## 0.3.0 - 2026-04-12
 
 This release addresses six ergonomics friction points identified by game projects consuming the engine. All changes are additive and backwards-compatible.

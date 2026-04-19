@@ -28,7 +28,7 @@ Requires Node.js 18+.
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
-- **[Sub-Grid Movement Guide](docs/guides/sub-grid-movement.md)** - Recommended fine-grid simulation, coarse building placement, and renderer-owned smooth motion
+- **[Sub-Grid Movement Guide](docs/guides/sub-grid-movement.md)** - Recommended fine-grid simulation, slot-based crowding, coarse building placement, and renderer-owned smooth motion
 - **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
 
 ## What You Can Build
@@ -71,7 +71,7 @@ world.step();
 | **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
 | **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
 | **Pathfinding**             | Generic A* on any graph - provide neighbors/cost/heuristic/hash callbacks                                             |
-| **Occupancy & Reservation** | Deterministic blocked-cell, footprint, and reservation tracking for RTS movement/building rules                       |
+| **Occupancy & Crowding**    | Deterministic blocked-cell footprints, reservations, and sub-cell slot packing for RTS movement/building rules        |
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
@@ -130,7 +130,7 @@ The root package centers on a few primary entry points:
 - `World` for simulation, commands, events, serialization, diffs, and resources
 - `ClientAdapter` and `RenderAdapter` for external clients and render transports
 - `WorldDebugger`, `WorldHistoryRecorder`, and `runScenario()` for AI/debug workflows
-- standalone utilities for pathfinding, map generation, occupancy, visibility, and behavior trees
+- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, and behavior trees
 
 Use [docs/api-reference.md](docs/api-reference.md) for the authoritative signatures, types, message shapes, and standalone utility docs.
 

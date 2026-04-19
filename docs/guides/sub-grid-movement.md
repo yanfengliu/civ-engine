@@ -7,10 +7,11 @@ This guide explains what the engine supports today for movement, occupancy, path
 1. [Current Engine Model](#current-engine-model)
 2. [What the Engine Does Not Do](#what-the-engine-does-not-do)
 3. [Recommended Resolution Strategy](#recommended-resolution-strategy)
-4. [Coarse Buildings on a Fine Navigation Grid](#coarse-buildings-on-a-fine-navigation-grid)
-5. [Visual Sub-Cell Motion](#visual-sub-cell-motion)
-6. [When to Use a Custom Graph Instead](#when-to-use-a-custom-graph-instead)
-7. [Rule of Thumb](#rule-of-thumb)
+4. [Slot-Based Crowding on a Coarse Grid](#slot-based-crowding-on-a-coarse-grid)
+5. [Coarse Buildings on a Fine Navigation Grid](#coarse-buildings-on-a-fine-navigation-grid)
+6. [Visual Sub-Cell Motion](#visual-sub-cell-motion)
+7. [When to Use a Custom Graph Instead](#when-to-use-a-custom-graph-instead)
+8. [Rule of Thumb](#rule-of-thumb)
 
 ---
 
@@ -21,6 +22,7 @@ The engine currently assumes one integer grid for its built-in spatial and pathi
 - `world.setPosition()` and the World's configured position component use integer `(x, y)` coordinates
 - `world.grid` tracks which entities are in each integer cell
 - `OccupancyGrid` tracks blocked, occupied, and reserved integer cells
+- `SubcellOccupancyGrid` tracks deterministic slot packing within an integer cell
 - `findGridPath()` searches across integer grid cells
 
 These pieces are intentionally separate:
@@ -38,9 +40,10 @@ The engine does not currently provide a built-in continuous movement or physics 
 That means there is no first-class support for:
 
 - fractional `position` coordinates in the World's spatial grid
-- sub-cell occupancy in `OccupancyGrid`
 - sub-cell pathfinding in `findGridPath()`
 - built-in collision resolution, steering, or separation forces
+
+The engine now does provide one discrete sub-cell primitive: `SubcellOccupancyGrid` for slot-based crowding inside an integer cell. What it does not provide is continuous collision, physics, or pathfinding over fractional coordinates.
 
 If you need those behaviors, they should be modeled in game code or renderer code instead of changing what `position` means per entity.
 
@@ -62,6 +65,51 @@ In practice:
 - rendering may interpolate between cells for smooth motion
 
 This keeps the engine's built-in helpers coherent instead of forcing per-entity grid semantics into the World.
+
+## Slot-Based Crowding on a Coarse Grid
+
+Sometimes rewriting the whole simulation onto a finer nav lattice is unnecessary, but whole-cell unit occupancy is still too coarse.
+
+That is the niche for `SubcellOccupancyGrid`:
+
+- pathfinding and `position` stay on integer cells
+- building footprints and hard blockers still live in `OccupancyGrid`
+- smaller-than-cell units can pack into deterministic slots inside a coarse cell
+
+```typescript
+import {
+  OccupancyGrid,
+  SubcellOccupancyGrid,
+  type EntityId,
+  type Position,
+} from 'civ-engine';
+
+const blockers = new OccupancyGrid(64, 64);
+const crowding = new SubcellOccupancyGrid(64, 64, {
+  isCellBlocked: (x, y, options) => blockers.isBlocked(x, y, options),
+});
+
+function moveUnitIntoCell(
+  unit: EntityId,
+  cell: Position,
+): boolean {
+  const placement = crowding.occupy(unit, cell);
+  if (!placement) {
+    return false;
+  }
+
+  // `placement.offset` can drive a finer renderer transform.
+  return true;
+}
+
+function findEgress(unit: EntityId, origin: Position): Position[] {
+  return crowding
+    .neighborsWithSpace(unit, origin)
+    .map((neighbor) => neighbor.position);
+}
+```
+
+The default slot pattern is four quarter-cell offsets, but you can provide your own `slots` layout when a game needs six-way packing, lane-biased offsets, and so on.
 
 ## Coarse Buildings on a Fine Navigation Grid
 
@@ -207,6 +255,7 @@ A practical split is:
 
 Use one fine grid inside the engine unless you have a measured reason not to.
 
+- If you need smaller-than-cell packing without changing grid pathfinding, pair `OccupancyGrid` with `SubcellOccupancyGrid`.
 - If you need coarse building placement, snap building origins and footprints in game code.
 - If you need smooth visuals, interpolate in the renderer or store a separate float transform.
 - If you need continuous collision or non-grid navigation, that belongs in game code, not in `World.position`.

@@ -22,7 +22,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
-| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, occupancy, and reservation tracking             |
+| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, reservation, and sub-cell crowding tracking     |
 | JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
 | Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
 | Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
