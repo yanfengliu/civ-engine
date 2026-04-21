@@ -23,6 +23,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [SpatialGrid](#spatialgrid)
 - [Pathfinding](#pathfinding)
 - [OccupancyGrid](#occupancygrid)
+- [OccupancyBinding](#occupancybinding)
 - [SubcellOccupancyGrid](#subcelloccupancygrid)
 - [Path Service](#path-service)
 - [VisibilityMap](#visibilitymap)
@@ -500,6 +501,20 @@ interface OccupancyQueryOptions {
 
 Options for occupancy checks. `ignoreEntity` is useful when checking whether a moving entity can continue through its current footprint.
 
+### `GridPassability`
+
+```typescript
+// src/occupancy-grid.ts
+interface GridPassability {
+  readonly width: number;
+  readonly height: number;
+  readonly version: number;
+  isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean;
+}
+```
+
+Minimal passability surface used by `findGridPath()`. `OccupancyGrid` and `OccupancyBinding` both satisfy this contract.
+
 ### `OccupancyGridState`
 
 ```typescript
@@ -515,6 +530,23 @@ interface OccupancyGridState {
 ```
 
 Serializable occupancy snapshot used by `OccupancyGrid.getState()` and `OccupancyGrid.fromState()`.
+
+### `OccupancyGridMetrics`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyGridMetrics {
+  blockedQueries: number;
+  blockedCellChecks: number;
+  claimQueries: number;
+  claimCellChecks: number;
+  areaNormalizations: number;
+  normalizedCellCount: number;
+  stateSnapshots: number;
+}
+```
+
+Runtime scan counters for `OccupancyGrid`. Useful for benchmark harnesses and game-side performance diagnostics.
 
 ### `SubcellSlotOffset`
 
@@ -608,6 +640,127 @@ interface SubcellOccupancyGridState {
 
 Serializable slot-crowding snapshot used by `SubcellOccupancyGrid.getState()` and `SubcellOccupancyGrid.fromState()`.
 
+### `SubcellOccupancyGridMetrics`
+
+```typescript
+// src/occupancy-grid.ts
+interface SubcellOccupancyGridMetrics {
+  placementQueries: number;
+  blockedQueries: number;
+  blockedCellChecks: number;
+  slotChecks: number;
+  neighborQueries: number;
+  neighborCellChecks: number;
+  freeSlotQueries: number;
+  freeSlotChecks: number;
+  stateSnapshots: number;
+}
+```
+
+Runtime scan counters for `SubcellOccupancyGrid`.
+
+### `OccupancyMetadata`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyMetadata {
+  kind: string;
+}
+```
+
+Minimal blocker metadata carried by `OccupancyBinding`. Use `kind` for repo-level distinctions such as `building`, `resource`, `unit`, or `terrain`.
+
+### `OccupancyCellClaim`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyCellClaim {
+  entity: EntityId | null;
+  kind: string;
+  claim: 'blocked' | 'occupied' | 'reserved' | 'subcell';
+  slot?: number;
+  offset?: SubcellSlotOffset;
+}
+```
+
+One occupancy or crowding claim returned by `OccupancyBinding.getCellStatus()`.
+
+### `OccupancyCellStatus`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyCellStatus {
+  position: Position;
+  blocked: boolean;
+  blockedBy: OccupancyCellClaim[];
+  crowdedBy: OccupancyCellClaim[];
+  freeSubcellSlots: number | null;
+}
+```
+
+Combined whole-cell and sub-cell view for one cell. `blockedBy` carries building/resource/unit-style metadata without requiring multiple parallel grids, while `blocked` also flips to `true` when sub-cell crowding has no free slots left for the query.
+
+### `OccupancyBindingClaimOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingClaimOptions {
+  metadata?: OccupancyMetadata;
+}
+```
+
+Metadata wrapper used by `OccupancyBinding.block()`, `occupy()`, and `reserve()`.
+
+### `OccupancyBindingSubcellOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingSubcellOptions extends SubcellOccupancyOptions {
+  metadata?: OccupancyMetadata;
+}
+```
+
+Sub-cell crowding options plus optional blocker metadata for `OccupancyBinding`.
+
+### `OccupancyBindingWorldHooks`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingWorldHooks {
+  onDestroy(callback: (id: EntityId, world: unknown) => void): void;
+  offDestroy(callback: (id: EntityId, world: unknown) => void): void;
+}
+```
+
+Minimal destroy-hook contract accepted by `OccupancyBinding.attachWorld()` and the constructor `world` option.
+
+### `OccupancyBindingOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingOptions {
+  crowding?: false | SubcellOccupancyGridOptions;
+  world?: OccupancyBindingWorldHooks;
+}
+```
+
+Constructor options for `OccupancyBinding`. Crowd tracking is enabled by default; pass `crowding: false` to disable sub-cell APIs.
+
+### `OccupancyBindingMetrics`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingMetrics {
+  version: number;
+  cellStatusQueries: number;
+  crowdedSlotChecks: number;
+  occupancy: OccupancyGridMetrics;
+  crowding: SubcellOccupancyGridMetrics | null;
+}
+```
+
+Aggregate metrics returned by `OccupancyBinding.getMetrics()`.
+
 ### `GridPathConfig`
 
 ```typescript
@@ -617,7 +770,7 @@ interface GridPathConfig {
   goal: Position;
   width?: number;
   height?: number;
-  occupancy?: OccupancyGrid;
+  occupancy?: GridPassability;
   movingEntity?: EntityId;
   includeReservations?: boolean;
   allowDiagonal?: boolean;
@@ -631,7 +784,7 @@ interface GridPathConfig {
 }
 ```
 
-Configuration for `findGridPath()`. Supply `width` and `height` directly, or pass an `OccupancyGrid` and dimensions are inferred.
+Configuration for `findGridPath()`. Supply `width` and `height` directly, or pass any `GridPassability` implementation (`OccupancyGrid`, `OccupancyBinding`, or your own) and dimensions are inferred.
 
 ### `GridPathRequest`
 
@@ -2292,6 +2445,7 @@ Deterministic blocked-cell, footprint, occupancy, and reservation tracking. Stan
 import {
   OccupancyGrid,
   type OccupancyArea,
+  type OccupancyGridMetrics,
   type OccupancyGridState,
   type OccupancyQueryOptions,
   type OccupancyRect,
@@ -2437,6 +2591,22 @@ getReservedCells(entity: EntityId): Position[]
 
 Returns the claimed reserved cells for an entity as positions.
 
+#### `getMetrics()`
+
+```typescript
+getMetrics(): OccupancyGridMetrics
+```
+
+Returns runtime scan counters for blocking checks, footprint claims, and snapshot reads.
+
+#### `resetMetrics()`
+
+```typescript
+resetMetrics(): void
+```
+
+Clears all accumulated `OccupancyGrid` counters without affecting occupancy state or `version`.
+
 #### `getState()`
 
 ```typescript
@@ -2455,6 +2625,201 @@ Restores an occupancy model from serialized state.
 
 ---
 
+## OccupancyBinding
+
+Higher-level occupancy ownership built on top of `OccupancyGrid` and optional `SubcellOccupancyGrid`. Use it when game code wants blocker metadata, destroy-time cleanup hooks, a `GridPassability` surface for `findGridPath()`, and measurable occupancy counters in one object.
+
+```typescript
+import {
+  OccupancyBinding,
+  type OccupancyBindingClaimOptions,
+  type OccupancyBindingMetrics,
+  type OccupancyBindingOptions,
+  type OccupancyBindingSubcellOptions,
+  type OccupancyCellStatus,
+} from 'civ-engine';
+```
+
+### Constructor
+
+```typescript
+new OccupancyBinding(
+  width: number,
+  height: number,
+  options?: OccupancyBindingOptions,
+)
+```
+
+Creates a higher-level occupancy surface for a fixed grid size.
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `width` | `number` | Grid width (read-only) |
+| `height` | `number` | Grid height (read-only) |
+| `version` | `number` | Monotonic passability version incremented on binding-level mutations |
+
+### Methods
+
+#### `attachWorld(world)`
+
+```typescript
+attachWorld(world: OccupancyBindingWorldHooks): void
+```
+
+Registers destroy-time cleanup so tracked claims are released automatically when entities die.
+
+#### `detachWorld()`
+
+```typescript
+detachWorld(): void
+```
+
+Removes the currently attached destroy hook source, if any.
+
+#### `block(area, options?)`
+
+```typescript
+block(area: OccupancyArea, options?: OccupancyBindingClaimOptions): void
+```
+
+Marks cells as blocked and records blocker metadata such as `terrain`. Throws if any targeted cell still contains crowded sub-cell occupants.
+
+#### `unblock(area)`
+
+```typescript
+unblock(area: OccupancyArea): void
+```
+
+Clears blocked cells and any stored static blocker metadata for them.
+
+#### `occupy(entity, area, options?)`
+
+```typescript
+occupy(
+  entity: EntityId,
+  area: OccupancyArea,
+  options?: OccupancyBindingClaimOptions,
+): boolean
+```
+
+Claims a whole-cell footprint and records metadata such as `building`, `resource`, or `unit`.
+
+#### `reserve(entity, area, options?)`
+
+```typescript
+reserve(
+  entity: EntityId,
+  area: OccupancyArea,
+  options?: OccupancyBindingClaimOptions,
+): boolean
+```
+
+Creates or replaces a reservation with optional blocker metadata. Returns `false` if the requested cells are blocked, claimed, or still occupied by crowded sub-cell units.
+
+#### `clearReservation(entity)`
+
+```typescript
+clearReservation(entity: EntityId): void
+```
+
+Clears only the reservation state for the entity.
+
+#### `isBlocked(x, y, options?)`
+
+```typescript
+isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean
+```
+
+Implements `GridPassability` across both owned whole-cell occupancy and sub-cell crowding. Fully crowded cells are treated as blocked for path queries.
+
+#### `canOccupySubcell(entity, position, options?)`
+
+```typescript
+canOccupySubcell(
+  entity: EntityId,
+  position: Position,
+  options?: OccupancyBindingSubcellOptions,
+): boolean
+```
+
+Checks whether the entity can claim at least one slot in the target cell.
+
+#### `bestSubcellPlacement(entity, position, options?)`
+
+```typescript
+bestSubcellPlacement(
+  entity: EntityId,
+  position: Position,
+  options?: OccupancyBindingSubcellOptions,
+): SubcellPlacement | null
+```
+
+Returns the best available sub-cell placement for the entity.
+
+#### `occupySubcell(entity, position, options?)`
+
+```typescript
+occupySubcell(
+  entity: EntityId,
+  position: Position,
+  options?: OccupancyBindingSubcellOptions,
+): SubcellPlacement | null
+```
+
+Claims the best available sub-cell slot and records metadata such as `unit`.
+
+#### `neighborsWithSpace(entity, origin, options?)`
+
+```typescript
+neighborsWithSpace(
+  entity: EntityId,
+  origin: Position,
+  options?: OccupancyBindingSubcellOptions,
+): SubcellNeighborSpace[]
+```
+
+Returns neighboring cells with room for the entity, along with free-slot counts and the best placement in each cell.
+
+#### `release(entity)`
+
+```typescript
+release(entity: EntityId): void
+```
+
+Clears all whole-cell, reservation, and sub-cell claims owned by the entity.
+
+#### `getCellStatus(x, y, options?)`
+
+```typescript
+getCellStatus(
+  x: number,
+  y: number,
+  options?: OccupancyQueryOptions,
+): OccupancyCellStatus
+```
+
+Returns combined `blockedBy` and `crowdedBy` metadata for the cell. `blocked` is `true` when either a whole-cell blocker exists or no sub-cell slots remain for the query.
+
+#### `getMetrics()`
+
+```typescript
+getMetrics(): OccupancyBindingMetrics
+```
+
+Returns aggregate binding, whole-cell, and crowding scan counters.
+
+#### `resetMetrics()`
+
+```typescript
+resetMetrics(): void
+```
+
+Clears all accumulated binding and owned-grid counters without affecting occupancy state or `version`.
+
+---
+
 ## SubcellOccupancyGrid
 
 Deterministic slot-based crowding for units smaller than a full integer cell. Use it alongside `OccupancyGrid` when whole-cell blockers and smaller-than-cell unit packing need to stay separate.
@@ -2464,6 +2829,7 @@ import {
   SubcellOccupancyGrid,
   type SubcellNeighborOptions,
   type SubcellNeighborSpace,
+  type SubcellOccupancyGridMetrics,
   type SubcellOccupancyGridOptions,
   type SubcellOccupancyGridState,
   type SubcellOccupancyOptions,
@@ -2580,6 +2946,22 @@ getState(): SubcellOccupancyGridState
 ```
 
 Returns a JSON-safe deterministic snapshot of the crowding model.
+
+#### `getMetrics()`
+
+```typescript
+getMetrics(): SubcellOccupancyGridMetrics
+```
+
+Returns runtime slot-scan and crowding-query counters.
+
+#### `resetMetrics()`
+
+```typescript
+resetMetrics(): void
+```
+
+Clears all accumulated `SubcellOccupancyGrid` counters without affecting occupancy state or `version`.
 
 #### `SubcellOccupancyGrid.fromState(state, options?)`
 
@@ -2745,7 +3127,7 @@ Creates a `PathRequestQueue` specialized for `findGridPath()`, with automatic ca
 createGridPathCacheKey(request: GridPathRequest): string | undefined
 ```
 
-Builds the default cache key used by `createGridPathQueue()`. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
+Builds the default cache key used by `createGridPathQueue()`. The generated key includes `movingEntity` so ignore-self passability queries do not reuse another entity's cached route. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
 
 ### `gridPathPassabilityVersion(request)`
 

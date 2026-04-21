@@ -14,7 +14,16 @@ This guide covers the engine-level utilities that make an RTS-scale simulation p
 
 ## Occupancy and Reservation
 
-Use `OccupancyGrid` when the question is "can something stand here?" or "is this footprint reserved?".
+Use `OccupancyGrid` when the question is "can something stand here?" or "is this footprint reserved?" and you only need the low-level footprint primitive.
+
+Use `OccupancyBinding` when the game also needs:
+
+- blocker metadata such as building-vs-resource-vs-unit
+- automatic destroy-time cleanup through `world.onDestroy()`
+- one passability surface that owns both whole-cell blockers and optional sub-cell crowding
+- measurable occupancy and crowding scan counters for benchmarks
+
+When crowding is enabled, the binding treats fully packed sub-cell slots as blocked for passability and rejects whole-cell blockers that would be stamped on top of crowded units.
 
 It is intentionally separate from `SpatialGrid`:
 
@@ -22,19 +31,25 @@ It is intentionally separate from `SpatialGrid`:
 - `OccupancyGrid` answers whether a cell or footprint is blocked, occupied, or reserved.
 
 ```typescript
-import { OccupancyGrid } from 'civ-engine';
+import { OccupancyBinding } from 'civ-engine';
 
-const occupancy = new OccupancyGrid(128, 128);
+const occupancy = new OccupancyBinding(128, 128);
 
-occupancy.block([{ x: 10, y: 10 }]);
-occupancy.occupy(100, { x: 20, y: 20, width: 4, height: 4 }); // building
+occupancy.block([{ x: 10, y: 10 }], {
+  metadata: { kind: 'terrain' },
+});
+occupancy.occupy(100, { x: 20, y: 20, width: 4, height: 4 }, {
+  metadata: { kind: 'building' },
+});
+occupancy.reserve(200, [{ x: 24, y: 20 }], {
+  metadata: { kind: 'resource' },
+});
 
-if (occupancy.canReserve(200, [{ x: 24, y: 20 }])) {
-  occupancy.reserve(200, [{ x: 24, y: 20 }]);
-}
+const status = occupancy.getCellStatus(20, 20);
+status.blockedBy; // [{ entity: 100, kind: 'building', claim: 'occupied' }]
 ```
 
-Useful APIs:
+Useful `OccupancyBinding` APIs:
 
 - `block(area)` / `unblock(area)`
 - `occupy(entity, area)`
@@ -42,8 +57,11 @@ Useful APIs:
 - `clearReservation(entity)`
 - `release(entity)`
 - `isBlocked(x, y, options?)`
+- `getCellStatus(x, y, options?)`
+- `attachWorld(world)` / `detachWorld()`
+- `getMetrics()` / `resetMetrics()`
 
-The grid is deterministic and serializable:
+Use raw `OccupancyGrid` when you need deterministic serialization snapshots:
 
 ```typescript
 const snapshot = occupancy.getState();
@@ -52,37 +70,39 @@ const restored = OccupancyGrid.fromState(snapshot);
 
 ## Sub-Cell Crowding
 
-Use `SubcellOccupancyGrid` when multiple units may share one coarse cell but still need deterministic slot assignment.
+Use `SubcellOccupancyGrid` directly for the raw primitive, or `OccupancyBinding` when the same game also needs blocker metadata and lifecycle cleanup.
 
-It is designed to layer on top of whole-cell blockers:
+The higher-level binding is designed to layer whole-cell blockers and crowding together:
 
-- `OccupancyGrid` still owns building footprints, terrain blockers, and reservations.
-- `SubcellOccupancyGrid` answers whether a smaller-than-cell unit can pack into a cell, which slot it should take, and which neighboring cells still have room.
+- `OccupancyBinding` owns building/resource/unit metadata plus destroy-time cleanup.
+- `SubcellOccupancyGrid` still provides the deterministic slot-packing primitive under that binding.
+- Fully crowded cells feed back into `isBlocked()` so `findGridPath()` and local crowding checks stay in sync.
 
 ```typescript
-import { OccupancyGrid, SubcellOccupancyGrid } from 'civ-engine';
+import { OccupancyBinding } from 'civ-engine';
 
-const blockedCells = new OccupancyGrid(128, 128);
-const crowding = new SubcellOccupancyGrid(128, 128, {
-  isCellBlocked: (x, y, options) => blockedCells.isBlocked(x, y, options),
+const occupancy = new OccupancyBinding(128, 128);
+
+occupancy.occupy(100, { x: 20, y: 20, width: 4, height: 4 }, {
+  metadata: { kind: 'building' },
 });
 
-blockedCells.occupy(100, { x: 20, y: 20, width: 4, height: 4 }); // building
-
-const placement = crowding.occupy(200, { x: 24, y: 20 });
+const placement = occupancy.occupySubcell(200, { x: 24, y: 20 }, {
+  metadata: { kind: 'unit' },
+});
 if (placement) {
   placement.slot;   // deterministic slot index
   placement.offset; // relative offset within the cell
 }
 
-const egress = crowding.neighborsWithSpace(200, { x: 24, y: 20 });
+const egress = occupancy.neighborsWithSpace(200, { x: 24, y: 20 });
 ```
 
-Useful APIs:
+Useful crowding APIs on the binding:
 
-- `canOccupy(entity, position, options?)`
-- `bestSlotForUnit(entity, position, options?)`
-- `occupy(entity, position, options?)`
+- `canOccupySubcell(entity, position, options?)`
+- `bestSubcellPlacement(entity, position, options?)`
+- `occupySubcell(entity, position, options?)`
 - `neighborsWithSpace(entity, origin, options?)`
 - `release(entity)`
 
@@ -202,6 +222,8 @@ The benchmark emits deterministic scenarios and reports:
 - Spatial sync scan counts
 - Diff size
 - Path request cost
+- Occupancy benchmark counts for buildings, resources, and units
+- Occupancy and crowding scan counters (`blockedQueries`, `claimCellChecks`, `cellStatusQueries`, `crowdedSlotChecks`, `slotChecks`)
 - Memory-sensitive counts from `process.memoryUsage()`
 
 Use this before making storage or scheduling changes. It is there to keep RTS-scale work driven by measured bottlenecks instead of guesswork.

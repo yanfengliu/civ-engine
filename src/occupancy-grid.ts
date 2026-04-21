@@ -14,6 +14,13 @@ export interface OccupancyQueryOptions {
   includeReservations?: boolean;
 }
 
+export interface GridPassability {
+  readonly width: number;
+  readonly height: number;
+  readonly version: number;
+  isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean;
+}
+
 export interface OccupancyGridState {
   width: number;
   height: number;
@@ -21,6 +28,16 @@ export interface OccupancyGridState {
   occupied: Array<[EntityId, number[]]>;
   reservations: Array<[EntityId, number[]]>;
   version: number;
+}
+
+export interface OccupancyGridMetrics {
+  blockedQueries: number;
+  blockedCellChecks: number;
+  claimQueries: number;
+  claimCellChecks: number;
+  areaNormalizations: number;
+  normalizedCellCount: number;
+  stateSnapshots: number;
 }
 
 export interface SubcellSlotOffset {
@@ -66,6 +83,71 @@ export interface SubcellOccupancyGridState {
   version: number;
 }
 
+export interface SubcellOccupancyGridMetrics {
+  placementQueries: number;
+  blockedQueries: number;
+  blockedCellChecks: number;
+  slotChecks: number;
+  neighborQueries: number;
+  neighborCellChecks: number;
+  freeSlotQueries: number;
+  freeSlotChecks: number;
+  stateSnapshots: number;
+}
+
+export interface OccupancyMetadata {
+  kind: string;
+}
+
+export type OccupancyClaimType =
+  | 'blocked'
+  | 'occupied'
+  | 'reserved'
+  | 'subcell';
+
+export interface OccupancyCellClaim {
+  entity: EntityId | null;
+  kind: string;
+  claim: OccupancyClaimType;
+  slot?: number;
+  offset?: SubcellSlotOffset;
+}
+
+export interface OccupancyCellStatus {
+  position: Position;
+  blocked: boolean;
+  blockedBy: OccupancyCellClaim[];
+  crowdedBy: OccupancyCellClaim[];
+  freeSubcellSlots: number | null;
+}
+
+export interface OccupancyBindingClaimOptions {
+  metadata?: OccupancyMetadata;
+}
+
+export interface OccupancyBindingSubcellOptions
+  extends SubcellOccupancyOptions {
+  metadata?: OccupancyMetadata;
+}
+
+export interface OccupancyBindingWorldHooks {
+  onDestroy(callback: (id: EntityId, world: unknown) => void): void;
+  offDestroy(callback: (id: EntityId, world: unknown) => void): void;
+}
+
+export interface OccupancyBindingOptions {
+  crowding?: false | SubcellOccupancyGridOptions;
+  world?: OccupancyBindingWorldHooks;
+}
+
+export interface OccupancyBindingMetrics {
+  version: number;
+  cellStatusQueries: number;
+  crowdedSlotChecks: number;
+  occupancy: OccupancyGridMetrics;
+  crowding: SubcellOccupancyGridMetrics | null;
+}
+
 const DEFAULT_SUBCELL_SLOT_OFFSETS: ReadonlyArray<SubcellSlotOffset> = [
   { x: 0, y: 0 },
   { x: 0.5, y: 0 },
@@ -80,7 +162,7 @@ const DEFAULT_SUBCELL_NEIGHBOR_OFFSETS: ReadonlyArray<Position> = [
   { x: 0, y: -1 },
 ];
 
-export class OccupancyGrid {
+export class OccupancyGrid implements GridPassability {
   readonly width: number;
   readonly height: number;
   private blocked = new Set<number>();
@@ -89,6 +171,7 @@ export class OccupancyGrid {
   private reservationsByCell = new Map<number, EntityId>();
   private reservationsByEntity = new Map<EntityId, number[]>();
   private _version = 0;
+  private metrics = createOccupancyGridMetrics();
 
   constructor(width: number, height: number) {
     assertPositiveInteger(width, 'width');
@@ -99,6 +182,14 @@ export class OccupancyGrid {
 
   get version(): number {
     return this._version;
+  }
+
+  getMetrics(): OccupancyGridMetrics {
+    return cloneOccupancyGridMetrics(this.metrics);
+  }
+
+  resetMetrics(): void {
+    this.metrics = createOccupancyGridMetrics();
   }
 
   setBlocked(area: OccupancyArea, blocked: boolean): void {
@@ -143,6 +234,8 @@ export class OccupancyGrid {
   }
 
   isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean {
+    this.metrics.blockedQueries++;
+    this.metrics.blockedCellChecks++;
     const cell = this.toIndex(x, y);
     if (this.blocked.has(cell)) return true;
 
@@ -261,6 +354,7 @@ export class OccupancyGrid {
   }
 
   getState(): OccupancyGridState {
+    this.metrics.stateSnapshots++;
     return {
       width: this.width,
       height: this.height,
@@ -319,7 +413,9 @@ export class OccupancyGrid {
     cells: number[],
     includeReservations: boolean,
   ): boolean {
+    this.metrics.claimQueries++;
     for (const cell of cells) {
+      this.metrics.claimCellChecks++;
       if (this.blocked.has(cell)) {
         return false;
       }
@@ -380,34 +476,9 @@ export class OccupancyGrid {
   }
 
   private normalizeArea(area: OccupancyArea): number[] {
-    if (!isOccupancyRect(area)) {
-      if (area.length === 0) {
-        throw new Error('Occupancy area must not be empty');
-      }
-      const cells = new Set<number>();
-      for (const cell of area) {
-        assertGridPoint(cell.x, cell.y, this.width, this.height);
-        cells.add(this.toIndex(cell.x, cell.y));
-      }
-      return [...cells].sort((a, b) => a - b);
-    }
-
-    assertPositiveInteger(area.width, 'Footprint width');
-    assertPositiveInteger(area.height, 'Footprint height');
-    assertGridPoint(area.x, area.y, this.width, this.height);
-    assertGridPoint(
-      area.x + area.width - 1,
-      area.y + area.height - 1,
-      this.width,
-      this.height,
-    );
-
-    const cells: number[] = [];
-    for (let y = area.y; y < area.y + area.height; y++) {
-      for (let x = area.x; x < area.x + area.width; x++) {
-        cells.push(this.toIndex(x, y));
-      }
-    }
+    this.metrics.areaNormalizations++;
+    const cells = normalizeOccupancyArea(area, this.width, this.height);
+    this.metrics.normalizedCellCount += cells.length;
     return cells;
   }
 
@@ -440,6 +511,7 @@ export class SubcellOccupancyGrid {
   private occupiedByCellSlot = new Map<number, EntityId>();
   private occupiedByEntity = new Map<EntityId, { cell: number; slot: number }>();
   private _version = 0;
+  private metrics = createSubcellOccupancyGridMetrics();
 
   constructor(
     width: number,
@@ -458,6 +530,14 @@ export class SubcellOccupancyGrid {
 
   get version(): number {
     return this._version;
+  }
+
+  getMetrics(): SubcellOccupancyGridMetrics {
+    return cloneSubcellOccupancyGridMetrics(this.metrics);
+  }
+
+  resetMetrics(): void {
+    this.metrics = createSubcellOccupancyGridMetrics();
   }
 
   canOccupy(
@@ -541,6 +621,7 @@ export class SubcellOccupancyGrid {
     origin: Position,
     options?: SubcellNeighborOptions,
   ): SubcellNeighborSpace[] {
+    this.metrics.neighborQueries++;
     assertGridPoint(origin.x, origin.y, this.width, this.height);
     const offsets = options?.offsets ?? DEFAULT_SUBCELL_NEIGHBOR_OFFSETS;
     const seen = new Set<number>();
@@ -562,6 +643,7 @@ export class SubcellOccupancyGrid {
         continue;
       }
       seen.add(cell);
+      this.metrics.neighborCellChecks++;
 
       const placement = this.bestSlotForUnit(entity, { x, y }, options);
       if (!placement) {
@@ -579,6 +661,7 @@ export class SubcellOccupancyGrid {
   }
 
   getState(): SubcellOccupancyGridState {
+    this.metrics.stateSnapshots++;
     return {
       width: this.width,
       height: this.height,
@@ -635,6 +718,7 @@ export class SubcellOccupancyGrid {
     position: Position,
     options?: SubcellOccupancyOptions,
   ): number | null {
+    this.metrics.placementQueries++;
     const cell = this.toIndex(position.x, position.y);
     if (this.isBlocked(position.x, position.y, entity, options)) {
       return null;
@@ -648,6 +732,7 @@ export class SubcellOccupancyGrid {
     );
 
     for (const slot of this.rankSlots(preferredSlot, options?.preferredOffset)) {
+      this.metrics.slotChecks++;
       const occupant = this.occupiedByCellSlot.get(this.toCellSlotKey(cell, slot));
       if (occupant === undefined || occupant === entity) {
         return slot;
@@ -687,8 +772,10 @@ export class SubcellOccupancyGrid {
   }
 
   private countFreeSlots(entity: EntityId, cell: number): number {
+    this.metrics.freeSlotQueries++;
     let freeSlots = 0;
     for (let slot = 0; slot < this.slots.length; slot++) {
+      this.metrics.freeSlotChecks++;
       const occupant = this.occupiedByCellSlot.get(this.toCellSlotKey(cell, slot));
       if (occupant === undefined || occupant === entity) {
         freeSlots++;
@@ -703,6 +790,7 @@ export class SubcellOccupancyGrid {
     entity: EntityId,
     options?: SubcellOccupancyOptions,
   ): boolean {
+    this.metrics.blockedQueries++;
     if (!this.isCellBlockedFn) {
       return false;
     }
@@ -713,6 +801,7 @@ export class SubcellOccupancyGrid {
     if (options?.includeReservations !== undefined) {
       queryOptions.includeReservations = options.includeReservations;
     }
+    this.metrics.blockedCellChecks++;
     return this.isCellBlockedFn(x, y, queryOptions);
   }
 
@@ -741,6 +830,526 @@ export class SubcellOccupancyGrid {
   }
 }
 
+interface OccupancyBindingEntityState {
+  metadata: OccupancyMetadata;
+  occupied: boolean;
+  reserved: boolean;
+  subcell: boolean;
+}
+
+export class OccupancyBinding implements GridPassability {
+  readonly width: number;
+  readonly height: number;
+  private readonly occupancy: OccupancyGrid;
+  private readonly crowding: SubcellOccupancyGrid | null;
+  private staticMetadataByCell = new Map<number, OccupancyMetadata>();
+  private entityStates = new Map<EntityId, OccupancyBindingEntityState>();
+  private metrics = {
+    cellStatusQueries: 0,
+    crowdedSlotChecks: 0,
+  };
+  private destroyHooks: OccupancyBindingWorldHooks | null = null;
+  private readonly destroyCallback = (id: EntityId) => {
+    this.release(id);
+  };
+  private _version = 0;
+
+  constructor(
+    width: number,
+    height: number,
+    options: OccupancyBindingOptions = {},
+  ) {
+    assertPositiveInteger(width, 'width');
+    assertPositiveInteger(height, 'height');
+    this.width = width;
+    this.height = height;
+    this.occupancy = new OccupancyGrid(width, height);
+
+    if (options.crowding === false) {
+      this.crowding = null;
+    } else {
+      const userBlocked = options.crowding?.isCellBlocked;
+      this.crowding = new SubcellOccupancyGrid(width, height, {
+        ...options.crowding,
+        isCellBlocked: (x, y, queryOptions) => {
+          if (this.occupancy.isBlocked(x, y, queryOptions)) {
+            return true;
+          }
+          return userBlocked?.(x, y, queryOptions) ?? false;
+        },
+      });
+    }
+
+    if (options.world) {
+      this.attachWorld(options.world);
+    }
+  }
+
+  get version(): number {
+    return this._version;
+  }
+
+  isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean {
+    if (this.occupancy.isBlocked(x, y, options)) {
+      return true;
+    }
+    if (!this.crowding) {
+      return false;
+    }
+    return this.countCrowdingFreeSlots(x, y, options?.ignoreEntity) === 0;
+  }
+
+  attachWorld(world: OccupancyBindingWorldHooks): void {
+    if (this.destroyHooks === world) {
+      return;
+    }
+    this.detachWorld();
+    world.onDestroy(this.destroyCallback);
+    this.destroyHooks = world;
+  }
+
+  detachWorld(): void {
+    if (!this.destroyHooks) {
+      return;
+    }
+    this.destroyHooks.offDestroy(this.destroyCallback);
+    this.destroyHooks = null;
+  }
+
+  block(
+    area: OccupancyArea,
+    options: OccupancyBindingClaimOptions = {},
+  ): void {
+    const cells = normalizeOccupancyArea(area, this.width, this.height);
+    const crowdedCell = this.findCrowdingConflictCell(cells);
+    if (crowdedCell !== null) {
+      const { x, y } = this.toPosition(crowdedCell);
+      throw new Error(
+        `Cannot block cells that still contain crowded occupants (${x}, ${y})`,
+      );
+    }
+    const metadata = normalizeOccupancyMetadata(options.metadata, 'blocked');
+    const beforeVersion = this.occupancy.version;
+    this.occupancy.block(area);
+
+    let changed = beforeVersion !== this.occupancy.version;
+    for (const cell of cells) {
+      changed = this.setStaticMetadata(cell, metadata) || changed;
+    }
+
+    this.bumpVersion(changed);
+  }
+
+  unblock(area: OccupancyArea): void {
+    const cells = normalizeOccupancyArea(area, this.width, this.height);
+    const beforeVersion = this.occupancy.version;
+    this.occupancy.unblock(area);
+
+    let changed = beforeVersion !== this.occupancy.version;
+    for (const cell of cells) {
+      changed = this.removeStaticMetadata(cell) || changed;
+    }
+
+    this.bumpVersion(changed);
+  }
+
+  occupy(
+    entity: EntityId,
+    area: OccupancyArea,
+    options: OccupancyBindingClaimOptions = {},
+  ): boolean {
+    const crowdedCell = this.findCrowdingConflictCell(
+      normalizeOccupancyArea(area, this.width, this.height),
+      entity,
+    );
+    if (crowdedCell !== null) {
+      return false;
+    }
+
+    const beforeOccupancyVersion = this.occupancy.version;
+    const beforeCrowdingVersion = this.crowding?.version ?? 0;
+    if (!this.occupancy.occupy(entity, area)) {
+      return false;
+    }
+
+    let changed = beforeOccupancyVersion !== this.occupancy.version;
+    if (this.crowding) {
+      this.crowding.release(entity);
+      changed = this.crowding.version !== beforeCrowdingVersion || changed;
+    }
+    changed = this.setEntityState(entity, {
+      metadata: options.metadata,
+      fallbackKind: 'occupied',
+      occupied: true,
+      reserved: false,
+      subcell: false,
+    }) || changed;
+
+    this.bumpVersion(changed);
+    return true;
+  }
+
+  reserve(
+    entity: EntityId,
+    area: OccupancyArea,
+    options: OccupancyBindingClaimOptions = {},
+  ): boolean {
+    const crowdedCell = this.findCrowdingConflictCell(
+      normalizeOccupancyArea(area, this.width, this.height),
+      entity,
+    );
+    if (crowdedCell !== null) {
+      return false;
+    }
+
+    const beforeVersion = this.occupancy.version;
+    if (!this.occupancy.reserve(entity, area)) {
+      return false;
+    }
+
+    const changed =
+      this.setEntityState(entity, {
+        metadata: options.metadata,
+        fallbackKind: 'reserved',
+        reserved: true,
+      }) || beforeVersion !== this.occupancy.version;
+    this.bumpVersion(changed);
+    return true;
+  }
+
+  clearReservation(entity: EntityId): void {
+    const beforeVersion = this.occupancy.version;
+    this.occupancy.clearReservation(entity);
+    const changed =
+      this.setEntityState(entity, {
+        fallbackKind: this.entityStates.get(entity)?.metadata.kind ?? 'reserved',
+        reserved: false,
+      }) || beforeVersion !== this.occupancy.version;
+    this.bumpVersion(changed);
+  }
+
+  canOccupySubcell(
+    entity: EntityId,
+    position: Position,
+    options?: OccupancyBindingSubcellOptions,
+  ): boolean {
+    return (
+      this.requireCrowding().canOccupy(entity, position, toSubcellOccupancyOptions(options))
+    );
+  }
+
+  bestSubcellPlacement(
+    entity: EntityId,
+    position: Position,
+    options?: OccupancyBindingSubcellOptions,
+  ): SubcellPlacement | null {
+    return this.requireCrowding().bestSlotForUnit(
+      entity,
+      position,
+      toSubcellOccupancyOptions(options),
+    );
+  }
+
+  occupySubcell(
+    entity: EntityId,
+    position: Position,
+    options: OccupancyBindingSubcellOptions = {},
+  ): SubcellPlacement | null {
+    const crowding = this.requireCrowding();
+    const beforeCrowdingVersion = crowding.version;
+    const beforeOccupancyVersion = this.occupancy.version;
+    const placement = crowding.occupy(
+      entity,
+      position,
+      toSubcellOccupancyOptions(options),
+    );
+    if (!placement) {
+      return null;
+    }
+
+    this.occupancy.release(entity);
+    const changed =
+      this.setEntityState(entity, {
+        metadata: options.metadata,
+        fallbackKind: 'subcell',
+        occupied: false,
+        reserved: false,
+        subcell: true,
+      }) ||
+      crowding.version !== beforeCrowdingVersion ||
+      this.occupancy.version !== beforeOccupancyVersion;
+    this.bumpVersion(changed);
+    return placement;
+  }
+
+  neighborsWithSpace(
+    entity: EntityId,
+    origin: Position,
+    options?: OccupancyBindingSubcellOptions,
+  ): SubcellNeighborSpace[] {
+    return this.requireCrowding().neighborsWithSpace(
+      entity,
+      origin,
+      toSubcellNeighborOptions(options),
+    );
+  }
+
+  release(entity: EntityId): void {
+    const beforeOccupancyVersion = this.occupancy.version;
+    const beforeCrowdingVersion = this.crowding?.version ?? 0;
+    this.occupancy.release(entity);
+    this.crowding?.release(entity);
+
+    const changed =
+      this.setEntityState(entity, {
+        fallbackKind: this.entityStates.get(entity)?.metadata.kind ?? 'occupied',
+        occupied: false,
+        reserved: false,
+        subcell: false,
+      }) ||
+      this.occupancy.version !== beforeOccupancyVersion ||
+      (this.crowding?.version ?? 0) !== beforeCrowdingVersion;
+    this.bumpVersion(changed);
+  }
+
+  getCellStatus(
+    x: number,
+    y: number,
+    options?: OccupancyQueryOptions,
+  ): OccupancyCellStatus {
+    assertGridPoint(x, y, this.width, this.height);
+    this.metrics.cellStatusQueries++;
+
+    const blockedBy: OccupancyCellClaim[] = [];
+    const crowdedBy: OccupancyCellClaim[] = [];
+    const ignoreEntity = options?.ignoreEntity;
+    const includeReservations = options?.includeReservations ?? true;
+    const cell = this.toIndex(x, y);
+
+    const staticMetadata = this.staticMetadataByCell.get(cell);
+    if (staticMetadata) {
+      blockedBy.push({
+        entity: null,
+        kind: staticMetadata.kind,
+        claim: 'blocked',
+      });
+    }
+
+    const occupant = this.occupancy.getOccupant(x, y);
+    if (occupant !== null && occupant !== ignoreEntity) {
+      blockedBy.push(this.createEntityClaim(occupant, 'occupied'));
+    }
+
+    if (includeReservations) {
+      const reservationOwner = this.occupancy.getReservationOwner(x, y);
+      if (reservationOwner !== null && reservationOwner !== ignoreEntity) {
+        blockedBy.push(this.createEntityClaim(reservationOwner, 'reserved'));
+      }
+    }
+
+    if (this.crowding) {
+      for (let slot = 0; slot < this.crowding.slots.length; slot++) {
+        this.metrics.crowdedSlotChecks++;
+        const crowdedEntity = this.crowding.getSlotOccupant(x, y, slot);
+        if (crowdedEntity === null || crowdedEntity === ignoreEntity) {
+          continue;
+        }
+        crowdedBy.push(
+          this.createEntityClaim(crowdedEntity, 'subcell', {
+            slot,
+            offset: { ...this.crowding.slots[slot]! },
+          }),
+        );
+      }
+    }
+
+    const freeSubcellSlots = this.crowding
+      ? this.crowding.slots.length - crowdedBy.length
+      : null;
+
+    return {
+      position: { x, y },
+      blocked: blockedBy.length > 0 || freeSubcellSlots === 0,
+      blockedBy,
+      crowdedBy,
+      freeSubcellSlots,
+    };
+  }
+
+  getMetrics(): OccupancyBindingMetrics {
+    return {
+      version: this._version,
+      cellStatusQueries: this.metrics.cellStatusQueries,
+      crowdedSlotChecks: this.metrics.crowdedSlotChecks,
+      occupancy: this.occupancy.getMetrics(),
+      crowding: this.crowding?.getMetrics() ?? null,
+    };
+  }
+
+  resetMetrics(): void {
+    this.metrics = {
+      cellStatusQueries: 0,
+      crowdedSlotChecks: 0,
+    };
+    this.occupancy.resetMetrics();
+    this.crowding?.resetMetrics();
+  }
+
+  private requireCrowding(): SubcellOccupancyGrid {
+    if (!this.crowding) {
+      throw new Error('OccupancyBinding crowding is disabled');
+    }
+    return this.crowding;
+  }
+
+  private findCrowdingConflictCell(
+    cells: number[],
+    ignoreEntity?: EntityId,
+  ): number | null {
+    if (!this.crowding) {
+      return null;
+    }
+
+    for (const cell of cells) {
+      const { x, y } = this.toPosition(cell);
+      if (this.hasCrowdingOccupant(x, y, ignoreEntity)) {
+        return cell;
+      }
+    }
+
+    return null;
+  }
+
+  private hasCrowdingOccupant(
+    x: number,
+    y: number,
+    ignoreEntity?: EntityId,
+  ): boolean {
+    if (!this.crowding) {
+      return false;
+    }
+
+    for (let slot = 0; slot < this.crowding.slots.length; slot++) {
+      const occupant = this.crowding.getSlotOccupant(x, y, slot);
+      if (occupant !== null && occupant !== ignoreEntity) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private countCrowdingFreeSlots(
+    x: number,
+    y: number,
+    ignoreEntity?: EntityId,
+  ): number {
+    if (!this.crowding) {
+      return 0;
+    }
+
+    let freeSlots = 0;
+    for (let slot = 0; slot < this.crowding.slots.length; slot++) {
+      const occupant = this.crowding.getSlotOccupant(x, y, slot);
+      if (occupant === null || occupant === ignoreEntity) {
+        freeSlots++;
+      }
+    }
+    return freeSlots;
+  }
+
+  private setStaticMetadata(cell: number, metadata: OccupancyMetadata): boolean {
+    const current = this.staticMetadataByCell.get(cell);
+    if (current && sameOccupancyMetadata(current, metadata)) {
+      return false;
+    }
+    this.staticMetadataByCell.set(cell, metadata);
+    return true;
+  }
+
+  private removeStaticMetadata(cell: number): boolean {
+    return this.staticMetadataByCell.delete(cell);
+  }
+
+  private setEntityState(
+    entity: EntityId,
+    config: {
+      metadata?: OccupancyMetadata;
+      fallbackKind: string;
+      occupied?: boolean;
+      reserved?: boolean;
+      subcell?: boolean;
+    },
+  ): boolean {
+    const current = this.entityStates.get(entity);
+    const next: OccupancyBindingEntityState = {
+      metadata: normalizeOccupancyMetadata(
+        config.metadata ?? current?.metadata,
+        current?.metadata.kind ?? config.fallbackKind,
+      ),
+      occupied: config.occupied ?? current?.occupied ?? false,
+      reserved: config.reserved ?? current?.reserved ?? false,
+      subcell: config.subcell ?? current?.subcell ?? false,
+    };
+
+    if (!next.occupied && !next.reserved && !next.subcell) {
+      if (!current) {
+        return false;
+      }
+      this.entityStates.delete(entity);
+      return true;
+    }
+
+    if (
+      current &&
+      sameOccupancyMetadata(current.metadata, next.metadata) &&
+      current.occupied === next.occupied &&
+      current.reserved === next.reserved &&
+      current.subcell === next.subcell
+    ) {
+      return false;
+    }
+
+    this.entityStates.set(entity, next);
+    return true;
+  }
+
+  private createEntityClaim(
+    entity: EntityId,
+    claim: OccupancyClaimType,
+    options: {
+      slot?: number;
+      offset?: SubcellSlotOffset;
+    } = {},
+  ): OccupancyCellClaim {
+    return {
+      entity,
+      kind: this.entityStates.get(entity)?.metadata.kind ?? claim,
+      claim,
+      ...(options.slot === undefined ? {} : { slot: options.slot }),
+      ...(options.offset === undefined ? {} : { offset: options.offset }),
+    };
+  }
+
+  private bumpVersion(changed: boolean): void {
+    if (changed) {
+      this._version++;
+    }
+  }
+
+  private toIndex(x: number, y: number): number {
+    assertGridPoint(x, y, this.width, this.height);
+    return y * this.width + x;
+  }
+
+  private toPosition(index: number): Position {
+    return {
+      x: index % this.width,
+      y: Math.floor(index / this.width),
+    };
+  }
+}
+
 function isOccupancyRect(area: OccupancyArea): area is OccupancyRect {
   return !Array.isArray(area);
 }
@@ -751,6 +1360,13 @@ function sameCells(a: number[], b: number[]): boolean {
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+function sameOccupancyMetadata(
+  a: OccupancyMetadata,
+  b: OccupancyMetadata,
+): boolean {
+  return a.kind === b.kind;
 }
 
 function normalizeIndexes(
@@ -767,6 +1383,116 @@ function normalizeIndexes(
     unique.add(cell);
   }
   return [...unique].sort((a, b) => a - b);
+}
+
+function normalizeOccupancyArea(
+  area: OccupancyArea,
+  width: number,
+  height: number,
+): number[] {
+  if (!isOccupancyRect(area)) {
+    if (area.length === 0) {
+      throw new Error('Occupancy area must not be empty');
+    }
+    const cells = new Set<number>();
+    for (const cell of area) {
+      assertGridPoint(cell.x, cell.y, width, height);
+      cells.add(cell.y * width + cell.x);
+    }
+    return [...cells].sort((a, b) => a - b);
+  }
+
+  assertPositiveInteger(area.width, 'Footprint width');
+  assertPositiveInteger(area.height, 'Footprint height');
+  assertGridPoint(area.x, area.y, width, height);
+  assertGridPoint(
+    area.x + area.width - 1,
+    area.y + area.height - 1,
+    width,
+    height,
+  );
+
+  const cells: number[] = [];
+  for (let y = area.y; y < area.y + area.height; y++) {
+    for (let x = area.x; x < area.x + area.width; x++) {
+      cells.push(y * width + x);
+    }
+  }
+  return cells;
+}
+
+function normalizeOccupancyMetadata(
+  metadata: OccupancyMetadata | undefined,
+  fallbackKind: string,
+): OccupancyMetadata {
+  const kind = metadata?.kind ?? fallbackKind;
+  if (kind.length === 0) {
+    throw new Error('Occupancy metadata kind must not be empty');
+  }
+  return { kind };
+}
+
+function toSubcellOccupancyOptions(
+  options?: OccupancyBindingSubcellOptions,
+): SubcellOccupancyOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+  return {
+    preferredSlot: options.preferredSlot,
+    preferredOffset: options.preferredOffset,
+    ignoreEntity: options.ignoreEntity,
+    includeReservations: options.includeReservations,
+  };
+}
+
+function toSubcellNeighborOptions(
+  options?: OccupancyBindingSubcellOptions,
+): SubcellNeighborOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+  return {
+    ...toSubcellOccupancyOptions(options),
+  };
+}
+
+function createOccupancyGridMetrics(): OccupancyGridMetrics {
+  return {
+    blockedQueries: 0,
+    blockedCellChecks: 0,
+    claimQueries: 0,
+    claimCellChecks: 0,
+    areaNormalizations: 0,
+    normalizedCellCount: 0,
+    stateSnapshots: 0,
+  };
+}
+
+function cloneOccupancyGridMetrics(
+  metrics: OccupancyGridMetrics,
+): OccupancyGridMetrics {
+  return { ...metrics };
+}
+
+function createSubcellOccupancyGridMetrics(): SubcellOccupancyGridMetrics {
+  return {
+    placementQueries: 0,
+    blockedQueries: 0,
+    blockedCellChecks: 0,
+    slotChecks: 0,
+    neighborQueries: 0,
+    neighborCellChecks: 0,
+    freeSlotQueries: 0,
+    freeSlotChecks: 0,
+    stateSnapshots: 0,
+  };
+}
+
+function cloneSubcellOccupancyGridMetrics(
+  metrics: SubcellOccupancyGridMetrics,
+): SubcellOccupancyGridMetrics {
+  return { ...metrics };
 }
 
 function normalizeSubcellSlots(

@@ -22,7 +22,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
-| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, reservation, and sub-cell crowding tracking     |
+| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, reservation, lifecycle binding, blocker metadata, metrics, and sub-cell crowding tracking |
 | JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
 | Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
 | Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
@@ -94,7 +94,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **RenderAdapter** is an optional projection helper. It turns current world state plus `TickDiff` into renderer-facing `renderSnapshot` and `renderTick` messages using game-owned callbacks. It does not own renderer objects or backend assumptions.
 - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
 - **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
-- **OccupancyGrid** is a standalone utility. It models blocked cells, occupied footprints, and temporary reservations. It is intentionally separate from `SpatialGrid`, which answers proximity rather than passability.
+- **OccupancyGrid** is a standalone utility. It models blocked cells, occupied footprints, and temporary reservations. `OccupancyBinding` composes it with blocker metadata, destroy-time cleanup hooks, optional sub-cell crowding, and scan metrics when game code wants a higher-level passability surface. These occupancy helpers remain intentionally separate from `SpatialGrid`, which answers proximity rather than passability.
 - **Pathfinding** is a standalone utility. It has no knowledge of the spatial grid, entities, or the tick loop. Game code provides `neighbors`, `cost`, `heuristic`, and `hash` callbacks to wire it to any graph topology.
 - **Path Service** is a standalone utility built on top of `findPath`. It provides `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for deterministic batched path processing.
 - **VisibilityMap** is a standalone utility. It tracks per-player visible and explored cells and remains independent of rendering and UI code.

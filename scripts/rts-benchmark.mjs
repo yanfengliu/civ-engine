@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import {
+  OccupancyBinding,
   OccupancyGrid,
   World,
   createGridPathQueue,
@@ -80,6 +81,7 @@ function runScenario(config) {
 
   const occupancy = createBenchmarkOccupancy(config);
   const pathfinding = benchmarkPaths(config, occupancy);
+  const occupancyCosts = benchmarkOccupancy(config);
   const memoryAfter = process.memoryUsage().heapUsed;
 
   return {
@@ -94,6 +96,7 @@ function runScenario(config) {
     spatialScannedEntities: summarize(spatialScannedEntities),
     diffSizeBytes: summarize(diffSizes),
     pathfinding,
+    occupancyCosts,
     memory: {
       beforeMB: round(memoryBefore / (1024 * 1024)),
       afterMB: round(memoryAfter / (1024 * 1024)),
@@ -214,6 +217,112 @@ function benchmarkPaths(config, occupancy) {
   };
 }
 
+function benchmarkOccupancy(config) {
+  const binding = new OccupancyBinding(config.width, config.height);
+  let nextEntityId = 1;
+
+  const buildingTarget = Math.max(192, Math.floor(config.width / 2));
+  const resourceTarget = buildingTarget * 2;
+  const unitTarget = Math.max(1024, Math.floor(config.entities / 2));
+
+  let buildings = 0;
+  for (let y = 2; y < config.height - 2 && buildings < buildingTarget; y += 6) {
+    for (let x = 2; x < config.width - 2 && buildings < buildingTarget; x += 6) {
+      if (
+        binding.occupy(
+          nextEntityId++,
+          { x, y, width: 2, height: 2 },
+          { metadata: { kind: 'building' } },
+        )
+      ) {
+        buildings++;
+      }
+    }
+  }
+
+  let resources = 0;
+  for (let y = 1; y < config.height && resources < resourceTarget; y += 3) {
+    const startX = y % 2 === 0 ? 1 : 3;
+    for (let x = startX; x < config.width && resources < resourceTarget; x += 5) {
+      if (binding.isBlocked(x, y, { includeReservations: false })) {
+        continue;
+      }
+      if (
+        binding.occupy(
+          nextEntityId++,
+          [{ x, y }],
+          { metadata: { kind: 'resource' } },
+        )
+      ) {
+        resources++;
+      }
+    }
+  }
+
+  let units = 0;
+  const unitPlacements = [];
+  for (let y = 0; y < config.height && units < unitTarget; y++) {
+    for (let x = 0; x < config.width && units < unitTarget; x++) {
+      if (binding.isBlocked(x, y, { includeReservations: false })) {
+        continue;
+      }
+      for (let slot = 0; slot < 4 && units < unitTarget; slot++) {
+        const entity = nextEntityId++;
+        const placement = binding.occupySubcell(entity, { x, y }, {
+          preferredSlot: slot,
+          metadata: { kind: 'unit' },
+        });
+        if (!placement) {
+          break;
+        }
+        unitPlacements.push({ entity, position: { x, y } });
+        units++;
+      }
+    }
+  }
+
+  binding.resetMetrics();
+
+  const queryCount = Math.min(
+    unitPlacements.length,
+    Math.max(512, Math.floor(unitTarget / 2)),
+  );
+  let blockedHits = 0;
+  let crowdedClaimsObserved = 0;
+  const start = performance.now();
+
+  for (let i = 0; i < queryCount; i++) {
+    const sample = unitPlacements[i % unitPlacements.length];
+    const inspectX = (i * 17 + 3) % config.width;
+    const inspectY = (i * 31 + 7) % config.height;
+
+    if (binding.isBlocked(inspectX, inspectY)) {
+      blockedHits++;
+    }
+
+    const status = binding.getCellStatus(inspectX, inspectY);
+    crowdedClaimsObserved += status.crowdedBy.length;
+    binding.neighborsWithSpace(sample.entity, sample.position);
+  }
+
+  const metrics = binding.getMetrics();
+  return {
+    buildings,
+    resources,
+    units,
+    queryCount,
+    blockedHits,
+    crowdedClaimsObserved,
+    durationMs: round(performance.now() - start),
+    bindingQueries: {
+      cellStatusQueries: metrics.cellStatusQueries,
+      crowdedSlotChecks: metrics.crowdedSlotChecks,
+    },
+    occupancy: metrics.occupancy,
+    crowding: metrics.crowding,
+  };
+}
+
 function processQueue(queue, requests, budget) {
   for (const request of requests) {
     queue.enqueue(request);
@@ -308,6 +417,12 @@ function renderMarkdown(report) {
     );
     lines.push(
       `- Path cache hits on second pass: ${scenario.pathfinding.cacheHitsSecondPass}`,
+    );
+    lines.push(
+      `- Occupancy benchmark: ${scenario.occupancyCosts.buildings} buildings, ${scenario.occupancyCosts.resources} resources, ${scenario.occupancyCosts.units} units over ${scenario.occupancyCosts.queryCount} query rounds in ${scenario.occupancyCosts.durationMs} ms`,
+    );
+    lines.push(
+      `- Occupancy scans: blockedQueries=${scenario.occupancyCosts.occupancy.blockedQueries}, claimCellChecks=${scenario.occupancyCosts.occupancy.claimCellChecks}, cellStatusQueries=${scenario.occupancyCosts.bindingQueries.cellStatusQueries}, crowdedSlotChecks=${scenario.occupancyCosts.bindingQueries.crowdedSlotChecks}, subcellSlotChecks=${scenario.occupancyCosts.crowding?.slotChecks ?? 0}`,
     );
     lines.push(`- Memory delta MB: ${scenario.memory.deltaMB}`);
     lines.push('');

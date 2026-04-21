@@ -22,6 +22,7 @@ The engine currently assumes one integer grid for its built-in spatial and pathi
 - `world.setPosition()` and the World's configured position component use integer `(x, y)` coordinates
 - `world.grid` tracks which entities are in each integer cell
 - `OccupancyGrid` tracks blocked, occupied, and reserved integer cells
+- `OccupancyBinding` layers blocker metadata, destroy-time cleanup, optional crowding, and metrics on top of those occupancy primitives
 - `SubcellOccupancyGrid` tracks deterministic slot packing within an integer cell
 - `findGridPath()` searches across integer grid cells
 
@@ -70,30 +71,30 @@ This keeps the engine's built-in helpers coherent instead of forcing per-entity 
 
 Sometimes rewriting the whole simulation onto a finer nav lattice is unnecessary, but whole-cell unit occupancy is still too coarse.
 
-That is the niche for `SubcellOccupancyGrid`:
+That is the niche for `SubcellOccupancyGrid`, or for `OccupancyBinding` when the game also wants lifecycle and metadata:
 
 - pathfinding and `position` stay on integer cells
-- building footprints and hard blockers still live in `OccupancyGrid`
+- building footprints and hard blockers still live in occupancy primitives
 - smaller-than-cell units can pack into deterministic slots inside a coarse cell
+- a higher-level binding can expose `blockedBy` metadata without forcing game code to maintain parallel grids
+- fully crowded cells report as blocked to grid pathfinding, so routing and slot placement stay aligned
 
 ```typescript
 import {
-  OccupancyGrid,
-  SubcellOccupancyGrid,
+  OccupancyBinding,
   type EntityId,
   type Position,
 } from 'civ-engine';
 
-const blockers = new OccupancyGrid(64, 64);
-const crowding = new SubcellOccupancyGrid(64, 64, {
-  isCellBlocked: (x, y, options) => blockers.isBlocked(x, y, options),
-});
+const occupancy = new OccupancyBinding(64, 64);
 
 function moveUnitIntoCell(
   unit: EntityId,
   cell: Position,
 ): boolean {
-  const placement = crowding.occupy(unit, cell);
+  const placement = occupancy.occupySubcell(unit, cell, {
+    metadata: { kind: 'unit' },
+  });
   if (!placement) {
     return false;
   }
@@ -103,7 +104,7 @@ function moveUnitIntoCell(
 }
 
 function findEgress(unit: EntityId, origin: Position): Position[] {
-  return crowding
+  return occupancy
     .neighborsWithSpace(unit, origin)
     .map((neighbor) => neighbor.position);
 }
@@ -255,7 +256,7 @@ A practical split is:
 
 Use one fine grid inside the engine unless you have a measured reason not to.
 
-- If you need smaller-than-cell packing without changing grid pathfinding, pair `OccupancyGrid` with `SubcellOccupancyGrid`.
+- If you need smaller-than-cell packing without changing grid pathfinding, use `OccupancyBinding` for the higher-level surface or pair `OccupancyGrid` with `SubcellOccupancyGrid` directly for lower-level control.
 - If you need coarse building placement, snap building origins and footprints in game code.
 - If you need smooth visuals, interpolate in the renderer or store a separate float transform.
 - If you need continuous collision or non-grid navigation, that belongs in game code, not in `World.position`.

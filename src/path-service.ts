@@ -2,14 +2,14 @@ import { ALL_DIRECTIONS, ORTHOGONAL } from './spatial-grid.js';
 import { findPath } from './pathfinding.js';
 import type { PathResult } from './pathfinding.js';
 import type { EntityId, Position } from './types.js';
-import type { OccupancyGrid } from './occupancy-grid.js';
+import type { GridPassability } from './occupancy-grid.js';
 
 export interface GridPathConfig {
   start: Position;
   goal: Position;
   width?: number;
   height?: number;
-  occupancy?: OccupancyGrid;
+  occupancy?: GridPassability;
   movingEntity?: EntityId;
   includeReservations?: boolean;
   allowDiagonal?: boolean;
@@ -273,6 +273,7 @@ export function createGridPathCacheKey(
     `${width}x${height}`,
     `${request.start.x},${request.start.y}`,
     `${request.goal.x},${request.goal.y}`,
+    `entity:${request.movingEntity ?? 'none'}`,
     `diag:${request.allowDiagonal ? 1 : 0}`,
     `cut:${request.preventCornerCutting === false ? 0 : 1}`,
     `res:${request.includeReservations === false ? 0 : 1}`,

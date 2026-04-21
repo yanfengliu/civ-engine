@@ -71,7 +71,7 @@ world.step();
 | **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
 | **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
 | **Pathfinding**             | Generic A* on any graph - provide neighbors/cost/heuristic/hash callbacks                                             |
-| **Occupancy & Crowding**    | Deterministic blocked-cell footprints, reservations, and sub-cell slot packing for RTS movement/building rules        |
+| **Occupancy & Crowding**    | Deterministic blocked-cell footprints, blocker metadata, lifecycle bindings, crowding-aware passability, reservations, and sub-cell slot packing  |
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
 | **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |

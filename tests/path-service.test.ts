@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { OccupancyGrid } from '../src/occupancy-grid.js';
+import {
+  OccupancyBinding,
+  OccupancyGrid,
+} from '../src/occupancy-grid.js';
 import {
   createGridPathQueue,
   findGridPath,
@@ -102,6 +105,36 @@ describe('PathRequestQueue', () => {
     const third = queue.process(1)[0];
     expect(third.fromCache).toBe(false);
     expect(queue.getStats().cacheHits).toBe(1);
+  });
+
+  it('treats movingEntity as part of the cache key when passability depends on it', () => {
+    const occupancy = new OccupancyBinding(4, 4);
+    occupancy.occupySubcell(4, { x: 1, y: 1 });
+    occupancy.occupySubcell(5, { x: 1, y: 1 });
+    occupancy.occupySubcell(6, { x: 1, y: 1 });
+    occupancy.occupySubcell(7, { x: 1, y: 1 });
+
+    const queue = createGridPathQueue({ occupancy });
+    const ownerRequest = {
+      start: { x: 1, y: 1 },
+      goal: { x: 2, y: 1 },
+      movingEntity: 4,
+    };
+    const strangerRequest = {
+      start: { x: 1, y: 1 },
+      goal: { x: 2, y: 1 },
+      movingEntity: 8,
+    };
+
+    queue.enqueue(ownerRequest);
+    const first = queue.process(1)[0];
+    expect(first.fromCache).toBe(false);
+    expect(first.result).not.toBeNull();
+
+    queue.enqueue(strangerRequest);
+    const second = queue.process(1)[0];
+    expect(second.fromCache).toBe(false);
+    expect(second.result).toBeNull();
   });
 
   it('does not cache custom blocked callbacks without an explicit cache key', () => {

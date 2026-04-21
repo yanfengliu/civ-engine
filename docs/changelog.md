@@ -5,10 +5,12 @@
 ### Added
 
 - `SubcellOccupancyGrid` for deterministic slot-based crowding on top of coarse cell blockers, including `bestSlotForUnit()`, `occupy()`, and `neighborsWithSpace()` for smaller-than-cell unit packing.
+- `OccupancyBinding` for higher-level passability ownership: blocker metadata (`building` / `resource` / `unit` etc.), destroy-time lifecycle cleanup via `world.onDestroy()`, optional sub-cell crowding, crowding-aware `isBlocked()` path queries, and a `GridPassability`-compatible surface that plugs directly into `findGridPath()`.
+- `getMetrics()` / `resetMetrics()` on `OccupancyGrid` and `SubcellOccupancyGrid`, plus occupancy-cost reporting in `npm run benchmark:rts`.
 
 ### Documentation
 
-- Updated the README, API reference, RTS primitives guide, and sub-grid movement guide to document slot-based crowding alongside the existing `OccupancyGrid` model.
+- Updated the README, architecture notes, API reference, RTS primitives guide, and sub-grid movement guide to document the higher-level occupancy binding and the new occupancy benchmark metrics.
 
 ## 0.3.0 - 2026-04-12
 

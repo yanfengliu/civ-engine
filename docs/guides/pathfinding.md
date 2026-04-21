@@ -188,6 +188,8 @@ The queue provides:
 - optional caching through `PathCache`
 - cache invalidation through `OccupancyGrid.version` or `passabilityVersion`
 
+The default grid-path cache key already includes `movingEntity`, so ignore-self path requests do not accidentally reuse another unit's cached route.
+
 If you use custom `blocked`, `cost`, or `heuristic` callbacks, provide an explicit `cacheKey` and `passabilityVersion` if you want those requests to be cached.
 
 ## Non-Grid Graphs
