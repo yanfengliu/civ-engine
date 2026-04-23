@@ -34,7 +34,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
 | WorldDebugger  | `src/world-debugger.ts`  | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
 | ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
-| BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, Action, Condition, BTState, createBehaviorTree |
+| BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, ReactiveSelector, ReactiveSequence, Action, Condition, BTState, createBehaviorTree, clearRunningState |
 | Public exports | `src/index.ts`           | Barrel export for the intended package API                                             |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, EntityRef, Position, WorldConfig, InstrumentationProfile) |
 
@@ -100,7 +100,7 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 - **VisibilityMap** is a standalone utility. It tracks per-player visible and explored cells and remains independent of rendering and UI code.
 - **WorldDebugger** is a standalone inspection utility. It captures structured summaries of world state, metrics, events, last-diff data, and custom probe output for standalone utilities such as occupancy, visibility, and path queues.
 - **ScenarioRunner** is a standalone orchestration utility. It pairs prepared setup, deterministic stepping, checks, debugger output, and short-horizon history into one machine-readable result for AI agents and harnesses.
-- **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined — the engine does not prescribe what context contains beyond a BTState accessor.
+- **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined — the engine does not prescribe what context contains beyond a BTState accessor. Reactive variants (`reactiveSelector`, `reactiveSequence`) re-evaluate from the root each tick without persisting running state; `clearRunningState` provides imperative subtree resets.
 - **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly — it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submitWithResult`).
 - **World State** is owned by World as a private Map. Systems read/write via `world.setState()`/`world.getState()`. State is non-entity structured data (terrain config, simulation time, etc.). Included in serialization and diffs.
 - **Tags & Metadata** are owned by World. Tags are string labels with reverse-index lookup via `world.getByTag()`. Metadata is key-value per entity with unique reverse-index via `world.getByMeta()`. Both cleaned up on entity destruction, included in serialization and diffs.
@@ -115,40 +115,5 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 | ESLint 9 + typescript-eslint 8 | Linting (flat config)                                         |
 | Node.js 18+                    | Runtime                                                       |
 
-## Key Architectural Decisions
-
-| #   | Date       | Decision                                              | Rationale                                                                  |
-| --- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------- |
-| 1   | 2026-04-04 | Sparse arrays for component storage                   | Simple, O(1) lookup, sufficient for expected entity density                |
-| 2   | 2026-04-04 | Fixed system pipeline (no scheduler)                  | Deterministic, easy to test and debug                                      |
-| 3   | 2026-04-04 | Monolithic World object                               | Simple API surface, avoids premature decoupling                            |
-| 4   | 2026-04-04 | Generation counters for change detection              | Minimal cost now, enables future diff/output layer                         |
-| 5   | 2026-04-04 | Zero runtime dependencies                             | Performance and simplicity for a game engine                               |
-| 6   | 2026-04-04 | Spatial index as internal World routine               | Non-bypassable, invisible to user systems, runs before all systems         |
-| 7   | 2026-04-04 | destroyEntity uses previousPositions for grid cleanup | Handles the case where position was mutated between ticks without stepping |
-| 8   | 2026-04-06 | BT state separated from tree structure via BTState   | Enables shared tree blueprints across entities while keeping per-entity state serializable in ECS |
-| 9   | 2026-04-12 | Optional typed component registry via TComponents generic | Type-safe component access without runtime overhead; backward-compatible with existing string-based API |
-
-## Drift Log
-
-| Date       | Change                                | Reason                                                           |
-| ---------- | ------------------------------------- | ---------------------------------------------------------------- |
-| 2026-04-04 | Initial architecture                  | Core engine foundation implementation                            |
-| 2026-04-05 | Added EventBus as World subsystem     | System-to-system and engine-to-client event communication        |
-| 2026-04-05 | Added CommandQueue as World subsystem | Input command layer for player command validation and processing |
-| 2026-04-05 | Added state serialization             | JSON snapshot save/load via World.serialize() and World.deserialize() |
-| 2026-04-05 | Added state diff output               | Per-tick dirty tracking and TickDiff via getDiff/onDiff/offDiff       |
-| 2026-04-05 | Added resource system                  | ResourceStore with pools, rates, transfers, diff integration          |
-| 2026-04-06 | Added map infrastructure utilities     | Standalone noise, cellular automata, and tile-creation primitives for map generation |
-| 2026-04-06 | Made hardcoded defaults configurable   | positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets now have overridable defaults |
-| 2026-04-06 | Added generic A* pathfinding        | Standalone graph-agnostic pathfinding with configurable callbacks and early termination |
-| 2026-04-06 | Added simulation speed control       | Speed multiplier and pause/resume on GameLoop, proxied via World                             |
-| 2026-04-06 | Added ClientAdapter | Transport-agnostic client protocol with typed messages for server-client communication |
-| 2026-04-06 | Added getComponents batch API      | Reduces verbosity when systems need multiple components per entity        |
-| 2026-04-06 | Added entity destroy hooks           | onDestroy/offDestroy callbacks fire before component removal for relationship cleanup |
-| 2026-04-06 | Added behavior tree framework        | Standalone generic BT with ECS-compatible state (BTState) and game-defined TContext    |
-| 2026-04-10 | Added RTS-scale standalone primitives | OccupancyGrid, queued grid path helpers, VisibilityMap, and benchmark harness |
-| 2026-04-10 | Added render projection and debugger helpers | RenderAdapter for renderer-facing projections and WorldDebugger with probe support |
-| 2026-04-10 | Hardened engine invariants           | Added JSON-safe component/resource state, entity refs, explicit write APIs, read-only grid exposure, resource snapshot v2, package exports/build, and CI |
-| 2026-04-11 | Added scenario runner harness        | `runScenario()` for deterministic setup/run/check orchestration over the AI-facing debug/history surfaces |
-| 2026-04-12 | Added 6 engine ergonomics features | Typed component registry, loose system typing, world-level state store, spatial query helpers, system ordering constraints, entity tags & metadata — addressing civ-sim-web integration friction |
+For architectural decisions, see `docs/architecture/decisions.md`.
+For architecture drift history, see `docs/architecture/drift-log.md`.
