@@ -24,7 +24,7 @@ Requires Node.js 18+.
 - **[Documentation Hub](docs/README.md)** - Full navigation for tutorials, guides, plans, reviews, and project history
 - **[Getting Started](docs/guides/getting-started.md)** - Fastest way to get productive with the engine
 - **[API Reference](docs/api-reference.md)** - Public types, methods, and standalone utilities
-- **[Architecture](docs/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
+- **[Architecture](docs/architecture/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
@@ -108,11 +108,11 @@ Use explicit instrumentation profiles in `WorldConfig`:
 - `minimal` for QA/staging: coarse implicit metrics with lower hot-path overhead
 - `release` for shipping: no implicit per-tick metrics, while explicit AI/debug APIs still work when you call them
 
-See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
+See [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for detailed documentation.
 
 ## Repository Layout
 
-The detailed file map lives in [Architecture](docs/ARCHITECTURE.md) and the full public surface lives in [API Reference](docs/api-reference.md).
+The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md) and the full public surface lives in [API Reference](docs/api-reference.md).
 
 At the repo level:
 
