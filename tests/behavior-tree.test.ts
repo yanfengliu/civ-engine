@@ -227,6 +227,171 @@ describe('BehaviorTree', () => {
     });
   });
 
+  describe('Reactive Selector', () => {
+    it('re-evaluates higher-priority children each tick even when later child was RUNNING', () => {
+      let highPrioritySucceeds = false;
+      let lowPriorityTicks = 0;
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([
+          b.condition(() => highPrioritySucceeds),
+          b.action(() => {
+            lowPriorityTicks++;
+            return NodeStatus.RUNNING;
+          }),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(lowPriorityTicks).toBe(1);
+
+      highPrioritySucceeds = true;
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+      expect(lowPriorityTicks).toBe(1);
+    });
+
+    it('does not write to state.running[index] when returning RUNNING', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([b.action(() => NodeStatus.RUNNING)]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      tree.tick(ctx);
+      expect(ctx.state.running[tree.index]).toBe(-1);
+    });
+
+    it('returns SUCCESS on first child success', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([
+          b.action(() => NodeStatus.SUCCESS),
+          b.action(() => NodeStatus.FAILURE),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+    });
+
+    it('returns FAILURE when all children fail', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([
+          b.action(() => NodeStatus.FAILURE),
+          b.action(() => NodeStatus.FAILURE),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+      expect(tree.tick(ctx)).toBe(NodeStatus.FAILURE);
+    });
+
+    it('does not suppress nested selector resume behavior', () => {
+      let innerTicks = 0;
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([
+          b.selector([
+            b.action(() => NodeStatus.FAILURE),
+            b.action(() => {
+              innerTicks++;
+              return innerTicks === 1 ? NodeStatus.RUNNING : NodeStatus.SUCCESS;
+            }),
+          ]),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+      expect(innerTicks).toBe(2);
+    });
+  });
+
+  describe('Reactive Sequence', () => {
+    it('restarts from child 0 when a later child was RUNNING', () => {
+      const ticked: number[] = [];
+      let childTwoCalls = 0;
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSequence([
+          b.action(() => {
+            ticked.push(0);
+            return NodeStatus.SUCCESS;
+          }),
+          b.action(() => {
+            ticked.push(1);
+            childTwoCalls++;
+            return childTwoCalls === 1 ? NodeStatus.RUNNING : NodeStatus.SUCCESS;
+          }),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+      expect(ticked).toEqual([0, 1, 0, 1]);
+    });
+
+    it('does not write to state.running[index] when returning RUNNING', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSequence([b.action(() => NodeStatus.RUNNING)]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      tree.tick(ctx);
+      expect(ctx.state.running[tree.index]).toBe(-1);
+    });
+
+    it('returns SUCCESS when all children succeed', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSequence([
+          b.action(() => NodeStatus.SUCCESS),
+          b.action(() => NodeStatus.SUCCESS),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+    });
+
+    it('returns FAILURE on first child failure', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSequence([
+          b.action(() => NodeStatus.FAILURE),
+          b.action(() => NodeStatus.SUCCESS),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+      expect(tree.tick(ctx)).toBe(NodeStatus.FAILURE);
+    });
+
+    it('condition + reactiveSequence gives guard-then-body re-check each tick', () => {
+      let guardTrue = true;
+      let bodyTicks = 0;
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSequence([
+          b.condition(() => guardTrue),
+          b.action(() => {
+            bodyTicks++;
+            return NodeStatus.RUNNING;
+          }),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(bodyTicks).toBe(1);
+
+      guardTrue = false;
+      expect(tree.tick(ctx)).toBe(NodeStatus.FAILURE);
+      expect(bodyTicks).toBe(1);
+    });
+  });
+
   describe('nested trees', () => {
     it('selector containing sequences', () => {
       const tree = createBehaviorTree<TestContext>(getState, (b) =>

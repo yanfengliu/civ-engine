@@ -118,11 +118,57 @@ class SequenceNode<TContext> extends BTNode<TContext> {
   }
 }
 
+class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
+  readonly children: BTNode<TContext>[];
+
+  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
+    super(index, nodeCount);
+    this.children = children;
+  }
+
+  tick(context: TContext): NodeStatus {
+    for (let i = 0; i < this.children.length; i++) {
+      const status = this.children[i].tick(context);
+      if (status === NodeStatus.RUNNING) {
+        return NodeStatus.RUNNING;
+      }
+      if (status === NodeStatus.SUCCESS) {
+        return NodeStatus.SUCCESS;
+      }
+    }
+    return NodeStatus.FAILURE;
+  }
+}
+
+class ReactiveSequenceNode<TContext> extends BTNode<TContext> {
+  readonly children: BTNode<TContext>[];
+
+  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
+    super(index, nodeCount);
+    this.children = children;
+  }
+
+  tick(context: TContext): NodeStatus {
+    for (let i = 0; i < this.children.length; i++) {
+      const status = this.children[i].tick(context);
+      if (status === NodeStatus.RUNNING) {
+        return NodeStatus.RUNNING;
+      }
+      if (status === NodeStatus.FAILURE) {
+        return NodeStatus.FAILURE;
+      }
+    }
+    return NodeStatus.SUCCESS;
+  }
+}
+
 export interface TreeBuilder<TContext> {
   action(fn: (ctx: TContext) => NodeStatus): BTNode<TContext>;
   condition(fn: (ctx: TContext) => boolean): BTNode<TContext>;
   selector(children: BTNode<TContext>[]): BTNode<TContext>;
   sequence(children: BTNode<TContext>[]): BTNode<TContext>;
+  reactiveSelector(children: BTNode<TContext>[]): BTNode<TContext>;
+  reactiveSequence(children: BTNode<TContext>[]): BTNode<TContext>;
 }
 
 export function createBTState(tree: BTNode<unknown>): BTState {
@@ -151,6 +197,16 @@ export function createBehaviorTree<TContext>(
       const index = nextIndex++;
       const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
       return new SequenceNode(index, 1 + childCount, children, getState);
+    },
+    reactiveSelector(children) {
+      const index = nextIndex++;
+      const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
+      return new ReactiveSelectorNode(index, 1 + childCount, children);
+    },
+    reactiveSequence(children) {
+      const index = nextIndex++;
+      const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
+      return new ReactiveSequenceNode(index, 1 + childCount, children);
     },
   };
 
