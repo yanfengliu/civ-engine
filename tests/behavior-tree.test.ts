@@ -3,6 +3,8 @@ import {
   NodeStatus,
   createBehaviorTree,
   createBTState,
+  clearRunningState,
+  BTNode,
 } from '../src/behavior-tree.js';
 
 interface TestContext {
@@ -389,6 +391,55 @@ describe('BehaviorTree', () => {
       guardTrue = false;
       expect(tree.tick(ctx)).toBe(NodeStatus.FAILURE);
       expect(bodyTicks).toBe(1);
+    });
+  });
+
+  describe('clearRunningState', () => {
+    it('resets every running index to -1 when called without a node', () => {
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.selector([
+          b.sequence([
+            b.action(() => NodeStatus.SUCCESS),
+            b.action(() => NodeStatus.RUNNING),
+          ]),
+          b.action(() => NodeStatus.SUCCESS),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      tree.tick(ctx);
+      expect(ctx.state.running.some((v) => v !== -1)).toBe(true);
+
+      clearRunningState(ctx.state);
+      expect(ctx.state.running.every((v) => v === -1)).toBe(true);
+    });
+
+    it('resets only the given subtree slice when a node is provided', () => {
+      let subtreeRoot!: BTNode<TestContext>;
+      const tree = createBehaviorTree<TestContext>(getState, (b) => {
+        subtreeRoot = b.sequence([
+          b.action(() => NodeStatus.SUCCESS),
+          b.action(() => NodeStatus.RUNNING),
+        ]);
+        return b.selector([subtreeRoot, b.action(() => NodeStatus.SUCCESS)]);
+      });
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      tree.tick(ctx);
+      ctx.state.running[tree.index] = 0;
+
+      clearRunningState(ctx.state, subtreeRoot);
+
+      for (
+        let i = subtreeRoot.index;
+        i < subtreeRoot.index + subtreeRoot.nodeCount;
+        i++
+      ) {
+        expect(ctx.state.running[i]).toBe(-1);
+      }
+      expect(ctx.state.running[tree.index]).toBe(0);
     });
   });
 

@@ -9,12 +9,18 @@ export interface BTState {
 }
 
 export abstract class BTNode<TContext> {
-  readonly index: number;
-  readonly nodeCount: number;
+  index: number;
+  nodeCount: number;
+  readonly children: ReadonlyArray<BTNode<TContext>>;
 
-  constructor(index: number, nodeCount: number) {
+  constructor(
+    index: number,
+    nodeCount: number,
+    children: ReadonlyArray<BTNode<TContext>> = [],
+  ) {
     this.index = index;
     this.nodeCount = nodeCount;
+    this.children = children;
   }
 
   abstract tick(context: TContext): NodeStatus;
@@ -47,7 +53,6 @@ class ConditionNode<TContext> extends BTNode<TContext> {
 }
 
 class SelectorNode<TContext> extends BTNode<TContext> {
-  readonly children: BTNode<TContext>[];
   private getState: (ctx: TContext) => BTState;
 
   constructor(
@@ -56,8 +61,7 @@ class SelectorNode<TContext> extends BTNode<TContext> {
     children: BTNode<TContext>[],
     getState: (ctx: TContext) => BTState,
   ) {
-    super(index, nodeCount);
-    this.children = children;
+    super(index, nodeCount, children);
     this.getState = getState;
   }
 
@@ -83,7 +87,6 @@ class SelectorNode<TContext> extends BTNode<TContext> {
 }
 
 class SequenceNode<TContext> extends BTNode<TContext> {
-  readonly children: BTNode<TContext>[];
   private getState: (ctx: TContext) => BTState;
 
   constructor(
@@ -92,8 +95,7 @@ class SequenceNode<TContext> extends BTNode<TContext> {
     children: BTNode<TContext>[],
     getState: (ctx: TContext) => BTState,
   ) {
-    super(index, nodeCount);
-    this.children = children;
+    super(index, nodeCount, children);
     this.getState = getState;
   }
 
@@ -119,11 +121,8 @@ class SequenceNode<TContext> extends BTNode<TContext> {
 }
 
 class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
-  readonly children: BTNode<TContext>[];
-
   constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
-    super(index, nodeCount);
-    this.children = children;
+    super(index, nodeCount, children);
   }
 
   tick(context: TContext): NodeStatus {
@@ -141,11 +140,8 @@ class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
 }
 
 class ReactiveSequenceNode<TContext> extends BTNode<TContext> {
-  readonly children: BTNode<TContext>[];
-
   constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
-    super(index, nodeCount);
-    this.children = children;
+    super(index, nodeCount, children);
   }
 
   tick(context: TContext): NodeStatus {
@@ -169,6 +165,22 @@ export interface TreeBuilder<TContext> {
   sequence(children: BTNode<TContext>[]): BTNode<TContext>;
   reactiveSelector(children: BTNode<TContext>[]): BTNode<TContext>;
   reactiveSequence(children: BTNode<TContext>[]): BTNode<TContext>;
+}
+
+/**
+ * Re-indexes the tree in depth-first pre-order so that every subtree
+ * occupies a contiguous slice [node.index, node.index + node.nodeCount).
+ * Returns the total node count.
+ */
+function reindexPreOrder(node: BTNode<unknown>, nextIndex: number): number {
+  node.index = nextIndex;
+  let count = 1;
+  for (const child of node.children) {
+    const childCount = reindexPreOrder(child, nextIndex + count);
+    count += childCount;
+  }
+  node.nodeCount = count;
+  return count;
 }
 
 export function createBTState(tree: BTNode<unknown>): BTState {
@@ -210,5 +222,23 @@ export function createBehaviorTree<TContext>(
     },
   };
 
-  return define(builder);
+  const root = define(builder);
+  reindexPreOrder(root, 0);
+  return root;
+}
+
+export function clearRunningState(
+  state: BTState,
+  node?: BTNode<unknown>,
+): void {
+  if (node === undefined) {
+    for (let i = 0; i < state.running.length; i++) {
+      state.running[i] = -1;
+    }
+    return;
+  }
+  const end = node.index + node.nodeCount;
+  for (let i = node.index; i < end; i++) {
+    state.running[i] = -1;
+  }
 }
