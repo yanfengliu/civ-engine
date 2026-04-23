@@ -956,6 +956,8 @@ interface TreeBuilder<TContext> {
   condition(fn: (ctx: TContext) => boolean): BTNode<TContext>;
   selector(children: BTNode<TContext>[]): BTNode<TContext>;
   sequence(children: BTNode<TContext>[]): BTNode<TContext>;
+  reactiveSelector(children: BTNode<TContext>[]): BTNode<TContext>;
+  reactiveSequence(children: BTNode<TContext>[]): BTNode<TContext>;
 }
 ```
 
@@ -1173,19 +1175,30 @@ Returns `true` only if the referenced entity ID is alive and still has the same 
 
 ### Components
 
-#### `registerComponent<T>(key)`
+#### `registerComponent<T>(key, options?)`
 
 ```typescript
-registerComponent<T>(key: string): void
+registerComponent<T>(key: string, options?: ComponentOptions): void
+
+interface ComponentOptions {
+  diffMode?: 'strict' | 'semantic';
+}
 ```
 
 Registers a component type by string key. Must be called before using `addComponent`, `getComponent`, `removeComponent`, or `query` with this key.
+
+`options.diffMode` controls how component writes participate in `TickDiff`:
+- `'strict'` (default) — every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. Preserves per-write audit semantics.
+- `'semantic'` — writes are fingerprinted against the baseline from the last tick; identical rewrites do not mark the entity dirty. Use this for components whose sync systems rewrite unchanged values every tick (e.g. `position`, `transform`) to keep `TickDiff` liveness signals high.
 
 **Throws:** `Error` if a component with this key is already registered.
 
 ```typescript
 interface Health { hp: number; maxHp: number }
 world.registerComponent<Health>('health');
+
+interface Transform { x: number; y: number }
+world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
 ```
 
 #### `addComponent<T>(entity, key, data)`
@@ -3548,6 +3561,47 @@ builder.sequence([
   builder.action((ctx) => ctx.moveToTarget()),
   builder.action((ctx) => ctx.attack()),
 ]);
+```
+
+#### `builder.reactiveSelector(children)`
+
+Like `selector`, but does not persist running state across ticks. Each tick re-evaluates children from index 0. Use when higher-priority children must pre-empt a previously running lower-priority branch (e.g., a sleep/eat need should interrupt a work branch).
+
+```typescript
+builder.reactiveSelector([
+  builder.sequence([
+    builder.condition((ctx) => ctx.energy < 0.2),
+    builder.action((ctx) => ctx.sleep()),
+  ]),
+  builder.action((ctx) => ctx.work()),
+]);
+```
+
+#### `builder.reactiveSequence(children)`
+
+Like `sequence`, but does not persist running state across ticks. Each tick restarts evaluation from child 0. Use with a `condition` as the first child to get guard-then-body semantics that re-check the guard every tick.
+
+```typescript
+builder.reactiveSequence([
+  builder.condition((ctx) => ctx.hasTarget),
+  builder.action((ctx) => ctx.advance()),
+]);
+```
+
+#### `clearRunningState(state, node?)`
+
+```typescript
+clearRunningState(state: BTState, node?: BTNode<unknown>): void
+```
+
+Resets running indices in a `BTState`. Without `node`, resets the entire tree. With `node`, resets only the subtree rooted at `node` — useful when external events (job reassignment, loot pickup) should interrupt a currently running branch.
+
+```typescript
+import { clearRunningState } from 'civ-engine';
+// Full reset
+clearRunningState(entity.btState);
+// Subtree reset
+clearRunningState(entity.btState, subtreeRoot);
 ```
 
 ### Complete Example
