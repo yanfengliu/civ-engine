@@ -75,6 +75,16 @@ world.registerComponent<Health>('health');
 world.registerComponent<Health>('health'); // Error: Component 'health' is already registered
 ```
 
+#### Diff mode (optional)
+
+For components whose sync systems rewrite unchanged values every tick, pass `{ diffMode: 'semantic' }` to suppress no-op writes from `TickDiff`:
+
+```typescript
+world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
+```
+
+Semantic mode fingerprints writes against a per-tick baseline and skips the dirty flag when the value is unchanged. The default `'strict'` preserves per-write dirty semantics. See `serialization-and-diffs.md` for details.
+
 ### Storage model
 
 Components are stored in sparse arrays indexed by entity ID. This gives O(1) get/set/remove but may waste memory for components that are rarely used across a large entity range. In practice, this is efficient for typical game entity counts.

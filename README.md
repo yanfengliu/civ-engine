@@ -77,7 +77,7 @@ world.step();
 | **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
 | **Debugging**               | `WorldDebugger`, machine-readable issues, structured tick failures, `WorldHistoryRecorder`, range summaries, and probes for headless inspection |
 | **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
-| **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence nodes                                                 |
+| **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence, and reactive (priority-re-evaluating) nodes          |
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **World State**             | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc.                          |
 | **Tags & Metadata**         | Entity labels with reverse-index (`getByTag`), per-entity metadata with unique lookup (`getByMeta`)                   |

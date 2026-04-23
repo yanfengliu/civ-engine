@@ -185,13 +185,14 @@ const moveToTarget = createBehaviorTree<AIContext>(
 );
 ```
 
-When a selector has a running child, it resumes from that child instead of starting from the first child. This means high-priority checks are skipped until the running action completes or is interrupted. If you need to check high-priority conditions every tick, structure your tree like this:
+When a selector has a running child, it resumes from that child instead of starting from the first child. This means high-priority checks are skipped until the running action completes. For most "dynamic priority" cases — where higher-priority needs must re-evaluate every tick, not just when the current action finishes — use `reactiveSelector` or `reactiveSequence` instead:
 
 ```typescript
-// This pattern checks "flee" every tick, even during movement
-b.selector([
+// reactiveSelector re-evaluates from child 0 every tick, so the
+// low-health flee branch interrupts any running lower-priority branch.
+b.reactiveSelector([
   b.sequence([
-    b.condition((ctx) => isLowHealth(ctx)), // checked every tick
+    b.condition((ctx) => isLowHealth(ctx)),
     fleeAction,
   ]),
   b.sequence([
@@ -200,6 +201,22 @@ b.selector([
   ]),
   wanderAction,
 ]);
+```
+
+Reactive variants never persist running state at their own slot — they behave like a classic priority selector. Descendants (nested normal `selector` / `sequence`) still resume as usual.
+
+### Imperative interrupts with `clearRunningState`
+
+When an external event (job reassignment, loot pickup, squad reform) needs to interrupt a running branch from outside the tree, call `clearRunningState(state, node?)`. Without a node argument it resets the entire tree; with a node, it resets only that subtree's slice.
+
+```typescript
+import { clearRunningState } from 'civ-engine';
+
+// Full reset — tree starts fresh on the next tick.
+clearRunningState(entity.btState);
+
+// Subtree reset — only the movement branch restarts.
+clearRunningState(entity.btState, movementSubtreeRoot);
 ```
 
 ## ECS Integration

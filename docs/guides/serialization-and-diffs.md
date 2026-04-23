@@ -248,6 +248,20 @@ world.onDiff((diff) => {
 });
 ```
 
+## Filtering blind rewrites with semantic diffMode
+
+By default, every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. For components whose sync systems rewrite unchanged values every tick (e.g. `position` or `transform` from a render-side sync) this pollutes `TickDiff` and masks real liveness signals.
+
+Opt in to semantic dirty-marking per component at registration:
+
+```typescript
+world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
+```
+
+In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. In-place mutation detection still works — if a system mutates the object returned from `getComponent`, the change is caught by the end-of-tick scan regardless of mode.
+
+`diffMode: 'strict'` (the default) preserves the per-write audit semantics that serialization consumers may depend on. Choose semantic only for components where the "identical rewrite" case is load-bearing noise.
+
 ## Patterns
 
 ### Incremental client sync
