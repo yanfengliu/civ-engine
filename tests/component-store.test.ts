@@ -160,4 +160,83 @@ describe('ComponentStore', () => {
       store.set(2, { fn: () => undefined } as unknown as { value: number }),
     ).toThrow();
   });
+
+  describe('semantic diffMode', () => {
+    it('defaults to strict mode (identical rewrites still mark dirty)', () => {
+      const store = new ComponentStore<{ x: number }>();
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.set(0, { x: 5 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[0, { x: 5 }]]);
+    });
+
+    it('semantic mode skips dirty-marking for identical rewrites', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.set(0, { x: 5 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([]);
+    });
+
+    it('semantic mode still marks dirty when value changes', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.set(0, { x: 6 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[0, { x: 6 }]]);
+    });
+
+    it('semantic mode marks dirty on first insert (no baseline)', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[0, { x: 5 }]]);
+    });
+
+    it('semantic mode still detects in-place mutations via getDirty scan', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      const value = store.get(0)!;
+      value.x = 99;
+
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[0, { x: 99 }]]);
+    });
+
+    it('semantic mode handles removal like strict', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.remove(0);
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([]);
+      expect(dirty.removed).toEqual([0]);
+    });
+
+    it('_generation still increments on every set() in both modes', () => {
+      const strict = new ComponentStore<{ x: number }>();
+      strict.set(0, { x: 5 });
+      strict.clearDirty();
+      const strictGenBefore = strict.generation;
+      strict.set(0, { x: 5 });
+      expect(strict.generation).toBe(strictGenBefore + 1);
+
+      const semantic = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      semantic.set(0, { x: 5 });
+      semantic.clearDirty();
+      const semanticGenBefore = semantic.generation;
+      semantic.set(0, { x: 5 });
+      expect(semantic.generation).toBe(semanticGenBefore + 1);
+    });
+  });
 });

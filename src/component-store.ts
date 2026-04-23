@@ -1,6 +1,10 @@
 import type { EntityId } from './types.js';
 import { jsonFingerprint } from './json.js';
 
+export interface ComponentStoreOptions {
+  diffMode?: 'strict' | 'semantic';
+}
+
 export class ComponentStore<T> {
   private data: (T | undefined)[] = [];
   private _generation = 0;
@@ -8,17 +12,29 @@ export class ComponentStore<T> {
   private dirtySet = new Set<EntityId>();
   private removedSet = new Set<EntityId>();
   private baseline = new Map<EntityId, string>();
+  private diffMode: 'strict' | 'semantic';
+
+  constructor(options: ComponentStoreOptions = {}) {
+    this.diffMode = options.diffMode ?? 'strict';
+  }
 
   set(entityId: EntityId, component: T): void {
     if (component === undefined) {
       throw new Error('Component data must not be undefined');
     }
-    jsonFingerprint(component, `component ${entityId}`);
-    if (this.data[entityId] === undefined) {
+    const fingerprint = jsonFingerprint(component, `component ${entityId}`);
+    const wasPresent = this.data[entityId] !== undefined;
+    if (!wasPresent) {
       this._size++;
     }
     this.data[entityId] = component;
     this._generation++;
+    if (this.diffMode === 'semantic' && wasPresent) {
+      const baseline = this.baseline.get(entityId);
+      if (baseline === fingerprint) {
+        return;
+      }
+    }
     this.dirtySet.add(entityId);
   }
 
@@ -92,8 +108,11 @@ export class ComponentStore<T> {
     }
   }
 
-  static fromEntries<T>(entries: Array<[EntityId, T]>): ComponentStore<T> {
-    const store = new ComponentStore<T>();
+  static fromEntries<T>(
+    entries: Array<[EntityId, T]>,
+    options?: ComponentStoreOptions,
+  ): ComponentStore<T> {
+    const store = new ComponentStore<T>(options);
     for (const [id, data] of entries) {
       store.set(id, data);
     }
