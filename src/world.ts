@@ -9,6 +9,7 @@ import type { WorldSnapshot } from './serializer.js';
 import type { TickDiff } from './diff.js';
 import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
+import type { ComponentStoreOptions } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
 import type { SpatialGridView } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';
@@ -205,9 +206,7 @@ interface TickRunOptions {
 
 export type ComponentRegistry = Record<string, unknown>;
 
-export interface ComponentOptions {
-  diffMode?: 'strict' | 'semantic';
-}
+export type ComponentOptions = ComponentStoreOptions;
 
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
