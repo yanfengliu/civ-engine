@@ -148,4 +148,38 @@ describe('State Diff', () => {
     const diff = world.getDiff()!;
     expect(diff.components['health'].set).toEqual([[e, { hp: 55 }]]);
   });
+
+  it('registerComponent with diffMode: "semantic" suppresses blind rewrites in the diff', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('transform', {
+      diffMode: 'semantic',
+    });
+    const e = world.createEntity();
+    world.addComponent(e, 'transform', { x: 5, y: 5 });
+    world.step();
+
+    world.registerSystem((w) => {
+      w.addComponent(e, 'transform', { x: 5, y: 5 });
+    });
+    world.step();
+
+    const diff = world.getDiff()!;
+    expect(diff.components['transform']).toBeUndefined();
+  });
+
+  it('registerComponent without diffMode still marks identical rewrites as dirty', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('transform');
+    const e = world.createEntity();
+    world.addComponent(e, 'transform', { x: 5, y: 5 });
+    world.step();
+
+    world.registerSystem((w) => {
+      w.addComponent(e, 'transform', { x: 5, y: 5 });
+    });
+    world.step();
+
+    const diff = world.getDiff()!;
+    expect(diff.components['transform'].set).toEqual([[e, { x: 5, y: 5 }]]);
+  });
 });

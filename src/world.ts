@@ -205,6 +205,10 @@ interface TickRunOptions {
 
 export type ComponentRegistry = Record<string, unknown>;
 
+export interface ComponentOptions {
+  diffMode?: 'strict' | 'semantic';
+}
+
 export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
@@ -348,14 +352,17 @@ export class World<
     }
   }
 
-  registerComponent<K extends keyof TComponents & string>(key: K): void;
+  registerComponent<K extends keyof TComponents & string>(
+    key: K,
+    options?: ComponentOptions,
+  ): void;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  registerComponent<T>(key: string): void;
-  registerComponent(key: string): void {
+  registerComponent<T>(key: string, options?: ComponentOptions): void;
+  registerComponent(key: string, options?: ComponentOptions): void {
     if (this.componentStores.has(key)) {
       throw new Error(`Component '${key}' is already registered`);
     }
-    this.componentStores.set(key, new ComponentStore<unknown>());
+    this.componentStores.set(key, new ComponentStore<unknown>(options));
     this.registerComponentBit(key);
   }
 
