@@ -12,7 +12,7 @@ import { ComponentStore } from './component-store.js';
 import type { ComponentStoreOptions } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
 import type { SpatialGridView } from './spatial-grid.js';
-import { GameLoop } from './game-loop.js';
+import { GameLoop, DEFAULT_MAX_TICKS_PER_FRAME } from './game-loop.js';
 import { EventBus } from './event-bus.js';
 import { CommandQueue } from './command-queue.js';
 import { ResourceStore } from './resource-store.js';
@@ -215,6 +215,7 @@ export class World<
 > {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
+  private componentOptions = new Map<string, ComponentOptions>();
   private componentBits = new Map<string, bigint>();
   private nextComponentBit = 0;
   private entitySignatures: bigint[] = [];
@@ -366,6 +367,9 @@ export class World<
       throw new Error(`Component '${key}' is already registered`);
     }
     this.componentStores.set(key, new ComponentStore<unknown>(options));
+    if (options) {
+      this.componentOptions.set(key, options);
+    }
     this.registerComponentBit(key);
   }
 
@@ -790,6 +794,18 @@ export class World<
     if (!this.detectInPlacePositionMutations) {
       config.detectInPlacePositionMutations = false;
     }
+    const maxTicksPerFrame = this.gameLoop.getMaxTicksPerFrame();
+    if (maxTicksPerFrame !== DEFAULT_MAX_TICKS_PER_FRAME) {
+      config.maxTicksPerFrame = maxTicksPerFrame;
+    }
+    if (this.instrumentationProfile !== 'full') {
+      config.instrumentationProfile = this.instrumentationProfile;
+    }
+
+    const componentOptions: Record<string, ComponentStoreOptions> = {};
+    for (const [key, opts] of this.componentOptions) {
+      componentOptions[key] = { ...opts };
+    }
 
     const snapshotTick = this.getObservableTick();
 
@@ -818,11 +834,12 @@ export class World<
     }
 
     return {
-      version: 4,
+      version: 5,
       config,
       tick: snapshotTick,
       entities: this.entityManager.getState(),
       components,
+      componentOptions,
       resources: this.resourceStore.getState(),
       rng: this.rng.getState(),
       state,
@@ -843,24 +860,29 @@ export class World<
     >,
   ): World<TEventMap, TCommandMap, TComponents> {
     const version = (snapshot as { version: number }).version;
-    if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
+    if (version < 1 || version > 5) {
       throw new Error(`Unsupported snapshot version: ${version}`);
     }
-    if (
-      snapshot.entities.generations.length !== snapshot.entities.alive.length
-    ) {
-      throw new Error('Invalid entity state: array length mismatch');
-    }
+
+    const componentOptions =
+      'componentOptions' in snapshot && snapshot.componentOptions
+        ? snapshot.componentOptions
+        : {};
 
     const world = new World<TEventMap, TCommandMap, TComponents>(snapshot.config);
     world.entityManager = EntityManager.fromState(snapshot.entities);
 
     world.componentStores.clear();
+    world.componentOptions.clear();
     for (const [key, entries] of Object.entries(snapshot.components)) {
+      const opts = componentOptions[key];
       world.componentStores.set(
         key,
-        ComponentStore.fromEntries(entries as Array<[number, unknown]>),
+        ComponentStore.fromEntries(entries as Array<[number, unknown]>, opts),
       );
+      if (opts) {
+        world.componentOptions.set(key, opts);
+      }
     }
     world.rebuildComponentSignatures();
     if ('resources' in snapshot) {
@@ -877,6 +899,11 @@ export class World<
     if ('tags' in snapshot) {
       for (const [entityIdStr, tagList] of Object.entries(snapshot.tags)) {
         const entityId = Number(entityIdStr);
+        if (!Number.isInteger(entityId) || entityId < 0) {
+          throw new Error(
+            `Invalid entity id key in snapshot.tags: ${JSON.stringify(entityIdStr)}`,
+          );
+        }
         for (const tag of tagList as string[]) {
           world.addTagInternal(entityId, tag);
         }
@@ -885,6 +912,11 @@ export class World<
     if ('metadata' in snapshot) {
       for (const [entityIdStr, metaRecord] of Object.entries(snapshot.metadata)) {
         const entityId = Number(entityIdStr);
+        if (!Number.isInteger(entityId) || entityId < 0) {
+          throw new Error(
+            `Invalid entity id key in snapshot.metadata: ${JSON.stringify(entityIdStr)}`,
+          );
+        }
         for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {
           world.setMetaInternal(entityId, key, value);
         }

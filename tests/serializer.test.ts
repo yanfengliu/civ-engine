@@ -19,7 +19,7 @@ describe('Serialization', () => {
 
     const snapshot = world.serialize();
 
-    expect(snapshot.version).toBe(4);
+    expect(snapshot.version).toBe(5);
     expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
@@ -32,7 +32,7 @@ describe('Serialization', () => {
     expect(snapshot.components['health']).toEqual([
       [0, { hp: 100 }],
     ]);
-    if (snapshot.version !== 4) throw new Error('Expected version 4 snapshot');
+    if (snapshot.version !== 5) throw new Error('Expected version 5 snapshot');
     expect(snapshot.resources).toEqual({
       registered: [],
       pools: {},
@@ -68,6 +68,154 @@ describe('Serialization', () => {
     expect(restored.getComponent(e0, 'health')).toEqual({ hp: 100 });
     expect(restored.getComponent(e1, 'health')).toEqual({ hp: 50 });
     expect(restored.getComponent(e1, 'position')).toBeUndefined();
+  });
+
+  it('snapshot preserves maxTicksPerFrame and instrumentationProfile (H6)', () => {
+    const world = new World({
+      gridWidth: 4,
+      gridHeight: 4,
+      tps: 60,
+      maxTicksPerFrame: 8,
+      instrumentationProfile: 'release',
+    });
+    const snapshot = world.serialize();
+    expect(snapshot.config.maxTicksPerFrame).toBe(8);
+    expect(snapshot.config.instrumentationProfile).toBe('release');
+
+    const restored = World.deserialize(snapshot);
+    expect(restored.getInstrumentationProfile()).toBe('release');
+  });
+
+  it('snapshot preserves per-component diffMode (H7)', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.registerComponent<{ x: number; y: number }>('position', { diffMode: 'semantic' });
+    world.registerComponent<{ hp: number }>('health'); // strict (default)
+    const e = world.createEntity();
+    world.addComponent(e, 'position', { x: 1, y: 2 });
+    world.addComponent(e, 'health', { hp: 10 });
+    world.step();
+
+    const snapshot = world.serialize();
+    if (snapshot.version !== 5) throw new Error('Expected v5');
+    expect(snapshot.componentOptions?.position).toEqual({ diffMode: 'semantic' });
+    // strict (default) options either omitted or explicitly strict; both acceptable
+    const healthOpts = snapshot.componentOptions?.health;
+    if (healthOpts !== undefined) {
+      expect(healthOpts.diffMode ?? 'strict').toBe('strict');
+    }
+
+    const restored = World.deserialize(snapshot);
+    // Round-trip: identical rewrite should be suppressed in semantic mode
+    restored.setComponent(e, 'position', { x: 1, y: 2 });
+    restored.step();
+    const diff = restored.getDiff()!;
+    expect(diff.components.position?.set ?? []).toEqual([]);
+  });
+
+  it('EntityManager.fromState rejects mismatched array lengths (L8)', async () => {
+    const { EntityManager } = await import('../src/entity-manager.js');
+    expect(() =>
+      EntityManager.fromState({
+        generations: [0, 0],
+        alive: [true],
+        freeList: [],
+      }),
+    ).toThrow();
+  });
+
+  it('EntityManager.fromState rejects freeList ids that point to alive entities (L8)', async () => {
+    const { EntityManager } = await import('../src/entity-manager.js');
+    expect(() =>
+      EntityManager.fromState({
+        generations: [0, 0],
+        alive: [true, true],
+        freeList: [0],
+      }),
+    ).toThrow();
+  });
+
+  it('ResourceStore.fromState rejects duplicate transfer ids (M6)', async () => {
+    const { ResourceStore } = await import('../src/resource-store.js');
+    expect(() =>
+      ResourceStore.fromState({
+        registered: [['food', { defaultMax: null }]],
+        pools: {},
+        production: {},
+        consumption: {},
+        transfers: [
+          { id: 0, from: 0, to: 1, resource: 'food', rate: 1 },
+          { id: 0, from: 2, to: 3, resource: 'food', rate: 1 },
+        ],
+        nextTransferId: 1,
+      }),
+    ).toThrow();
+  });
+
+  it('ResourceStore.fromState normalizes nextTransferId above existing transfer ids (M6)', async () => {
+    const { ResourceStore } = await import('../src/resource-store.js');
+    const store = ResourceStore.fromState({
+      registered: [['food', { defaultMax: null }]],
+      pools: {},
+      production: {},
+      consumption: {},
+      transfers: [
+        { id: 5, from: 0, to: 1, resource: 'food', rate: 1 },
+      ],
+      nextTransferId: 1,
+    });
+    const id = store.addTransfer(0, 1, 'food', 1);
+    expect(id).toBeGreaterThan(5);
+  });
+
+  it('ResourceStore.fromState clamps pool.current to pool.max (M6)', async () => {
+    const { ResourceStore } = await import('../src/resource-store.js');
+    const store = ResourceStore.fromState({
+      registered: [['gold', { defaultMax: 100 }]],
+      pools: {
+        gold: [[0, { current: 999, max: 100 }]],
+      },
+      production: {},
+      consumption: {},
+      transfers: [],
+      nextTransferId: 0,
+    });
+    expect(store.getResource(0, 'gold')).toEqual({ current: 100, max: 100 });
+  });
+
+  it('VisibilityMap.getState returns up-to-date data without explicit update() (M5)', async () => {
+    const { VisibilityMap } = await import('../src/visibility-map.js');
+    const map = new VisibilityMap(8, 8);
+    map.setSource(1, 'src1', { x: 4, y: 4, radius: 2 });
+    const state = map.getState();
+    const player = state.players.find(([id]) => id === 1);
+    expect(player).toBeDefined();
+    // explored cells should reflect the new source position even without explicit update
+    const explored = (player![1] as { explored: number[] }).explored;
+    expect(explored.length).toBeGreaterThan(0);
+  });
+
+  it('deserialize rejects non-integer entity-id keys in tags/metadata (L9)', () => {
+    const bad = {
+      version: 5 as const,
+      config: { gridWidth: 10, gridHeight: 10, tps: 60 },
+      tick: 0,
+      entities: { generations: [], alive: [], freeList: [] },
+      components: {},
+      componentOptions: {},
+      resources: {
+        registered: [],
+        pools: {},
+        production: {},
+        consumption: {},
+        transfers: [],
+        nextTransferId: 0,
+      },
+      rng: { state: 1 },
+      state: {},
+      tags: { abc: ['nope'] } as unknown as Record<number, string[]>,
+      metadata: {},
+    };
+    expect(() => World.deserialize(bad as never)).toThrow();
   });
 
   it('deserialize throws on unsupported version', () => {
@@ -161,7 +309,7 @@ describe('Serialization', () => {
       components: {},
     };
     expect(() => World.deserialize(bad)).toThrow(
-      'Invalid entity state: array length mismatch',
+      /generations\.length must equal alive\.length/,
     );
   });
 

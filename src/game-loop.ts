@@ -1,3 +1,5 @@
+export const DEFAULT_MAX_TICKS_PER_FRAME = 4;
+
 export class GameLoop {
   private _tick = 0;
   private readonly _tps: number;
@@ -31,7 +33,11 @@ export class GameLoop {
     this.tickDuration = 1000 / config.tps;
     this.onTick = config.onTick;
     this.onError = config.onError ?? null;
-    this.maxTicksPerFrame = config.maxTicksPerFrame ?? 4;
+    this.maxTicksPerFrame = config.maxTicksPerFrame ?? DEFAULT_MAX_TICKS_PER_FRAME;
+  }
+
+  getMaxTicksPerFrame(): number {
+    return this.maxTicksPerFrame;
   }
 
   step(): void {

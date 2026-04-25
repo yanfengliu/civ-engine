@@ -74,6 +74,30 @@ export class EntityManager {
     alive: boolean[];
     freeList: number[];
   }): EntityManager {
+    if (state.generations.length !== state.alive.length) {
+      throw new Error(
+        'EntityManager.fromState: generations.length must equal alive.length',
+      );
+    }
+    const seen = new Set<number>();
+    for (const id of state.freeList) {
+      if (!Number.isInteger(id) || id < 0 || id >= state.alive.length) {
+        throw new Error(
+          `EntityManager.fromState: freeList contains invalid id ${id}`,
+        );
+      }
+      if (state.alive[id]) {
+        throw new Error(
+          `EntityManager.fromState: freeList id ${id} points to an alive entity`,
+        );
+      }
+      if (seen.has(id)) {
+        throw new Error(
+          `EntityManager.fromState: freeList contains duplicate id ${id}`,
+        );
+      }
+      seen.add(id);
+    }
     const em = new EntityManager();
     em.generations = [...state.generations];
     em.alive = [...state.alive];

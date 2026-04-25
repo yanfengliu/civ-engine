@@ -126,6 +126,7 @@ export class VisibilityMap {
   }
 
   getState(): VisibilityMapState {
+    this.update();
     const players: VisibilityMapState['players'] = [...this.players.entries()]
       .sort(compareByNormalizedKey)
       .map(([playerId, player]) => [

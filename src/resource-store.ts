@@ -305,9 +305,12 @@ export class ResourceStore {
       const poolMap = store.pools.get(key)!;
       for (const [entityId, pool] of entries) {
         assertNonNegativeFinite(pool.current, 'Resource current');
+        const max = normalizeMax(pool.max);
+        const clampedCurrent =
+          max !== null && pool.current > max ? max : pool.current;
         poolMap.set(entityId, {
-          current: pool.current,
-          max: normalizeMax(pool.max),
+          current: clampedCurrent,
+          max,
         });
       }
     }
@@ -330,15 +333,29 @@ export class ResourceStore {
       }
     }
 
+    const seenTransferIds = new Set<number>();
+    let maxTransferId = -1;
     store.transfers = state.transfers.map((transfer) => {
       store.getOpts(transfer.resource);
       assertNonNegativeFinite(transfer.rate, 'Transfer rate');
+      if (!Number.isInteger(transfer.id) || transfer.id < 0) {
+        throw new Error(
+          `Transfer id must be a non-negative integer (got ${transfer.id})`,
+        );
+      }
+      if (seenTransferIds.has(transfer.id)) {
+        throw new Error(`Duplicate transfer id ${transfer.id} in fromState`);
+      }
+      seenTransferIds.add(transfer.id);
+      if (transfer.id > maxTransferId) {
+        maxTransferId = transfer.id;
+      }
       return { ...transfer };
     });
     if (!Number.isInteger(state.nextTransferId) || state.nextTransferId < 0) {
       throw new Error('nextTransferId must be a non-negative integer');
     }
-    store.nextTransferId = state.nextTransferId;
+    store.nextTransferId = Math.max(state.nextTransferId, maxTransferId + 1);
     store.clearDirty();
     return store;
   }

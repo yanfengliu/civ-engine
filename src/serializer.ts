@@ -1,6 +1,7 @@
 import type { EntityId, WorldConfig } from './types.js';
 import type { ResourceStoreState } from './resource-store.js';
 import type { RandomState } from './random.js';
+import type { ComponentStoreOptions } from './component-store.js';
 
 export interface WorldSnapshotV1 {
   version: 1;
@@ -58,4 +59,27 @@ export interface WorldSnapshotV4 {
   metadata: Record<number, Record<string, string | number>>;
 }
 
-export type WorldSnapshot = WorldSnapshotV1 | WorldSnapshotV2 | WorldSnapshotV3 | WorldSnapshotV4;
+export interface WorldSnapshotV5 {
+  version: 5;
+  config: WorldConfig;
+  tick: number;
+  entities: {
+    generations: number[];
+    alive: boolean[];
+    freeList: number[];
+  };
+  components: Record<string, Array<[EntityId, unknown]>>;
+  componentOptions: Record<string, ComponentStoreOptions>;
+  resources: ResourceStoreState;
+  rng: RandomState;
+  state: Record<string, unknown>;
+  tags: Record<number, string[]>;
+  metadata: Record<number, Record<string, string | number>>;
+}
+
+export type WorldSnapshot =
+  | WorldSnapshotV1
+  | WorldSnapshotV2
+  | WorldSnapshotV3
+  | WorldSnapshotV4
+  | WorldSnapshotV5;
