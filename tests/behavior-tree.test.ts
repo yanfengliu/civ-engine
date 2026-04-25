@@ -394,6 +394,59 @@ describe('BehaviorTree', () => {
     });
   });
 
+  describe('Reactive preemption clears stateful subtree (H5)', () => {
+    it('reactiveSelector preempting a running Sequence resets its progress', () => {
+      const events: string[] = [];
+      let highPriorityActive = false;
+      const tree = createBehaviorTree<TestContext>(getState, (b) =>
+        b.reactiveSelector([
+          // High-priority guarded sequence — only triggers when active
+          b.sequence([
+            b.condition(() => highPriorityActive),
+            b.action(() => {
+              events.push('hi');
+              return NodeStatus.SUCCESS;
+            }),
+          ]),
+          // Lower-priority running sequence
+          b.sequence([
+            b.action(() => {
+              events.push('a');
+              return NodeStatus.SUCCESS;
+            }),
+            b.action(() => {
+              events.push('b');
+              return NodeStatus.RUNNING;
+            }),
+            b.action(() => {
+              events.push('c');
+              return NodeStatus.SUCCESS;
+            }),
+          ]),
+        ]),
+      );
+      const ctx = makeCtx();
+      ctx.state = createBTState(tree);
+
+      // Tick 1: low-priority runs, gets stuck on b
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(events).toEqual(['a', 'b']);
+
+      // Tick 2: high-priority becomes active and preempts
+      highPriorityActive = true;
+      events.length = 0;
+      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
+      expect(events).toEqual(['hi']);
+
+      // Tick 3: high-priority deactivates; low-priority should restart from 'a'
+      // (NOT resume from 'b' which it was running on tick 1)
+      highPriorityActive = false;
+      events.length = 0;
+      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
+      expect(events).toEqual(['a', 'b']);
+    });
+  });
+
   describe('clearRunningState', () => {
     it('resets every running index to -1 when called without a node', () => {
       const tree = createBehaviorTree<TestContext>(getState, (b) =>

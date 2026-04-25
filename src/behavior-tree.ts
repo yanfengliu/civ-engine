@@ -67,7 +67,7 @@ class SelectorNode<TContext> extends BTNode<TContext> {
 
   tick(context: TContext): NodeStatus {
     const state = this.getState(context);
-    const startIndex = Math.max(state.running[this.index], 0);
+    const startIndex = Math.max(state.running[this.index] ?? -1, 0);
 
     for (let i = startIndex; i < this.children.length; i++) {
       const status = this.children[i].tick(context);
@@ -101,7 +101,7 @@ class SequenceNode<TContext> extends BTNode<TContext> {
 
   tick(context: TContext): NodeStatus {
     const state = this.getState(context);
-    const startIndex = Math.max(state.running[this.index], 0);
+    const startIndex = Math.max(state.running[this.index] ?? -1, 0);
 
     for (let i = startIndex; i < this.children.length; i++) {
       const status = this.children[i].tick(context);
@@ -121,17 +121,28 @@ class SequenceNode<TContext> extends BTNode<TContext> {
 }
 
 class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
-  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
+  private getState: (ctx: TContext) => BTState;
+
+  constructor(
+    index: number,
+    nodeCount: number,
+    children: BTNode<TContext>[],
+    getState: (ctx: TContext) => BTState,
+  ) {
     super(index, nodeCount, children);
+    this.getState = getState;
   }
 
   tick(context: TContext): NodeStatus {
+    const state = this.getState(context);
     for (let i = 0; i < this.children.length; i++) {
       const status = this.children[i].tick(context);
       if (status === NodeStatus.RUNNING) {
+        clearReactivePreempted(state, this.children, i + 1);
         return NodeStatus.RUNNING;
       }
       if (status === NodeStatus.SUCCESS) {
+        clearReactivePreempted(state, this.children, i + 1);
         return NodeStatus.SUCCESS;
       }
     }
@@ -140,21 +151,46 @@ class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
 }
 
 class ReactiveSequenceNode<TContext> extends BTNode<TContext> {
-  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
+  private getState: (ctx: TContext) => BTState;
+
+  constructor(
+    index: number,
+    nodeCount: number,
+    children: BTNode<TContext>[],
+    getState: (ctx: TContext) => BTState,
+  ) {
     super(index, nodeCount, children);
+    this.getState = getState;
   }
 
   tick(context: TContext): NodeStatus {
+    const state = this.getState(context);
     for (let i = 0; i < this.children.length; i++) {
       const status = this.children[i].tick(context);
       if (status === NodeStatus.RUNNING) {
+        clearReactivePreempted(state, this.children, i + 1);
         return NodeStatus.RUNNING;
       }
       if (status === NodeStatus.FAILURE) {
+        clearReactivePreempted(state, this.children, i + 1);
         return NodeStatus.FAILURE;
       }
     }
     return NodeStatus.SUCCESS;
+  }
+}
+
+function clearReactivePreempted<TContext>(
+  state: BTState,
+  children: ReadonlyArray<BTNode<TContext>>,
+  startIndex: number,
+): void {
+  for (let j = startIndex; j < children.length; j++) {
+    const child = children[j];
+    const end = child.index + child.nodeCount;
+    for (let k = child.index; k < end; k++) {
+      state.running[k] = -1;
+    }
   }
 }
 
@@ -213,12 +249,12 @@ export function createBehaviorTree<TContext>(
     reactiveSelector(children) {
       const index = nextIndex++;
       const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
-      return new ReactiveSelectorNode(index, 1 + childCount, children);
+      return new ReactiveSelectorNode(index, 1 + childCount, children, getState);
     },
     reactiveSequence(children) {
       const index = nextIndex++;
       const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
-      return new ReactiveSequenceNode(index, 1 + childCount, children);
+      return new ReactiveSequenceNode(index, 1 + childCount, children, getState);
     },
   };
 
