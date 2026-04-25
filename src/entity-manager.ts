@@ -33,6 +33,23 @@ export class EntityManager {
     this.destroyedThisTick.push(id);
   }
 
+  // Marks the entity as no longer alive but does NOT push the id back onto the
+  // free-list, so callers running cleanup can prevent re-entrant destroy calls
+  // from recursing while still keeping the id reserved.
+  markDying(id: EntityId): void {
+    if (!this.alive[id]) return;
+    this.alive[id] = false;
+    this._count--;
+    this.generations[id]++;
+    this.destroyedThisTick.push(id);
+  }
+
+  // Returns the id to the free list so create() can recycle it. Safe to call
+  // after markDying() once cleanup is complete.
+  releaseId(id: EntityId): void {
+    this.freeList.push(id);
+  }
+
   isAlive(id: EntityId): boolean {
     return id >= 0 && id < this.alive.length && this.alive[id];
   }

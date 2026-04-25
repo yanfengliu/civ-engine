@@ -304,26 +304,32 @@ export class World<
   destroyEntity(id: EntityId): void {
     if (!this.entityManager.isAlive(id)) return;
 
-    // Mark dead first so re-entrant destroyEntity(id) calls inside callbacks
-    // hit the alive guard and return without recursing.
-    this.entityManager.destroy(id);
+    // Mark dying (alive=false, generation bumped) so re-entrant
+    // destroyEntity(id) calls hit the alive guard. Hold the id off the free
+    // list until cleanup finishes so a callback that creates a new entity
+    // cannot recycle this id mid-cleanup.
+    this.entityManager.markDying(id);
 
-    for (const callback of this.destroyCallbacks) {
-      callback(id, this);
-    }
+    try {
+      for (const callback of this.destroyCallbacks) {
+        callback(id, this);
+      }
+    } finally {
+      const prev = this.previousPositions.get(id);
+      if (prev) {
+        this.spatialGrid.remove(id, prev.x, prev.y);
+        this.previousPositions.delete(id);
+      }
+      this.setEntitySignature(id, 0n);
+      for (const store of this.componentStores.values()) {
+        store.remove(id);
+      }
+      this.resourceStore.removeEntity(id);
+      this.removeEntityTags(id);
+      this.removeEntityMeta(id);
 
-    const prev = this.previousPositions.get(id);
-    if (prev) {
-      this.spatialGrid.remove(id, prev.x, prev.y);
-      this.previousPositions.delete(id);
+      this.entityManager.releaseId(id);
     }
-    this.setEntitySignature(id, 0n);
-    for (const store of this.componentStores.values()) {
-      store.remove(id);
-    }
-    this.resourceStore.removeEntity(id);
-    this.removeEntityTags(id);
-    this.removeEntityMeta(id);
   }
 
   isAlive(id: EntityId): boolean {
@@ -521,22 +527,33 @@ export class World<
   ): EntityId | undefined {
     const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
     const mask = components.length > 0 ? this.queryMask(components) : 0n;
-    const entityIds = this.spatialGrid.getInRadius(cx, cy, maxRadius);
+    const seen = new Set<EntityId>();
     let bestId: EntityId | undefined;
     let bestDistSq = Infinity;
-    for (const id of entityIds) {
-      if (components.length > 0) {
-        const sig = this.entitySignatures[id] ?? 0n;
-        if ((sig & mask) !== mask) continue;
+
+    for (let r = 0; r <= maxRadius; r++) {
+      // Early-out: any entity outside the next ring would be farther than the
+      // best we've already found, so we can stop.
+      if (bestId !== undefined && bestDistSq <= (r - 1) * (r - 1)) {
+        return bestId;
       }
-      const pos = this.getComponent<Position>(id, this.positionKey);
-      if (!pos) continue;
-      const dx = pos.x - cx;
-      const dy = pos.y - cy;
-      const distSq = dx * dx + dy * dy;
-      if (distSq < bestDistSq) {
-        bestDistSq = distSq;
-        bestId = id;
+      const entityIds = this.spatialGrid.getInRadius(cx, cy, r);
+      for (const id of entityIds) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        if (components.length > 0) {
+          const sig = this.entitySignatures[id] ?? 0n;
+          if ((sig & mask) !== mask) continue;
+        }
+        const pos = this.getComponent<Position>(id, this.positionKey);
+        if (!pos) continue;
+        const dx = pos.x - cx;
+        const dy = pos.y - cy;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < bestDistSq) {
+          bestDistSq = distSq;
+          bestId = id;
+        }
       }
     }
     return bestId;
@@ -2204,38 +2221,10 @@ function cloneTickFailure(failure: TickFailure): TickFailure {
 }
 
 function cloneTickDiff(diff: TickDiff): TickDiff {
-  const components: TickDiff['components'] = {};
-  for (const [key, entry] of Object.entries(diff.components)) {
-    components[key] = {
-      set: entry.set.map(([id, data]) => [id, data]),
-      removed: [...entry.removed],
-    };
-  }
-  const resources: TickDiff['resources'] = {};
-  for (const [key, entry] of Object.entries(diff.resources)) {
-    resources[key] = {
-      set: entry.set.map(([id, pool]) => [id, { ...pool }]),
-      removed: [...entry.removed],
-    };
-  }
-  return {
-    tick: diff.tick,
-    entities: {
-      created: [...diff.entities.created],
-      destroyed: [...diff.entities.destroyed],
-    },
-    components,
-    resources,
-    state: {
-      set: { ...diff.state.set },
-      removed: [...diff.state.removed],
-    },
-    tags: diff.tags.map((t) => ({ entity: t.entity, tags: [...t.tags] })),
-    metadata: diff.metadata.map((m) => ({
-      entity: m.entity,
-      meta: { ...m.meta },
-    })),
-  };
+  // Deep-clone: component data and state values are JSON-compatible by
+  // contract (assertJsonCompatible runs at write time), so structuredClone /
+  // JSON round-trip is safe and gives true defensive isolation.
+  return JSON.parse(JSON.stringify(diff)) as TickDiff;
 }
 
 function createErrorDetails(error: unknown): {

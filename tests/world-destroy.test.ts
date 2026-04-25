@@ -37,6 +37,31 @@ describe('onDestroy / offDestroy', () => {
     expect(world.getComponent(e, 'health')).toBeUndefined();
   });
 
+  it('createEntity inside an onDestroy callback does NOT recycle the dying id', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    let recycled: number | null = null;
+    world.onDestroy((id, w) => {
+      const fresh = w.createEntity();
+      if (fresh === id) recycled = id;
+    });
+    const e = world.createEntity();
+    world.destroyEntity(e);
+    expect(recycled).toBeNull();
+  });
+
+  it('cleanup runs even if an onDestroy callback throws', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.registerComponent<{ hp: number }>('health');
+    world.onDestroy(() => {
+      throw new Error('callback failure');
+    });
+    const e = world.createEntity();
+    world.addComponent(e, 'health', { hp: 10 });
+    expect(() => world.destroyEntity(e)).toThrow('callback failure');
+    expect(world.isAlive(e)).toBe(false);
+    expect(world.getComponent(e, 'health')).toBeUndefined();
+  });
+
   it('callback re-entering destroyEntity for the same id does not recurse infinitely (H4)', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     let calls = 0;

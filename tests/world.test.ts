@@ -33,6 +33,27 @@ describe('World defensive views', () => {
     const second = world.getDiff();
     expect(second!.entities.created).not.toContain(999);
   });
+
+  it('getDiff deep-clones component data; mutating returned payloads does not affect the live store', () => {
+    type Components = { health: { hp: number } };
+    const world = new World<Record<string, never>, Record<string, never>, Components>({
+      gridWidth: 4,
+      gridHeight: 4,
+      tps: 60,
+    });
+    world.registerComponent<{ hp: number }>('health');
+    const e = world.createEntity();
+    world.registerSystem((w) => {
+      if (w.tick === 0) w.setComponent(e, 'health', { hp: 100 });
+    });
+    world.step();
+
+    const diff = world.getDiff();
+    if (!diff) throw new Error('expected a diff');
+    const setEntry = diff.components.health.set[0];
+    (setEntry[1] as { hp: number }).hp = 999;
+    expect(world.getComponent<{ hp: number }>(e, 'health')?.hp).toBe(100);
+  });
 });
 
 describe('World', () => {

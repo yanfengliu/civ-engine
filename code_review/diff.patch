@@ -1,0 +1,1824 @@
+diff --git a/src/behavior-tree.ts b/src/behavior-tree.ts
+index ae31c36..7ee5a98 100644
+--- a/src/behavior-tree.ts
++++ b/src/behavior-tree.ts
+@@ -67,7 +67,7 @@ class SelectorNode<TContext> extends BTNode<TContext> {
+ 
+   tick(context: TContext): NodeStatus {
+     const state = this.getState(context);
+-    const startIndex = Math.max(state.running[this.index], 0);
++    const startIndex = Math.max(state.running[this.index] ?? -1, 0);
+ 
+     for (let i = startIndex; i < this.children.length; i++) {
+       const status = this.children[i].tick(context);
+@@ -101,7 +101,7 @@ class SequenceNode<TContext> extends BTNode<TContext> {
+ 
+   tick(context: TContext): NodeStatus {
+     const state = this.getState(context);
+-    const startIndex = Math.max(state.running[this.index], 0);
++    const startIndex = Math.max(state.running[this.index] ?? -1, 0);
+ 
+     for (let i = startIndex; i < this.children.length; i++) {
+       const status = this.children[i].tick(context);
+@@ -121,17 +121,28 @@ class SequenceNode<TContext> extends BTNode<TContext> {
+ }
+ 
+ class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
+-  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
++  private getState: (ctx: TContext) => BTState;
++
++  constructor(
++    index: number,
++    nodeCount: number,
++    children: BTNode<TContext>[],
++    getState: (ctx: TContext) => BTState,
++  ) {
+     super(index, nodeCount, children);
++    this.getState = getState;
+   }
+ 
+   tick(context: TContext): NodeStatus {
++    const state = this.getState(context);
+     for (let i = 0; i < this.children.length; i++) {
+       const status = this.children[i].tick(context);
+       if (status === NodeStatus.RUNNING) {
++        clearReactivePreempted(state, this.children, i + 1);
+         return NodeStatus.RUNNING;
+       }
+       if (status === NodeStatus.SUCCESS) {
++        clearReactivePreempted(state, this.children, i + 1);
+         return NodeStatus.SUCCESS;
+       }
+     }
+@@ -140,17 +151,28 @@ class ReactiveSelectorNode<TContext> extends BTNode<TContext> {
+ }
+ 
+ class ReactiveSequenceNode<TContext> extends BTNode<TContext> {
+-  constructor(index: number, nodeCount: number, children: BTNode<TContext>[]) {
++  private getState: (ctx: TContext) => BTState;
++
++  constructor(
++    index: number,
++    nodeCount: number,
++    children: BTNode<TContext>[],
++    getState: (ctx: TContext) => BTState,
++  ) {
+     super(index, nodeCount, children);
++    this.getState = getState;
+   }
+ 
+   tick(context: TContext): NodeStatus {
++    const state = this.getState(context);
+     for (let i = 0; i < this.children.length; i++) {
+       const status = this.children[i].tick(context);
+       if (status === NodeStatus.RUNNING) {
++        clearReactivePreempted(state, this.children, i + 1);
+         return NodeStatus.RUNNING;
+       }
+       if (status === NodeStatus.FAILURE) {
++        clearReactivePreempted(state, this.children, i + 1);
+         return NodeStatus.FAILURE;
+       }
+     }
+@@ -158,6 +180,20 @@ class ReactiveSequenceNode<TContext> extends BTNode<TContext> {
+   }
+ }
+ 
++function clearReactivePreempted<TContext>(
++  state: BTState,
++  children: ReadonlyArray<BTNode<TContext>>,
++  startIndex: number,
++): void {
++  for (let j = startIndex; j < children.length; j++) {
++    const child = children[j];
++    const end = child.index + child.nodeCount;
++    for (let k = child.index; k < end; k++) {
++      state.running[k] = -1;
++    }
++  }
++}
++
+ export interface TreeBuilder<TContext> {
+   action(fn: (ctx: TContext) => NodeStatus): BTNode<TContext>;
+   condition(fn: (ctx: TContext) => boolean): BTNode<TContext>;
+@@ -213,12 +249,12 @@ export function createBehaviorTree<TContext>(
+     reactiveSelector(children) {
+       const index = nextIndex++;
+       const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
+-      return new ReactiveSelectorNode(index, 1 + childCount, children);
++      return new ReactiveSelectorNode(index, 1 + childCount, children, getState);
+     },
+     reactiveSequence(children) {
+       const index = nextIndex++;
+       const childCount = children.reduce((sum, c) => sum + c.nodeCount, 0);
+-      return new ReactiveSequenceNode(index, 1 + childCount, children);
++      return new ReactiveSequenceNode(index, 1 + childCount, children, getState);
+     },
+   };
+ 
+diff --git a/src/component-store.ts b/src/component-store.ts
+index 9c5534c..8d695b9 100644
+--- a/src/component-store.ts
++++ b/src/component-store.ts
+@@ -1,8 +1,18 @@
+ import type { EntityId } from './types.js';
+-import { jsonFingerprint } from './json.js';
++import { assertJsonCompatible, jsonFingerprint } from './json.js';
+ 
+ export interface ComponentStoreOptions {
+   diffMode?: 'strict' | 'semantic';
++  /**
++   * When true (default), `getDirty()` scans every entry and uses fingerprint
++   * comparison to detect in-place object mutations made after the previous
++   * `clearDirty()`. When false, only entries marked dirty via `set()`/`remove()`
++   * are reported. Setting this to false avoids the per-entity JSON.stringify cost
++   * on the diff path; callers must then write through `set()` for changes to be
++   * visible. `'semantic'` `diffMode` continues to use the baseline fingerprint
++   * to suppress identical rewrites regardless of this flag.
++   */
++  detectInPlaceMutations?: boolean;
+ }
+ 
+ export class ComponentStore<T> {
+@@ -13,29 +23,40 @@ export class ComponentStore<T> {
+   private removedSet = new Set<EntityId>();
+   private baseline = new Map<EntityId, string>();
+   private diffMode: 'strict' | 'semantic';
++  private detectInPlaceMutations: boolean;
+ 
+   constructor(options: ComponentStoreOptions = {}) {
+     this.diffMode = options.diffMode ?? 'strict';
++    this.detectInPlaceMutations = options.detectInPlaceMutations ?? true;
+   }
+ 
+   set(entityId: EntityId, component: T): void {
+     if (component === undefined) {
+       throw new Error('Component data must not be undefined');
+     }
+-    const fingerprint = jsonFingerprint(component, `component ${entityId}`);
+     const wasPresent = this.data[entityId] !== undefined;
+-    if (!wasPresent) {
+-      this._size++;
+-    }
+-    this.data[entityId] = component;
+-    this._generation++;
++
+     if (this.diffMode === 'semantic' && wasPresent) {
++      const fingerprint = jsonFingerprint(component, `component ${entityId}`);
+       const baseline = this.baseline.get(entityId);
++      this.data[entityId] = component;
++      this._generation++;
+       if (baseline === fingerprint) {
+         return;
+       }
++      this.dirtySet.add(entityId);
++      this.removedSet.delete(entityId);
++      return;
+     }
++
++    assertJsonCompatible(component, `component ${entityId}`);
++    if (!wasPresent) {
++      this._size++;
++    }
++    this.data[entityId] = component;
++    this._generation++;
+     this.dirtySet.add(entityId);
++    this.removedSet.delete(entityId);
+   }
+ 
+   get(entityId: EntityId): T | undefined {
+@@ -81,12 +102,14 @@ export class ComponentStore<T> {
+ 
+   getDirty(): { set: Array<[EntityId, T]>; removed: EntityId[] } {
+     const changed = new Set(this.dirtySet);
+-    for (const [id, data] of this.entries()) {
+-      if (changed.has(id)) continue;
+-      const previous = this.baseline.get(id);
+-      const current = jsonFingerprint(data, `component ${id}`);
+-      if (previous !== current) {
+-        changed.add(id);
++    if (this.detectInPlaceMutations) {
++      for (const [id, data] of this.entries()) {
++        if (changed.has(id)) continue;
++        const previous = this.baseline.get(id);
++        const current = jsonFingerprint(data, `component ${id}`);
++        if (previous !== current) {
++          changed.add(id);
++        }
+       }
+     }
+ 
+@@ -102,9 +125,11 @@ export class ComponentStore<T> {
+   clearDirty(): void {
+     this.dirtySet.clear();
+     this.removedSet.clear();
+-    this.baseline.clear();
+-    for (const [id, data] of this.entries()) {
+-      this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
++    if (this.detectInPlaceMutations || this.diffMode === 'semantic') {
++      this.baseline.clear();
++      for (const [id, data] of this.entries()) {
++        this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
++      }
+     }
+   }
+ 
+diff --git a/src/entity-manager.ts b/src/entity-manager.ts
+index eca187c..ca50087 100644
+--- a/src/entity-manager.ts
++++ b/src/entity-manager.ts
+@@ -37,6 +37,12 @@ export class EntityManager {
+     return id >= 0 && id < this.alive.length && this.alive[id];
+   }
+ 
++  *aliveEntities(): IterableIterator<EntityId> {
++    for (let i = 0; i < this.alive.length; i++) {
++      if (this.alive[i]) yield i;
++    }
++  }
++
+   getGeneration(id: EntityId): number {
+     return this.generations[id] ?? 0;
+   }
+@@ -74,6 +80,30 @@ export class EntityManager {
+     alive: boolean[];
+     freeList: number[];
+   }): EntityManager {
++    if (state.generations.length !== state.alive.length) {
++      throw new Error(
++        'EntityManager.fromState: generations.length must equal alive.length',
++      );
++    }
++    const seen = new Set<number>();
++    for (const id of state.freeList) {
++      if (!Number.isInteger(id) || id < 0 || id >= state.alive.length) {
++        throw new Error(
++          `EntityManager.fromState: freeList contains invalid id ${id}`,
++        );
++      }
++      if (state.alive[id]) {
++        throw new Error(
++          `EntityManager.fromState: freeList id ${id} points to an alive entity`,
++        );
++      }
++      if (seen.has(id)) {
++        throw new Error(
++          `EntityManager.fromState: freeList contains duplicate id ${id}`,
++        );
++      }
++      seen.add(id);
++    }
+     const em = new EntityManager();
+     em.generations = [...state.generations];
+     em.alive = [...state.alive];
+diff --git a/src/event-bus.ts b/src/event-bus.ts
+index 7d1eb8e..f2ec174 100644
+--- a/src/event-bus.ts
++++ b/src/event-bus.ts
+@@ -43,7 +43,7 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
+     type: keyof TEventMap;
+     data: TEventMap[keyof TEventMap];
+   }> {
+-    return this.buffer;
++    return [...this.buffer];
+   }
+ 
+   clear(): void {
+diff --git a/src/game-loop.ts b/src/game-loop.ts
+index f7c7ad2..d3f3626 100644
+--- a/src/game-loop.ts
++++ b/src/game-loop.ts
+@@ -1,3 +1,5 @@
++export const DEFAULT_MAX_TICKS_PER_FRAME = 4;
++
+ export class GameLoop {
+   private _tick = 0;
+   private readonly _tps: number;
+@@ -31,11 +33,18 @@ export class GameLoop {
+     this.tickDuration = 1000 / config.tps;
+     this.onTick = config.onTick;
+     this.onError = config.onError ?? null;
+-    this.maxTicksPerFrame = config.maxTicksPerFrame ?? 4;
++    this.maxTicksPerFrame = config.maxTicksPerFrame ?? DEFAULT_MAX_TICKS_PER_FRAME;
++  }
++
++  getMaxTicksPerFrame(): number {
++    return this.maxTicksPerFrame;
+   }
+ 
+   step(): void {
+     this.onTick();
++  }
++
++  advance(): void {
+     this._tick++;
+   }
+ 
+diff --git a/src/history-recorder.ts b/src/history-recorder.ts
+index 27a4994..50c9ddd 100644
+--- a/src/history-recorder.ts
++++ b/src/history-recorder.ts
+@@ -252,10 +252,8 @@ export class WorldHistoryRecorder<
+ 
+   private captureDebug(): TDebug | null {
+     const debug = this.debugCapture?.() ?? null;
+-    if (debug !== null) {
+-      assertJsonCompatible(debug, 'history debug payload');
+-    }
+-    return debug;
++    if (debug === null) return null;
++    return cloneJsonValue(debug, 'history debug payload') as TDebug;
+   }
+ }
+ 
+diff --git a/src/noise.ts b/src/noise.ts
+index 4e7a688..20867c3 100644
+--- a/src/noise.ts
++++ b/src/noise.ts
+@@ -1,8 +1,8 @@
+-// 2D simplex noise gradients (8 directions)
+-const GRAD2 = [
++// 2D simplex noise gradients (8 directions). Length is load-bearing: indexed by `gi & 7`.
++const GRAD2: ReadonlyArray<readonly [number, number]> = [
+   [1, 1], [-1, 1], [1, -1], [-1, -1],
+   [1, 0], [-1, 0], [0, 1], [0, -1],
+-];
++] as const;
+ 
+ // Skew/unskew factors for 2D simplex
+ const F2 = 0.5 * (Math.sqrt(3) - 1);
+@@ -33,7 +33,7 @@ function buildPermutationTable(seed: number): Uint8Array {
+   return perm;
+ }
+ 
+-function dot2(g: number[], x: number, y: number): number {
++function dot2(g: readonly [number, number], x: number, y: number): number {
+   return g[0] * x + g[1] * y;
+ }
+ 
+@@ -59,9 +59,9 @@ export function createNoise2D(seed: number): (x: number, y: number) => number {
+ 
+     const ii = i & 255;
+     const jj = j & 255;
+-    const gi0 = perm[(ii + perm[jj % 256]) % 256] % 8;
+-    const gi1 = perm[(ii + i1 + perm[(jj + j1) % 256]) % 256] % 8;
+-    const gi2 = perm[(ii + 1 + perm[(jj + 1) % 256]) % 256] % 8;
++    const gi0 = perm[(ii + perm[jj % 256]) % 256] & 7;
++    const gi1 = perm[(ii + i1 + perm[(jj + j1) % 256]) % 256] & 7;
++    const gi2 = perm[(ii + 1 + perm[(jj + 1) % 256]) % 256] & 7;
+ 
+     let n0 = 0;
+     let t0 = 0.5 - x0 * x0 - y0 * y0;
+diff --git a/src/occupancy-grid.ts b/src/occupancy-grid.ts
+index c4d4fff..2428cc2 100644
+--- a/src/occupancy-grid.ts
++++ b/src/occupancy-grid.ts
+@@ -131,8 +131,8 @@ export interface OccupancyBindingSubcellOptions
+ }
+ 
+ export interface OccupancyBindingWorldHooks {
+-  onDestroy(callback: (id: EntityId, world: unknown) => void): void;
+-  offDestroy(callback: (id: EntityId, world: unknown) => void): void;
++  onDestroy(callback: (id: EntityId) => void): void;
++  offDestroy(callback: (id: EntityId) => void): void;
+ }
+ 
+ export interface OccupancyBindingOptions {
+diff --git a/src/path-service.ts b/src/path-service.ts
+index 39b642b..e09c6b9 100644
+--- a/src/path-service.ts
++++ b/src/path-service.ts
+@@ -176,7 +176,7 @@ export class PathRequestQueue<TRequest, TResult> {
+ 
+   private compact(): void {
+     if (this.head === 0) return;
+-    if (this.head < 1024 && this.head * 2 < this.pending.length) return;
++    if (this.head < 256 && this.head * 2 < this.pending.length) return;
+     this.pending = this.pending.slice(this.head);
+     this.head = 0;
+   }
+diff --git a/src/pathfinding.ts b/src/pathfinding.ts
+index 43644d6..4ec4a2f 100644
+--- a/src/pathfinding.ts
++++ b/src/pathfinding.ts
+@@ -117,7 +117,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
+ 
+     explored++;
+ 
+-    if (current.g > maxCost) return null;
++    if (current.g > maxCost) continue;
+ 
+     if (currentHash === goalHash) {
+       const path = reconstructPath(cameFrom, hash, current.node);
+@@ -128,7 +128,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
+ 
+     for (const neighbor of neighbors(current.node)) {
+       const edgeCost = cost(current.node, neighbor);
+-      if (!isFinite(edgeCost)) continue;
++      if (!isFinite(edgeCost) || edgeCost < 0) continue;
+ 
+       const newG = current.g + edgeCost;
+       const neighborHash = hash(neighbor);
+diff --git a/src/render-adapter.ts b/src/render-adapter.ts
+index 2df3e5a..387e438 100644
+--- a/src/render-adapter.ts
++++ b/src/render-adapter.ts
+@@ -158,16 +158,14 @@ export class RenderAdapter<
+   }
+ 
+   private buildSnapshot(): RenderSnapshot<TView, TFrame> {
+-    const snapshot = this.world.serialize();
+     this.knownRefs.clear();
+     this.renderedRefs.clear();
+ 
+     const entities: Array<RenderEntity<TView>> = [];
+-    for (let id = 0; id < snapshot.entities.alive.length; id++) {
+-      if (!snapshot.entities.alive[id]) continue;
++    for (const id of this.world.getAliveEntities()) {
+       const ref = {
+         id,
+-        generation: snapshot.entities.generations[id] ?? 0,
++        generation: this.world.getEntityGeneration(id),
+       };
+       this.knownRefs.set(id, ref);
+       const projected = this.projector.projectEntity(ref, this.world, null);
+@@ -179,7 +177,7 @@ export class RenderAdapter<
+ 
+     const frame = this.captureFrame(null);
+     return {
+-      tick: snapshot.tick,
++      tick: this.world.tick,
+       entities,
+       frame,
+     };
+diff --git a/src/resource-store.ts b/src/resource-store.ts
+index 4a9c852..7163280 100644
+--- a/src/resource-store.ts
++++ b/src/resource-store.ts
+@@ -305,9 +305,12 @@ export class ResourceStore {
+       const poolMap = store.pools.get(key)!;
+       for (const [entityId, pool] of entries) {
+         assertNonNegativeFinite(pool.current, 'Resource current');
++        const max = normalizeMax(pool.max);
++        const clampedCurrent =
++          max !== null && pool.current > max ? max : pool.current;
+         poolMap.set(entityId, {
+-          current: pool.current,
+-          max: normalizeMax(pool.max),
++          current: clampedCurrent,
++          max,
+         });
+       }
+     }
+@@ -330,15 +333,29 @@ export class ResourceStore {
+       }
+     }
+ 
++    const seenTransferIds = new Set<number>();
++    let maxTransferId = -1;
+     store.transfers = state.transfers.map((transfer) => {
+       store.getOpts(transfer.resource);
+       assertNonNegativeFinite(transfer.rate, 'Transfer rate');
++      if (!Number.isInteger(transfer.id) || transfer.id < 0) {
++        throw new Error(
++          `Transfer id must be a non-negative integer (got ${transfer.id})`,
++        );
++      }
++      if (seenTransferIds.has(transfer.id)) {
++        throw new Error(`Duplicate transfer id ${transfer.id} in fromState`);
++      }
++      seenTransferIds.add(transfer.id);
++      if (transfer.id > maxTransferId) {
++        maxTransferId = transfer.id;
++      }
+       return { ...transfer };
+     });
+     if (!Number.isInteger(state.nextTransferId) || state.nextTransferId < 0) {
+       throw new Error('nextTransferId must be a non-negative integer');
+     }
+-    store.nextTransferId = state.nextTransferId;
++    store.nextTransferId = Math.max(state.nextTransferId, maxTransferId + 1);
+     store.clearDirty();
+     return store;
+   }
+diff --git a/src/serializer.ts b/src/serializer.ts
+index b3e6828..61418ed 100644
+--- a/src/serializer.ts
++++ b/src/serializer.ts
+@@ -1,6 +1,7 @@
+ import type { EntityId, WorldConfig } from './types.js';
+ import type { ResourceStoreState } from './resource-store.js';
+ import type { RandomState } from './random.js';
++import type { ComponentStoreOptions } from './component-store.js';
+ 
+ export interface WorldSnapshotV1 {
+   version: 1;
+@@ -58,4 +59,27 @@ export interface WorldSnapshotV4 {
+   metadata: Record<number, Record<string, string | number>>;
+ }
+ 
+-export type WorldSnapshot = WorldSnapshotV1 | WorldSnapshotV2 | WorldSnapshotV3 | WorldSnapshotV4;
++export interface WorldSnapshotV5 {
++  version: 5;
++  config: WorldConfig;
++  tick: number;
++  entities: {
++    generations: number[];
++    alive: boolean[];
++    freeList: number[];
++  };
++  components: Record<string, Array<[EntityId, unknown]>>;
++  componentOptions: Record<string, ComponentStoreOptions>;
++  resources: ResourceStoreState;
++  rng: RandomState;
++  state: Record<string, unknown>;
++  tags: Record<number, string[]>;
++  metadata: Record<number, Record<string, string | number>>;
++}
++
++export type WorldSnapshot =
++  | WorldSnapshotV1
++  | WorldSnapshotV2
++  | WorldSnapshotV3
++  | WorldSnapshotV4
++  | WorldSnapshotV5;
+diff --git a/src/spatial-grid.ts b/src/spatial-grid.ts
+index 5056dd4..706c95a 100644
+--- a/src/spatial-grid.ts
++++ b/src/spatial-grid.ts
+@@ -149,7 +149,7 @@ export class SpatialGrid {
+     return result;
+   }
+ 
+-  private assertBounds(x: number, y: number): void {
++  assertBounds(x: number, y: number): void {
+     if (!Number.isInteger(x) || !Number.isInteger(y)) {
+       throw new RangeError(`Position (${x}, ${y}) must use integer coordinates`);
+     }
+diff --git a/src/visibility-map.ts b/src/visibility-map.ts
+index 768d86e..a3ab445 100644
+--- a/src/visibility-map.ts
++++ b/src/visibility-map.ts
+@@ -126,6 +126,7 @@ export class VisibilityMap {
+   }
+ 
+   getState(): VisibilityMapState {
++    this.update();
+     const players: VisibilityMapState['players'] = [...this.players.entries()]
+       .sort(compareByNormalizedKey)
+       .map(([playerId, player]) => [
+diff --git a/src/world.ts b/src/world.ts
+index 1d3b309..de2153d 100644
+--- a/src/world.ts
++++ b/src/world.ts
+@@ -12,7 +12,7 @@ import { ComponentStore } from './component-store.js';
+ import type { ComponentStoreOptions } from './component-store.js';
+ import { SpatialGrid } from './spatial-grid.js';
+ import type { SpatialGridView } from './spatial-grid.js';
+-import { GameLoop } from './game-loop.js';
++import { GameLoop, DEFAULT_MAX_TICKS_PER_FRAME } from './game-loop.js';
+ import { EventBus } from './event-bus.js';
+ import { CommandQueue } from './command-queue.js';
+ import { ResourceStore } from './resource-store.js';
+@@ -212,9 +212,11 @@ export class World<
+   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+   TComponents extends ComponentRegistry = Record<string, unknown>,
++  TState extends Record<string, unknown> = Record<string, unknown>,
+ > {
+   private entityManager: EntityManager;
+   private componentStores = new Map<string, ComponentStore<unknown>>();
++  private componentOptions = new Map<string, ComponentOptions>();
+   private componentBits = new Map<string, bigint>();
+   private nextComponentBit = 0;
+   private entitySignatures: bigint[] = [];
+@@ -246,6 +248,7 @@ export class World<
+   private currentMetrics: WorldMetrics | null = null;
+   private activeMetrics: WorldMetrics | null = null;
+   private lastTickFailure: TickFailure | null = null;
++  private poisoned: TickFailure | null = null;
+   private diffListeners = new Set<(diff: TickDiff) => void>();
+   private resourceStore = new ResourceStore();
+   private rng: DeterministicRandom;
+@@ -301,6 +304,10 @@ export class World<
+   destroyEntity(id: EntityId): void {
+     if (!this.entityManager.isAlive(id)) return;
+ 
++    // Mark dead first so re-entrant destroyEntity(id) calls inside callbacks
++    // hit the alive guard and return without recursing.
++    this.entityManager.destroy(id);
++
+     for (const callback of this.destroyCallbacks) {
+       callback(id, this);
+     }
+@@ -317,13 +324,20 @@ export class World<
+     this.resourceStore.removeEntity(id);
+     this.removeEntityTags(id);
+     this.removeEntityMeta(id);
+-    this.entityManager.destroy(id);
+   }
+ 
+   isAlive(id: EntityId): boolean {
+     return this.entityManager.isAlive(id);
+   }
+ 
++  *getAliveEntities(): IterableIterator<EntityId> {
++    yield* this.entityManager.aliveEntities();
++  }
++
++  getEntityGeneration(id: EntityId): number {
++    return this.entityManager.getGeneration(id);
++  }
++
+   getEntityRef(id: EntityId): EntityRef | null {
+     if (!this.entityManager.isAlive(id)) return null;
+     return { id, generation: this.entityManager.getGeneration(id) };
+@@ -362,6 +376,9 @@ export class World<
+       throw new Error(`Component '${key}' is already registered`);
+     }
+     this.componentStores.set(key, new ComponentStore<unknown>(options));
++    if (options) {
++      this.componentOptions.set(key, options);
++    }
+     this.registerComponentBit(key);
+   }
+ 
+@@ -504,28 +521,25 @@ export class World<
+   ): EntityId | undefined {
+     const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
+     const mask = components.length > 0 ? this.queryMask(components) : 0n;
+-    for (let r = 0; r <= maxRadius; r++) {
+-      const entityIds = this.spatialGrid.getInRadius(cx, cy, r);
+-      let bestId: EntityId | undefined;
+-      let bestDistSq = Infinity;
+-      for (const id of entityIds) {
+-        if (components.length > 0) {
+-          const sig = this.entitySignatures[id] ?? 0n;
+-          if ((sig & mask) !== mask) continue;
+-        }
+-        const pos = this.getComponent<Position>(id, this.positionKey);
+-        if (!pos) continue;
+-        const dx = pos.x - cx;
+-        const dy = pos.y - cy;
+-        const distSq = dx * dx + dy * dy;
+-        if (distSq < bestDistSq) {
+-          bestDistSq = distSq;
+-          bestId = id;
+-        }
++    const entityIds = this.spatialGrid.getInRadius(cx, cy, maxRadius);
++    let bestId: EntityId | undefined;
++    let bestDistSq = Infinity;
++    for (const id of entityIds) {
++      if (components.length > 0) {
++        const sig = this.entitySignatures[id] ?? 0n;
++        if ((sig & mask) !== mask) continue;
++      }
++      const pos = this.getComponent<Position>(id, this.positionKey);
++      if (!pos) continue;
++      const dx = pos.x - cx;
++      const dy = pos.y - cy;
++      const distSq = dx * dx + dy * dy;
++      if (distSq < bestDistSq) {
++        bestDistSq = distSq;
++        bestId = id;
+       }
+-      if (bestId !== undefined) return bestId;
+     }
+-    return undefined;
++    return bestId;
+   }
+ 
+   registerSystem(
+@@ -545,13 +559,26 @@ export class World<
+   }
+ 
+   step(): void {
++    if (this.poisoned) {
++      throw new WorldTickFailureError(
++        this.makeWorldPoisonedFailure(this.poisoned),
++      );
++    }
+     this.gameLoop.step();
+   }
+ 
+   stepWithResult(): WorldStepResult {
++    if (this.poisoned) {
++      const failure = this.makeWorldPoisonedFailure(this.poisoned);
++      return {
++        schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
++        ok: false,
++        tick: failure.tick,
++        failure,
++      };
++    }
+     const failure = this.runTick({ metricsProfile: 'full' });
+     if (!failure) {
+-      this.gameLoop.setTick(this.gameLoop.tick + 1);
+       return {
+         schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
+         ok: true,
+@@ -567,6 +594,30 @@ export class World<
+     };
+   }
+ 
++  isPoisoned(): boolean {
++    return this.poisoned !== null;
++  }
++
++  recover(): void {
++    this.poisoned = null;
++  }
++
++  private makeWorldPoisonedFailure(prior: TickFailure): TickFailure {
++    return {
++      schemaVersion: prior.schemaVersion,
++      tick: prior.tick,
++      phase: prior.phase,
++      code: 'world_poisoned',
++      message: `World is poisoned by tick ${prior.tick} failure '${prior.code}'; call world.recover() to resume`,
++      subsystem: prior.subsystem,
++      commandType: prior.commandType,
++      submissionSequence: prior.submissionSequence,
++      systemName: prior.systemName,
++      details: prior.details,
++      error: prior.error,
++    };
++  }
++
+   start(): void {
+     this.gameLoop.start();
+   }
+@@ -614,17 +665,6 @@ export class World<
+   }
+ 
+   submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
+-    if (
+-      this.instrumentationProfile !== 'full' &&
+-      this.commandResultListeners.size === 0
+-    ) {
+-      const rejection = this.validateCommand(type, data);
+-      if (rejection) {
+-        return false;
+-      }
+-      this.commandQueue.push(type, data);
+-      return true;
+-    }
+     return this.submitWithResult(type, data).accepted;
+   }
+ 
+@@ -760,6 +800,18 @@ export class World<
+     if (!this.detectInPlacePositionMutations) {
+       config.detectInPlacePositionMutations = false;
+     }
++    const maxTicksPerFrame = this.gameLoop.getMaxTicksPerFrame();
++    if (maxTicksPerFrame !== DEFAULT_MAX_TICKS_PER_FRAME) {
++      config.maxTicksPerFrame = maxTicksPerFrame;
++    }
++    if (this.instrumentationProfile !== 'full') {
++      config.instrumentationProfile = this.instrumentationProfile;
++    }
++
++    const componentOptions: Record<string, ComponentStoreOptions> = {};
++    for (const [key, opts] of this.componentOptions) {
++      componentOptions[key] = { ...opts };
++    }
+ 
+     const snapshotTick = this.getObservableTick();
+ 
+@@ -788,11 +840,12 @@ export class World<
+     }
+ 
+     return {
+-      version: 4,
++      version: 5,
+       config,
+       tick: snapshotTick,
+       entities: this.entityManager.getState(),
+       components,
++      componentOptions,
+       resources: this.resourceStore.getState(),
+       rng: this.rng.getState(),
+       state,
+@@ -813,24 +866,29 @@ export class World<
+     >,
+   ): World<TEventMap, TCommandMap, TComponents> {
+     const version = (snapshot as { version: number }).version;
+-    if (version !== 1 && version !== 2 && version !== 3 && version !== 4) {
++    if (version < 1 || version > 5) {
+       throw new Error(`Unsupported snapshot version: ${version}`);
+     }
+-    if (
+-      snapshot.entities.generations.length !== snapshot.entities.alive.length
+-    ) {
+-      throw new Error('Invalid entity state: array length mismatch');
+-    }
++
++    const componentOptions =
++      'componentOptions' in snapshot && snapshot.componentOptions
++        ? snapshot.componentOptions
++        : {};
+ 
+     const world = new World<TEventMap, TCommandMap, TComponents>(snapshot.config);
+     world.entityManager = EntityManager.fromState(snapshot.entities);
+ 
+     world.componentStores.clear();
++    world.componentOptions.clear();
+     for (const [key, entries] of Object.entries(snapshot.components)) {
++      const opts = componentOptions[key];
+       world.componentStores.set(
+         key,
+-        ComponentStore.fromEntries(entries as Array<[number, unknown]>),
++        ComponentStore.fromEntries(entries as Array<[number, unknown]>, opts),
+       );
++      if (opts) {
++        world.componentOptions.set(key, opts);
++      }
+     }
+     world.rebuildComponentSignatures();
+     if ('resources' in snapshot) {
+@@ -847,6 +905,11 @@ export class World<
+     if ('tags' in snapshot) {
+       for (const [entityIdStr, tagList] of Object.entries(snapshot.tags)) {
+         const entityId = Number(entityIdStr);
++        if (!Number.isInteger(entityId) || entityId < 0) {
++          throw new Error(
++            `Invalid entity id key in snapshot.tags: ${JSON.stringify(entityIdStr)}`,
++          );
++        }
+         for (const tag of tagList as string[]) {
+           world.addTagInternal(entityId, tag);
+         }
+@@ -855,6 +918,11 @@ export class World<
+     if ('metadata' in snapshot) {
+       for (const [entityIdStr, metaRecord] of Object.entries(snapshot.metadata)) {
+         const entityId = Number(entityIdStr);
++        if (!Number.isInteger(entityId) || entityId < 0) {
++          throw new Error(
++            `Invalid entity id key in snapshot.metadata: ${JSON.stringify(entityIdStr)}`,
++          );
++        }
+         for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {
+           world.setMetaInternal(entityId, key, value);
+         }
+@@ -878,7 +946,7 @@ export class World<
+   }
+ 
+   getDiff(): TickDiff | null {
+-    return this.currentDiff;
++    return this.currentDiff ? cloneTickDiff(this.currentDiff) : null;
+   }
+ 
+   getMetrics(): WorldMetrics | null {
+@@ -976,7 +1044,7 @@ export class World<
+     return this.resourceStore.getTransfers(entity);
+   }
+ 
+-  setState<K extends keyof TComponents & string>(key: K, value: TComponents[K]): void;
++  setState<K extends keyof TState & string>(key: K, value: TState[K]): void;
+   setState(key: string, value: unknown): void;
+   setState(key: string, value: unknown): void {
+     assertJsonCompatible(value, `state '${key}'`);
+@@ -985,12 +1053,14 @@ export class World<
+     this.stateRemovedKeys.delete(key);
+   }
+ 
+-  getState<K extends keyof TComponents & string>(key: K): TComponents[K] | undefined;
++  getState<K extends keyof TState & string>(key: K): TState[K] | undefined;
+   getState(key: string): unknown;
+   getState(key: string): unknown {
+     return this.stateStore.get(key);
+   }
+ 
++  deleteState<K extends keyof TState & string>(key: K): void;
++  deleteState(key: string): void;
+   deleteState(key: string): void {
+     if (this.stateStore.has(key)) {
+       this.stateStore.delete(key);
+@@ -999,6 +1069,8 @@ export class World<
+     }
+   }
+ 
++  hasState<K extends keyof TState & string>(key: K): boolean;
++  hasState(key: string): boolean;
+   hasState(key: string): boolean {
+     return this.stateStore.has(key);
+   }
+@@ -1028,11 +1100,13 @@ export class World<
+   }
+ 
+   getByTag(tag: string): ReadonlySet<EntityId> {
+-    return this.tagIndex.get(tag) ?? EMPTY_SET;
++    const set = this.tagIndex.get(tag);
++    return set ? new Set(set) : EMPTY_SET;
+   }
+ 
+   getTags(entity: EntityId): ReadonlySet<string> {
+-    return this.entityTags.get(entity) ?? EMPTY_STRING_SET;
++    const set = this.entityTags.get(entity);
++    return set ? new Set(set) : EMPTY_STRING_SET;
+   }
+ 
+   setMeta(entity: EntityId, key: string, value: string | number): void {
+@@ -1105,6 +1179,7 @@ export class World<
+       }
+     }
+     this.entityTags.delete(entity);
++    this.tagsDirtyEntities.add(entity);
+   }
+ 
+   private removeEntityMeta(entity: EntityId): void {
+@@ -1120,6 +1195,7 @@ export class World<
+       }
+     }
+     this.entityMeta.delete(entity);
++    this.metaDirtyEntities.add(entity);
+   }
+ 
+   private addTagInternal(entity: EntityId, tag: string): void {
+@@ -1144,12 +1220,23 @@ export class World<
+       this.entityMeta.set(entity, meta);
+     }
+     const oldValue = meta.get(key);
+-    if (oldValue !== undefined) {
+-      const keyIndex = this.metaIndex.get(key);
+-      if (keyIndex) keyIndex.delete(oldValue);
++    let keyIndex = this.metaIndex.get(key);
++    if (oldValue !== undefined && keyIndex) {
++      keyIndex.delete(oldValue);
++    }
++    if (keyIndex) {
++      const owner = keyIndex.get(value);
++      if (owner !== undefined && owner !== entity) {
++        // Restore the prior reverse-index entry we just cleared so state is unchanged.
++        if (oldValue !== undefined) {
++          keyIndex.set(oldValue, entity);
++        }
++        throw new Error(
++          `Metadata ${JSON.stringify(key)}=${JSON.stringify(value)} is already owned by entity ${owner}; metadata reverse index is unique`,
++        );
++      }
+     }
+     meta.set(key, value);
+-    let keyIndex = this.metaIndex.get(key);
+     if (!keyIndex) {
+       keyIndex = new Map();
+       this.metaIndex.set(key, keyIndex);
+@@ -1330,6 +1417,7 @@ export class World<
+       }
+       this.currentMetrics = metrics;
+       this.lastTickFailure = null;
++      this.gameLoop.advance();
+     } finally {
+       this.activeMetrics = null;
+     }
+@@ -1339,7 +1427,7 @@ export class World<
+         listener(this.currentDiff!);
+       }
+     } catch (error) {
+-      const tick = metrics?.tick ?? this.gameLoop.tick + 1;
++      const tick = metrics?.tick ?? this.gameLoop.tick;
+       return this.finalizeTickFailure(
+         this.createTickFailure({
+           tick,
+@@ -1363,26 +1451,29 @@ export class World<
+   } {
+     const commands = this.commandQueue.drain();
+     let processed = 0;
+-    for (const command of commands) {
++    for (let i = 0; i < commands.length; i++) {
++      const command = commands[i];
+       const handler = this.handlers.get(command.type);
+       if (!handler) {
++        const failureMessage = `No handler registered for command '${String(command.type)}'`;
++        this.emitCommandExecution(command.type, {
++          submissionSequence: command.submissionSequence,
++          executed: false,
++          code: 'missing_handler',
++          message: failureMessage,
++          details: null,
++          tick,
++        });
++        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+         const failure = this.createTickFailure({
+           tick,
+           phase: 'commands',
+           code: 'missing_handler',
+-          message: `No handler registered for command '${String(command.type)}'`,
++          message: failureMessage,
+           subsystem: 'commands',
+           commandType: command.type,
+           submissionSequence: command.submissionSequence,
+-          details: null,
+-        });
+-        this.emitCommandExecution(command.type, {
+-          submissionSequence: command.submissionSequence,
+-          executed: false,
+-          code: 'missing_handler',
+-          message: failure.message,
+-          details: null,
+-          tick,
++          details: dropped.length > 0 ? { droppedCommands: dropped } : null,
+         });
+         return { processed, failure };
+       }
+@@ -1400,6 +1491,17 @@ export class World<
+         });
+       } catch (error) {
+         const details = createErrorDetails(error);
++        this.emitCommandExecution(command.type, {
++          submissionSequence: command.submissionSequence,
++          executed: false,
++          code: 'command_handler_threw',
++          message: errorMessage(error),
++          details: {
++            error: details,
++          },
++          tick,
++        });
++        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+         const failure = this.createTickFailure({
+           tick,
+           phase: 'commands',
+@@ -1412,19 +1514,10 @@ export class World<
+             commandType: String(command.type),
+             submissionSequence: command.submissionSequence,
+             error: details,
++            ...(dropped.length > 0 ? { droppedCommands: dropped } : {}),
+           },
+           error,
+         });
+-        this.emitCommandExecution(command.type, {
+-          submissionSequence: command.submissionSequence,
+-          executed: false,
+-          code: 'command_handler_threw',
+-          message: errorMessage(error),
+-          details: {
+-            error: details,
+-          },
+-          tick,
+-        });
+         return { processed, failure };
+       }
+     }
+@@ -1432,6 +1525,36 @@ export class World<
+     return { processed, failure: null };
+   }
+ 
++  private dropPendingCommands(
++    commands: ReadonlyArray<{
++      type: keyof TCommandMap;
++      submissionSequence: number | null;
++    }>,
++    startIndex: number,
++    tick: number,
++  ): Array<{ commandType: string; submissionSequence: number | null }> {
++    const dropped: Array<{
++      commandType: string;
++      submissionSequence: number | null;
++    }> = [];
++    for (let i = startIndex; i < commands.length; i++) {
++      const cmd = commands[i];
++      this.emitCommandExecution(cmd.type, {
++        submissionSequence: cmd.submissionSequence,
++        executed: false,
++        code: 'tick_aborted_before_handler',
++        message: 'Command was queued for this tick but the tick aborted before its handler ran',
++        details: null,
++        tick,
++      });
++      dropped.push({
++        commandType: String(cmd.type),
++        submissionSequence: cmd.submissionSequence,
++      });
++    }
++    return dropped;
++  }
++
+   private createCommandSubmissionResult<K extends keyof TCommandMap>(
+     type: K,
+     config: {
+@@ -1519,6 +1642,7 @@ export class World<
+     }
+     this.currentMetrics = metrics;
+     this.lastTickFailure = failure;
++    this.poisoned = failure;
+     if (failure.phase !== 'listeners') {
+       this.currentDiff = null;
+     }
+@@ -1834,7 +1958,7 @@ export class World<
+   }
+ 
+   private assertPositionInBounds(position: Position): void {
+-    this.spatialGrid.getAt(position.x, position.y);
++    this.spatialGrid.assertBounds(position.x, position.y);
+   }
+ 
+   private registerComponentBit(key: string): bigint {
+@@ -2079,6 +2203,41 @@ function cloneTickFailure(failure: TickFailure): TickFailure {
+   return JSON.parse(JSON.stringify(failure)) as TickFailure;
+ }
+ 
++function cloneTickDiff(diff: TickDiff): TickDiff {
++  const components: TickDiff['components'] = {};
++  for (const [key, entry] of Object.entries(diff.components)) {
++    components[key] = {
++      set: entry.set.map(([id, data]) => [id, data]),
++      removed: [...entry.removed],
++    };
++  }
++  const resources: TickDiff['resources'] = {};
++  for (const [key, entry] of Object.entries(diff.resources)) {
++    resources[key] = {
++      set: entry.set.map(([id, pool]) => [id, { ...pool }]),
++      removed: [...entry.removed],
++    };
++  }
++  return {
++    tick: diff.tick,
++    entities: {
++      created: [...diff.entities.created],
++      destroyed: [...diff.entities.destroyed],
++    },
++    components,
++    resources,
++    state: {
++      set: { ...diff.state.set },
++      removed: [...diff.state.removed],
++    },
++    tags: diff.tags.map((t) => ({ entity: t.entity, tags: [...t.tags] })),
++    metadata: diff.metadata.map((m) => ({
++      entity: m.entity,
++      meta: { ...m.meta },
++    })),
++  };
++}
++
+ function createErrorDetails(error: unknown): {
+   name: string;
+   message: string;
+diff --git a/tests/behavior-tree.test.ts b/tests/behavior-tree.test.ts
+index 9ac333a..54fb977 100644
+--- a/tests/behavior-tree.test.ts
++++ b/tests/behavior-tree.test.ts
+@@ -394,6 +394,59 @@ describe('BehaviorTree', () => {
+     });
+   });
+ 
++  describe('Reactive preemption clears stateful subtree (H5)', () => {
++    it('reactiveSelector preempting a running Sequence resets its progress', () => {
++      const events: string[] = [];
++      let highPriorityActive = false;
++      const tree = createBehaviorTree<TestContext>(getState, (b) =>
++        b.reactiveSelector([
++          // High-priority guarded sequence — only triggers when active
++          b.sequence([
++            b.condition(() => highPriorityActive),
++            b.action(() => {
++              events.push('hi');
++              return NodeStatus.SUCCESS;
++            }),
++          ]),
++          // Lower-priority running sequence
++          b.sequence([
++            b.action(() => {
++              events.push('a');
++              return NodeStatus.SUCCESS;
++            }),
++            b.action(() => {
++              events.push('b');
++              return NodeStatus.RUNNING;
++            }),
++            b.action(() => {
++              events.push('c');
++              return NodeStatus.SUCCESS;
++            }),
++          ]),
++        ]),
++      );
++      const ctx = makeCtx();
++      ctx.state = createBTState(tree);
++
++      // Tick 1: low-priority runs, gets stuck on b
++      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
++      expect(events).toEqual(['a', 'b']);
++
++      // Tick 2: high-priority becomes active and preempts
++      highPriorityActive = true;
++      events.length = 0;
++      expect(tree.tick(ctx)).toBe(NodeStatus.SUCCESS);
++      expect(events).toEqual(['hi']);
++
++      // Tick 3: high-priority deactivates; low-priority should restart from 'a'
++      // (NOT resume from 'b' which it was running on tick 1)
++      highPriorityActive = false;
++      events.length = 0;
++      expect(tree.tick(ctx)).toBe(NodeStatus.RUNNING);
++      expect(events).toEqual(['a', 'b']);
++    });
++  });
++
+   describe('clearRunningState', () => {
+     it('resets every running index to -1 when called without a node', () => {
+       const tree = createBehaviorTree<TestContext>(getState, (b) =>
+diff --git a/tests/component-store.test.ts b/tests/component-store.test.ts
+index f5436ee..5e5b251 100644
+--- a/tests/component-store.test.ts
++++ b/tests/component-store.test.ts
+@@ -161,6 +161,59 @@ describe('ComponentStore', () => {
+     ).toThrow();
+   });
+ 
++  describe('detectInPlaceMutations option', () => {
++    it('defaults to true — in-place mutations after clearDirty are detected (existing behavior)', () => {
++      const store = new ComponentStore<{ hp: number }>();
++      store.set(1, { hp: 10 });
++      store.clearDirty();
++      store.get(1)!.hp = 15;
++      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
++    });
++
++    it('when false, in-place mutations after clearDirty are NOT detected', () => {
++      const store = new ComponentStore<{ hp: number }>({
++        detectInPlaceMutations: false,
++      });
++      store.set(1, { hp: 10 });
++      store.clearDirty();
++      store.get(1)!.hp = 15;
++      expect(store.getDirty().set).toEqual([]);
++    });
++
++    it('when false, explicit set() still marks dirty', () => {
++      const store = new ComponentStore<{ hp: number }>({
++        detectInPlaceMutations: false,
++      });
++      store.set(1, { hp: 10 });
++      store.clearDirty();
++      store.set(1, { hp: 15 });
++      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
++    });
++
++    it('still validates JSON-compatibility on set even with detectInPlaceMutations false', () => {
++      const store = new ComponentStore<{ value: number }>({
++        detectInPlaceMutations: false,
++      });
++      expect(() => store.set(1, { value: Number.NaN })).toThrow();
++    });
++
++    it('combines with semantic mode: identical rewrites suppressed AND in-place detection skipped', () => {
++      const store = new ComponentStore<{ x: number }>({
++        diffMode: 'semantic',
++        detectInPlaceMutations: false,
++      });
++      store.set(0, { x: 5 });
++      store.clearDirty();
++
++      store.set(0, { x: 5 });
++      expect(store.getDirty().set).toEqual([]);
++
++      store.clearDirty();
++      store.get(0)!.x = 99;
++      expect(store.getDirty().set).toEqual([]);
++    });
++  });
++
+   describe('semantic diffMode', () => {
+     it('defaults to strict mode (identical rewrites still mark dirty)', () => {
+       const store = new ComponentStore<{ x: number }>();
+diff --git a/tests/game-loop.test.ts b/tests/game-loop.test.ts
+index d69a10c..d5fdded 100644
+--- a/tests/game-loop.test.ts
++++ b/tests/game-loop.test.ts
+@@ -14,12 +14,15 @@ describe('GameLoop', () => {
+     expect(called).toBe(true);
+   });
+ 
+-  it('increments tick on step()', () => {
++  it('step() does not auto-advance tick; advance() is the explicit step', () => {
+     const loop = new GameLoop({ tps: 60, onTick: () => {} });
+     expect(loop.tick).toBe(0);
+     loop.step();
++    expect(loop.tick).toBe(0);
++    loop.advance();
+     expect(loop.tick).toBe(1);
+     loop.step();
++    loop.advance();
+     expect(loop.tick).toBe(2);
+   });
+ 
+@@ -44,8 +47,11 @@ describe('GameLoop', () => {
+       },
+     });
+     loop.step();
++    loop.advance();
+     loop.step();
++    loop.advance();
+     loop.step();
++    loop.advance();
+     expect(count).toBe(3);
+     expect(loop.tick).toBe(3);
+   });
+@@ -105,6 +111,7 @@ describe('GameLoop', () => {
+     const loop = new GameLoop({ tps: 60, onTick: () => { count++; } });
+     loop.pause();
+     loop.step();
++    loop.advance();
+     expect(count).toBe(1);
+     expect(loop.tick).toBe(1);
+   });
+diff --git a/tests/serializer.test.ts b/tests/serializer.test.ts
+index 6dd0961..5581e31 100644
+--- a/tests/serializer.test.ts
++++ b/tests/serializer.test.ts
+@@ -19,7 +19,7 @@ describe('Serialization', () => {
+ 
+     const snapshot = world.serialize();
+ 
+-    expect(snapshot.version).toBe(4);
++    expect(snapshot.version).toBe(5);
+     expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
+     expect(snapshot.tick).toBe(2);
+     expect(snapshot.entities.alive).toEqual([true, true]);
+@@ -32,7 +32,7 @@ describe('Serialization', () => {
+     expect(snapshot.components['health']).toEqual([
+       [0, { hp: 100 }],
+     ]);
+-    if (snapshot.version !== 4) throw new Error('Expected version 4 snapshot');
++    if (snapshot.version !== 5) throw new Error('Expected version 5 snapshot');
+     expect(snapshot.resources).toEqual({
+       registered: [],
+       pools: {},
+@@ -70,6 +70,154 @@ describe('Serialization', () => {
+     expect(restored.getComponent(e1, 'position')).toBeUndefined();
+   });
+ 
++  it('snapshot preserves maxTicksPerFrame and instrumentationProfile (H6)', () => {
++    const world = new World({
++      gridWidth: 4,
++      gridHeight: 4,
++      tps: 60,
++      maxTicksPerFrame: 8,
++      instrumentationProfile: 'release',
++    });
++    const snapshot = world.serialize();
++    expect(snapshot.config.maxTicksPerFrame).toBe(8);
++    expect(snapshot.config.instrumentationProfile).toBe('release');
++
++    const restored = World.deserialize(snapshot);
++    expect(restored.getInstrumentationProfile()).toBe('release');
++  });
++
++  it('snapshot preserves per-component diffMode (H7)', () => {
++    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
++    world.registerComponent<{ x: number; y: number }>('position', { diffMode: 'semantic' });
++    world.registerComponent<{ hp: number }>('health'); // strict (default)
++    const e = world.createEntity();
++    world.addComponent(e, 'position', { x: 1, y: 2 });
++    world.addComponent(e, 'health', { hp: 10 });
++    world.step();
++
++    const snapshot = world.serialize();
++    if (snapshot.version !== 5) throw new Error('Expected v5');
++    expect(snapshot.componentOptions?.position).toEqual({ diffMode: 'semantic' });
++    // strict (default) options either omitted or explicitly strict; both acceptable
++    const healthOpts = snapshot.componentOptions?.health;
++    if (healthOpts !== undefined) {
++      expect(healthOpts.diffMode ?? 'strict').toBe('strict');
++    }
++
++    const restored = World.deserialize(snapshot);
++    // Round-trip: identical rewrite should be suppressed in semantic mode
++    restored.setComponent(e, 'position', { x: 1, y: 2 });
++    restored.step();
++    const diff = restored.getDiff()!;
++    expect(diff.components.position?.set ?? []).toEqual([]);
++  });
++
++  it('EntityManager.fromState rejects mismatched array lengths (L8)', async () => {
++    const { EntityManager } = await import('../src/entity-manager.js');
++    expect(() =>
++      EntityManager.fromState({
++        generations: [0, 0],
++        alive: [true],
++        freeList: [],
++      }),
++    ).toThrow();
++  });
++
++  it('EntityManager.fromState rejects freeList ids that point to alive entities (L8)', async () => {
++    const { EntityManager } = await import('../src/entity-manager.js');
++    expect(() =>
++      EntityManager.fromState({
++        generations: [0, 0],
++        alive: [true, true],
++        freeList: [0],
++      }),
++    ).toThrow();
++  });
++
++  it('ResourceStore.fromState rejects duplicate transfer ids (M6)', async () => {
++    const { ResourceStore } = await import('../src/resource-store.js');
++    expect(() =>
++      ResourceStore.fromState({
++        registered: [['food', { defaultMax: null }]],
++        pools: {},
++        production: {},
++        consumption: {},
++        transfers: [
++          { id: 0, from: 0, to: 1, resource: 'food', rate: 1 },
++          { id: 0, from: 2, to: 3, resource: 'food', rate: 1 },
++        ],
++        nextTransferId: 1,
++      }),
++    ).toThrow();
++  });
++
++  it('ResourceStore.fromState normalizes nextTransferId above existing transfer ids (M6)', async () => {
++    const { ResourceStore } = await import('../src/resource-store.js');
++    const store = ResourceStore.fromState({
++      registered: [['food', { defaultMax: null }]],
++      pools: {},
++      production: {},
++      consumption: {},
++      transfers: [
++        { id: 5, from: 0, to: 1, resource: 'food', rate: 1 },
++      ],
++      nextTransferId: 1,
++    });
++    const id = store.addTransfer(0, 1, 'food', 1);
++    expect(id).toBeGreaterThan(5);
++  });
++
++  it('ResourceStore.fromState clamps pool.current to pool.max (M6)', async () => {
++    const { ResourceStore } = await import('../src/resource-store.js');
++    const store = ResourceStore.fromState({
++      registered: [['gold', { defaultMax: 100 }]],
++      pools: {
++        gold: [[0, { current: 999, max: 100 }]],
++      },
++      production: {},
++      consumption: {},
++      transfers: [],
++      nextTransferId: 0,
++    });
++    expect(store.getResource(0, 'gold')).toEqual({ current: 100, max: 100 });
++  });
++
++  it('VisibilityMap.getState returns up-to-date data without explicit update() (M5)', async () => {
++    const { VisibilityMap } = await import('../src/visibility-map.js');
++    const map = new VisibilityMap(8, 8);
++    map.setSource(1, 'src1', { x: 4, y: 4, radius: 2 });
++    const state = map.getState();
++    const player = state.players.find(([id]) => id === 1);
++    expect(player).toBeDefined();
++    // explored cells should reflect the new source position even without explicit update
++    const explored = (player![1] as { explored: number[] }).explored;
++    expect(explored.length).toBeGreaterThan(0);
++  });
++
++  it('deserialize rejects non-integer entity-id keys in tags/metadata (L9)', () => {
++    const bad = {
++      version: 5 as const,
++      config: { gridWidth: 10, gridHeight: 10, tps: 60 },
++      tick: 0,
++      entities: { generations: [], alive: [], freeList: [] },
++      components: {},
++      componentOptions: {},
++      resources: {
++        registered: [],
++        pools: {},
++        production: {},
++        consumption: {},
++        transfers: [],
++        nextTransferId: 0,
++      },
++      rng: { state: 1 },
++      state: {},
++      tags: { abc: ['nope'] } as unknown as Record<number, string[]>,
++      metadata: {},
++    };
++    expect(() => World.deserialize(bad as never)).toThrow();
++  });
++
+   it('deserialize throws on unsupported version', () => {
+     const bad = {
+       version: 99,
+@@ -161,7 +309,7 @@ describe('Serialization', () => {
+       components: {},
+     };
+     expect(() => World.deserialize(bad)).toThrow(
+-      'Invalid entity state: array length mismatch',
++      /generations\.length must equal alive\.length/,
+     );
+   });
+ 
+diff --git a/tests/world-commands.test.ts b/tests/world-commands.test.ts
+index 9b758a9..bb11927 100644
+--- a/tests/world-commands.test.ts
++++ b/tests/world-commands.test.ts
+@@ -151,7 +151,7 @@ describe('World commands', () => {
+     ]);
+   });
+ 
+-  it('minimal-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
++  it('minimal-mode submit still assigns a sequence and queues with submissionSequence', () => {
+     type Cmds = { move: { x: number; y: number } };
+     const world = new World<Record<string, never>, Cmds>({
+       gridWidth: 10,
+@@ -160,17 +160,12 @@ describe('World commands', () => {
+       instrumentationProfile: 'minimal',
+     });
+     world.registerHandler('move', () => {});
+-    const createResultSpy = vi.spyOn(
+-      world as unknown as { createCommandSubmissionResult: () => unknown },
+-      'createCommandSubmissionResult',
+-    );
+-
+     expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+-    expect(createResultSpy).not.toHaveBeenCalled();
+-    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
++    // sequence 0 was consumed by submit(); the next submitWithResult sees 1
++    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(1);
+   });
+ 
+-  it('release-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
++  it('release-mode submit still assigns a sequence and queues with submissionSequence', () => {
+     type Cmds = { move: { x: number; y: number } };
+     const world = new World<Record<string, never>, Cmds>({
+       gridWidth: 10,
+@@ -179,14 +174,30 @@ describe('World commands', () => {
+       instrumentationProfile: 'release',
+     });
+     world.registerHandler('move', () => {});
+-    const createResultSpy = vi.spyOn(
+-      world as unknown as { createCommandSubmissionResult: () => unknown },
+-      'createCommandSubmissionResult',
+-    );
+-
+     expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
+-    expect(createResultSpy).not.toHaveBeenCalled();
+-    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
++    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(1);
++  });
++
++  it('submit() populates submissionSequence on queued commands so executions are correlatable', () => {
++    type Cmds = { move: { n: number } };
++    const world = new World<Record<string, never>, Cmds>({
++      gridWidth: 10,
++      gridHeight: 10,
++      tps: 60,
++      instrumentationProfile: 'release',
++    });
++    world.registerHandler('move', () => {});
++
++    const seenSequences: Array<number | null> = [];
++    world.onCommandExecution((result) => {
++      seenSequences.push(result.submissionSequence);
++    });
++
++    world.submit('move', { n: 1 });
++    world.submit('move', { n: 2 });
++    world.step();
++
++    expect(seenSequences).toEqual([0, 1]);
+   });
+ 
+   it('release-mode submit still emits structured results when listeners are attached', () => {
+@@ -217,6 +228,120 @@ describe('World commands', () => {
+     ]);
+   });
+ 
++  it('processCommands emits tick_aborted_before_handler executions for commands after a failure', () => {
++    type Cmds = { move: { n: number } };
++    const world = new World<Record<string, never>, Cmds>({
++      gridWidth: 10,
++      gridHeight: 10,
++      tps: 60,
++    });
++    world.registerHandler('move', (data) => {
++      if (data.n === 2) throw new Error('boom');
++    });
++
++    const executions: unknown[] = [];
++    world.onCommandExecution((result) => executions.push(result));
++
++    const a = world.submitWithResult('move', { n: 1 });
++    const b = world.submitWithResult('move', { n: 2 });
++    const c = world.submitWithResult('move', { n: 3 });
++    const d = world.submitWithResult('move', { n: 4 });
++
++    const result = world.stepWithResult();
++    expect(result.ok).toBe(false);
++
++    expect(executions).toEqual([
++      expect.objectContaining({
++        submissionSequence: a.sequence,
++        executed: true,
++        code: 'executed',
++      }),
++      expect.objectContaining({
++        submissionSequence: b.sequence,
++        executed: false,
++        code: 'command_handler_threw',
++      }),
++      expect.objectContaining({
++        submissionSequence: c.sequence,
++        executed: false,
++        code: 'tick_aborted_before_handler',
++      }),
++      expect.objectContaining({
++        submissionSequence: d.sequence,
++        executed: false,
++        code: 'tick_aborted_before_handler',
++      }),
++    ]);
++
++    const failure = result.failure!;
++    const droppedSequences = (failure.details as {
++      droppedCommands: Array<{ submissionSequence: number | null }>;
++    } | null)?.droppedCommands?.map((cmd) => cmd.submissionSequence);
++    expect(droppedSequences).toEqual([c.sequence, d.sequence]);
++  });
++
++  it('marks world as poisoned after a tick failure; step() refuses until recover()', () => {
++    type Cmds = { move: { x: number } };
++    const world = new World<Record<string, never>, Cmds>({
++      gridWidth: 10,
++      gridHeight: 10,
++      tps: 60,
++    });
++    world.submit('move', { x: 1 });
++
++    expect(world.isPoisoned()).toBe(false);
++    expect(() => world.step()).toThrow(WorldTickFailureError);
++    expect(world.isPoisoned()).toBe(true);
++
++    expect(() => world.step()).toThrow(/poisoned/i);
++
++    world.registerHandler('move', () => {});
++    world.recover();
++    expect(world.isPoisoned()).toBe(false);
++    expect(() => world.step()).not.toThrow();
++  });
++
++  it('stepWithResult on a poisoned world returns world_poisoned without re-running', () => {
++    type Cmds = { move: { x: number } };
++    const world = new World<Record<string, never>, Cmds>({
++      gridWidth: 10,
++      gridHeight: 10,
++      tps: 60,
++    });
++    world.submit('move', { x: 1 });
++    const first = world.stepWithResult();
++    expect(first.ok).toBe(false);
++    expect(world.isPoisoned()).toBe(true);
++
++    const second = world.stepWithResult();
++    expect(second.ok).toBe(false);
++    expect(second.failure?.code).toBe('world_poisoned');
++  });
++
++  it('diff listeners observe world.tick aligned with diff.tick', () => {
++    type Events = Record<string, never>;
++    type Cmds = Record<string, never>;
++    const world = new World<Events, Cmds>({
++      gridWidth: 10,
++      gridHeight: 10,
++      tps: 60,
++    });
++    const observed: Array<{ worldTick: number; diffTick: number }> = [];
++    world.onDiff((diff) => {
++      observed.push({ worldTick: world.tick, diffTick: diff.tick });
++    });
++
++    world.step();
++    world.step();
++    world.step();
++
++    expect(observed).toEqual([
++      { worldTick: 1, diffTick: 1 },
++      { worldTick: 2, diffTick: 2 },
++      { worldTick: 3, diffTick: 3 },
++    ]);
++  });
++
+   it('release-mode skips command execution result allocation when nothing is listening', () => {
+     type Cmds = { move: { x: number; y: number } };
+     const world = new World<Record<string, never>, Cmds>({
+diff --git a/tests/world-destroy.test.ts b/tests/world-destroy.test.ts
+index c71a4fd..e3ec3bc 100644
+--- a/tests/world-destroy.test.ts
++++ b/tests/world-destroy.test.ts
+@@ -37,6 +37,18 @@ describe('onDestroy / offDestroy', () => {
+     expect(world.getComponent(e, 'health')).toBeUndefined();
+   });
+ 
++  it('callback re-entering destroyEntity for the same id does not recurse infinitely (H4)', () => {
++    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++    let calls = 0;
++    world.onDestroy((id, w) => {
++      calls++;
++      w.destroyEntity(id);
++    });
++    const e = world.createEntity();
++    expect(() => world.destroyEntity(e)).not.toThrow();
++    expect(calls).toBe(1);
++  });
++
+   it('does not fire for already dead entities', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+     const destroyed: number[] = [];
+diff --git a/tests/world-tags-meta.test.ts b/tests/world-tags-meta.test.ts
+index 10df4cb..67b0aee 100644
+--- a/tests/world-tags-meta.test.ts
++++ b/tests/world-tags-meta.test.ts
+@@ -68,6 +68,22 @@ describe('Entity tags', () => {
+     expect(diff.tags[0].tags).toContain('marked');
+   });
+ 
++  it('destroyEntity surfaces tag cleanup in TickDiff (M8)', () => {
++    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++    const id = world.createEntity();
++    world.addTag(id, 'player');
++    world.step(); // diff with addTag
++
++    world.registerSystem((w) => {
++      if (w.tick === 1) w.destroyEntity(id);
++    });
++    world.step();
++    const diff = world.getDiff()!;
++    expect(diff.entities.destroyed).toContain(id);
++    const tagEntry = diff.tags.find((t) => t.entity === id);
++    expect(tagEntry).toEqual({ entity: id, tags: [] });
++  });
++
+   it('tags survive serialize/deserialize', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+     const id = world.createEntity();
+@@ -117,6 +133,22 @@ describe('Entity metadata', () => {
+     expect(world.getByMeta('externalId', 'x')).toBeUndefined();
+   });
+ 
++  it('destroyEntity surfaces metadata cleanup in TickDiff (M8)', () => {
++    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++    const id = world.createEntity();
++    world.setMeta(id, 'externalId', 'x');
++    world.step();
++
++    world.registerSystem((w) => {
++      if (w.tick === 1) w.destroyEntity(id);
++    });
++    world.step();
++    const diff = world.getDiff()!;
++    expect(diff.entities.destroyed).toContain(id);
++    const metaEntry = diff.metadata.find((m) => m.entity === id);
++    expect(metaEntry).toEqual({ entity: id, meta: {} });
++  });
++
+   it('metadata changes appear in diffs', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+     const id = world.createEntity();
+diff --git a/tests/world.test.ts b/tests/world.test.ts
+index 6bbe783..02b1afc 100644
+--- a/tests/world.test.ts
++++ b/tests/world.test.ts
+@@ -1,6 +1,40 @@
+ import { describe, it, expect, vi } from 'vitest';
+ import { World, type LooseSystem } from '../src/world.js';
+ 
++describe('World defensive views', () => {
++  it('getEvents returns a defensive copy that survives later clear (M1)', () => {
++    type Events = { hi: { n: number } };
++    const world = new World<Events>({ gridWidth: 4, gridHeight: 4, tps: 60 });
++    world.emit('hi', { n: 1 });
++    const captured = world.getEvents();
++    expect(captured).toHaveLength(1);
++    world.step(); // clears the buffer
++    // captured snapshot is independent
++    expect(captured).toHaveLength(1);
++    expect(captured[0]).toEqual({ type: 'hi', data: { n: 1 } });
++  });
++
++  it('getByTag returns a defensive copy; mutating it does not affect the engine (M1)', () => {
++    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
++    const id = world.createEntity();
++    world.addTag(id, 'alpha');
++    const view = world.getByTag('alpha') as Set<number>;
++    view.delete(id);
++    expect([...world.getByTag('alpha')]).toEqual([id]);
++  });
++
++  it('getDiff returns a defensive copy; mutating its arrays does not corrupt the next call (M1)', () => {
++    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
++    world.createEntity();
++    world.step();
++    const diff = world.getDiff();
++    if (!diff) throw new Error('expected a diff');
++    (diff.entities.created as number[]).push(999);
++    const second = world.getDiff();
++    expect(second!.entities.created).not.toContain(999);
++  });
++});
++
+ describe('World', () => {
+   it('creates and tracks entities', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
