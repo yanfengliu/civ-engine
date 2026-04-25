@@ -512,28 +512,25 @@ export class World<
   ): EntityId | undefined {
     const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
     const mask = components.length > 0 ? this.queryMask(components) : 0n;
-    for (let r = 0; r <= maxRadius; r++) {
-      const entityIds = this.spatialGrid.getInRadius(cx, cy, r);
-      let bestId: EntityId | undefined;
-      let bestDistSq = Infinity;
-      for (const id of entityIds) {
-        if (components.length > 0) {
-          const sig = this.entitySignatures[id] ?? 0n;
-          if ((sig & mask) !== mask) continue;
-        }
-        const pos = this.getComponent<Position>(id, this.positionKey);
-        if (!pos) continue;
-        const dx = pos.x - cx;
-        const dy = pos.y - cy;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < bestDistSq) {
-          bestDistSq = distSq;
-          bestId = id;
-        }
+    const entityIds = this.spatialGrid.getInRadius(cx, cy, maxRadius);
+    let bestId: EntityId | undefined;
+    let bestDistSq = Infinity;
+    for (const id of entityIds) {
+      if (components.length > 0) {
+        const sig = this.entitySignatures[id] ?? 0n;
+        if ((sig & mask) !== mask) continue;
       }
-      if (bestId !== undefined) return bestId;
+      const pos = this.getComponent<Position>(id, this.positionKey);
+      if (!pos) continue;
+      const dx = pos.x - cx;
+      const dy = pos.y - cy;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        bestId = id;
+      }
     }
-    return undefined;
+    return bestId;
   }
 
   registerSystem(
@@ -940,7 +937,7 @@ export class World<
   }
 
   getDiff(): TickDiff | null {
-    return this.currentDiff;
+    return this.currentDiff ? cloneTickDiff(this.currentDiff) : null;
   }
 
   getMetrics(): WorldMetrics | null {
@@ -1090,11 +1087,13 @@ export class World<
   }
 
   getByTag(tag: string): ReadonlySet<EntityId> {
-    return this.tagIndex.get(tag) ?? EMPTY_SET;
+    const set = this.tagIndex.get(tag);
+    return set ? new Set(set) : EMPTY_SET;
   }
 
   getTags(entity: EntityId): ReadonlySet<string> {
-    return this.entityTags.get(entity) ?? EMPTY_STRING_SET;
+    const set = this.entityTags.get(entity);
+    return set ? new Set(set) : EMPTY_STRING_SET;
   }
 
   setMeta(entity: EntityId, key: string, value: string | number): void {
@@ -2178,6 +2177,41 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
 
 function cloneTickFailure(failure: TickFailure): TickFailure {
   return JSON.parse(JSON.stringify(failure)) as TickFailure;
+}
+
+function cloneTickDiff(diff: TickDiff): TickDiff {
+  const components: TickDiff['components'] = {};
+  for (const [key, entry] of Object.entries(diff.components)) {
+    components[key] = {
+      set: entry.set.map(([id, data]) => [id, data]),
+      removed: [...entry.removed],
+    };
+  }
+  const resources: TickDiff['resources'] = {};
+  for (const [key, entry] of Object.entries(diff.resources)) {
+    resources[key] = {
+      set: entry.set.map(([id, pool]) => [id, { ...pool }]),
+      removed: [...entry.removed],
+    };
+  }
+  return {
+    tick: diff.tick,
+    entities: {
+      created: [...diff.entities.created],
+      destroyed: [...diff.entities.destroyed],
+    },
+    components,
+    resources,
+    state: {
+      set: { ...diff.state.set },
+      removed: [...diff.state.removed],
+    },
+    tags: diff.tags.map((t) => ({ entity: t.entity, tags: [...t.tags] })),
+    metadata: diff.metadata.map((m) => ({
+      entity: m.entity,
+      meta: { ...m.meta },
+    })),
+  };
 }
 
 function createErrorDetails(error: unknown): {

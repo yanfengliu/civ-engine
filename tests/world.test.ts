@@ -1,6 +1,40 @@
 import { describe, it, expect, vi } from 'vitest';
 import { World, type LooseSystem } from '../src/world.js';
 
+describe('World defensive views', () => {
+  it('getEvents returns a defensive copy that survives later clear (M1)', () => {
+    type Events = { hi: { n: number } };
+    const world = new World<Events>({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.emit('hi', { n: 1 });
+    const captured = world.getEvents();
+    expect(captured).toHaveLength(1);
+    world.step(); // clears the buffer
+    // captured snapshot is independent
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toEqual({ type: 'hi', data: { n: 1 } });
+  });
+
+  it('getByTag returns a defensive copy; mutating it does not affect the engine (M1)', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    const id = world.createEntity();
+    world.addTag(id, 'alpha');
+    const view = world.getByTag('alpha') as Set<number>;
+    view.delete(id);
+    expect([...world.getByTag('alpha')]).toEqual([id]);
+  });
+
+  it('getDiff returns a defensive copy; mutating its arrays does not corrupt the next call (M1)', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.createEntity();
+    world.step();
+    const diff = world.getDiff();
+    if (!diff) throw new Error('expected a diff');
+    (diff.entities.created as number[]).push(999);
+    const second = world.getDiff();
+    expect(second!.entities.created).not.toContain(999);
+  });
+});
+
 describe('World', () => {
   it('creates and tracks entities', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });

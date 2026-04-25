@@ -176,7 +176,7 @@ export class PathRequestQueue<TRequest, TResult> {
 
   private compact(): void {
     if (this.head === 0) return;
-    if (this.head < 1024 && this.head * 2 < this.pending.length) return;
+    if (this.head < 256 && this.head * 2 < this.pending.length) return;
     this.pending = this.pending.slice(this.head);
     this.head = 0;
   }

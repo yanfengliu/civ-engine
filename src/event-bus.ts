@@ -43,7 +43,7 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
     type: keyof TEventMap;
     data: TEventMap[keyof TEventMap];
   }> {
-    return this.buffer;
+    return [...this.buffer];
   }
 
   clear(): void {
