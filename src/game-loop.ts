@@ -36,6 +36,9 @@ export class GameLoop {
 
   step(): void {
     this.onTick();
+  }
+
+  advance(): void {
     this._tick++;
   }
 

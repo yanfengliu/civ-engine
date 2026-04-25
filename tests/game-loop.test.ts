@@ -14,12 +14,15 @@ describe('GameLoop', () => {
     expect(called).toBe(true);
   });
 
-  it('increments tick on step()', () => {
+  it('step() does not auto-advance tick; advance() is the explicit step', () => {
     const loop = new GameLoop({ tps: 60, onTick: () => {} });
     expect(loop.tick).toBe(0);
     loop.step();
+    expect(loop.tick).toBe(0);
+    loop.advance();
     expect(loop.tick).toBe(1);
     loop.step();
+    loop.advance();
     expect(loop.tick).toBe(2);
   });
 
@@ -44,8 +47,11 @@ describe('GameLoop', () => {
       },
     });
     loop.step();
+    loop.advance();
     loop.step();
+    loop.advance();
     loop.step();
+    loop.advance();
     expect(count).toBe(3);
     expect(loop.tick).toBe(3);
   });
@@ -105,6 +111,7 @@ describe('GameLoop', () => {
     const loop = new GameLoop({ tps: 60, onTick: () => { count++; } });
     loop.pause();
     loop.step();
+    loop.advance();
     expect(count).toBe(1);
     expect(loop.tick).toBe(1);
   });

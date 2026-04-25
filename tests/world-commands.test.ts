@@ -280,6 +280,68 @@ describe('World commands', () => {
     expect(droppedSequences).toEqual([c.sequence, d.sequence]);
   });
 
+  it('marks world as poisoned after a tick failure; step() refuses until recover()', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+
+    expect(world.isPoisoned()).toBe(false);
+    expect(() => world.step()).toThrow(WorldTickFailureError);
+    expect(world.isPoisoned()).toBe(true);
+
+    expect(() => world.step()).toThrow(/poisoned/i);
+
+    world.registerHandler('move', () => {});
+    world.recover();
+    expect(world.isPoisoned()).toBe(false);
+    expect(() => world.step()).not.toThrow();
+  });
+
+  it('stepWithResult on a poisoned world returns world_poisoned without re-running', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+    const first = world.stepWithResult();
+    expect(first.ok).toBe(false);
+    expect(world.isPoisoned()).toBe(true);
+
+    const second = world.stepWithResult();
+    expect(second.ok).toBe(false);
+    expect(second.failure?.code).toBe('world_poisoned');
+  });
+
+  it('diff listeners observe world.tick aligned with diff.tick', () => {
+    type Events = Record<string, never>;
+    type Cmds = Record<string, never>;
+    const world = new World<Events, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    const observed: Array<{ worldTick: number; diffTick: number }> = [];
+    world.onDiff((diff) => {
+      observed.push({ worldTick: world.tick, diffTick: diff.tick });
+    });
+
+    world.step();
+    world.step();
+    world.step();
+
+    expect(observed).toEqual([
+      { worldTick: 1, diffTick: 1 },
+      { worldTick: 2, diffTick: 2 },
+      { worldTick: 3, diffTick: 3 },
+    ]);
+  });
+
   it('release-mode skips command execution result allocation when nothing is listening', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({

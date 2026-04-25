@@ -246,6 +246,7 @@ export class World<
   private currentMetrics: WorldMetrics | null = null;
   private activeMetrics: WorldMetrics | null = null;
   private lastTickFailure: TickFailure | null = null;
+  private poisoned: TickFailure | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -545,13 +546,26 @@ export class World<
   }
 
   step(): void {
+    if (this.poisoned) {
+      throw new WorldTickFailureError(
+        this.makeWorldPoisonedFailure(this.poisoned),
+      );
+    }
     this.gameLoop.step();
   }
 
   stepWithResult(): WorldStepResult {
+    if (this.poisoned) {
+      const failure = this.makeWorldPoisonedFailure(this.poisoned);
+      return {
+        schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
+        ok: false,
+        tick: failure.tick,
+        failure,
+      };
+    }
     const failure = this.runTick({ metricsProfile: 'full' });
     if (!failure) {
-      this.gameLoop.setTick(this.gameLoop.tick + 1);
       return {
         schemaVersion: WORLD_STEP_RESULT_SCHEMA_VERSION,
         ok: true,
@@ -564,6 +578,30 @@ export class World<
       ok: false,
       tick: failure.tick,
       failure,
+    };
+  }
+
+  isPoisoned(): boolean {
+    return this.poisoned !== null;
+  }
+
+  recover(): void {
+    this.poisoned = null;
+  }
+
+  private makeWorldPoisonedFailure(prior: TickFailure): TickFailure {
+    return {
+      schemaVersion: prior.schemaVersion,
+      tick: prior.tick,
+      phase: prior.phase,
+      code: 'world_poisoned',
+      message: `World is poisoned by tick ${prior.tick} failure '${prior.code}'; call world.recover() to resume`,
+      subsystem: prior.subsystem,
+      commandType: prior.commandType,
+      submissionSequence: prior.submissionSequence,
+      systemName: prior.systemName,
+      details: prior.details,
+      error: prior.error,
     };
   }
 
@@ -1319,6 +1357,7 @@ export class World<
       }
       this.currentMetrics = metrics;
       this.lastTickFailure = null;
+      this.gameLoop.advance();
     } finally {
       this.activeMetrics = null;
     }
@@ -1328,7 +1367,7 @@ export class World<
         listener(this.currentDiff!);
       }
     } catch (error) {
-      const tick = metrics?.tick ?? this.gameLoop.tick + 1;
+      const tick = metrics?.tick ?? this.gameLoop.tick;
       return this.finalizeTickFailure(
         this.createTickFailure({
           tick,
@@ -1543,6 +1582,7 @@ export class World<
     }
     this.currentMetrics = metrics;
     this.lastTickFailure = failure;
+    this.poisoned = failure;
     if (failure.phase !== 'listeners') {
       this.currentDiff = null;
     }
