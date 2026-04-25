@@ -614,17 +614,6 @@ export class World<
   }
 
   submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
-    if (
-      this.instrumentationProfile !== 'full' &&
-      this.commandResultListeners.size === 0
-    ) {
-      const rejection = this.validateCommand(type, data);
-      if (rejection) {
-        return false;
-      }
-      this.commandQueue.push(type, data);
-      return true;
-    }
     return this.submitWithResult(type, data).accepted;
   }
 
@@ -1363,26 +1352,29 @@ export class World<
   } {
     const commands = this.commandQueue.drain();
     let processed = 0;
-    for (const command of commands) {
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i];
       const handler = this.handlers.get(command.type);
       if (!handler) {
-        const failure = this.createTickFailure({
-          tick,
-          phase: 'commands',
-          code: 'missing_handler',
-          message: `No handler registered for command '${String(command.type)}'`,
-          subsystem: 'commands',
-          commandType: command.type,
-          submissionSequence: command.submissionSequence,
-          details: null,
-        });
+        const failureMessage = `No handler registered for command '${String(command.type)}'`;
         this.emitCommandExecution(command.type, {
           submissionSequence: command.submissionSequence,
           executed: false,
           code: 'missing_handler',
-          message: failure.message,
+          message: failureMessage,
           details: null,
           tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'missing_handler',
+          message: failureMessage,
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: dropped.length > 0 ? { droppedCommands: dropped } : null,
         });
         return { processed, failure };
       }
@@ -1400,6 +1392,17 @@ export class World<
         });
       } catch (error) {
         const details = createErrorDetails(error);
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: false,
+          code: 'command_handler_threw',
+          message: errorMessage(error),
+          details: {
+            error: details,
+          },
+          tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
         const failure = this.createTickFailure({
           tick,
           phase: 'commands',
@@ -1412,24 +1415,45 @@ export class World<
             commandType: String(command.type),
             submissionSequence: command.submissionSequence,
             error: details,
+            ...(dropped.length > 0 ? { droppedCommands: dropped } : {}),
           },
           error,
-        });
-        this.emitCommandExecution(command.type, {
-          submissionSequence: command.submissionSequence,
-          executed: false,
-          code: 'command_handler_threw',
-          message: errorMessage(error),
-          details: {
-            error: details,
-          },
-          tick,
         });
         return { processed, failure };
       }
     }
 
     return { processed, failure: null };
+  }
+
+  private dropPendingCommands(
+    commands: ReadonlyArray<{
+      type: keyof TCommandMap;
+      submissionSequence: number | null;
+    }>,
+    startIndex: number,
+    tick: number,
+  ): Array<{ commandType: string; submissionSequence: number | null }> {
+    const dropped: Array<{
+      commandType: string;
+      submissionSequence: number | null;
+    }> = [];
+    for (let i = startIndex; i < commands.length; i++) {
+      const cmd = commands[i];
+      this.emitCommandExecution(cmd.type, {
+        submissionSequence: cmd.submissionSequence,
+        executed: false,
+        code: 'tick_aborted_before_handler',
+        message: 'Command was queued for this tick but the tick aborted before its handler ran',
+        details: null,
+        tick,
+      });
+      dropped.push({
+        commandType: String(cmd.type),
+        submissionSequence: cmd.submissionSequence,
+      });
+    }
+    return dropped;
   }
 
   private createCommandSubmissionResult<K extends keyof TCommandMap>(

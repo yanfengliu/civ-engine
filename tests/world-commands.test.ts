@@ -151,7 +151,7 @@ describe('World commands', () => {
     ]);
   });
 
-  it('minimal-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
+  it('minimal-mode submit still assigns a sequence and queues with submissionSequence', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({
       gridWidth: 10,
@@ -160,17 +160,12 @@ describe('World commands', () => {
       instrumentationProfile: 'minimal',
     });
     world.registerHandler('move', () => {});
-    const createResultSpy = vi.spyOn(
-      world as unknown as { createCommandSubmissionResult: () => unknown },
-      'createCommandSubmissionResult',
-    );
-
     expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
-    expect(createResultSpy).not.toHaveBeenCalled();
-    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
+    // sequence 0 was consumed by submit(); the next submitWithResult sees 1
+    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(1);
   });
 
-  it('release-mode submit uses a boolean fast path when no command-result listeners are attached', () => {
+  it('release-mode submit still assigns a sequence and queues with submissionSequence', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({
       gridWidth: 10,
@@ -179,14 +174,30 @@ describe('World commands', () => {
       instrumentationProfile: 'release',
     });
     world.registerHandler('move', () => {});
-    const createResultSpy = vi.spyOn(
-      world as unknown as { createCommandSubmissionResult: () => unknown },
-      'createCommandSubmissionResult',
-    );
-
     expect(world.submit('move', { x: 1, y: 2 })).toBe(true);
-    expect(createResultSpy).not.toHaveBeenCalled();
-    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(0);
+    expect(world.submitWithResult('move', { x: 2, y: 3 }).sequence).toBe(1);
+  });
+
+  it('submit() populates submissionSequence on queued commands so executions are correlatable', () => {
+    type Cmds = { move: { n: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+      instrumentationProfile: 'release',
+    });
+    world.registerHandler('move', () => {});
+
+    const seenSequences: Array<number | null> = [];
+    world.onCommandExecution((result) => {
+      seenSequences.push(result.submissionSequence);
+    });
+
+    world.submit('move', { n: 1 });
+    world.submit('move', { n: 2 });
+    world.step();
+
+    expect(seenSequences).toEqual([0, 1]);
   });
 
   it('release-mode submit still emits structured results when listeners are attached', () => {
@@ -215,6 +226,58 @@ describe('World commands', () => {
         validatorIndex: null,
       },
     ]);
+  });
+
+  it('processCommands emits tick_aborted_before_handler executions for commands after a failure', () => {
+    type Cmds = { move: { n: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 60,
+    });
+    world.registerHandler('move', (data) => {
+      if (data.n === 2) throw new Error('boom');
+    });
+
+    const executions: unknown[] = [];
+    world.onCommandExecution((result) => executions.push(result));
+
+    const a = world.submitWithResult('move', { n: 1 });
+    const b = world.submitWithResult('move', { n: 2 });
+    const c = world.submitWithResult('move', { n: 3 });
+    const d = world.submitWithResult('move', { n: 4 });
+
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(false);
+
+    expect(executions).toEqual([
+      expect.objectContaining({
+        submissionSequence: a.sequence,
+        executed: true,
+        code: 'executed',
+      }),
+      expect.objectContaining({
+        submissionSequence: b.sequence,
+        executed: false,
+        code: 'command_handler_threw',
+      }),
+      expect.objectContaining({
+        submissionSequence: c.sequence,
+        executed: false,
+        code: 'tick_aborted_before_handler',
+      }),
+      expect.objectContaining({
+        submissionSequence: d.sequence,
+        executed: false,
+        code: 'tick_aborted_before_handler',
+      }),
+    ]);
+
+    const failure = result.failure!;
+    const droppedSequences = (failure.details as {
+      droppedCommands: Array<{ submissionSequence: number | null }>;
+    } | null)?.droppedCommands?.map((cmd) => cmd.submissionSequence);
+    expect(droppedSequences).toEqual([c.sequence, d.sequence]);
   });
 
   it('release-mode skips command execution result allocation when nothing is listening', () => {
