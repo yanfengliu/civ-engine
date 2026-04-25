@@ -302,6 +302,10 @@ export class World<
   destroyEntity(id: EntityId): void {
     if (!this.entityManager.isAlive(id)) return;
 
+    // Mark dead first so re-entrant destroyEntity(id) calls inside callbacks
+    // hit the alive guard and return without recursing.
+    this.entityManager.destroy(id);
+
     for (const callback of this.destroyCallbacks) {
       callback(id, this);
     }
@@ -318,7 +322,6 @@ export class World<
     this.resourceStore.removeEntity(id);
     this.removeEntityTags(id);
     this.removeEntityMeta(id);
-    this.entityManager.destroy(id);
   }
 
   isAlive(id: EntityId): boolean {
@@ -1132,6 +1135,7 @@ export class World<
       }
     }
     this.entityTags.delete(entity);
+    this.tagsDirtyEntities.add(entity);
   }
 
   private removeEntityMeta(entity: EntityId): void {
@@ -1147,6 +1151,7 @@ export class World<
       }
     }
     this.entityMeta.delete(entity);
+    this.metaDirtyEntities.add(entity);
   }
 
   private addTagInternal(entity: EntityId, tag: string): void {
@@ -1898,7 +1903,7 @@ export class World<
   }
 
   private assertPositionInBounds(position: Position): void {
-    this.spatialGrid.getAt(position.x, position.y);
+    this.spatialGrid.assertBounds(position.x, position.y);
   }
 
   private registerComponentBit(key: string): bigint {

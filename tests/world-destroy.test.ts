@@ -37,6 +37,18 @@ describe('onDestroy / offDestroy', () => {
     expect(world.getComponent(e, 'health')).toBeUndefined();
   });
 
+  it('callback re-entering destroyEntity for the same id does not recurse infinitely (H4)', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    let calls = 0;
+    world.onDestroy((id, w) => {
+      calls++;
+      w.destroyEntity(id);
+    });
+    const e = world.createEntity();
+    expect(() => world.destroyEntity(e)).not.toThrow();
+    expect(calls).toBe(1);
+  });
+
   it('does not fire for already dead entities', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     const destroyed: number[] = [];

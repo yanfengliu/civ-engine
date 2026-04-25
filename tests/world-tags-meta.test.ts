@@ -68,6 +68,22 @@ describe('Entity tags', () => {
     expect(diff.tags[0].tags).toContain('marked');
   });
 
+  it('destroyEntity surfaces tag cleanup in TickDiff (M8)', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const id = world.createEntity();
+    world.addTag(id, 'player');
+    world.step(); // diff with addTag
+
+    world.registerSystem((w) => {
+      if (w.tick === 1) w.destroyEntity(id);
+    });
+    world.step();
+    const diff = world.getDiff()!;
+    expect(diff.entities.destroyed).toContain(id);
+    const tagEntry = diff.tags.find((t) => t.entity === id);
+    expect(tagEntry).toEqual({ entity: id, tags: [] });
+  });
+
   it('tags survive serialize/deserialize', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     const id = world.createEntity();
@@ -115,6 +131,22 @@ describe('Entity metadata', () => {
     world.setMeta(id, 'externalId', 'x');
     world.destroyEntity(id);
     expect(world.getByMeta('externalId', 'x')).toBeUndefined();
+  });
+
+  it('destroyEntity surfaces metadata cleanup in TickDiff (M8)', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const id = world.createEntity();
+    world.setMeta(id, 'externalId', 'x');
+    world.step();
+
+    world.registerSystem((w) => {
+      if (w.tick === 1) w.destroyEntity(id);
+    });
+    world.step();
+    const diff = world.getDiff()!;
+    expect(diff.entities.destroyed).toContain(id);
+    const metaEntry = diff.metadata.find((m) => m.entity === id);
+    expect(metaEntry).toEqual({ entity: id, meta: {} });
   });
 
   it('metadata changes appear in diffs', () => {

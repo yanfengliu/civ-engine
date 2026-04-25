@@ -149,7 +149,7 @@ export class SpatialGrid {
     return result;
   }
 
-  private assertBounds(x: number, y: number): void {
+  assertBounds(x: number, y: number): void {
     if (!Number.isInteger(x) || !Number.isInteger(y)) {
       throw new RangeError(`Position (${x}, ${y}) must use integer coordinates`);
     }
