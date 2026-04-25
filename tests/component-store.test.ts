@@ -161,6 +161,59 @@ describe('ComponentStore', () => {
     ).toThrow();
   });
 
+  describe('detectInPlaceMutations option', () => {
+    it('defaults to true — in-place mutations after clearDirty are detected (existing behavior)', () => {
+      const store = new ComponentStore<{ hp: number }>();
+      store.set(1, { hp: 10 });
+      store.clearDirty();
+      store.get(1)!.hp = 15;
+      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+    });
+
+    it('when false, in-place mutations after clearDirty are NOT detected', () => {
+      const store = new ComponentStore<{ hp: number }>({
+        detectInPlaceMutations: false,
+      });
+      store.set(1, { hp: 10 });
+      store.clearDirty();
+      store.get(1)!.hp = 15;
+      expect(store.getDirty().set).toEqual([]);
+    });
+
+    it('when false, explicit set() still marks dirty', () => {
+      const store = new ComponentStore<{ hp: number }>({
+        detectInPlaceMutations: false,
+      });
+      store.set(1, { hp: 10 });
+      store.clearDirty();
+      store.set(1, { hp: 15 });
+      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+    });
+
+    it('still validates JSON-compatibility on set even with detectInPlaceMutations false', () => {
+      const store = new ComponentStore<{ value: number }>({
+        detectInPlaceMutations: false,
+      });
+      expect(() => store.set(1, { value: Number.NaN })).toThrow();
+    });
+
+    it('combines with semantic mode: identical rewrites suppressed AND in-place detection skipped', () => {
+      const store = new ComponentStore<{ x: number }>({
+        diffMode: 'semantic',
+        detectInPlaceMutations: false,
+      });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.set(0, { x: 5 });
+      expect(store.getDirty().set).toEqual([]);
+
+      store.clearDirty();
+      store.get(0)!.x = 99;
+      expect(store.getDirty().set).toEqual([]);
+    });
+  });
+
   describe('semantic diffMode', () => {
     it('defaults to strict mode (identical rewrites still mark dirty)', () => {
       const store = new ComponentStore<{ x: number }>();

@@ -1,8 +1,18 @@
 import type { EntityId } from './types.js';
-import { jsonFingerprint } from './json.js';
+import { assertJsonCompatible, jsonFingerprint } from './json.js';
 
 export interface ComponentStoreOptions {
   diffMode?: 'strict' | 'semantic';
+  /**
+   * When true (default), `getDirty()` scans every entry and uses fingerprint
+   * comparison to detect in-place object mutations made after the previous
+   * `clearDirty()`. When false, only entries marked dirty via `set()`/`remove()`
+   * are reported. Setting this to false avoids the per-entity JSON.stringify cost
+   * on the diff path; callers must then write through `set()` for changes to be
+   * visible. `'semantic'` `diffMode` continues to use the baseline fingerprint
+   * to suppress identical rewrites regardless of this flag.
+   */
+  detectInPlaceMutations?: boolean;
 }
 
 export class ComponentStore<T> {
@@ -13,29 +23,40 @@ export class ComponentStore<T> {
   private removedSet = new Set<EntityId>();
   private baseline = new Map<EntityId, string>();
   private diffMode: 'strict' | 'semantic';
+  private detectInPlaceMutations: boolean;
 
   constructor(options: ComponentStoreOptions = {}) {
     this.diffMode = options.diffMode ?? 'strict';
+    this.detectInPlaceMutations = options.detectInPlaceMutations ?? true;
   }
 
   set(entityId: EntityId, component: T): void {
     if (component === undefined) {
       throw new Error('Component data must not be undefined');
     }
-    const fingerprint = jsonFingerprint(component, `component ${entityId}`);
     const wasPresent = this.data[entityId] !== undefined;
+
+    if (this.diffMode === 'semantic' && wasPresent) {
+      const fingerprint = jsonFingerprint(component, `component ${entityId}`);
+      const baseline = this.baseline.get(entityId);
+      this.data[entityId] = component;
+      this._generation++;
+      if (baseline === fingerprint) {
+        return;
+      }
+      this.dirtySet.add(entityId);
+      this.removedSet.delete(entityId);
+      return;
+    }
+
+    assertJsonCompatible(component, `component ${entityId}`);
     if (!wasPresent) {
       this._size++;
     }
     this.data[entityId] = component;
     this._generation++;
-    if (this.diffMode === 'semantic' && wasPresent) {
-      const baseline = this.baseline.get(entityId);
-      if (baseline === fingerprint) {
-        return;
-      }
-    }
     this.dirtySet.add(entityId);
+    this.removedSet.delete(entityId);
   }
 
   get(entityId: EntityId): T | undefined {
@@ -81,12 +102,14 @@ export class ComponentStore<T> {
 
   getDirty(): { set: Array<[EntityId, T]>; removed: EntityId[] } {
     const changed = new Set(this.dirtySet);
-    for (const [id, data] of this.entries()) {
-      if (changed.has(id)) continue;
-      const previous = this.baseline.get(id);
-      const current = jsonFingerprint(data, `component ${id}`);
-      if (previous !== current) {
-        changed.add(id);
+    if (this.detectInPlaceMutations) {
+      for (const [id, data] of this.entries()) {
+        if (changed.has(id)) continue;
+        const previous = this.baseline.get(id);
+        const current = jsonFingerprint(data, `component ${id}`);
+        if (previous !== current) {
+          changed.add(id);
+        }
       }
     }
 
@@ -102,9 +125,11 @@ export class ComponentStore<T> {
   clearDirty(): void {
     this.dirtySet.clear();
     this.removedSet.clear();
-    this.baseline.clear();
-    for (const [id, data] of this.entries()) {
-      this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
+    if (this.detectInPlaceMutations || this.diffMode === 'semantic') {
+      this.baseline.clear();
+      for (const [id, data] of this.entries()) {
+        this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
+      }
     }
   }
 
