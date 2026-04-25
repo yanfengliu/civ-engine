@@ -158,16 +158,14 @@ export class RenderAdapter<
   }
 
   private buildSnapshot(): RenderSnapshot<TView, TFrame> {
-    const snapshot = this.world.serialize();
     this.knownRefs.clear();
     this.renderedRefs.clear();
 
     const entities: Array<RenderEntity<TView>> = [];
-    for (let id = 0; id < snapshot.entities.alive.length; id++) {
-      if (!snapshot.entities.alive[id]) continue;
+    for (const id of this.world.getAliveEntities()) {
       const ref = {
         id,
-        generation: snapshot.entities.generations[id] ?? 0,
+        generation: this.world.getEntityGeneration(id),
       };
       this.knownRefs.set(id, ref);
       const projected = this.projector.projectEntity(ref, this.world, null);
@@ -179,7 +177,7 @@ export class RenderAdapter<
 
     const frame = this.captureFrame(null);
     return {
-      tick: snapshot.tick,
+      tick: this.world.tick,
       entities,
       frame,
     };

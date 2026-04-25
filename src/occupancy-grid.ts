@@ -131,8 +131,8 @@ export interface OccupancyBindingSubcellOptions
 }
 
 export interface OccupancyBindingWorldHooks {
-  onDestroy(callback: (id: EntityId, world: unknown) => void): void;
-  offDestroy(callback: (id: EntityId, world: unknown) => void): void;
+  onDestroy(callback: (id: EntityId) => void): void;
+  offDestroy(callback: (id: EntityId) => void): void;
 }
 
 export interface OccupancyBindingOptions {

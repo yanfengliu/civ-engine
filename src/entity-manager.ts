@@ -37,6 +37,12 @@ export class EntityManager {
     return id >= 0 && id < this.alive.length && this.alive[id];
   }
 
+  *aliveEntities(): IterableIterator<EntityId> {
+    for (let i = 0; i < this.alive.length; i++) {
+      if (this.alive[i]) yield i;
+    }
+  }
+
   getGeneration(id: EntityId): number {
     return this.generations[id] ?? 0;
   }

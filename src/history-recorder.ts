@@ -252,10 +252,8 @@ export class WorldHistoryRecorder<
 
   private captureDebug(): TDebug | null {
     const debug = this.debugCapture?.() ?? null;
-    if (debug !== null) {
-      assertJsonCompatible(debug, 'history debug payload');
-    }
-    return debug;
+    if (debug === null) return null;
+    return cloneJsonValue(debug, 'history debug payload') as TDebug;
   }
 }
 

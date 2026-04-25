@@ -212,6 +212,7 @@ export class World<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   private entityManager: EntityManager;
   private componentStores = new Map<string, ComponentStore<unknown>>();
@@ -327,6 +328,14 @@ export class World<
 
   isAlive(id: EntityId): boolean {
     return this.entityManager.isAlive(id);
+  }
+
+  *getAliveEntities(): IterableIterator<EntityId> {
+    yield* this.entityManager.aliveEntities();
+  }
+
+  getEntityGeneration(id: EntityId): number {
+    return this.entityManager.getGeneration(id);
   }
 
   getEntityRef(id: EntityId): EntityRef | null {
@@ -1035,7 +1044,7 @@ export class World<
     return this.resourceStore.getTransfers(entity);
   }
 
-  setState<K extends keyof TComponents & string>(key: K, value: TComponents[K]): void;
+  setState<K extends keyof TState & string>(key: K, value: TState[K]): void;
   setState(key: string, value: unknown): void;
   setState(key: string, value: unknown): void {
     assertJsonCompatible(value, `state '${key}'`);
@@ -1044,12 +1053,14 @@ export class World<
     this.stateRemovedKeys.delete(key);
   }
 
-  getState<K extends keyof TComponents & string>(key: K): TComponents[K] | undefined;
+  getState<K extends keyof TState & string>(key: K): TState[K] | undefined;
   getState(key: string): unknown;
   getState(key: string): unknown {
     return this.stateStore.get(key);
   }
 
+  deleteState<K extends keyof TState & string>(key: K): void;
+  deleteState(key: string): void;
   deleteState(key: string): void {
     if (this.stateStore.has(key)) {
       this.stateStore.delete(key);
@@ -1058,6 +1069,8 @@ export class World<
     }
   }
 
+  hasState<K extends keyof TState & string>(key: K): boolean;
+  hasState(key: string): boolean;
   hasState(key: string): boolean {
     return this.stateStore.has(key);
   }
@@ -1207,12 +1220,23 @@ export class World<
       this.entityMeta.set(entity, meta);
     }
     const oldValue = meta.get(key);
-    if (oldValue !== undefined) {
-      const keyIndex = this.metaIndex.get(key);
-      if (keyIndex) keyIndex.delete(oldValue);
+    let keyIndex = this.metaIndex.get(key);
+    if (oldValue !== undefined && keyIndex) {
+      keyIndex.delete(oldValue);
+    }
+    if (keyIndex) {
+      const owner = keyIndex.get(value);
+      if (owner !== undefined && owner !== entity) {
+        // Restore the prior reverse-index entry we just cleared so state is unchanged.
+        if (oldValue !== undefined) {
+          keyIndex.set(oldValue, entity);
+        }
+        throw new Error(
+          `Metadata ${JSON.stringify(key)}=${JSON.stringify(value)} is already owned by entity ${owner}; metadata reverse index is unique`,
+        );
+      }
     }
     meta.set(key, value);
-    let keyIndex = this.metaIndex.get(key);
     if (!keyIndex) {
       keyIndex = new Map();
       this.metaIndex.set(key, keyIndex);

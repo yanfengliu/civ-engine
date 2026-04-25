@@ -117,7 +117,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
 
     explored++;
 
-    if (current.g > maxCost) return null;
+    if (current.g > maxCost) continue;
 
     if (currentHash === goalHash) {
       const path = reconstructPath(cameFrom, hash, current.node);
@@ -128,7 +128,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
 
     for (const neighbor of neighbors(current.node)) {
       const edgeCost = cost(current.node, neighbor);
-      if (!isFinite(edgeCost)) continue;
+      if (!isFinite(edgeCost) || edgeCost < 0) continue;
 
       const newG = current.g + edgeCost;
       const neighborHash = hash(neighbor);

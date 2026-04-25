@@ -1,8 +1,8 @@
-// 2D simplex noise gradients (8 directions)
-const GRAD2 = [
+// 2D simplex noise gradients (8 directions). Length is load-bearing: indexed by `gi & 7`.
+const GRAD2: ReadonlyArray<readonly [number, number]> = [
   [1, 1], [-1, 1], [1, -1], [-1, -1],
   [1, 0], [-1, 0], [0, 1], [0, -1],
-];
+] as const;
 
 // Skew/unskew factors for 2D simplex
 const F2 = 0.5 * (Math.sqrt(3) - 1);
@@ -33,7 +33,7 @@ function buildPermutationTable(seed: number): Uint8Array {
   return perm;
 }
 
-function dot2(g: number[], x: number, y: number): number {
+function dot2(g: readonly [number, number], x: number, y: number): number {
   return g[0] * x + g[1] * y;
 }
 
@@ -59,9 +59,9 @@ export function createNoise2D(seed: number): (x: number, y: number) => number {
 
     const ii = i & 255;
     const jj = j & 255;
-    const gi0 = perm[(ii + perm[jj % 256]) % 256] % 8;
-    const gi1 = perm[(ii + i1 + perm[(jj + j1) % 256]) % 256] % 8;
-    const gi2 = perm[(ii + 1 + perm[(jj + 1) % 256]) % 256] % 8;
+    const gi0 = perm[(ii + perm[jj % 256]) % 256] & 7;
+    const gi1 = perm[(ii + i1 + perm[(jj + j1) % 256]) % 256] & 7;
+    const gi2 = perm[(ii + 1 + perm[(jj + 1) % 256]) % 256] & 7;
 
     let n0 = 0;
     let t0 = 0.5 - x0 * x0 - y0 * y0;
