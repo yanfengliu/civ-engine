@@ -280,6 +280,39 @@ describe('World commands', () => {
     expect(droppedSequences).toEqual([c.sequence, d.sequence]);
   });
 
+  it('recover() also clears lastTickFailure and currentDiff (CR3)', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 4,
+      gridHeight: 4,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+    expect(() => world.step()).toThrow(WorldTickFailureError);
+    expect(world.getLastTickFailure()).not.toBeNull();
+    world.recover();
+    expect(world.getLastTickFailure()).toBeNull();
+    expect(world.getDiff()).toBeNull();
+  });
+
+  it('failed tick consumes a tick number; next successful tick uses a distinct one (H_NEW2)', () => {
+    type Cmds = { move: { x: number } };
+    const world = new World<Record<string, never>, Cmds>({
+      gridWidth: 4,
+      gridHeight: 4,
+      tps: 60,
+    });
+    world.submit('move', { x: 1 });
+    expect(() => world.step()).toThrow(WorldTickFailureError);
+    const failedTick = world.tick;
+    expect(failedTick).toBe(1);
+
+    world.registerHandler('move', () => {});
+    world.recover();
+    world.step();
+    expect(world.tick).toBe(2);
+  });
+
   it('marks world as poisoned after a tick failure; step() refuses until recover()', () => {
     type Cmds = { move: { x: number } };
     const world = new World<Record<string, never>, Cmds>({

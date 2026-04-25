@@ -617,6 +617,9 @@ export class World<
 
   recover(): void {
     this.poisoned = null;
+    this.lastTickFailure = null;
+    this.currentDiff = null;
+    this.currentMetrics = null;
   }
 
   private makeWorldPoisonedFailure(prior: TickFailure): TickFailure {
@@ -1118,12 +1121,12 @@ export class World<
 
   getByTag(tag: string): ReadonlySet<EntityId> {
     const set = this.tagIndex.get(tag);
-    return set ? new Set(set) : EMPTY_SET;
+    return set ? new Set(set) : new Set<EntityId>();
   }
 
   getTags(entity: EntityId): ReadonlySet<string> {
     const set = this.entityTags.get(entity);
-    return set ? new Set(set) : EMPTY_STRING_SET;
+    return set ? new Set(set) : new Set<string>();
   }
 
   setMeta(entity: EntityId, key: string, value: string | number): void {
@@ -1231,27 +1234,24 @@ export class World<
   }
 
   private setMetaInternal(entity: EntityId, key: string, value: string | number): void {
-    let meta = this.entityMeta.get(entity);
-    if (!meta) {
-      meta = new Map();
-      this.entityMeta.set(entity, meta);
-    }
-    const oldValue = meta.get(key);
+    const existingMeta = this.entityMeta.get(entity);
     let keyIndex = this.metaIndex.get(key);
-    if (oldValue !== undefined && keyIndex) {
-      keyIndex.delete(oldValue);
-    }
     if (keyIndex) {
       const owner = keyIndex.get(value);
       if (owner !== undefined && owner !== entity) {
-        // Restore the prior reverse-index entry we just cleared so state is unchanged.
-        if (oldValue !== undefined) {
-          keyIndex.set(oldValue, entity);
-        }
         throw new Error(
           `Metadata ${JSON.stringify(key)}=${JSON.stringify(value)} is already owned by entity ${owner}; metadata reverse index is unique`,
         );
       }
+    }
+    // Uniqueness check passed — now mutate state.
+    const meta = existingMeta ?? new Map();
+    if (!existingMeta) {
+      this.entityMeta.set(entity, meta);
+    }
+    const oldValue = meta.get(key);
+    if (oldValue !== undefined && keyIndex) {
+      keyIndex.delete(oldValue);
     }
     meta.set(key, value);
     if (!keyIndex) {
@@ -1662,6 +1662,10 @@ export class World<
     this.poisoned = failure;
     if (failure.phase !== 'listeners') {
       this.currentDiff = null;
+      // Listener-phase failures already happened AFTER gameLoop.advance() ran in
+      // the success path. For every other phase, advance now so the failed tick
+      // number is consumed and the next successful tick gets a distinct number.
+      this.gameLoop.advance();
     }
     this.emitTickFailure(failure);
     return cloneTickFailure(failure);
@@ -1702,6 +1706,11 @@ export class World<
   }
 
   private executeTickOrThrow(): void {
+    if (this.poisoned) {
+      throw new WorldTickFailureError(
+        this.makeWorldPoisonedFailure(this.poisoned),
+      );
+    }
     const failure = this.runTick({
       metricsProfile: getImplicitMetricsProfile(this.instrumentationProfile),
     });
@@ -2279,8 +2288,6 @@ function insertSorted(values: EntityId[], value: EntityId): void {
   }
 }
 
-const EMPTY_SET: ReadonlySet<EntityId> = new Set();
-const EMPTY_STRING_SET: ReadonlySet<string> = new Set();
 
 function validateWorldConfig(config: WorldConfig): void {
   if (!Number.isInteger(config.gridWidth) || config.gridWidth <= 0) {

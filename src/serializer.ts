@@ -69,7 +69,7 @@ export interface WorldSnapshotV5 {
     freeList: number[];
   };
   components: Record<string, Array<[EntityId, unknown]>>;
-  componentOptions: Record<string, ComponentStoreOptions>;
+  componentOptions?: Record<string, ComponentStoreOptions>;
   resources: ResourceStoreState;
   rng: RandomState;
   state: Record<string, unknown>;
