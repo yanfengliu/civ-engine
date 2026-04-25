@@ -50,8 +50,9 @@ Components must already be JSON-compatible plain data. `serialize()` rejects non
 
 ```typescript
 interface WorldSnapshot {
-  version: 3;                    // format version
-  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, sync options
+  version: 5;                    // format version (current write format)
+  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, sync options,
+                                 //   plus maxTicksPerFrame and instrumentationProfile when non-default
   tick: number;                  // current tick count
   entities: {
     generations: number[];       // per-slot generation counters
@@ -60,10 +61,17 @@ interface WorldSnapshot {
   };
   components: Record<string, Array<[EntityId, unknown]>>;
   // e.g., { position: [[0, {x:5,y:3}], [1, {x:2,y:7}]], health: [[0, {hp:100}]] }
+  componentOptions?: Record<string, ComponentStoreOptions>;
+  // per-component diffMode + detectInPlaceMutations; survives save/load
   resources: ResourceStoreState; // registrations, pools, rates, transfers
   rng: RandomState;              // deterministic RNG state
+  state: Record<string, unknown>;
+  tags: Record<number, string[]>;
+  metadata: Record<number, Record<string, string | number>>;
 }
 ```
+
+`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on).
 
 ## Loading State
 
@@ -158,7 +166,11 @@ if (diff) {
 }
 ```
 
-`getDiff()` returns `null` before the first tick.
+`getDiff()` returns `null` before the first tick. The returned object is a JSON deep-clone — mutating it does not write through to the live engine. Callers can safely cache diffs across ticks without worrying about the engine overwriting them.
+
+Inside an `onDiff` listener `world.tick === diff.tick`. Use whichever you prefer for correlation; they always agree.
+
+`world.getEvents()` returns the same defensive shape (deep-cloned event payloads).
 
 ### Push (callback)
 

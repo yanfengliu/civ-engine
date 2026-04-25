@@ -326,15 +326,27 @@ class WorldTickFailureError extends Error {
 }
 ```
 
-Compatibility error thrown by `world.step()` when the tick fails at runtime.
+Thrown by `world.step()` when a tick fails. Also thrown by `world.step()` (and surfaced as a `world_poisoned` failure result by `world.stepWithResult()`) for any subsequent step until `world.recover()` is called — see Tick failure semantics.
+
+### Tick failure semantics
+
+A failure in any tick phase (commands, spatialSync, systems, resources, diff, listeners) marks the world as **poisoned**:
+
+- `world.isPoisoned(): boolean` returns `true` until the next call to `recover()`.
+- While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `WorldStepResult` with `failure.code === 'world_poisoned'`. The original failure that caused the poison is preserved on the result for diagnostics.
+- `world.recover(): void` clears the poison flag and the cached `lastTickFailure`/`currentDiff`/`currentMetrics`. After `recover()`, the next `step()` runs normally.
+
+Failed ticks consume a tick number. If a tick fails at would-be tick `N+1`, `world.tick` advances to `N+1`; the next successful tick after `recover()` is `N+2`. This guarantees that failed-tick events and successful-tick events never share a `tick` value, so consumers can correlate by tick number unambiguously.
+
+When a command handler throws (or its handler is missing), every command queued for that tick that has not yet executed is emitted as a `commandExecuted: false` event with `code: 'tick_aborted_before_handler'`, and the dropped commands' `submissionSequence`s are recorded on `failure.details.droppedCommands`. The queue is not re-populated — these commands are dropped, not retried.
 
 ### `WorldSnapshot`
 
 ```typescript
 // src/serializer.ts
 interface WorldSnapshot {
-  version: 4;
-  config: WorldConfig;
+  version: 5;
+  config: WorldConfig; // includes maxTicksPerFrame and instrumentationProfile when non-default
   tick: number;
   entities: {
     generations: number[];
@@ -342,15 +354,16 @@ interface WorldSnapshot {
     freeList: number[];
   };
   components: Record<string, Array<[EntityId, unknown]>>;
+  componentOptions?: Record<string, ComponentStoreOptions>; // diffMode + detectInPlaceMutations per component
   resources: ResourceStoreState;
   rng: RandomState;
   state: Record<string, unknown>;
-  tags: Record<string, EntityId[]>;
-  metadata: Record<string, Array<[EntityId, Record<string, string | number>]>>;
+  tags: Record<number, string[]>;
+  metadata: Record<number, Record<string, string | number>>;
 }
 ```
 
-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 4 adds world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Version 1, 2, and 3 snapshots are still accepted by `World.deserialize()` for backward compatibility. Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` / `detectInPlaceMutations` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on). Systems, validators, handlers, and event listeners are not included (they are functions, not data).
 
 ### `TickDiff`
 
@@ -1173,6 +1186,22 @@ isCurrent(ref: EntityRef): boolean
 
 Returns `true` only if the referenced entity ID is alive and still has the same generation.
 
+#### `getAliveEntities()`
+
+```typescript
+getAliveEntities(): IterableIterator<EntityId>
+```
+
+Yields every live entity id in ascending order. Cheaper than reading `world.serialize().entities.alive` when you only need to iterate the set (no JSON-compat walk on component data). Useful for renderer adapters connecting mid-session.
+
+#### `getEntityGeneration(id)`
+
+```typescript
+getEntityGeneration(id: EntityId): number
+```
+
+Returns the current generation counter for the given entity id. Combined with `getAliveEntities()` lets a caller build `EntityRef` objects without going through `getEntityRef` per entity.
+
 ### Components
 
 #### `registerComponent<T>(key, options?)`
@@ -1182,6 +1211,7 @@ registerComponent<T>(key: string, options?: ComponentOptions): void
 
 interface ComponentOptions {
   diffMode?: 'strict' | 'semantic';
+  detectInPlaceMutations?: boolean;
 }
 ```
 
@@ -1191,6 +1221,14 @@ Registers a component type by string key. Must be called before using `addCompon
 - `'strict'` (default) — every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. Preserves per-write audit semantics.
 - `'semantic'` — writes are fingerprinted against the baseline from the last tick; identical rewrites do not mark the entity dirty. Use this for components whose sync systems rewrite unchanged values every tick (e.g. `position`, `transform`) to keep `TickDiff` liveness signals high.
 
+`options.detectInPlaceMutations` (default `true`) controls whether the per-tick diff scan detects mutations made to component objects via direct assignment (`world.getComponent(id, 'foo').x = 5`):
+- `true` (default) — `getDirty()` and `clearDirty()` walk every entry in the store and use a JSON fingerprint to detect in-place mutations. Backwards-compatible behavior.
+- `false` — only writes through `setComponent`/`addComponent`/`patchComponent` are tracked. The store skips the per-tick all-entries fingerprint scan, eliminating its O(N) cost. Use this for high-traffic components when you commit to writing through the explicit APIs.
+
+The combination `{ diffMode: 'semantic', detectInPlaceMutations: false }` is the cheapest mode: rewrite suppression in `set()`, no scan in `getDirty()`/`clearDirty()`.
+
+Both options are round-tripped in v5 snapshots so save/load preserves component-store behavior.
+
 **Throws:** `Error` if a component with this key is already registered.
 
 ```typescript
@@ -1199,6 +1237,12 @@ world.registerComponent<Health>('health');
 
 interface Transform { x: number; y: number }
 world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
+
+interface Velocity { dx: number; dy: number }
+world.registerComponent<Velocity>('velocity', {
+  diffMode: 'semantic',
+  detectInPlaceMutations: false, // we only ever assign through setComponent
+});
 ```
 
 #### `addComponent<T>(entity, key, data)`
@@ -1419,6 +1463,36 @@ stepWithResult(): WorldStepResult
 ```
 
 Advances the simulation by exactly one tick and returns a structured success/failure result instead of throwing on runtime failure. This is the preferred stepping API for AI loops and remote harnesses.
+
+If the world is poisoned (a previous tick failed and `recover()` has not been called), `stepWithResult()` immediately returns `{ ok: false, failure: { code: 'world_poisoned', ... } }` without attempting another tick.
+
+#### `isPoisoned()`
+
+```typescript
+isPoisoned(): boolean
+```
+
+Returns `true` while the world is in a post-failure poisoned state. Cleared by `recover()`. See Tick failure semantics.
+
+#### `recover()`
+
+```typescript
+recover(): void
+```
+
+Clears the poison flag along with cached `lastTickFailure`, `currentDiff`, and `currentMetrics`. After `recover()` the world is safe to step again. The next successful tick uses a tick number one greater than the failed tick (failed ticks consume their tick number).
+
+```typescript
+try {
+  world.step();
+} catch (err) {
+  if (err instanceof WorldTickFailureError) {
+    console.error('tick failed:', err.failure);
+    world.recover();
+  }
+}
+world.step(); // safe again
+```
 
 #### `start()`
 

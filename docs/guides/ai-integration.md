@@ -72,6 +72,8 @@ For AI loops, do not infer execution success from diffs alone when an explicit e
 
 ## Tick Failure Surface
 
+Tick failures are **fail-fast**: any failure in the tick pipeline marks the world as poisoned. Subsequent calls to `step()` throw `WorldTickFailureError` and `stepWithResult()` returns a `world_poisoned` failure result until `world.recover()` is called. The contract makes the partial-mutation state explicit instead of letting agents silently re-enter a half-broken world.
+
 Use `world.stepWithResult()` instead of `world.step()` when the agent needs a non-throwing tick loop:
 
 ```typescript
@@ -79,12 +81,23 @@ const step = world.stepWithResult();
 
 if (!step.ok) {
   console.log(step.failure?.code, step.failure?.phase, step.failure?.subsystem);
+  // The world is now poisoned. Decide whether to recover or reset.
+  if (canHandle(step.failure)) {
+    world.recover(); // clears poison + cached failure/diff/metrics
+  } else {
+    // restart from a known snapshot
+    world = World.deserialize(lastSnapshot);
+  }
 }
 ```
 
-`step()` remains available, but it throws `WorldTickFailureError` on runtime failure. `stepWithResult()` is the preferred AI-facing surface because it returns `WorldStepResult` directly.
+`step()` remains available, but it throws `WorldTickFailureError` on runtime failure AND on every subsequent step until `recover()` is called. `stepWithResult()` is the preferred AI-facing surface because it returns `WorldStepResult` directly.
 
-The most recent runtime failure is also available through `world.getLastTickFailure()`.
+Failed ticks consume a tick number. If a tick fails at would-be tick `N+1`, `world.tick` advances to `N+1`; the next successful tick after `recover()` is `N+2`. This guarantees that failed-tick events and successful-tick events never share a `tick` value, so a history recorder or replay tool can correlate by tick number unambiguously.
+
+When a command handler throws (or its handler is missing), every command queued for that tick that has not yet executed is emitted as a `commandExecuted: false` event with `code: 'tick_aborted_before_handler'`, and the dropped commands' `submissionSequence`s are recorded on `failure.details.droppedCommands`. The queue is not re-populated — these commands are dropped, not retried.
+
+The most recent runtime failure is also available through `world.getLastTickFailure()` (until `recover()` clears it).
 
 ## Runtime Profiles
 

@@ -176,9 +176,12 @@ world.registerHandler('moveUnit', (data, w) => {
   const step = world.stepWithResult();
   // step.ok === false
   // step.failure?.code === 'missing_handler'
+  // world.isPoisoned() === true — call world.recover() before stepping again
   ```
 
 - **Handlers can do anything** — create entities, destroy entities, emit events, modify components, etc.
+
+- **Tick-aborted commands are auditable** — if any command in a tick triggers a failure (missing handler or thrown handler), every command after it in the same tick is dropped. Each dropped command emits a `commandExecuted: false` event with `code: 'tick_aborted_before_handler'`, and the dropped sequences are listed on `failure.details.droppedCommands`. Re-submit them after `world.recover()` if your loop wants to retry.
 
 ### Command timing
 
