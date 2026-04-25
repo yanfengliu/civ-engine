@@ -525,7 +525,9 @@ export class World<
     cy: number,
     ...components: string[]
   ): EntityId | undefined {
-    const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
+    const w = this.spatialGrid.width;
+    const h = this.spatialGrid.height;
+    const maxRadius = Math.ceil(Math.hypot(Math.max(w - 1, 0), Math.max(h - 1, 0)));
     const mask = components.length > 0 ? this.queryMask(components) : 0n;
     const seen = new Set<EntityId>();
     let bestId: EntityId | undefined;
@@ -802,9 +804,10 @@ export class World<
   serialize(): WorldSnapshot {
     const components: Record<string, Array<[EntityId, unknown]>> = {};
     for (const [key, store] of this.componentStores) {
-      const entries = [...store.entries()];
-      for (const [entity, data] of entries) {
+      const entries: Array<[EntityId, unknown]> = [];
+      for (const [entity, data] of store.entries()) {
         assertJsonCompatible(data, `component '${key}' on entity ${entity}`);
+        entries.push([entity, structuredClone(data)]);
       }
       components[key] = entries;
     }
@@ -838,7 +841,7 @@ export class World<
     const state: Record<string, unknown> = {};
     for (const [key, value] of this.stateStore) {
       assertJsonCompatible(value, `state '${key}'`);
-      state[key] = value;
+      state[key] = structuredClone(value);
     }
 
     const tags: Record<number, string[]> = {};
@@ -902,9 +905,13 @@ export class World<
     world.componentOptions.clear();
     for (const [key, entries] of Object.entries(snapshot.components)) {
       const opts = componentOptions[key];
+      const cloned: Array<[number, unknown]> = [];
+      for (const [id, data] of entries as Array<[number, unknown]>) {
+        cloned.push([id, structuredClone(data)]);
+      }
       world.componentStores.set(
         key,
-        ComponentStore.fromEntries(entries as Array<[number, unknown]>, opts),
+        ComponentStore.fromEntries(cloned, opts),
       );
       if (opts) {
         world.componentOptions.set(key, opts);
@@ -919,7 +926,7 @@ export class World<
     }
     if ('state' in snapshot) {
       for (const [key, value] of Object.entries(snapshot.state)) {
-        world.stateStore.set(key, value);
+        world.stateStore.set(key, structuredClone(value));
       }
     }
     if ('tags' in snapshot) {

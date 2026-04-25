@@ -1,0 +1,50 @@
+Warning: True color (24-bit) support not detected. Using a terminal with true color enabled will result in a better visual experience.
+Error executing tool run_shell_command: Tool "run_shell_command" not found. Did you mean one of: "grep_search", "replace", "invoke_agent"?
+Attempt 1 failed. Retrying with backoff... _GaxiosError: request to https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse failed, reason: 1C6C0000:error:0A0003FC:SSL routines:ssl3_read_bytes:sslv3 alert bad record mac:c:\ws\deps\openssl\openssl\ssl\record\rec_layer_s3.c:1605:SSL alert number 20
+
+    at Gaxios._request (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:8804:66)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async _OAuth2Client.requestAsync (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:10763:16)
+    at async CodeAssistServer.requestStreamingPost (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:277779:17)
+    at async CodeAssistServer.generateContentStream (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:277579:23)
+    at async file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:278424:19
+    at async file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:255329:23
+    at async retryWithBackoff (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:275301:23)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:312614:28)
+    at async GeminiChat.streamWithRetries (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:312452:29) {
+  config: {
+    url: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+    method: 'POST',
+    params: { alt: 'sse' },
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'GeminiCLI/0.39.1/gemini-3.1-pro-preview (win32; x64; terminal) google-api-nodejs-client/9.15.1',
+      Authorization: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+      'x-goog-api-client': 'gl-node/22.14.0'
+    },
+    responseType: 'stream',
+    body: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+    signal: AbortSignal { aborted: false },
+    retry: false,
+    paramsSerializer: [Function: paramsSerializer],
+    validateStatus: [Function: validateStatus],
+    errorRedactor: [Function: defaultErrorRedactor]
+  },
+  response: undefined,
+  error: FetchError2: request to https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse failed, reason: 1C6C0000:error:0A0003FC:SSL routines:ssl3_read_bytes:sslv3 alert bad record mac:c:\ws\deps\openssl\openssl\ssl\record\rec_layer_s3.c:1605:SSL alert number 20
+  
+      at ClientRequest.<anonymous> (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:7726:18)
+      at ClientRequest.emit (node:events:518:28)
+      at emitErrorEvent (node:_http_client:104:11)
+      at TLSSocket.socketErrorListener (node:_http_client:518:5)
+      at TLSSocket.emit (node:events:518:28)
+      at TLSSocket._emitTLSError (node:_tls_wrap:1034:10)
+      at TLSWrap.onerror (node:_tls_wrap:475:11)
+      at TLSWrap.callbackTrampoline (node:internal/async_hooks:130:17) {
+    type: 'system',
+    errno: 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC',
+    code: 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC'
+  },
+  code: 'ERR_SSL_SSLV3_ALERT_BAD_RECORD_MAC',
+  [Symbol(gaxios-gaxios-error)]: '6.7.1'
+}

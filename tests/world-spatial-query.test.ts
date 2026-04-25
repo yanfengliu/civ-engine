@@ -102,4 +102,20 @@ describe('findNearest', () => {
     placeEntity(world, 15, 15);
     expect(world.findNearest(3, 3)).toBe(a);
   });
+
+  it('finds entity in the diagonal corner of a small grid', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.registerComponent<Position>('position');
+    const corner = world.createEntity();
+    world.setPosition(corner, { x: 3, y: 3 });
+    expect(world.findNearest(0, 0)).toBe(corner);
+  });
+
+  it('finds diagonal entity on a non-square grid', () => {
+    const world = new World({ gridWidth: 10, gridHeight: 4, tps: 60 });
+    world.registerComponent<Position>('position');
+    const corner = world.createEntity();
+    world.setPosition(corner, { x: 9, y: 3 });
+    expect(world.findNearest(0, 0)).toBe(corner);
+  });
 });

@@ -403,4 +403,45 @@ describe('Serialization', () => {
     expect(restored.tick).toBe(1);
     expect(restored.getComponent(e, 'health')).toEqual({ hp: 100 });
   });
+
+  describe('snapshot isolation', () => {
+    it('mutating a returned snapshot does not affect live world state', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ x: number; y: number }>('position');
+      const e = world.createEntity();
+      world.addComponent(e, 'position', { x: 1, y: 2 });
+      world.setState('terrain', { biome: 'grass' });
+
+      const snapshot = world.serialize();
+      if (snapshot.version !== 5) throw new Error('Expected version 5');
+
+      const positionEntries = snapshot.components['position'];
+      const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
+      posData.x = 999;
+      (snapshot.state['terrain'] as { biome: string }).biome = 'lava';
+
+      expect(world.getComponent(e, 'position')).toEqual({ x: 1, y: 2 });
+      expect(world.getState('terrain')).toEqual({ biome: 'grass' });
+    });
+
+    it('mutating snapshot input does not affect deserialized world state', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ x: number; y: number }>('position');
+      const e = world.createEntity();
+      world.addComponent(e, 'position', { x: 1, y: 2 });
+      world.setState('terrain', { biome: 'grass' });
+
+      const snapshot = world.serialize();
+      const restored = World.deserialize(snapshot);
+
+      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      const positionEntries = snapshot.components['position'];
+      const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
+      posData.x = 999;
+      (snapshot.state['terrain'] as { biome: string }).biome = 'lava';
+
+      expect(restored.getComponent(e, 'position')).toEqual({ x: 1, y: 2 });
+      expect(restored.getState('terrain')).toEqual({ biome: 'grass' });
+    });
+  });
 });
