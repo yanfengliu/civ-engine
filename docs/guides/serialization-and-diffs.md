@@ -128,11 +128,17 @@ Version 5 (the current write format) round-trips per-component `ComponentStoreOp
 | Grid config (width, height, TPS) | `snapshot.config` |
 | Position key | `snapshot.config.positionKey` |
 | Seed config | `snapshot.config.seed` |
+| maxTicksPerFrame (when non-default) | `snapshot.config.maxTicksPerFrame` |
+| instrumentationProfile (when non-default) | `snapshot.config.instrumentationProfile` |
 | Tick count | `snapshot.tick` |
 | Entity IDs, alive states, generations | `snapshot.entities` |
 | All component data | `snapshot.components` |
+| Per-component options (diffMode) | `snapshot.componentOptions` |
 | Resource registrations, pools, rates, transfers | `snapshot.resources` |
 | Deterministic RNG state | `snapshot.rng` |
+| World-level state (setState/getState) | `snapshot.state` |
+| Entity tags | `snapshot.tags` |
+| Entity metadata | `snapshot.metadata` |
 
 ### Excluded (must be re-registered)
 
@@ -153,6 +159,9 @@ Diffs capture:
 - Entity creation and destruction
 - Component additions, mutations, and removals
 - Resource pool changes
+- World-level state changes (`setState` / `removeState`)
+- Entity tag additions and removals
+- Entity metadata additions and removals
 
 ## Reading Diffs
 
@@ -217,6 +226,9 @@ interface TickDiff {
     set: Array<[EntityId, ResourcePool]>;  // added or changed pools
     removed: EntityId[];                    // removed pools
   }>;
+  state: Record<string, { set?: unknown; removed?: true }>;  // world-level state changes
+  tags: Record<string, { added: EntityId[]; removed: EntityId[] }>;  // tag changes
+  metadata: Record<string, { set: Array<[EntityId, string | number]>; removed: EntityId[] }>;  // metadata changes
 }
 ```
 

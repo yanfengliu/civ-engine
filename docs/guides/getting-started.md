@@ -310,4 +310,4 @@ Client messages: `command` (submit a game command), `requestSnapshot` (request f
 - [Building a Complete Game](./building-a-game.md) — Step-by-step tutorial building a colony survival simulation
 - [Debugging](./debugging.md) — Diagnostic flowchart, error code reference, and debugging scenarios
 - [Architecture](../ARCHITECTURE.md) — Detailed architecture documentation
-- [API Reference](../../README.md#api-reference) — Full method listing
+- [API Reference](../api-reference.md) — Full method listing

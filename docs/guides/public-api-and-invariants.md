@@ -98,7 +98,7 @@ world.getResource(city, 'food'); // { current: 50, max: null }
 
 Resource amounts, rates, finite maxima, and transfer rates must be non-negative finite numbers.
 
-Snapshot version 3 restores resource registrations, pools, rates, transfers, transfer IDs, and deterministic RNG state. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks. Version 1 and 2 snapshots still load for compatibility.
+Snapshot version 5 (current) round-trips per-component `diffMode`, `maxTicksPerFrame`, and `instrumentationProfile` in addition to everything in earlier versions. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state. Version 2 added resource registrations, pools, rates, and transfers. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks.
 
 ## Client Adapter
 
