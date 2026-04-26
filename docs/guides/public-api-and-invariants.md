@@ -39,7 +39,7 @@ world.patchComponent<{ hp: number }>(unit, 'health', (health) => {
 });
 ```
 
-`getComponent()` returns the stored object directly. Direct mutations are diff-detected, but `setComponent()` and `patchComponent()` make write intent clearer.
+`getComponent()` returns the stored object directly, but in-place mutations are **not** picked up by the diff system. All component changes must go through `setComponent()` / `addComponent()` / `patchComponent()` (or `setPosition()` for the configured position component) for the engine to mark the entity dirty and update derived structures like the spatial grid.
 
 Use `setPosition()` when same-tick grid correctness matters:
 
@@ -48,7 +48,7 @@ const pos = world.getComponent<Position>(unit, 'position')!;
 world.setPosition(unit, { x: pos.x + 1, y: pos.y });
 ```
 
-In-place mutation of position objects (`pos.x += 1`) is not auto-detected — the grid will not see the change. Always use `setPosition`/`setComponent` for movement.
+In-place mutation of position objects (`pos.x += 1`) is not auto-detected — neither the diff nor the grid will see the change. Always use `setPosition`/`setComponent` for movement.
 
 ## Systems and Metrics
 

@@ -190,7 +190,6 @@ Commands submitted during a tick (e.g., from a system) are queued and processed 
 ```
 Tick N:
   processCommands()  ← commands submitted before tick N are processed here
-  syncSpatialIndex()
   system A  ← if system A calls submit(), that command waits for tick N+1
   system B
   ...

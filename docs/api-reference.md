@@ -108,21 +108,23 @@ interface WorldConfig {
 
 ```typescript
 // src/world.ts
-type System<TEventMap, TCommandMap> = (world: World<TEventMap, TCommandMap>) => void;
+type System<TEventMap, TCommandMap, TComponents, TState> = (
+  world: World<TEventMap, TCommandMap, TComponents, TState>,
+) => void;
 ```
 
-A system is a pure function that receives the `World` and runs game logic. Systems execute by phase, preserving registration order within each phase. Bare function registrations default to the `update` phase.
+A system is a pure function that receives the `World` and runs game logic. Systems execute by phase, preserving registration order within each phase. Bare function registrations default to the `update` phase. All four generics default to permissive types so existing 2-generic call sites continue to compile; threading `TComponents` and `TState` through gives compile-time-typed `world.getComponent` / `world.getState` access inside the callback body.
 
 ### `SystemRegistration`
 
 ```typescript
 // src/world.ts
-interface SystemRegistration<TEventMap, TCommandMap> {
+interface SystemRegistration<TEventMap, TCommandMap, TComponents, TState> {
   name?: string;
   phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
   before?: string[];
   after?: string[];
-  execute: System<TEventMap, TCommandMap>;
+  execute: System<TEventMap, TCommandMap, TComponents, TState>;
 }
 ```
 
@@ -132,10 +134,10 @@ Optional system registration object for naming systems and assigning a lifecycle
 
 ```typescript
 // src/world.ts
-type LooseSystem = (world: World<any, any>) => void;
+type LooseSystem = (world: World<any, any, any, any>) => void;
 ```
 
-A system typed against a bare `World` that does not need explicit casts when registered into a generically typed world. Useful for utility systems that do not depend on specific event or command maps.
+A system typed against a bare `World` that does not need explicit casts when registered into a generically typed world. Useful for utility systems that do not depend on specific event/command/component/state maps.
 
 ### `LooseSystemRegistration`
 
@@ -159,7 +161,7 @@ Same shape as `SystemRegistration` but uses `LooseSystem` instead.
 type ComponentRegistry = Record<string, unknown>;
 ```
 
-Optional third type parameter to `World<TEventMap, TCommandMap, TComponents>`. When specified, component methods (`addComponent`, `getComponent`, `setComponent`, `patchComponent`, `removeComponent`, `query`) infer value types from the registry keys, eliminating manual generic annotations.
+Third type parameter to `World<TEventMap, TCommandMap, TComponents, TState>`. When specified, component methods (`addComponent`, `getComponent`, `setComponent`, `patchComponent`, `removeComponent`, `query`) infer value types from the registry keys, eliminating manual generic annotations. The fourth `TState` generic plays the analogous role for `world.setState` / `world.getState`. Both generics thread through `System`, `SystemRegistration`, `registerSystem`, `registerValidator`, `registerHandler`, `onDestroy`, and `World.deserialize` so typed access works inside callback bodies.
 
 ### `WorldMetrics`
 
@@ -1611,7 +1613,7 @@ registerValidator<K extends keyof TCommandMap>(
   type: K,
   fn: (
     data: TCommandMap[K],
-    world: World<TEventMap, TCommandMap>,
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
   ) => CommandValidationResult,
 ): void
 ```
@@ -1644,7 +1646,10 @@ world.registerValidator('moveUnit', (data, w) => {
 ```typescript
 registerHandler<K extends keyof TCommandMap>(
   type: K,
-  fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
+  fn: (
+    data: TCommandMap[K],
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
+  ) => void,
 ): void
 ```
 
@@ -2310,7 +2315,7 @@ Unsubscribes from diffs. Pass the exact same function reference used in `onDiff(
 
 ```typescript
 onDestroy(
-  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+  callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
 ): void
 ```
 
@@ -2332,7 +2337,7 @@ world.onDestroy((id, w) => {
 
 ```typescript
 offDestroy(
-  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+  callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
 ): void
 ```
 
