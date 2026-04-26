@@ -260,7 +260,7 @@ function refreshPanels() {
         ['Diff ms', formatNumber(metrics.durationMs.diff)],
         ['Query Calls', String(metrics.query.calls)],
         ['Query Cache', `${metrics.query.cacheHits} hits / ${metrics.query.cacheMisses} misses`],
-        ['Spatial Sync', `${metrics.spatial.explicitSyncs} explicit / ${metrics.spatial.fullScans} scans`],
+        ['Spatial Sync', `${metrics.spatial.explicitSyncs} explicit syncs`],
         ['Slowest System', formatSlowestSystem(metrics.systems)],
       ])
     : 'No metrics yet.';

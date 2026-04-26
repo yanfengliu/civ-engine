@@ -86,7 +86,7 @@ type InstrumentationProfile = 'full' | 'minimal' | 'release';
 Controls how much implicit runtime instrumentation the engine keeps on the hot path.
 
 - `full` keeps the normal development behavior. `step()` records detailed per-tick metrics and `submit()` preserves the compatibility wrapper over `submitWithResult()`.
-- `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries. `submit()` takes the lower-overhead boolean fast path when no command-result listeners are attached.
+- `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries.
 - `release` removes avoidable observation work from the implicit `step()` and `submit()` paths. Explicit AI/debug APIs such as `stepWithResult()` and `submitWithResult()` still return structured results when you call them.
 
 ### `WorldConfig`
@@ -267,7 +267,6 @@ Structured outcome emitted through `world.onCommandExecution()` after a queued c
 // src/world.ts
 type TickFailurePhase =
   | 'commands'
-  | 'spatialSync'
   | 'systems'
   | 'resources'
   | 'diff'
@@ -328,7 +327,7 @@ Thrown by `world.step()` when a tick fails. Also thrown by `world.step()` (and s
 
 ### Tick failure semantics
 
-A failure in any tick phase (commands, spatialSync, systems, resources, diff, listeners) marks the world as **poisoned**:
+A failure in any tick phase (commands, systems, resources, diff, listeners) marks the world as **poisoned**:
 
 - `world.isPoisoned(): boolean` returns `true` until the next call to `recover()`.
 - While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `WorldStepResult` with `failure.code === 'world_poisoned'`. The original failure that caused the poison is preserved on the result for diagnostics.
@@ -1579,9 +1578,7 @@ submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean
 
 Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator rejects, the command is not queued.
 
-**Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`.
-
-When `instrumentationProfile` is `'minimal'` or `'release'` and no command-result listeners are attached, `submit()` takes a boolean fast path and does not allocate a `CommandSubmissionResult`. Use `submitWithResult()` when the caller explicitly needs the structured outcome.
+**Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`; the two paths produce identical observable outcomes (same validator pipeline, same `submissionSequence` assignment, same listener emissions). Use `submitWithResult()` when the caller wants the full structured `CommandSubmissionResult`.
 
 ```typescript
 const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
@@ -2185,13 +2182,15 @@ const closest = world.findNearest(10, 10, 'position', 'enemy');
 
 ### State Serialization
 
-#### `serialize()`
+#### `serialize(options?)`
 
 ```typescript
-serialize(): WorldSnapshot
+serialize(options?: { inspectPoisoned?: boolean }): WorldSnapshot
 ```
 
-Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, resource state, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions).
+Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, resource state, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions). Component data and state values are `structuredClone`d on the way out so the returned snapshot stays isolated from the live world.
+
+When called on a poisoned world, `serialize()` emits a one-time `console.warn` per poison cycle. Pass `{ inspectPoisoned: true }` to suppress the warning — intended for engine-internal debug/history tooling that exists specifically to inspect poisoned state. The warning resets on `world.recover()`.
 
 ```typescript
 const snapshot = world.serialize();
@@ -2201,21 +2200,30 @@ const json = JSON.stringify(snapshot);
 #### `World.deserialize(snapshot, systems?)`
 
 ```typescript
-static deserialize<TEventMap, TCommandMap>(
+static deserialize<TEventMap, TCommandMap, TComponents, TState>(
   snapshot: WorldSnapshot,
-  systems?: Array<System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>>,
-): World<TEventMap, TCommandMap>
+  systems?: Array<
+    | System<TEventMap, TCommandMap, TComponents, TState>
+    | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
+    | LooseSystem
+    | LooseSystemRegistration
+  >,
+): World<TEventMap, TCommandMap, TComponents, TState>
 ```
 
 Restores a world from a snapshot. Optionally accepts systems to re-register. After deserializing, you must also re-register:
 - Command validators and handlers
 - Event listeners
+- Destroy callbacks
+
+Component data and state values are `structuredClone`d on read so the input snapshot stays isolated from the live world.
 
 **Throws:**
-- `Error` if `snapshot.version` is not `1`, `2`, `3`, or `4`
+- `Error` if `snapshot.version` is not `1`, `2`, `3`, `4`, or `5`
 - `Error` if entity state arrays have mismatched lengths
+- `Error` if `snapshot.tags` or `snapshot.metadata` references a dead entity id
 
-Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata.
+Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata. Version 5 snapshots additionally round-trip per-component `ComponentStoreOptions` (`diffMode`) plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default.
 
 ```typescript
 const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);

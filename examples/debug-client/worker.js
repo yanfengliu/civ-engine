@@ -21,7 +21,6 @@ const world = new World({
   gridHeight: GRID_HEIGHT,
   tps: 1000 / DEFAULT_TICK_MS,
   seed: 'debug-client',
-  detectInPlacePositionMutations: false,
 });
 const occupancy = new OccupancyGrid(GRID_WIDTH, GRID_HEIGHT);
 const visibility = new VisibilityMap(GRID_WIDTH, GRID_HEIGHT);

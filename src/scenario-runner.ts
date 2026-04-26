@@ -340,7 +340,10 @@ function captureScenarioState<
   debuggerView: WorldDebugger<TEventMap, TCommandMap>,
   history: WorldHistoryRecorder<TEventMap, TCommandMap, WorldDebugSnapshot>,
 ): ScenarioCapture<TEventMap, TCommandMap> {
-  const snapshot = cloneJsonValue(world.serialize(), 'scenario snapshot');
+  const snapshot = cloneJsonValue(
+    world.serialize({ inspectPoisoned: true }),
+    'scenario snapshot',
+  );
   const debug = cloneJsonValue(debuggerView.capture(), 'scenario debug snapshot');
   const diff = cloneNullableJsonValue(world.getDiff(), 'scenario diff');
   const events = cloneJsonValue(

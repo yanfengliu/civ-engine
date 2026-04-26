@@ -645,5 +645,52 @@ describe('World commands', () => {
       expect(snapshot.version).toBe(5);
       expect(warnSpy).toHaveBeenCalled();
     });
+
+    it('warns exactly once per poison cycle across submit + serialize', () => {
+      type Cmds = { boom: null; ping: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.registerHandler('boom', () => {
+        throw new Error('explode');
+      });
+      world.registerHandler('ping', () => {});
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+
+      world.submit('ping', null);
+      world.submit('ping', null);
+      world.serialize();
+      world.serialize();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      world.recover();
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+      world.submit('ping', null);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('serialize({ inspectPoisoned: true }) does not warn', () => {
+      type Cmds = { boom: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.registerHandler('boom', () => {
+        throw new Error('explode');
+      });
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+
+      world.serialize({ inspectPoisoned: true });
+      world.serialize({ inspectPoisoned: true });
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
   });
 });

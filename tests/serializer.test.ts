@@ -442,4 +442,71 @@ describe('Serialization', () => {
       expect(restored.getState('terrain')).toEqual({ biome: 'grass' });
     });
   });
+
+  describe('deserialize rejects malformed snapshots', () => {
+    it('throws when tags reference a dead entity', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const a = world.createEntity();
+      const b = world.createEntity();
+      world.addTag(a, 'live');
+      world.addTag(b, 'dies');
+      world.destroyEntity(b);
+
+      const snapshot = world.serialize();
+      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      // Manually corrupt: tag a dead entity id
+      const deadId = b;
+      snapshot.tags[deadId] = ['ghost'];
+
+      expect(() => World.deserialize(snapshot)).toThrow(/references dead entity/);
+    });
+
+    it('throws when metadata references a dead entity', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const a = world.createEntity();
+      world.setMeta(a, 'level', 1);
+
+      const snapshot = world.serialize();
+      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      // Manually corrupt: meta on a non-existent entity id
+      snapshot.metadata[999] = { level: 99 };
+
+      expect(() => World.deserialize(snapshot)).toThrow(/references dead entity/);
+    });
+  });
+
+  describe('deserialize tolerates legacy snapshot fields', () => {
+    it('silently ignores config.detectInPlacePositionMutations on read', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      const e = world.createEntity();
+      world.addComponent(e, 'health', { hp: 50 });
+
+      const snapshot = world.serialize();
+      // Inject the legacy field a v0.4.x snapshot would carry
+      (snapshot.config as { detectInPlacePositionMutations?: boolean }).detectInPlacePositionMutations = false;
+
+      const restored = World.deserialize(snapshot);
+      expect(restored.getComponent(e, 'health')).toEqual({ hp: 50 });
+    });
+
+    it('silently ignores componentOptions[*].detectInPlaceMutations on read', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent<{ hp: number }>('health');
+      const e = world.createEntity();
+      world.addComponent(e, 'health', { hp: 50 });
+
+      const snapshot = world.serialize();
+      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      const opts = snapshot.componentOptions ?? {};
+      opts['health'] = {
+        ...(opts['health'] ?? {}),
+        ...({ detectInPlaceMutations: false } as Record<string, unknown>),
+      };
+      snapshot.componentOptions = opts;
+
+      const restored = World.deserialize(snapshot);
+      expect(restored.getComponent(e, 'health')).toEqual({ hp: 50 });
+    });
+  });
 });

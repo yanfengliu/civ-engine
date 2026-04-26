@@ -136,7 +136,7 @@ export class WorldHistoryRecorder<
     this.connected = true;
 
     if (this.captureInitialSnapshot) {
-      this.initialSnapshot = cloneJsonValue(this.world.serialize(), 'history initial snapshot');
+      this.initialSnapshot = cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot');
     }
 
     this.world.onDiff(this.diffListener);
@@ -160,7 +160,7 @@ export class WorldHistoryRecorder<
     this.executionEntries.length = 0;
     this.failureEntries.length = 0;
     this.initialSnapshot = this.captureInitialSnapshot
-      ? cloneJsonValue(this.world.serialize(), 'history initial snapshot')
+      ? cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot')
       : null;
   }
 

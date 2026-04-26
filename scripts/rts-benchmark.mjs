@@ -63,8 +63,7 @@ function runScenario(config) {
   const tickDurations = [];
   const queryHits = [];
   const queryMisses = [];
-  const spatialFullScans = [];
-  const spatialScannedEntities = [];
+  const explicitSyncs = [];
   const diffSizes = [];
 
   for (let i = 0; i < config.ticks; i++) {
@@ -74,8 +73,7 @@ function runScenario(config) {
     tickDurations.push(metrics.durationMs.total);
     queryHits.push(metrics.query.cacheHits);
     queryMisses.push(metrics.query.cacheMisses);
-    spatialFullScans.push(metrics.spatial.fullScans);
-    spatialScannedEntities.push(metrics.spatial.scannedEntities);
+    explicitSyncs.push(metrics.spatial.explicitSyncs);
     diffSizes.push(Buffer.byteLength(JSON.stringify(diff), 'utf8'));
   }
 
@@ -92,8 +90,7 @@ function runScenario(config) {
     tickDurationMs: summarize(tickDurations),
     queryCacheHits: summarize(queryHits),
     queryCacheMisses: summarize(queryMisses),
-    spatialFullScans: summarize(spatialFullScans),
-    spatialScannedEntities: summarize(spatialScannedEntities),
+    spatialExplicitSyncs: summarize(explicitSyncs),
     diffSizeBytes: summarize(diffSizes),
     pathfinding,
     occupancyCosts,
@@ -111,7 +108,6 @@ function createBenchmarkWorld(config) {
     gridHeight: config.height,
     tps: 20,
     seed: `bench:${config.name}`,
-    detectInPlacePositionMutations: false,
   });
 
   world.registerComponent('position');

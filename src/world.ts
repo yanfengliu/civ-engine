@@ -251,7 +251,6 @@ export class World<
   private lastTickFailure: TickFailure | null = null;
   private poisoned: TickFailure | null = null;
   private poisonedWarningEmitted = false;
-  private lastTickFailureClone: TickFailure | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -285,7 +284,10 @@ export class World<
     this.grid = {
       get width() { return grid.width; },
       get height() { return grid.height; },
-      getAt: (x, y) => grid.getAt(x, y),
+      getAt: (x, y) => {
+        const cell = grid.getAt(x, y);
+        return cell ? new Set(cell) : null;
+      },
       getNeighbors: (x, y, offsets) => grid.getNeighbors(x, y, offsets),
       getInRadius: (cx, cy, radius, metric) => grid.getInRadius(cx, cy, radius, metric),
     };
@@ -618,7 +620,6 @@ export class World<
   recover(): void {
     this.poisoned = null;
     this.lastTickFailure = null;
-    this.lastTickFailureClone = null;
     this.currentDiff = null;
     this.currentMetrics = null;
     this.poisonedWarningEmitted = false;
@@ -811,8 +812,15 @@ export class World<
     return this.rng.random();
   }
 
-  serialize(): WorldSnapshot {
-    this.warnIfPoisoned('serialize');
+  /**
+   * @param options.inspectPoisoned - When true, suppresses the "serialize on
+   *   poisoned world" warning. Intended for engine-internal debug/history
+   *   tooling that exists specifically to inspect poisoned state.
+   */
+  serialize(options?: { inspectPoisoned?: boolean }): WorldSnapshot {
+    if (!options?.inspectPoisoned) {
+      this.warnIfPoisoned('serialize');
+    }
     const components: Record<string, Array<[EntityId, unknown]>> = {};
     for (const [key, store] of this.componentStores) {
       const entries: Array<[EntityId, unknown]> = [];
@@ -1005,11 +1013,7 @@ export class World<
   }
 
   getLastTickFailure(): TickFailure | null {
-    if (!this.lastTickFailure) return null;
-    if (!this.lastTickFailureClone) {
-      this.lastTickFailureClone = cloneTickFailure(this.lastTickFailure);
-    }
-    return this.lastTickFailureClone;
+    return this.lastTickFailure ? cloneTickFailure(this.lastTickFailure) : null;
   }
 
   onDiff(fn: (diff: TickDiff) => void): void {
@@ -1449,7 +1453,6 @@ export class World<
       }
       this.currentMetrics = metrics;
       this.lastTickFailure = null;
-    this.lastTickFailureClone = null;
       this.gameLoop.advance();
     } finally {
       this.activeMetrics = null;
@@ -1687,7 +1690,6 @@ export class World<
     }
     this.currentMetrics = metrics;
     this.lastTickFailure = failure;
-    this.lastTickFailureClone = null;
     this.poisoned = failure;
     if (failure.phase !== 'listeners') {
       this.currentDiff = null;
@@ -1888,8 +1890,8 @@ export class World<
 
   private normalizeSystemRegistration(
     system:
-      | System<TEventMap, TCommandMap>
-      | SystemRegistration<TEventMap, TCommandMap>
+      | System<TEventMap, TCommandMap, TComponents, TState>
+      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
       | LooseSystem
       | LooseSystemRegistration,
   ): RegisteredSystem<TEventMap, TCommandMap, TComponents, TState> {
@@ -1899,7 +1901,7 @@ export class World<
       return {
         name: system.name || `system#${order}`,
         phase: 'update',
-        execute: system as System<TEventMap, TCommandMap>,
+        execute: system as System<TEventMap, TCommandMap, TComponents, TState>,
         order,
         before: [],
         after: [],
@@ -1914,7 +1916,7 @@ export class World<
     return {
       name: system.name ?? system.execute.name ?? `system#${order}`,
       phase,
-      execute: system.execute as System<TEventMap, TCommandMap>,
+      execute: system.execute as System<TEventMap, TCommandMap, TComponents, TState>,
       order,
       before: system.before ?? [],
       after: system.after ?? [],
@@ -2212,11 +2214,17 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
 }
 
 function cloneTickFailure(failure: TickFailure): TickFailure {
+  // structuredClone preserves Error instances and their stack traces in the
+  // optional `error` field; JSON would silently flatten Error → {}.
   return structuredClone(failure);
 }
 
 function cloneTickDiff(diff: TickDiff): TickDiff {
-  return structuredClone(diff);
+  // TickDiff is strictly JSON-shaped (component data and state values pass
+  // assertJsonCompatible at write time). JSON round-trip is faster than
+  // structuredClone for plain objects on V8 and runs once per tick per
+  // listener, so prefer it here.
+  return JSON.parse(JSON.stringify(diff)) as TickDiff;
 }
 
 function createErrorDetails(error: unknown): {

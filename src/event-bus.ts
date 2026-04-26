@@ -2,6 +2,12 @@ import { assertJsonCompatible } from './json.js';
 
 export type Listener<T> = (event: T) => void;
 
+function deepCloneJson<T>(value: T): T {
+  return value === null || typeof value !== 'object'
+    ? value
+    : (JSON.parse(JSON.stringify(value)) as T);
+}
+
 export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
   private listeners = new Map<keyof TEventMap, Set<Listener<never>>>();
   private buffer: Array<{
@@ -46,9 +52,12 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
     type: keyof TEventMap;
     data: TEventMap[keyof TEventMap];
   }> {
+    // Event payloads are JSON-shaped by contract (assertJsonCompatible runs
+    // at emit time). JSON round-trip is faster than structuredClone for
+    // plain objects on V8 and getEvents may be called per tick per consumer.
     return this.buffer.map((event) => ({
       type: event.type,
-      data: structuredClone(event.data),
+      data: deepCloneJson(event.data),
     }));
   }
 

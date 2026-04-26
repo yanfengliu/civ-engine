@@ -15,7 +15,7 @@ function createWorld(): World<Events, Commands> {
     gridWidth: 8,
     gridHeight: 8,
     tps: 10,
-    
+
   });
   world.registerComponent<Position>('position');
   world.registerComponent<{ hp: number }>('health');

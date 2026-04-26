@@ -139,7 +139,7 @@ export class WorldDebugger<
   }
 
   capture(): WorldDebugSnapshot {
-    const snapshot = this.world.serialize();
+    const snapshot = this.world.serialize({ inspectPoisoned: true });
     const metrics = this.world.getMetrics();
     const diff = summarizeDiff(this.world.getDiff());
     const tickFailure = this.world.getLastTickFailure();
