@@ -308,15 +308,34 @@ function deathSystem(w: World): void {
 
 ### Periodic systems
 
-Run logic every N ticks:
+Two ways to run logic on a cadence:
+
+**1. Built-in `interval` field (preferred).** Set `interval: N` on the registration; the engine skips the system body on ticks where `(executingTick - 1) % interval !== intervalOffset`, where `executingTick` is the tick number being processed (equal to `world.tick + 1` while the system is running). With `interval: N` and the default `intervalOffset: 0`, the system fires on ticks 1, N+1, 2N+1, … — i.e., on the first tick and then every N. This matches the legacy `if (w.tick % N !== 0) return;` schedule exactly.
+
+```typescript
+world.registerSystem({
+  name: 'Tax',
+  phase: 'update',
+  execute: collectTaxes,
+  interval: 100, // fires at tick 1, 101, 201, ...
+});
+
+// Stagger two heavy systems so they never share a tick.
+world.registerSystem({ name: 'Weather',  execute: weather,  interval: 6, intervalOffset: 0 }); // ticks 1, 7, 13
+world.registerSystem({ name: 'Politics', execute: politics, interval: 6, intervalOffset: 3 }); // ticks 4, 10, 16
+```
+
+Validation throws at registration if `interval` is not a safe integer >= 1 (`Number.isSafeInteger`), or if `intervalOffset` is not a safe integer in `[0, interval)`. Ordering constraints (`before`/`after`) still apply within the phase — they are independent of `interval`.
+
+Skipped systems do not invoke their `execute` body and do not push a per-system entry into `metrics.systems`. The cheap modulo check still runs across all registered systems, so `metrics.durationMs.systems` (the per-tick total measured around the whole systems pass) is not literally zero for skip ticks — the savings come from the body, not from the dispatch. **Failed ticks consume a cadence slot:** if a tick aligned with a periodic system's modulo fails, that fire opportunity is lost; the engine does not retry on the next successful tick. Mid-game registration is anchored to absolute tick numbering — registering `interval: 10, intervalOffset: 5` at tick 7 means the next fire is the next tick where `(tick - 1) % 10 === 5`, not "5 ticks from now."
+
+**2. Manual modulo inside the system body** (legacy pattern; use only when the cadence depends on runtime state):
 
 ```typescript
 function dailySystem(w: World): void {
-  if (w.tick % 100 !== 0) return; // every 100 ticks
-  
+  if (w.tick % 100 !== 0) return;
   // daily logic
-  for (const id of w.query('settlement')) {
-    // collect taxes, grow population, etc.
-  }
 }
 ```
+
+The manual form pays the call/return overhead every tick and shows up as a tracked entry with near-zero duration in `metrics.systems`. Prefer the `interval` field unless you genuinely need the cadence to vary at runtime.

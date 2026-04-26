@@ -42,6 +42,8 @@ export interface LooseSystemRegistration {
   execute: LooseSystem;
   before?: string[];
   after?: string[];
+  interval?: number;
+  intervalOffset?: number;
 }
 
 export const SYSTEM_PHASES = [
@@ -65,6 +67,8 @@ export interface SystemRegistration<
   execute: System<TEventMap, TCommandMap, TComponents, TState>;
   before?: string[];
   after?: string[];
+  interval?: number;
+  intervalOffset?: number;
 }
 
 export interface WorldMetrics {
@@ -198,6 +202,8 @@ interface RegisteredSystem<
   order: number;
   before: string[];
   after: string[];
+  interval: number;
+  intervalOffset: number;
 }
 
 type TickMetricsProfile = 'full' | 'minimal' | 'none';
@@ -1761,6 +1767,9 @@ export class World<
     const systems = this.resolvedSystemOrder;
 
     for (const system of systems) {
+      if ((tick - 1) % system.interval !== system.intervalOffset) {
+        continue;
+      }
       const start = collectDetailedTimings ? now() : 0;
       try {
         system.execute(this);
@@ -1895,9 +1904,9 @@ export class World<
       | LooseSystem
       | LooseSystemRegistration,
   ): RegisteredSystem<TEventMap, TCommandMap, TComponents, TState> {
-    const order = this.nextSystemOrder++;
-    this.resolvedSystemOrder = null;
     if (typeof system === 'function') {
+      const order = this.nextSystemOrder++;
+      this.resolvedSystemOrder = null;
       return {
         name: system.name || `system#${order}`,
         phase: 'update',
@@ -1905,6 +1914,8 @@ export class World<
         order,
         before: [],
         after: [],
+        interval: 1,
+        intervalOffset: 0,
       };
     }
 
@@ -1913,13 +1924,28 @@ export class World<
       throw new Error(`Unknown system phase '${String(phase)}'`);
     }
 
+    const provisionalName =
+      system.name ?? system.execute.name ?? `system#${this.nextSystemOrder}`;
+    const interval = validateSystemInterval(provisionalName, system.interval);
+    const intervalOffset = validateSystemIntervalOffset(
+      provisionalName,
+      interval,
+      system.intervalOffset,
+    );
+
+    const order = this.nextSystemOrder++;
+    this.resolvedSystemOrder = null;
+    const name = system.name ?? system.execute.name ?? `system#${order}`;
+
     return {
-      name: system.name ?? system.execute.name ?? `system#${order}`,
+      name,
       phase,
       execute: system.execute as System<TEventMap, TCommandMap, TComponents, TState>,
       order,
       before: system.before ?? [],
       after: system.after ?? [],
+      interval,
+      intervalOffset,
     };
   }
 
@@ -2263,6 +2289,41 @@ function phaseIndex(phase: SystemPhase): number {
 
 function isSystemPhase(value: string): value is SystemPhase {
   return (SYSTEM_PHASES as readonly string[]).includes(value);
+}
+
+function describeIntervalValue(raw: unknown): string {
+  if (typeof raw === 'string') return `"${raw}"`;
+  if (typeof raw === 'number') return String(raw);
+  return `${typeof raw}: ${String(raw)}`;
+}
+
+function validateSystemInterval(name: string, raw: number | undefined): number {
+  if (raw === undefined) return 1;
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 1) {
+    throw new Error(
+      `System '${name}' interval must be a safe integer >= 1 (got ${describeIntervalValue(raw)})`,
+    );
+  }
+  return raw;
+}
+
+function validateSystemIntervalOffset(
+  name: string,
+  interval: number,
+  raw: number | undefined,
+): number {
+  if (raw === undefined) return 0;
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 0) {
+    throw new Error(
+      `System '${name}' intervalOffset must be a safe integer >= 0 (got ${describeIntervalValue(raw)})`,
+    );
+  }
+  if (raw >= interval) {
+    throw new Error(
+      `System '${name}' intervalOffset (${raw}) must be < interval (${interval})`,
+    );
+  }
+  return raw;
 }
 
 function insertSorted(values: EntityId[], value: EntityId): void {

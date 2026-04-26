@@ -124,11 +124,21 @@ interface SystemRegistration<TEventMap, TCommandMap, TComponents, TState> {
   phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
   before?: string[];
   after?: string[];
+  interval?: number;
+  intervalOffset?: number;
   execute: System<TEventMap, TCommandMap, TComponents, TState>;
 }
 ```
 
 Optional system registration object for naming systems and assigning a lifecycle phase. The `before` and `after` fields declare ordering constraints between named systems within the same phase (see [System Ordering Constraints](#registersystemfnorconfig)).
+
+`interval` (default `1`) gates how often the system runs. The system fires only when `(executingTick - 1) % interval === intervalOffset`, where `executingTick` is the tick number being processed (equal to `world.tick + 1` while the system is running, or equivalently the value of `world.tick` after `step()` returns successfully). With `interval: 4` and `intervalOffset: 0`, the system runs at ticks 1, 5, 9, 13 — i.e., it fires on the first tick and then every 4 ticks, which matches the legacy `if (world.tick % 4 !== 0) return;` pattern.
+
+`intervalOffset` (default `0`, must satisfy `0 <= intervalOffset < interval`) shifts the cadence within the cycle. `interval: 4, intervalOffset: 1` fires at ticks 2, 6, 10. Three systems with `interval: 3` and offsets `0`/`1`/`2` partition every tick into a stable round-robin.
+
+Use intervals to throttle expensive subsystems (slow propagation, periodic AI re-planning, weather updates) without changing each system's logic. Skipped systems do not invoke their `execute` body and do not push a per-system entry into `metrics.systems`; the per-tick total in `metrics.durationMs.systems` still includes the cheap modulo check across all registered systems, so the savings come from the body, not from the dispatch. **Failed ticks consume a cadence slot:** if the executing tick fails, any periodic system whose modulo aligned with that tick simply does not fire — the engine does not retry on the next successful tick.
+
+Validation throws at registration if `interval` is not a safe integer (`Number.isSafeInteger`) >= 1, or if `intervalOffset` is not a safe integer in `[0, interval)`. Bounding `interval` to safe-integer range avoids non-deterministic modulo results past `2^53`.
 
 ### `LooseSystem`
 
@@ -148,11 +158,13 @@ interface LooseSystemRegistration {
   phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
   before?: string[];
   after?: string[];
+  interval?: number;
+  intervalOffset?: number;
   execute: LooseSystem;
 }
 ```
 
-Same shape as `SystemRegistration` but uses `LooseSystem` instead.
+Same shape as `SystemRegistration` but uses `LooseSystem` instead. `interval` and `intervalOffset` carry the same semantics as on `SystemRegistration`.
 
 ### `ComponentRegistry`
 
@@ -1369,11 +1381,15 @@ The overload accepting `LooseSystem | LooseSystemRegistration` allows systems ty
 |---|---|---|
 | `before` | `string[]` | Run this system before the named systems |
 | `after` | `string[]` | Run this system after the named systems |
+| `interval` | `number` | Run only on ticks where `(executingTick - 1) % interval === intervalOffset` (default `1`) |
+| `intervalOffset` | `number` | Cycle offset within `[0, interval)` (default `0`); shifts which absolute tick number triggers the system within the modulo cycle |
 
 **Throws:**
 - `Error` if a constraint creates a cycle within a phase
 - `Error` if a constraint references a system in a different phase
 - `Error` if a constraint references a non-existent system name
+- `Error` if `interval` is not a safe integer >= 1
+- `Error` if `intervalOffset` is not a safe integer in `[0, interval)`
 
 ```typescript
 function movementSystem(w: World): void {
@@ -1404,6 +1420,18 @@ world.registerSystem({
   after: ['Movement'],
   execute: collisionSystem,
 });
+
+// Cadence: heavy weather sim runs every 12 ticks (fires at tick 1, 13, 25, ...)
+world.registerSystem({
+  name: 'Weather',
+  phase: 'update',
+  interval: 12,
+  execute: weatherSystem,
+});
+
+// Stagger: two interval-2 systems on alternating ticks
+world.registerSystem({ name: 'A', execute: a, interval: 2, intervalOffset: 0 }); // ticks 1, 3, 5
+world.registerSystem({ name: 'B', execute: b, interval: 2, intervalOffset: 1 }); // ticks 2, 4, 6
 ```
 
 #### `step()`

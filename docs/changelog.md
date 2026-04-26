@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.9 - 2026-04-25
+
+Per-system cadence scheduling. Inspired by MicropolisCore's `simCycle % speedTable[idx]` pattern (`MicropolisEngine/src/simulate.cpp:134–143`): different sub-systems should run at different rates without each one re-implementing modulo gating. Additive, no migration needed for callers using the legacy `if (w.tick % N !== 0) return;` pattern. 491 tests pass (up from 467).
+
+### Added
+
+- **`SystemRegistration.interval` and `LooseSystemRegistration.interval`** (default `1`). The engine skips the system on ticks where `(executingTick - 1) % interval !== intervalOffset`, where `executingTick` is the tick number being processed (equal to `world.tick + 1` while the system is running). With `interval: N` and the default `intervalOffset: 0`, the system fires on ticks 1, N+1, 2N+1, … This matches the legacy `if (world.tick % N !== 0) return;` schedule exactly, so existing periodic systems migrate to the field by direct substitution without changing when the first fire happens.
+- **`SystemRegistration.intervalOffset` and `LooseSystemRegistration.intervalOffset`** (default `0`, must satisfy `0 <= intervalOffset < interval`). Shifts the cadence so two interval-N systems can be staggered onto disjoint ticks. Three systems with `interval: 3` and offsets `0`/`1`/`2` partition every tick into a stable round-robin.
+- Skipped systems do not invoke their `execute` body and do not push a per-system entry into `WorldMetrics.systems`. The cheap `(tick - 1) % interval` check still runs across all registered systems, so `WorldMetrics.durationMs.systems` (the per-tick total measured around the whole systems pass) is not literally zero for skip ticks — the savings come from the body, not from the dispatch.
+
+### Validated
+
+- `interval` must satisfy `Number.isSafeInteger(interval) && interval >= 1`; rejected otherwise at `registerSystem` time with a descriptive error that quotes the offending value with its type. Bounding to safe-integer range avoids non-deterministic modulo results past `2^53`.
+- `intervalOffset` must satisfy `Number.isSafeInteger(intervalOffset) && 0 <= intervalOffset < interval`; rejected otherwise at `registerSystem` time.
+- Validation runs **before** the order counter and resolved-order cache mutate, so a rejected registration does not burn an order slot or invalidate the cached system order.
+- Ordering constraints (`before`/`after`) remain independent of cadence — topological sort still resolves intra-phase order, and skipped systems do not break the determinism of un-skipped systems' ordering.
+
+### Behavior callouts
+
+- **Failed ticks consume a cadence slot.** If a tick aligned with a periodic system's modulo fails, that fire opportunity is lost; the engine does not retry on the next successful tick. Tested by `failed tick consumes a cadence slot`.
+- **Mid-game registration is anchored to absolute tick numbering.** Registering `interval: 10, intervalOffset: 5` at tick 7 means the next fire is the next tick where `(tick - 1) % 10 === 5`, not "5 ticks from now."
+- **`metrics.systems[].name` shape becomes tick-variable** when periodic systems are registered: a periodic system is present in `metrics.systems` on its fire ticks and absent on skip ticks. Existing telemetry consumers that assumed a stable shape across ticks should note this.
+
+### Documented
+
+- **`docs/api-reference.md`** — `SystemRegistration` and `LooseSystemRegistration` interfaces include the new fields; `registerSystem` table lists `interval`/`intervalOffset`; throws list extended; example block shows a `Weather` system on `interval: 12` and a stagger pattern. The semantics of `executingTick` are pinned (equal to `world.tick + 1` during system execution).
+- **`docs/guides/systems-and-simulation.md`** — "Periodic systems" section rewritten to recommend the `interval` field over the manual `if (w.tick % N !== 0) return;` pattern, with a stagger example and explicit notes on (a) failed-tick cadence semantics, (b) mid-game registration anchoring, and (c) when the legacy manual form is still appropriate (runtime-varying cadence).
+
 ## 0.5.8 - 2026-04-25
 
 Iter-2 fix-review iteration 5 — **Codex CLEAN, Gemini CLEAN, Opus** flagged one remaining inconsistency in `serialization-and-diffs.md:74` ("still accepts versions 1–4" — internally inconsistent with the file's own lines 116/120, which correctly say 1–5). Fixed.
