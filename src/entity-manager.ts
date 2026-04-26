@@ -102,6 +102,19 @@ export class EntityManager {
         'EntityManager.fromState: generations.length must equal alive.length',
       );
     }
+    for (let i = 0; i < state.alive.length; i++) {
+      if (typeof state.alive[i] !== 'boolean') {
+        throw new Error(
+          `EntityManager.fromState: alive[${i}] must be a boolean, got ${typeof state.alive[i]}`,
+        );
+      }
+      const gen = state.generations[i];
+      if (!Number.isInteger(gen) || gen < 0) {
+        throw new Error(
+          `EntityManager.fromState: generations[${i}] must be a non-negative integer, got ${gen}`,
+        );
+      }
+    }
     const seen = new Set<number>();
     for (const id of state.freeList) {
       if (!Number.isInteger(id) || id < 0 || id >= state.alive.length) {

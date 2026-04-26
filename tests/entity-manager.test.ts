@@ -125,4 +125,21 @@ describe('EntityManager', () => {
     expect(dirty.created).toEqual([]);
     expect(dirty.destroyed).toEqual([]);
   });
+
+  describe('fromState validation', () => {
+    it('rejects non-boolean alive entries', () => {
+      const bad = { generations: [0, 0], alive: [true, 'yes' as unknown as boolean], freeList: [] };
+      expect(() => EntityManager.fromState(bad)).toThrow(/alive\[1\]/);
+    });
+
+    it('rejects negative generation entries', () => {
+      const bad = { generations: [0, -1], alive: [true, true], freeList: [] };
+      expect(() => EntityManager.fromState(bad)).toThrow(/generations\[1\]/);
+    });
+
+    it('rejects non-integer generation entries', () => {
+      const bad = { generations: [0, 1.5], alive: [true, true], freeList: [] };
+      expect(() => EntityManager.fromState(bad)).toThrow(/generations\[1\]/);
+    });
+  });
 });

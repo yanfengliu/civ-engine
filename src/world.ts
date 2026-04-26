@@ -251,6 +251,7 @@ export class World<
   private lastTickFailure: TickFailure | null = null;
   private poisoned: TickFailure | null = null;
   private poisonedWarningEmitted = false;
+  private lastTickFailureClone: TickFailure | null = null;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -390,7 +391,7 @@ export class World<
     }
     this.componentStores.set(key, new ComponentStore<unknown>(options));
     if (options) {
-      this.componentOptions.set(key, options);
+      this.componentOptions.set(key, { ...options });
     }
     this.registerComponentBit(key);
   }
@@ -527,8 +528,10 @@ export class World<
     let bestDistSq = Infinity;
 
     for (let r = 0; r <= maxRadius; r++) {
-      // Early-out: any entity outside the next ring would be farther than the
-      // best we've already found, so we can stop.
+      // Every entity returned by getInRadius(cx, cy, r) is within Euclidean
+      // distance r. If our best is already inside (r-1) the next ring cannot
+      // improve it, so we can stop. r is the cell-radius bound; bestDistSq is
+      // squared Euclidean.
       if (bestId !== undefined && bestDistSq <= (r - 1) * (r - 1)) {
         return bestId;
       }
@@ -615,6 +618,7 @@ export class World<
   recover(): void {
     this.poisoned = null;
     this.lastTickFailure = null;
+    this.lastTickFailureClone = null;
     this.currentDiff = null;
     this.currentMetrics = null;
     this.poisonedWarningEmitted = false;
@@ -920,7 +924,7 @@ export class World<
         ComponentStore.fromEntries(cloned, opts),
       );
       if (opts) {
-        world.componentOptions.set(key, opts);
+        world.componentOptions.set(key, { ...opts });
       }
     }
     world.rebuildComponentSignatures();
@@ -943,6 +947,11 @@ export class World<
             `Invalid entity id key in snapshot.tags: ${JSON.stringify(entityIdStr)}`,
           );
         }
+        if (!world.entityManager.isAlive(entityId)) {
+          throw new Error(
+            `snapshot.tags references dead entity ${entityId}`,
+          );
+        }
         for (const tag of tagList as string[]) {
           world.addTagInternal(entityId, tag);
         }
@@ -954,6 +963,11 @@ export class World<
         if (!Number.isInteger(entityId) || entityId < 0) {
           throw new Error(
             `Invalid entity id key in snapshot.metadata: ${JSON.stringify(entityIdStr)}`,
+          );
+        }
+        if (!world.entityManager.isAlive(entityId)) {
+          throw new Error(
+            `snapshot.metadata references dead entity ${entityId}`,
           );
         }
         for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {
@@ -991,7 +1005,11 @@ export class World<
   }
 
   getLastTickFailure(): TickFailure | null {
-    return this.lastTickFailure ? cloneTickFailure(this.lastTickFailure) : null;
+    if (!this.lastTickFailure) return null;
+    if (!this.lastTickFailureClone) {
+      this.lastTickFailureClone = cloneTickFailure(this.lastTickFailure);
+    }
+    return this.lastTickFailureClone;
   }
 
   onDiff(fn: (diff: TickDiff) => void): void {
@@ -1247,6 +1265,11 @@ export class World<
   }
 
   private setMetaInternal(entity: EntityId, key: string, value: string | number): void {
+    if (typeof value === 'number' && !Number.isFinite(value)) {
+      throw new Error(
+        `Metadata ${JSON.stringify(key)} value must be a finite JSON number; got ${value}`,
+      );
+    }
     const existingMeta = this.entityMeta.get(entity);
     let keyIndex = this.metaIndex.get(key);
     if (keyIndex) {
@@ -1426,6 +1449,7 @@ export class World<
       }
       this.currentMetrics = metrics;
       this.lastTickFailure = null;
+    this.lastTickFailureClone = null;
       this.gameLoop.advance();
     } finally {
       this.activeMetrics = null;
@@ -1663,6 +1687,7 @@ export class World<
     }
     this.currentMetrics = metrics;
     this.lastTickFailure = failure;
+    this.lastTickFailureClone = null;
     this.poisoned = failure;
     if (failure.phase !== 'listeners') {
       this.currentDiff = null;
@@ -2187,14 +2212,11 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
 }
 
 function cloneTickFailure(failure: TickFailure): TickFailure {
-  return JSON.parse(JSON.stringify(failure)) as TickFailure;
+  return structuredClone(failure);
 }
 
 function cloneTickDiff(diff: TickDiff): TickDiff {
-  // Deep-clone: component data and state values are JSON-compatible by
-  // contract (assertJsonCompatible runs at write time), so structuredClone /
-  // JSON round-trip is safe and gives true defensive isolation.
-  return JSON.parse(JSON.stringify(diff)) as TickDiff;
+  return structuredClone(diff);
 }
 
 function createErrorDetails(error: unknown): {

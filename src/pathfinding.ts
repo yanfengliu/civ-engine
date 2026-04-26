@@ -131,6 +131,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
       if (!isFinite(edgeCost) || edgeCost < 0) continue;
 
       const newG = current.g + edgeCost;
+      if (newG > maxCost) continue;
       const neighborHash = hash(neighbor);
       const prevG = bestG.get(neighborHash);
 

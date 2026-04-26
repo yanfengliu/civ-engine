@@ -1,6 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import { World } from '../src/world.js';
 
+describe('setMeta validation', () => {
+  it('rejects NaN values', () => {
+    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
+    const id = world.createEntity();
+    expect(() => world.setMeta(id, 'level', Number.NaN)).toThrow(/finite/);
+  });
+
+  it('rejects Infinity values', () => {
+    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
+    const id = world.createEntity();
+    expect(() => world.setMeta(id, 'level', Infinity)).toThrow(/finite/);
+    expect(() => world.setMeta(id, 'level', -Infinity)).toThrow(/finite/);
+  });
+
+  it('accepts finite numbers and strings', () => {
+    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
+    const id = world.createEntity();
+    world.setMeta(id, 'level', 42);
+    world.setMeta(id, 'tier', 'gold');
+    expect(world.getMeta(id, 'level')).toBe(42);
+    expect(world.getMeta(id, 'tier')).toBe('gold');
+  });
+});
+
 describe('Entity tags', () => {
   it('addTag/hasTag/getByTag round-trip', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });

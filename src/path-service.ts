@@ -141,7 +141,7 @@ export class PathRequestQueue<TRequest, TResult> {
       completed.push({
         id: current.id,
         request: current.request,
-        result: this.clone(resolved),
+        result: resolved,
         fromCache: false,
       });
     }

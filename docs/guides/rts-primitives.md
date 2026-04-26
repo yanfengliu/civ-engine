@@ -51,15 +51,17 @@ status.blockedBy; // [{ entity: 100, kind: 'building', claim: 'occupied' }]
 
 Useful `OccupancyBinding` APIs:
 
-- `block(area)` / `unblock(area)`
-- `occupy(entity, area)`
-- `reserve(entity, area)`
+- `block(area)` / `unblock(area)` — entity-less terrain (walls, cliffs, world geometry)
+- `occupy(entity, area)` — entity-owned footprint
+- `reserve(entity, area)` — short-lived entity-owned hold
 - `clearReservation(entity)`
 - `release(entity)`
-- `isBlocked(x, y, options?)`
+- `isBlocked(x, y, options?)` — `options.ignoreEntity` only ignores `occupy`/`reserve` claims of that entity, not static blocks
 - `getCellStatus(x, y, options?)`
 - `attachWorld(world)` / `detachWorld()`
 - `getMetrics()` / `resetMetrics()`
+
+**Static blocks vs occupancy.** `block()` is for terrain — cells that are impassable to everyone, with no notion of an owner. It does not accept an entity argument and is not affected by `options.ignoreEntity`. If you want a cell that blocks others but not the entity that placed it (a barricade, a construction site, an entity's own footprint), use `occupy(entity, area)` with an appropriately long lifetime — that path tracks the owner and `ignoreEntity` works correctly. Modeling all entity-blocking as occupancy keeps the passability surface simple and deterministic.
 
 Use raw `OccupancyGrid` when you need deterministic serialization snapshots:
 
