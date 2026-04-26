@@ -2,6 +2,7 @@ export * from './ai-contract.js';
 export * from './behavior-tree.js';
 export * from './cellular.js';
 export * from './client-adapter.js';
+export * from './command-transaction.js';
 export * from './diff.js';
 export * from './history-recorder.js';
 export * from './layer.js';

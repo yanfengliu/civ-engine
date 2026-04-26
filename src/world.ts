@@ -25,6 +25,7 @@ import {
   TICK_FAILURE_SCHEMA_VERSION,
   WORLD_STEP_RESULT_SCHEMA_VERSION,
 } from './ai-contract.js';
+import { CommandTransaction } from './command-transaction.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -704,6 +705,11 @@ export class World<
 
   submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
     return this.submitWithResult(type, data).accepted;
+  }
+
+  transaction(): CommandTransaction<TEventMap> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new CommandTransaction<TEventMap>(this as unknown as World<TEventMap, any, any, any>);
   }
 
   submitWithResult<K extends keyof TCommandMap>(

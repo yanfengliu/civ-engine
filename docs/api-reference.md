@@ -3370,6 +3370,102 @@ Restores a visibility map from serialized state.
 
 ---
 
+## Command Transaction
+
+Atomic propose-validate-commit-or-abort builder over `World`. Buffers proposed mutations, events, and precondition predicates; on `commit()` either applies everything (preconditions passed) or applies nothing (any precondition failed). v1 surface: components, position, events, resources. Inspired by MicropolisCore's `ToolEffects` (`MicropolisEngine/src/tool.h:171`).
+
+```typescript
+import { CommandTransaction, type TransactionResult } from 'civ-engine';
+```
+
+### `world.transaction()`
+
+```typescript
+transaction(): CommandTransaction<TEventMap>
+```
+
+Creates a fresh transaction bound to this world. The returned transaction inherits the world's `TEventMap` so `tx.emit(type, data)` is type-checked against the same event map as `world.emit`.
+
+### Builder methods (chainable, return `this`)
+
+| Method | Buffers |
+|---|---|
+| `setComponent(entity, key, data)` | A `setComponent` mutation |
+| `addComponent(entity, key, data)` | Alias for `setComponent` (matches `World.addComponent`) |
+| `patchComponent(entity, key, patch)` | A `patchComponent` mutation; `patch` runs at commit time against current state |
+| `removeComponent(entity, key)` | A `removeComponent` mutation |
+| `setPosition(entity, position, key?)` | A `setPosition` mutation; `key` defaults to the world's `positionKey` |
+| `addResource(entity, resource, amount)` | An `addResource` mutation |
+| `removeResource(entity, resource, amount)` | A `removeResource` mutation |
+| `emit(type, data)` | A buffered event; emitted via `EventBus` only on successful commit |
+| `require(predicate)` | A precondition; `predicate(world)` runs before any mutation applies |
+
+All builder methods throw if the transaction has already been committed or aborted.
+
+### Preconditions
+
+```typescript
+type TransactionPrecondition<TEventMap> =
+  (world: World<TEventMap>) => true | false | string;
+```
+
+A predicate receives the live world and must return one of:
+
+- `true` — pass
+- `false` — fail (rejection reason: `"precondition returned false"`)
+- a `string` — fail (rejection reason: the string)
+
+Preconditions run in registration order at the start of `commit()` and short-circuit on the first failure. Each predicate sees the **current live state** of the world, not the transaction's proposed mutations — preconditions are checked against the pre-commit baseline, not the post-commit projection.
+
+### `commit(): TransactionResult`
+
+```typescript
+type TransactionResult =
+  | { ok: true;  mutationsApplied: number; eventsEmitted: number }
+  | { ok: false; code: 'precondition_failed'; reason: string }
+  | { ok: false; code: 'aborted' };
+```
+
+Runs preconditions; on any failure, returns `precondition_failed` with no mutation or event applied. Otherwise applies every buffered mutation in registration order via the corresponding public `World` API (so mutations get the same liveness, bounds, and JSON-compat validation as direct calls), then emits every buffered event via `world.emit`. Returns the success result with counts.
+
+If the transaction was previously `abort()`ed, `commit()` returns `{ ok: false, code: 'aborted' }` without throwing or mutating.
+
+`commit()` after a previous `commit()` throws `Error('CommandTransaction already committed')`.
+
+### `abort(): void`
+
+Marks a pending transaction as aborted. A subsequent `commit()` returns `{ ok: false, code: 'aborted' }` with no mutation or event applied. `abort()` on an already-committed or already-aborted transaction is a no-op.
+
+### v1 limitations
+
+- **Unbuffered ops:** `createEntity`, `destroyEntity`, `addTag`, `removeTag`, `setMeta`, `deleteMeta`, `setState`, `deleteState`, and resource registration / `setResourceMax` are not buffered. v1 covers components (set / add / patch / remove), position, events, and resource add / remove.
+- **Aliasing window.** Buffered values (the `data` argument to `setComponent` / `addComponent` / `patchComponent`, the `position` argument to `setPosition`, and the `data` argument to `emit`) are stored by reference. Mutating a buffered object between the builder call and `commit()` is observable at apply time. Treat buffered values as owned by the transaction once handed over.
+- **Mid-commit throw → partial state, transaction consumed.** If a buffered mutation throws mid-commit (e.g., entity destroyed between buffering and commit, JSON-incompat caller-side mutation per the aliasing window above, etc.), the error propagates. Mutations 0..N-1 already applied stay applied. The transaction is still consumed (status flips to `committed` in a `finally` block), so calling `commit()` again throws — the caller cannot retry and silently double-apply earlier mutations (e.g., double-debit a resource). Best practice: validate entity liveness via `require((w) => w.isAlive(entity) || 'entity dead')` before mutating.
+- **Mid-emit throw → partial event delivery.** Events fire synchronously in registration order after all mutations apply. If event N's listeners throw or the JSON-compat check rejects payload N, mutations 0..M and events 0..N-1 are already applied / fired. The transaction-level "all-or-nothing" promise covers preconditions, not emit-time exceptions. Validate event payloads before buffering.
+
+### Example: cost-checked build action
+
+```typescript
+const result = world
+  .transaction()
+  .require((w) => {
+    const wood = w.getResource(player, 'wood');
+    return (wood?.current ?? 0) >= 80 || 'not enough wood';
+  })
+  .removeResource(player, 'wood', 80)
+  .setComponent(site, 'building', { kind: 'house' })
+  .emit('building_placed', { player, site, kind: 'house' })
+  .commit();
+
+if (!result.ok) {
+  console.log('build aborted:', result.code === 'precondition_failed' ? result.reason : result.code);
+}
+```
+
+If the player has 80+ wood, the transaction commits: wood is deducted, the building is placed, and the `building_placed` event fires — all in one tick, all visible in one `TickDiff`. If the player has fewer than 80 wood, none of the changes apply and the event is not emitted.
+
+---
+
 ## Layer
 
 Generic typed overlay map at configurable downsampled resolution. Models field data — pollution, influence, danger, weather, faith — as a sparse grid where each cell covers a `blockSize × blockSize` block of world coordinates. Standalone utility, no `World` dependency. Sibling of `OccupancyGrid` and `VisibilityMap`.
