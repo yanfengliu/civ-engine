@@ -29,10 +29,12 @@ import {
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
-> = (world: World<TEventMap, TCommandMap>) => void;
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type LooseSystem = (world: World<any, any>) => void;
+export type LooseSystem = (world: World<any, any, any, any>) => void;
 
 export interface LooseSystemRegistration {
   name?: string;
@@ -55,10 +57,12 @@ export type SystemPhase = (typeof SYSTEM_PHASES)[number];
 export interface SystemRegistration<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   name?: string;
   phase?: SystemPhase;
-  execute: System<TEventMap, TCommandMap>;
+  execute: System<TEventMap, TCommandMap, TComponents, TState>;
   before?: string[];
   after?: string[];
 }
@@ -185,10 +189,12 @@ interface QueryCacheEntry {
 interface RegisteredSystem<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   name: string;
   phase: SystemPhase;
-  execute: System<TEventMap, TCommandMap>;
+  execute: System<TEventMap, TCommandMap, TComponents, TState>;
   order: number;
   before: string[];
   after: string[];
@@ -217,8 +223,8 @@ export class World<
   private nextComponentBit = 0;
   private entitySignatures: bigint[] = [];
   private queryCache = new Map<string, QueryCacheEntry>();
-  private systems: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
-  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap>> | null = null;
+  private systems: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
+  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> | null = null;
   private nextSystemOrder = 0;
   private gameLoop: GameLoop;
   private previousPositions = new Map<EntityId, { x: number; y: number }>();
@@ -227,12 +233,12 @@ export class World<
   private validators = new Map<
     keyof TCommandMap,
     Array<
-      (data: never, world: World<TEventMap, TCommandMap>) => CommandValidationResult
+      (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => CommandValidationResult
     >
   >();
   private handlers = new Map<
     keyof TCommandMap,
-    (data: never, world: World<TEventMap, TCommandMap>) => void
+    (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
   >();
   private spatialGrid: SpatialGrid;
   readonly grid: SpatialGridView;
@@ -257,7 +263,7 @@ export class World<
   >();
   private tickFailureListeners = new Set<(failure: TickFailure) => void>();
   private destroyCallbacks: Array<
-    (id: EntityId, world: World<TEventMap, TCommandMap>) => void
+    (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
   > = [];
   private stateStore = new Map<string, unknown>();
   private stateDirtyKeys = new Set<string>();
@@ -358,13 +364,13 @@ export class World<
   }
 
   onDestroy(
-    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+    callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
     this.destroyCallbacks.push(callback);
   }
 
   offDestroy(
-    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
+    callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
     const index = this.destroyCallbacks.indexOf(callback);
     if (index !== -1) {
@@ -549,15 +555,17 @@ export class World<
   }
 
   registerSystem(
-    system: System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>,
+    system:
+      | System<TEventMap, TCommandMap, TComponents, TState>
+      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>,
   ): void;
   registerSystem(
     system: LooseSystem | LooseSystemRegistration,
   ): void;
   registerSystem(
     system:
-      | System<TEventMap, TCommandMap>
-      | SystemRegistration<TEventMap, TCommandMap>
+      | System<TEventMap, TCommandMap, TComponents, TState>
+      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
       | LooseSystem
       | LooseSystemRegistration,
   ): void {
@@ -723,7 +731,7 @@ export class World<
     type: K,
     fn: (
       data: TCommandMap[K],
-      world: World<TEventMap, TCommandMap>,
+      world: World<TEventMap, TCommandMap, TComponents, TState>,
     ) => CommandValidationResult,
   ): void {
     let fns = this.validators.get(type);
@@ -734,7 +742,7 @@ export class World<
     fns.push(
       fn as (
         data: never,
-        world: World<TEventMap, TCommandMap>,
+        world: World<TEventMap, TCommandMap, TComponents, TState>,
       ) => CommandValidationResult,
     );
   }
@@ -765,14 +773,14 @@ export class World<
 
   registerHandler<K extends keyof TCommandMap>(
     type: K,
-    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
+    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
     if (this.handlers.has(type)) {
       throw new Error(`Handler already registered for command '${String(type)}'`);
     }
     this.handlers.set(
       type,
-      fn as (data: never, world: World<TEventMap, TCommandMap>) => void,
+      fn as (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
     );
   }
 
@@ -877,13 +885,15 @@ export class World<
     TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
     TComponents extends ComponentRegistry = Record<string, unknown>,
+    TState extends Record<string, unknown> = Record<string, unknown>,
   >(
     snapshot: WorldSnapshot,
     systems?: Array<
-      System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>
+      System<TEventMap, TCommandMap, TComponents, TState>
+      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
       | LooseSystem | LooseSystemRegistration
     >,
-  ): World<TEventMap, TCommandMap, TComponents> {
+  ): World<TEventMap, TCommandMap, TComponents, TState> {
     const version = (snapshot as { version: number }).version;
     if (version < 1 || version > 5) {
       throw new Error(`Unsupported snapshot version: ${version}`);
@@ -894,7 +904,7 @@ export class World<
         ? snapshot.componentOptions
         : {};
 
-    const world = new World<TEventMap, TCommandMap, TComponents>(snapshot.config);
+    const world = new World<TEventMap, TCommandMap, TComponents, TState>(snapshot.config);
     world.entityManager = EntityManager.fromState(snapshot.entities);
 
     world.componentStores.clear();
@@ -1755,12 +1765,12 @@ export class World<
     return null;
   }
 
-  private resolveSystemOrder(): Array<RegisteredSystem<TEventMap, TCommandMap>> {
-    const byPhase = new Map<SystemPhase, Array<RegisteredSystem<TEventMap, TCommandMap>>>();
+  private resolveSystemOrder(): Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> {
+    const byPhase = new Map<SystemPhase, Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>>();
     for (const phase of SYSTEM_PHASES) {
       byPhase.set(phase, []);
     }
-    const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap>>();
+    const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>();
     for (const sys of this.systems) {
       byPhase.get(sys.phase)!.push(sys);
       if (sys.name) {
@@ -1794,7 +1804,7 @@ export class World<
       }
     }
 
-    const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+    const result: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
     for (const phase of SYSTEM_PHASES) {
       const phaseSystems = byPhase.get(phase)!;
       if (phaseSystems.length === 0) continue;
@@ -1822,7 +1832,7 @@ export class World<
       const validation = (
         fns[index] as (
           data: TCommandMap[K],
-          world: World<TEventMap, TCommandMap>,
+          world: World<TEventMap, TCommandMap, TComponents, TState>,
         ) => CommandValidationResult
       )(data, this);
       const rejection = normalizeCommandValidationResult(validation, index);
@@ -1857,7 +1867,7 @@ export class World<
       | SystemRegistration<TEventMap, TCommandMap>
       | LooseSystem
       | LooseSystemRegistration,
-  ): RegisteredSystem<TEventMap, TCommandMap> {
+  ): RegisteredSystem<TEventMap, TCommandMap, TComponents, TState> {
     const order = this.nextSystemOrder++;
     this.resolvedSystemOrder = null;
     if (typeof system === 'function') {
@@ -2295,11 +2305,13 @@ function asPosition(value: unknown): Position {
 function topologicalSort<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry,
+  TState extends Record<string, unknown>,
 >(
-  systems: Array<RegisteredSystem<TEventMap, TCommandMap>>,
-  nameToSystem: Map<string, RegisteredSystem<TEventMap, TCommandMap>>,
-): Array<RegisteredSystem<TEventMap, TCommandMap>> {
-  const edges = new Map<RegisteredSystem<TEventMap, TCommandMap>, Set<RegisteredSystem<TEventMap, TCommandMap>>>();
+  systems: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>,
+  nameToSystem: Map<string, RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>,
+): Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> {
+  const edges = new Map<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>, Set<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>>();
   for (const sys of systems) {
     edges.set(sys, new Set());
   }
@@ -2315,7 +2327,7 @@ function topologicalSort<
     }
   }
 
-  const inDegree = new Map<RegisteredSystem<TEventMap, TCommandMap>, number>();
+  const inDegree = new Map<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>, number>();
   for (const sys of systems) {
     inDegree.set(sys, 0);
   }
@@ -2329,7 +2341,7 @@ function topologicalSort<
     .filter((s) => inDegree.get(s) === 0)
     .sort((a, b) => a.order - b.order);
 
-  const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+  const result: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
   while (queue.length > 0) {
     const sys = queue.shift()!;
     result.push(sys);

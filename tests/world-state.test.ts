@@ -102,4 +102,48 @@ describe('World state store', () => {
     const terrain = world.getState('terrain');
     expect(terrain).toEqual({ biome: 'forest' });
   });
+
+  it('typed registry threads through system, validator, handler, and onDestroy callbacks', () => {
+    type Components = {
+      health: { hp: number };
+      position: { x: number; y: number };
+    };
+    type State = {
+      kills: number;
+      [key: string]: unknown;
+    };
+    type Cmds = { revive: { entity: number } };
+
+    const world = new World<Record<string, never>, Cmds, Components, State>({
+      gridWidth: 10, gridHeight: 10, tps: 60,
+    });
+    world.registerComponent<Components['health']>('health');
+    world.registerComponent<Components['position']>('position');
+    world.setState('kills', 0);
+
+    let captured = 0;
+    world.registerSystem((w) => {
+      const kills = w.getState('kills') ?? 0;
+      captured = kills;
+    });
+    world.registerValidator('revive', (data, w) => {
+      return w.isAlive(data.entity) ? false : true;
+    });
+    world.registerHandler('revive', (_data, w) => {
+      const cur = w.getState('kills') ?? 0;
+      w.setState('kills', cur - 1);
+    });
+    world.onDestroy((_id, w) => {
+      const cur = w.getState('kills') ?? 0;
+      w.setState('kills', cur + 1);
+    });
+
+    const e = world.createEntity();
+    world.addComponent(e, 'health', { hp: 100 });
+    world.destroyEntity(e);
+    world.step();
+
+    expect(captured).toBe(1);
+    expect(world.getState('kills')).toBe(1);
+  });
 });
