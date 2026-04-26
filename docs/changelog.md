@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.5.10 - 2026-04-25
+
+`Layer<T>` — generic typed overlay map utility for downsampled field data. Inspired by MicropolisCore's `Map<DATA, BLKSIZE>` template (`MicropolisEngine/src/map_type.h:111`), where pollution, traffic-density, fire-station influence, etc., are each typed maps at different downsampled resolutions of the world. Standalone utility, no `World` dependency. Sibling of `OccupancyGrid` / `VisibilityMap`. 540 tests pass (up from 491).
+
+### Added
+
+- **`Layer<T>` (`src/layer.ts`)** — exported from package root. Constructor takes `LayerOptions<T>`: `worldWidth`, `worldHeight`, optional `blockSize` (default `1`), and `defaultValue`. Cell grid dimensions derive as `Math.ceil(worldWidth / blockSize)` × `Math.ceil(worldHeight / blockSize)`.
+- **`Layer<T>.getCell(cx, cy)` / `setCell(cx, cy, value)`** — cell-coordinate access with bounds and integer-coordinate validation.
+- **`Layer<T>.getAt(worldX, worldY)` / `setAt(worldX, worldY, value)`** — world-coordinate access; auto-buckets to `Math.floor(world / blockSize)`. Bounds-validates against `worldWidth`/`worldHeight`.
+- **`Layer<T>.fill(value)`** — sets every cell to `value`.
+- **`Layer<T>.forEach(cb)`** — visits every cell in row-major order, including unset cells (which yield `defaultValue`).
+- **`Layer<T>.getState()` / `Layer.fromState<T>(state)`** — sparse JSON-serializable round-trip; cells matching `defaultValue` (by JSON fingerprint) are stripped from the snapshot; entries are sorted by cell index for determinism.
+- **`Layer<T>.clone()`** — independent deep copy.
+- **`LayerState<T>` and `LayerOptions<T>` type exports** — for consumers building higher-level abstractions on top.
+
+### Validated
+
+- `worldWidth`, `worldHeight`, `blockSize` must be **safe positive integers** (`Number.isSafeInteger`). The constructor also rejects `width * height` products that exceed `Number.MAX_SAFE_INTEGER`.
+- `defaultValue` and every written cell value must satisfy `assertJsonCompatible` — no functions, symbols, BigInt, circular references, or class instances.
+- Cell coordinates must be integers in `[0, width)` × `[0, height)`; world coordinates must be integers in `[0, worldWidth)` × `[0, worldHeight)`. Both out-of-range and non-integer inputs throw `RangeError` (consistent error type).
+- `Layer.fromState` validates state shape (non-null object, `state.cells` is an array of `[index, value]` tuples, `state.blockSize` is present), validates each cell index is a safe integer in range, rejects duplicates, JSON-compatibility-checks each value, and **canonicalizes** by stripping any cell whose value matches `defaultValue`.
+
+### Defensive-copy contract
+
+Inspired by the v0.4.0+ direction (`world.grid.getAt()` returns a fresh `Set` copy; `getDiff`/`getEvents`/`serialize` deep-clone), `Layer<T>` `structuredClone`s on every value boundary:
+
+- **Writes** (`setCell`, `setAt`, `fill`): the input value is cloned before storage. Mutating the original after the call cannot affect the Layer.
+- **Reads** (`getCell`, `getAt`, `forEach`, the `defaultValue` getter): the returned value is a fresh clone of internal storage. Mutating the returned value cannot affect the Layer or other readers.
+- **Serialization** (`getState`, `Layer.fromState`, `clone`): values are cloned at both ends.
+
+For primitive `T` (`number`, `string`, `boolean`, `null`) the clones are zero-cost. For object `T`, every read pays `structuredClone(value)` — if profiling shows this dominates a hot loop, batch reads via `getState()` (one bulk clone) instead.
+
+The default-value-strip comparison uses `jsonFingerprint` (canonical with `src/json.ts`), which under the hood is `JSON.stringify`. Two objects that are deeply equal but constructed with different key orders will not match — for object-typed `T` defaults, write your values with the same key order as `defaultValue` if you want them stripped on serialize.
+
+### Design notes
+
+- Storage is **sparse**: only cells that have been explicitly written are kept in the backing `Map`. Reads of unset cells return a fresh clone of `defaultValue`.
+- The fingerprint of `defaultValue` is computed once at construction and cached, so `getState()` and `Layer.fromState()` strip default-valued entries in O(n) `jsonFingerprint` calls (one per stored cell), not O(n²).
+- Layers are intentionally **not owned by `World`**. Game code instantiates a layer per concern (one for pollution, one for influence, one for danger) and ticks them from systems. This mirrors the existing pattern for `OccupancyGrid` / `VisibilityMap` / `Pathfinding`.
+
+### Documented
+
+- **`docs/architecture/ARCHITECTURE.md`** — Layer added to the Component Map and Boundaries sections, positioned next to `OccupancyGrid` and `VisibilityMap`.
+- **`docs/api-reference.md`** — new `## Layer` section between `## VisibilityMap` and `## Noise` covering `LayerOptions<T>`, `LayerState<T>`, the constructor, every method, properties, the defensive-copy contract, the `fromState` validation throw list, the fingerprint key-order caveat, and a worked pollution example.
+
 ## 0.5.9 - 2026-04-25
 
 Per-system cadence scheduling. Inspired by MicropolisCore's `simCycle % speedTable[idx]` pattern (`MicropolisEngine/src/simulate.cpp:134–143`): different sub-systems should run at different rates without each one re-implementing modulo gating. Additive, no migration needed for callers using the legacy `if (w.tick % N !== 0) return;` pattern. 491 tests pass (up from 467).

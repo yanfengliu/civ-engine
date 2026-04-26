@@ -3370,6 +3370,157 @@ Restores a visibility map from serialized state.
 
 ---
 
+## Layer
+
+Generic typed overlay map at configurable downsampled resolution. Models field data — pollution, influence, danger, weather, faith — as a sparse grid where each cell covers a `blockSize × blockSize` block of world coordinates. Standalone utility, no `World` dependency. Sibling of `OccupancyGrid` and `VisibilityMap`.
+
+```typescript
+import { Layer, type LayerState } from 'civ-engine';
+```
+
+### `LayerOptions<T>`
+
+```typescript
+// src/layer.ts
+interface LayerOptions<T> {
+  worldWidth: number;
+  worldHeight: number;
+  blockSize?: number;     // default 1
+  defaultValue: T;
+}
+```
+
+`worldWidth`, `worldHeight`, and `blockSize` (default `1`) must be **safe positive integers** (rejected via `Number.isSafeInteger`). The cell grid dimensions are `Math.ceil(worldWidth / blockSize)` × `Math.ceil(worldHeight / blockSize)`; the constructor also rejects dimensions whose product exceeds `Number.MAX_SAFE_INTEGER` to keep cell-index arithmetic exact. `defaultValue` must be JSON-compatible (validated via `assertJsonCompatible`).
+
+### `LayerState<T>`
+
+```typescript
+// src/layer.ts
+interface LayerState<T> {
+  worldWidth: number;
+  worldHeight: number;
+  blockSize: number;
+  defaultValue: T;
+  cells: Array<[number, T]>;  // sparse: [cellIndex, value]
+}
+```
+
+Sparse serialization. Only cells whose value differs from `defaultValue` (compared by JSON fingerprint) appear in `cells`; entries are sorted by `cellIndex` for determinism. `cellIndex = cy * width + cx`.
+
+### `new Layer<T>(options)`
+
+```typescript
+new Layer<T>(options: LayerOptions<T>)
+```
+
+Creates a Layer of cell type `T`. The constructor validates dimensions and JSON-compatibility, and `structuredClone`s `defaultValue` so caller mutation cannot bleed in.
+
+**Defensive-copy contract.** All values flowing across the Layer's API surface are `structuredClone`d:
+
+- **Writes** (`setCell`, `setAt`, `fill`): the input value is cloned before storage. Mutating the original after the call does not affect the Layer.
+- **Reads** (`getCell`, `getAt`, `forEach`, `defaultValue` getter): the returned value is a fresh clone of internal storage. Mutating the returned value does not affect the Layer or other readers.
+- **Serialization** (`getState`, `Layer.fromState`, `clone`): values are cloned at both ends.
+
+For primitive `T` (`number`, `string`, `boolean`, `null`) clones are zero-cost. For object `T`, cloning every read costs O(value size) per call — if profiling shows this dominates, batch reads via `getState()` (one bulk clone) rather than calling `getCell` in a hot loop.
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `worldWidth` | `number` | World coordinate range (read-only) |
+| `worldHeight` | `number` | World coordinate range (read-only) |
+| `blockSize` | `number` | Cell size in world units (read-only) |
+| `width` | `number` | Cell grid width = `ceil(worldWidth / blockSize)` |
+| `height` | `number` | Cell grid height = `ceil(worldHeight / blockSize)` |
+| `defaultValue` | `T` | Getter returning a fresh `structuredClone` of the internal default value (mutating the result does not affect the Layer) |
+
+### `getCell(cx, cy)` / `setCell(cx, cy, value)`
+
+```typescript
+getCell(cx: number, cy: number): T
+setCell(cx: number, cy: number, value: T): void
+```
+
+Cell-coordinate access. `cx` and `cy` must be integers in `[0, width)` × `[0, height)` — both out-of-range and non-integer inputs throw `RangeError`. `setCell` validates `value` via `assertJsonCompatible` and `structuredClone`s before storage. `getCell` `structuredClone`s before returning.
+
+### `getAt(worldX, worldY)` / `setAt(worldX, worldY, value)`
+
+```typescript
+getAt(worldX: number, worldY: number): T
+setAt(worldX: number, worldY: number, value: T): void
+```
+
+World-coordinate access; auto-buckets to `Math.floor(worldX / blockSize)`, `Math.floor(worldY / blockSize)`. `worldX` and `worldY` must be integers in `[0, worldWidth)` × `[0, worldHeight)` — both out-of-range and non-integer inputs throw `RangeError`. Same defensive-copy contract as `getCell` / `setCell`.
+
+### `fill(value)`
+
+```typescript
+fill(value: T): void
+```
+
+Sets every cell to `value`. Validates once via `assertJsonCompatible`, then `structuredClone`s once per cell so each cell holds an independent copy. Subsequent `getState()` strips entries that match `defaultValue` (by `jsonFingerprint`), so `fill(defaultValue)` then `getState()` produces an empty `cells` array.
+
+### `forEach(cb)`
+
+```typescript
+forEach(cb: (value: T, cx: number, cy: number) => void): void
+```
+
+Visits every cell in row-major order (`cy` outer, `cx` inner). Each invocation receives a fresh `structuredClone` — mutating the callback's `value` argument does not affect the Layer. Unset cells yield clones of `defaultValue`.
+
+### `getState()` / `Layer.fromState(state)`
+
+```typescript
+getState(): LayerState<T>
+static fromState<T>(state: LayerState<T>): Layer<T>
+```
+
+Round-trip serialization. `getState` strips entries that match `defaultValue` (by `jsonFingerprint`), `structuredClone`s the rest, and sorts by cell index for determinism. `Layer.fromState` validates state shape (non-null object, `cells` is an array of `[index, value]` tuples, `blockSize` is present), validates each cell index is a safe integer in `[0, width * height)`, rejects duplicates, validates each value is JSON-compatible, and **canonicalizes** by stripping any cell whose value matches `defaultValue` (so a malformed snapshot with redundant default entries normalizes on load).
+
+**Throws (fromState):**
+- `TypeError` if `state` is not a non-null object
+- `Error` if `state.blockSize` is `undefined` or `null`
+- `TypeError` if `state.cells` is not an array
+- `TypeError` if any cell entry is not a 2-element `[index, value]` tuple
+- `RangeError` if any cell index is not a safe integer in `[0, width * height)`
+- `Error` if any cell index appears more than once
+- `Error` if any value is not JSON-compatible
+
+Note on the fingerprint comparison: `jsonFingerprint` uses `JSON.stringify`, which serializes object keys in insertion order. Two objects that are deeply equal but constructed with different key orders will not match — for object-typed `T` defaults, write your values with the same key order as `defaultValue` if you want them to be stripped on serialize.
+
+### `clone()`
+
+```typescript
+clone(): Layer<T>
+```
+
+Returns an independent deep copy. Equivalent to `Layer.fromState(this.getState())`.
+
+### Example
+
+```typescript
+const pollution = new Layer<number>({
+  worldWidth: 64,
+  worldHeight: 64,
+  blockSize: 4, // 16 × 16 cells
+  defaultValue: 0,
+});
+
+// Factory pollutes the cell containing world coord (10, 12)
+pollution.setAt(10, 12, 80);
+
+// Any agent querying nearby world coords in the same 4×4 cell sees the value
+console.log(pollution.getAt(11, 13)); // 80
+console.log(pollution.getAt(8, 12));  // 80 (same cell)
+console.log(pollution.getAt(20, 12)); // 0  (different cell)
+
+// Snapshot for save state
+const snapshot = pollution.getState();
+const restored = Layer.fromState<number>(snapshot);
+```
+
+---
+
 ## Noise
 
 Seedable 2D simplex noise for procedural generation. Standalone utility.
