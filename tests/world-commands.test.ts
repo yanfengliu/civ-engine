@@ -1,7 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { World, WorldTickFailureError } from '../src/world.js';
 
 describe('World commands', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('submit with no validators queues and returns true', () => {
     type Cmds = { move: { x: number; y: number } };
     const world = new World<Record<string, never>, Cmds>({
@@ -556,5 +560,90 @@ describe('World commands', () => {
 
     expect(spawnedId).toBeDefined();
     expect(foundInGrid).toBe(true);
+  });
+
+  describe('listener exception isolation', () => {
+    it('a throwing commandExecutionListener does not leak through processCommands', () => {
+      type Cmds = { ping: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      world.registerHandler('ping', () => {});
+      world.onCommandExecution(() => {
+        throw new Error('listener bug');
+      });
+      world.submit('ping', null);
+
+      expect(() => world.step()).not.toThrow();
+      expect(world.isPoisoned()).toBe(false);
+      expect(world.tick).toBe(1);
+      expect(errSpy).toHaveBeenCalled();
+    });
+
+    it('a throwing tickFailureListener does not replace the original failure', () => {
+      type Cmds = { boom: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      world.registerHandler('boom', () => {
+        throw new Error('handler exploded');
+      });
+      world.onTickFailure(() => {
+        throw new Error('tick-failure listener bug');
+      });
+      world.submit('boom', null);
+
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+      expect(world.isPoisoned()).toBe(true);
+      expect(world.getLastTickFailure()?.code).toBe('command_handler_threw');
+      expect(errSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('poisoned-world contract', () => {
+    it('submit on a poisoned world warns but still queues', () => {
+      type Cmds = { boom: null; ping: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.registerHandler('boom', () => {
+        throw new Error('explode');
+      });
+      world.registerHandler('ping', () => {});
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+      expect(world.isPoisoned()).toBe(true);
+
+      expect(world.submit('ping', null)).toBe(true);
+      expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('serialize on a poisoned world warns but still returns a snapshot', () => {
+      type Cmds = { boom: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 10,
+        gridHeight: 10,
+        tps: 60,
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.registerHandler('boom', () => {
+        throw new Error('explode');
+      });
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+
+      const snapshot = world.serialize();
+      expect(snapshot.version).toBe(5);
+      expect(warnSpy).toHaveBeenCalled();
+    });
   });
 });

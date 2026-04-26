@@ -244,6 +244,7 @@ export class World<
   private activeMetrics: WorldMetrics | null = null;
   private lastTickFailure: TickFailure | null = null;
   private poisoned: TickFailure | null = null;
+  private poisonedWarningEmitted = false;
   private diffListeners = new Set<(diff: TickDiff) => void>();
   private resourceStore = new ResourceStore();
   private rng: DeterministicRandom;
@@ -608,6 +609,16 @@ export class World<
     this.lastTickFailure = null;
     this.currentDiff = null;
     this.currentMetrics = null;
+    this.poisonedWarningEmitted = false;
+  }
+
+  private warnIfPoisoned(api: string): void {
+    if (!this.poisoned || this.poisonedWarningEmitted) return;
+    this.poisonedWarningEmitted = true;
+    console.warn(
+      `${api} called on a poisoned world (last failure: '${this.poisoned.code}' at tick ${this.poisoned.tick}). ` +
+        `Call world.recover() to clear the poison flag.`,
+    );
   }
 
   private makeWorldPoisonedFailure(prior: TickFailure): TickFailure {
@@ -680,6 +691,7 @@ export class World<
     type: K,
     data: TCommandMap[K],
   ): CommandSubmissionResult<K> {
+    this.warnIfPoisoned('submit');
     const rejection = this.validateCommand(type, data);
     if (rejection) {
       const result = this.createCommandSubmissionResult(type, {
@@ -788,6 +800,7 @@ export class World<
   }
 
   serialize(): WorldSnapshot {
+    this.warnIfPoisoned('serialize');
     const components: Record<string, Array<[EntityId, unknown]>> = {};
     for (const [key, store] of this.componentStores) {
       const entries: Array<[EntityId, unknown]> = [];
@@ -1600,7 +1613,11 @@ export class World<
     result: CommandSubmissionResult<K>,
   ): void {
     for (const listener of this.commandResultListeners) {
-      listener(result as CommandSubmissionResult<keyof TCommandMap>);
+      try {
+        listener(result as CommandSubmissionResult<keyof TCommandMap>);
+      } catch (error) {
+        console.error('commandResultListener threw:', error);
+      }
     }
   }
 
@@ -1608,13 +1625,21 @@ export class World<
     result: CommandExecutionResult<K>,
   ): void {
     for (const listener of this.commandExecutionListeners) {
-      listener(result as CommandExecutionResult<keyof TCommandMap>);
+      try {
+        listener(result as CommandExecutionResult<keyof TCommandMap>);
+      } catch (error) {
+        console.error('commandExecutionListener threw:', error);
+      }
     }
   }
 
   private emitTickFailure(failure: TickFailure): void {
     for (const listener of this.tickFailureListeners) {
-      listener(cloneTickFailure(failure));
+      try {
+        listener(cloneTickFailure(failure));
+      } catch (error) {
+        console.error('tickFailureListener threw:', error);
+      }
     }
   }
 
