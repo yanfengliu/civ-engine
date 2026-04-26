@@ -20,7 +20,6 @@ describe('WorldDebugger', () => {
       gridWidth: 8,
       gridHeight: 8,
       tps: 10,
-
     });
     world.registerComponent<Position>('position');
     world.registerComponent<{ role: string }>('unit');
@@ -134,7 +133,6 @@ describe('WorldDebugger', () => {
       gridWidth: 8,
       gridHeight: 8,
       tps: 10,
-
     });
     world.registerComponent<Position>('position');
     world.registerComponent<{ asset: string }>('renderable');
@@ -192,7 +190,6 @@ describe('WorldDebugger', () => {
       gridWidth: 8,
       gridHeight: 8,
       tps: 1000,
-
     });
 
     world.registerSystem({
@@ -239,7 +236,6 @@ describe('WorldDebugger', () => {
       gridWidth: 8,
       gridHeight: 8,
       tps: 10,
-
     });
     world.registerHandler('explode', () => {
       throw new Error('boom');

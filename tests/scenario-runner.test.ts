@@ -11,7 +11,6 @@ function createWorld(): World<Events, Commands> {
     gridWidth: 8,
     gridHeight: 8,
     tps: 10,
-
   });
 }
 

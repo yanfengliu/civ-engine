@@ -2256,7 +2256,7 @@ if (diff) {
 getMetrics(): WorldMetrics | null
 ```
 
-Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
+Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, the per-tick `spatial.explicitSyncs` count (incremented by every `setPosition`-style write), system timings, and tick section timings.
 
 In `instrumentationProfile: 'minimal'`, implicit `step()` still updates counts and total duration, but leaves detailed phase timings and per-system timing entries empty. In `instrumentationProfile: 'release'`, implicit `step()` leaves this as `null` so the shipping runtime does not pay for per-tick metrics. Explicit `stepWithResult()` calls still populate the full metrics payload for callers that deliberately opt into richer diagnostics.
 

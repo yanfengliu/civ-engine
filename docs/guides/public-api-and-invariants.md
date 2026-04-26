@@ -59,7 +59,7 @@ world.registerSystem({ phase: 'input', execute: inputSystem });
 world.registerSystem({ name: 'Combat', phase: 'postUpdate', execute: combatSystem });
 ```
 
-Use `world.getMetrics()` after `step()` to inspect query cache hits, spatial scan counts, system timings, and total tick time before choosing heavier optimizations.
+Use `world.getMetrics()` after `step()` to inspect query cache hits, explicit-sync counts, system timings, and total tick time before choosing heavier optimizations.
 
 Use the instrumentation profiles deliberately:
 

@@ -188,7 +188,6 @@ Read `failure.phase` to find which part of the tick failed:
 |---|---|---|---|
 | `commands` | `missing_handler` | No handler registered for command type | Verify `registerHandler()` was called with the correct command type string |
 | `commands` | `command_handler_threw` | Handler threw an exception | Read `failure.details.error` for the stack trace; check the handler logic |
-| `spatialSync` | `spatial_sync_threw` | Position/occupancy sync crashed | Check for destroyed entities with stale position components |
 | `systems` | `system_threw` | A system's `execute()` threw | Read `failure.systemName` and `failure.details.error`; check that system's logic |
 | `resources` | `resource_processing_threw` | Resource pool tick update crashed | Check resource definitions and pool bounds |
 | `diff` | `diff_build_threw` | Change-set construction crashed | This is likely an engine bug — report it |
@@ -262,7 +261,6 @@ All codes are machine-readable strings. Custom validator codes are user-defined.
 |---|---|---|---|
 | `missing_handler` | `commands` | `commands` | No handler for queued command type |
 | `command_handler_threw` | `commands` | `commands` | Command handler threw |
-| `spatial_sync_threw` | `spatialSync` | `spatial` | Position/occupancy sync threw |
 | `system_threw` | `systems` | `systems` | System `execute()` threw; `systemName` identifies which |
 | `resource_processing_threw` | `resources` | `resources` | Resource pool tick threw |
 | `diff_build_threw` | `diff` | `diff` | Change-set construction threw |
@@ -275,7 +273,6 @@ All tick failures include `error: { name, message, stack }` when the cause is an
 | Code | Severity | Subsystem | Meaning | Key details |
 |---|---|---|---|---|
 | `entity-id-recycled-in-diff` | `warn` | `diff` | Same entity ID destroyed and created in one tick | `overlappingEntityIds` |
-| `spatial-full-scan` | `info` | `spatial` | Full-scan sync path was used | `fullScans`, `scannedEntities`, `explicitSyncs` |
 | `tick-budget-exceeded` | `warn` | `performance` | Tick exceeded time budget by >25% | `totalMs`, `tickBudgetMs`, `overBudgetMs`, `slowSystems` |
 
 Tick failures also surface as issues with severity `error`, using the tick failure's own code.
@@ -347,7 +344,7 @@ if (!step.ok) {
       // Check the system's logic and the entities it queries
       break;
     default:
-      // spatialSync, resources, diff, listeners
+      // resources, diff, listeners
       console.log('Phase:', f.phase, 'Code:', f.code);
       console.log('Error:', f.error?.message);
   }
@@ -368,21 +365,14 @@ if (perfIssue) {
   console.log('Over budget by:', perfIssue.details.overBudgetMs, 'ms');
 }
 
-// Check for expensive spatial sync
-const spatialIssue = debug.issues.find(i => i.code === 'spatial-full-scan');
-if (spatialIssue) {
-  console.log('Full scans:', spatialIssue.details.fullScans);
-  console.log('Scanned entities:', spatialIssue.details.scannedEntities);
-  // Fix: use world.setPosition() instead of mutating position objects
-}
-
 // Raw metrics for deeper analysis
 const metrics = world.getMetrics();
 if (metrics) {
   console.log('Total tick:', metrics.durationMs.total, 'ms');
   console.log('Commands:', metrics.durationMs.commands, 'ms');
   console.log('Systems:', metrics.durationMs.systems, 'ms');
-  console.log('Spatial sync:', metrics.durationMs.spatialSync, 'ms');
+  console.log('Resources:', metrics.durationMs.resources, 'ms');
+  console.log('Diff build:', metrics.durationMs.diff, 'ms');
 }
 ```
 

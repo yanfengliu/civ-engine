@@ -604,6 +604,27 @@ describe('World commands', () => {
       expect(world.getLastTickFailure()?.code).toBe('command_handler_threw');
       expect(errSpy).toHaveBeenCalled();
     });
+
+    it('getLastTickFailure returns isolated copies; mutation does not bleed across calls', () => {
+      type Cmds = { boom: null };
+      const world = new World<Record<string, never>, Cmds>({
+        gridWidth: 5,
+        gridHeight: 5,
+        tps: 60,
+      });
+      world.registerHandler('boom', () => {
+        throw new Error('explode');
+      });
+      world.submit('boom', null);
+      expect(() => world.step()).toThrow(WorldTickFailureError);
+
+      const a = world.getLastTickFailure();
+      const b = world.getLastTickFailure();
+      expect(a).not.toBe(b);
+      (a as { code: string }).code = 'corrupted';
+      const c = world.getLastTickFailure();
+      expect(c?.code).toBe('command_handler_threw');
+    });
   });
 
   describe('poisoned-world contract', () => {

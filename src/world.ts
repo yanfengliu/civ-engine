@@ -2213,17 +2213,19 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
   };
 }
 
+// Both helpers deep-clone via JSON. TickDiff is JSON-shaped because component
+// data and state values pass assertJsonCompatible at write time; TickFailure
+// is JSON-shaped because createTickFailure normalizes the optional Error field
+// to a plain {name, message, stack} via createErrorDetails (line ~2230) and
+// asserts JSON-compat on `details`. JSON is ~2-5× faster than structuredClone
+// for these plain shapes on V8, and cloneTickDiff runs once per tick per
+// diff listener so the throughput matters.
+
 function cloneTickFailure(failure: TickFailure): TickFailure {
-  // structuredClone preserves Error instances and their stack traces in the
-  // optional `error` field; JSON would silently flatten Error → {}.
-  return structuredClone(failure);
+  return JSON.parse(JSON.stringify(failure)) as TickFailure;
 }
 
 function cloneTickDiff(diff: TickDiff): TickDiff {
-  // TickDiff is strictly JSON-shaped (component data and state values pass
-  // assertJsonCompatible at write time). JSON round-trip is faster than
-  // structuredClone for plain objects on V8 and runs once per tick per
-  // listener, so prefer it here.
   return JSON.parse(JSON.stringify(diff)) as TickDiff;
 }
 

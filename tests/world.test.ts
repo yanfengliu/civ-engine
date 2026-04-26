@@ -791,5 +791,21 @@ describe('World', () => {
       expect(world.grid.getNeighbors(2, 2)).toEqual([]);
       expect(world.grid.getInRadius(2, 2, 1)).toContain(id);
     });
+
+    it('mutating the Set returned by getAt does not corrupt the engine grid', () => {
+      const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
+      world.registerComponent<{ x: number; y: number }>('position');
+      const id = world.createEntity();
+      world.setPosition(id, { x: 2, y: 2 });
+
+      const cell = world.grid.getAt(2, 2);
+      expect(cell?.has(id)).toBe(true);
+      (cell as Set<number>).clear();
+      (cell as Set<number>).add(999);
+
+      expect(world.grid.getAt(2, 2)?.has(id)).toBe(true);
+      expect(world.grid.getAt(2, 2)?.has(999)).toBe(false);
+      expect(world.grid.getInRadius(2, 2, 0)).toContain(id);
+    });
   });
 });
