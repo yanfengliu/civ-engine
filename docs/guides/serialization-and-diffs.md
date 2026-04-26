@@ -71,7 +71,7 @@ interface WorldSnapshot {
 }
 ```
 
-`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
+`World.deserialize()` accepts versions 1–5. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
 
 Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both fields are silently ignored on read in 0.5.0+ since in-place mutation auto-detection has been removed.
 

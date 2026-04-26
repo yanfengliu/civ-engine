@@ -1,0 +1,2727 @@
+diff --git a/docs/api-reference.md b/docs/api-reference.md
+index 79dc6d7..f423116 100644
+--- a/docs/api-reference.md
++++ b/docs/api-reference.md
+@@ -86,7 +86,7 @@ type InstrumentationProfile = 'full' | 'minimal' | 'release';
+ Controls how much implicit runtime instrumentation the engine keeps on the hot path.
+ 
+ - `full` keeps the normal development behavior. `step()` records detailed per-tick metrics and `submit()` preserves the compatibility wrapper over `submitWithResult()`.
+-- `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries. `submit()` takes the lower-overhead boolean fast path when no command-result listeners are attached.
++- `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries.
+ - `release` removes avoidable observation work from the implicit `step()` and `submit()` paths. Explicit AI/debug APIs such as `stepWithResult()` and `submitWithResult()` still return structured results when you call them.
+ 
+ ### `WorldConfig`
+@@ -100,7 +100,6 @@ interface WorldConfig {
+   positionKey?: string;    // Component key used for spatial sync (default: 'position')
+   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
+   seed?: number | string;  // Deterministic RNG seed
+-  detectInPlacePositionMutations?: boolean; // Full-scan fallback (default: true)
+   instrumentationProfile?: InstrumentationProfile; // Implicit instrumentation level (default: 'full')
+ }
+ ```
+@@ -109,21 +108,23 @@ interface WorldConfig {
+ 
+ ```typescript
+ // src/world.ts
+-type System<TEventMap, TCommandMap> = (world: World<TEventMap, TCommandMap>) => void;
++type System<TEventMap, TCommandMap, TComponents, TState> = (
++  world: World<TEventMap, TCommandMap, TComponents, TState>,
++) => void;
+ ```
+ 
+-A system is a pure function that receives the `World` and runs game logic. Systems execute by phase, preserving registration order within each phase. Bare function registrations default to the `update` phase.
++A system is a pure function that receives the `World` and runs game logic. Systems execute by phase, preserving registration order within each phase. Bare function registrations default to the `update` phase. All four generics default to permissive types so existing 2-generic call sites continue to compile; threading `TComponents` and `TState` through gives compile-time-typed `world.getComponent` / `world.getState` access inside the callback body.
+ 
+ ### `SystemRegistration`
+ 
+ ```typescript
+ // src/world.ts
+-interface SystemRegistration<TEventMap, TCommandMap> {
++interface SystemRegistration<TEventMap, TCommandMap, TComponents, TState> {
+   name?: string;
+   phase?: 'input' | 'preUpdate' | 'update' | 'postUpdate' | 'output';
+   before?: string[];
+   after?: string[];
+-  execute: System<TEventMap, TCommandMap>;
++  execute: System<TEventMap, TCommandMap, TComponents, TState>;
+ }
+ ```
+ 
+@@ -133,10 +134,10 @@ Optional system registration object for naming systems and assigning a lifecycle
+ 
+ ```typescript
+ // src/world.ts
+-type LooseSystem = (world: World<any, any>) => void;
++type LooseSystem = (world: World<any, any, any, any>) => void;
+ ```
+ 
+-A system typed against a bare `World` that does not need explicit casts when registered into a generically typed world. Useful for utility systems that do not depend on specific event or command maps.
++A system typed against a bare `World` that does not need explicit casts when registered into a generically typed world. Useful for utility systems that do not depend on specific event/command/component/state maps.
+ 
+ ### `LooseSystemRegistration`
+ 
+@@ -160,7 +161,7 @@ Same shape as `SystemRegistration` but uses `LooseSystem` instead.
+ type ComponentRegistry = Record<string, unknown>;
+ ```
+ 
+-Optional third type parameter to `World<TEventMap, TCommandMap, TComponents>`. When specified, component methods (`addComponent`, `getComponent`, `setComponent`, `patchComponent`, `removeComponent`, `query`) infer value types from the registry keys, eliminating manual generic annotations.
++Third type parameter to `World<TEventMap, TCommandMap, TComponents, TState>`. When specified, component methods (`addComponent`, `getComponent`, `setComponent`, `patchComponent`, `removeComponent`, `query`) infer value types from the registry keys, eliminating manual generic annotations. The fourth `TState` generic plays the analogous role for `world.setState` / `world.getState`. Both generics thread through `System`, `SystemRegistration`, `registerSystem`, `registerValidator`, `registerHandler`, `onDestroy`, and `World.deserialize` so typed access works inside callback bodies.
+ 
+ ### `WorldMetrics`
+ 
+@@ -174,11 +175,10 @@ interface WorldMetrics {
+   commandStats: { pendingBeforeTick: number; processed: number };
+   systems: Array<{ name: string; phase: SystemPhase; durationMs: number }>;
+   query: { calls: number; cacheHits: number; cacheMisses: number; results: number };
+-  spatial: { fullScans: number; scannedEntities: number; explicitSyncs: number };
++  spatial: { explicitSyncs: number };
+   durationMs: {
+     total: number;
+     commands: number;
+-    spatialSync: number;
+     systems: number;
+     resources: number;
+     diff: number;
+@@ -269,7 +269,6 @@ Structured outcome emitted through `world.onCommandExecution()` after a queued c
+ // src/world.ts
+ type TickFailurePhase =
+   | 'commands'
+-  | 'spatialSync'
+   | 'systems'
+   | 'resources'
+   | 'diff'
+@@ -330,7 +329,7 @@ Thrown by `world.step()` when a tick fails. Also thrown by `world.step()` (and s
+ 
+ ### Tick failure semantics
+ 
+-A failure in any tick phase (commands, spatialSync, systems, resources, diff, listeners) marks the world as **poisoned**:
++A failure in any tick phase (commands, systems, resources, diff, listeners) marks the world as **poisoned**:
+ 
+ - `world.isPoisoned(): boolean` returns `true` until the next call to `recover()`.
+ - While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `WorldStepResult` with `failure.code === 'world_poisoned'`. The original failure that caused the poison is preserved on the result for diagnostics.
+@@ -354,7 +353,7 @@ interface WorldSnapshot {
+     freeList: number[];
+   };
+   components: Record<string, Array<[EntityId, unknown]>>;
+-  componentOptions?: Record<string, ComponentStoreOptions>; // diffMode + detectInPlaceMutations per component
++  componentOptions?: Record<string, ComponentStoreOptions>; // diffMode per component
+   resources: ResourceStoreState;
+   rng: RandomState;
+   state: Record<string, unknown>;
+@@ -363,7 +362,7 @@ interface WorldSnapshot {
+ }
+ ```
+ 
+-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` / `detectInPlaceMutations` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on). Systems, validators, handlers, and event listeners are not included (they are functions, not data).
++JSON-serializable snapshot of the entire world state, deep-cloned at both serialize and deserialize boundaries so callers cannot mutate live engine state through it. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options. Systems, validators, handlers, and event listeners are not included (they are functions, not data). Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both are silently ignored on read in 0.5.0+.
+ 
+ ### `TickDiff`
+ 
+@@ -1107,7 +1106,6 @@ Creates a new world with the specified grid dimensions, tick rate, and optional
+ | `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
+ | `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
+ | `config.seed` | `number \| string` | No | Seed for deterministic `world.random()` sequences |
+-| `config.detectInPlacePositionMutations` | `boolean` | No | Whether each tick scans position components to detect direct object mutations (default: `true`) |
+ 
+ **Example:**
+ 
+@@ -1211,7 +1209,6 @@ registerComponent<T>(key: string, options?: ComponentOptions): void
+ 
+ interface ComponentOptions {
+   diffMode?: 'strict' | 'semantic';
+-  detectInPlaceMutations?: boolean;
+ }
+ ```
+ 
+@@ -1221,13 +1218,9 @@ Registers a component type by string key. Must be called before using `addCompon
+ - `'strict'` (default) — every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. Preserves per-write audit semantics.
+ - `'semantic'` — writes are fingerprinted against the baseline from the last tick; identical rewrites do not mark the entity dirty. Use this for components whose sync systems rewrite unchanged values every tick (e.g. `position`, `transform`) to keep `TickDiff` liveness signals high.
+ 
+-`options.detectInPlaceMutations` (default `true`) controls whether the per-tick diff scan detects mutations made to component objects via direct assignment (`world.getComponent(id, 'foo').x = 5`):
+-- `true` (default) — `getDirty()` and `clearDirty()` walk every entry in the store and use a JSON fingerprint to detect in-place mutations. Backwards-compatible behavior.
+-- `false` — only writes through `setComponent`/`addComponent`/`patchComponent` are tracked. The store skips the per-tick all-entries fingerprint scan, eliminating its O(N) cost. Use this for high-traffic components when you commit to writing through the explicit APIs.
++In-place mutations of component objects (`world.getComponent(id, 'foo').x = 5`) are NOT tracked by the diff system. Game code must call `setComponent`/`addComponent`/`patchComponent` for changes to land in the diff. The dirty set is updated only by the explicit write APIs.
+ 
+-The combination `{ diffMode: 'semantic', detectInPlaceMutations: false }` is the cheapest mode: rewrite suppression in `set()`, no scan in `getDirty()`/`clearDirty()`.
+-
+-Both options are round-tripped in v5 snapshots so save/load preserves component-store behavior.
++`options.diffMode` is round-tripped in v5 snapshots so save/load preserves component-store behavior.
+ 
+ **Throws:** `Error` if a component with this key is already registered.
+ 
+@@ -1237,12 +1230,6 @@ world.registerComponent<Health>('health');
+ 
+ interface Transform { x: number; y: number }
+ world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
+-
+-interface Velocity { dx: number; dy: number }
+-world.registerComponent<Velocity>('velocity', {
+-  diffMode: 'semantic',
+-  detectInPlaceMutations: false, // we only ever assign through setComponent
+-});
+ ```
+ 
+ #### `addComponent<T>(entity, key, data)`
+@@ -1289,14 +1276,6 @@ setPosition(entity: EntityId, position: Position, key?: string): void
+ 
+ Sets position data and updates the spatial grid immediately when the key is the world's `positionKey`.
+ 
+-#### `markPositionDirty(entity, key?)`
+-
+-```typescript
+-markPositionDirty(entity: EntityId, key?: string): void
+-```
+-
+-Synchronizes a position component that was mutated in place. This is mainly useful when `detectInPlacePositionMutations` is set to `false` and callers want to avoid the per-tick full-scan fallback.
+-
+ #### `getComponent<T>(entity, key)`
+ 
+ ```typescript
+@@ -1601,9 +1580,7 @@ submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean
+ 
+ Submits a command. All registered validators for this command type are run immediately (synchronously). If any validator rejects, the command is not queued.
+ 
+-**Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`.
+-
+-When `instrumentationProfile` is `'minimal'` or `'release'` and no command-result listeners are attached, `submit()` takes a boolean fast path and does not allocate a `CommandSubmissionResult`. Use `submitWithResult()` when the caller explicitly needs the structured outcome.
++**Returns:** `true` if the command passed all validators and was queued, `false` if rejected. This is the compatibility wrapper over `submitWithResult()`; the two paths produce identical observable outcomes (same validator pipeline, same `submissionSequence` assignment, same listener emissions). Use `submitWithResult()` when the caller wants the full structured `CommandSubmissionResult`.
+ 
+ ```typescript
+ const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
+@@ -1636,7 +1613,7 @@ registerValidator<K extends keyof TCommandMap>(
+   type: K,
+   fn: (
+     data: TCommandMap[K],
+-    world: World<TEventMap, TCommandMap>,
++    world: World<TEventMap, TCommandMap, TComponents, TState>,
+   ) => CommandValidationResult,
+ ): void
+ ```
+@@ -1669,7 +1646,10 @@ world.registerValidator('moveUnit', (data, w) => {
+ ```typescript
+ registerHandler<K extends keyof TCommandMap>(
+   type: K,
+-  fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
++  fn: (
++    data: TCommandMap[K],
++    world: World<TEventMap, TCommandMap, TComponents, TState>,
++  ) => void,
+ ): void
+ ```
+ 
+@@ -2207,13 +2187,15 @@ const closest = world.findNearest(10, 10, 'position', 'enemy');
+ 
+ ### State Serialization
+ 
+-#### `serialize()`
++#### `serialize(options?)`
+ 
+ ```typescript
+-serialize(): WorldSnapshot
++serialize(options?: { inspectPoisoned?: boolean }): WorldSnapshot
+ ```
+ 
+-Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, resource state, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions).
++Captures the entire world state as a JSON-serializable snapshot. Includes entity state, all component data, resource state, grid config, and tick count. Does **not** include systems, validators, handlers, or event listeners (they are functions). Component data and state values are `structuredClone`d on the way out so the returned snapshot stays isolated from the live world.
++
++When called on a poisoned world, `serialize()` emits a one-time `console.warn` per poison cycle. Pass `{ inspectPoisoned: true }` to suppress the warning — intended for engine-internal debug/history tooling that exists specifically to inspect poisoned state. The warning resets on `world.recover()`.
+ 
+ ```typescript
+ const snapshot = world.serialize();
+@@ -2223,21 +2205,30 @@ const json = JSON.stringify(snapshot);
+ #### `World.deserialize(snapshot, systems?)`
+ 
+ ```typescript
+-static deserialize<TEventMap, TCommandMap>(
++static deserialize<TEventMap, TCommandMap, TComponents, TState>(
+   snapshot: WorldSnapshot,
+-  systems?: Array<System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>>,
+-): World<TEventMap, TCommandMap>
++  systems?: Array<
++    | System<TEventMap, TCommandMap, TComponents, TState>
++    | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
++    | LooseSystem
++    | LooseSystemRegistration
++  >,
++): World<TEventMap, TCommandMap, TComponents, TState>
+ ```
+ 
+ Restores a world from a snapshot. Optionally accepts systems to re-register. After deserializing, you must also re-register:
+ - Command validators and handlers
+ - Event listeners
++- Destroy callbacks
++
++Component data and state values are `structuredClone`d on read so the input snapshot stays isolated from the live world.
+ 
+ **Throws:**
+-- `Error` if `snapshot.version` is not `1`, `2`, `3`, or `4`
++- `Error` if `snapshot.version` is not `1`, `2`, `3`, `4`, or `5`
+ - `Error` if entity state arrays have mismatched lengths
++- `Error` if `snapshot.tags` or `snapshot.metadata` references a dead entity id
+ 
+-Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata.
++Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata. Version 5 snapshots additionally round-trip per-component `ComponentStoreOptions` (`diffMode`) plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default.
+ 
+ ```typescript
+ const restored = World.deserialize(snapshot, [movementSystem, combatSystem]);
+@@ -2270,7 +2261,7 @@ if (diff) {
+ getMetrics(): WorldMetrics | null
+ ```
+ 
+-Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, spatial scan counts, system timings, and tick section timings.
++Returns timing and count instrumentation from the most recent tick, or `null` before the first tick. Metrics include simulation budget data, last-tick command counts, entity/component counts, query cache hit/miss counts, the per-tick `spatial.explicitSyncs` count (incremented by every `setPosition`-style write), system timings, and tick section timings.
+ 
+ In `instrumentationProfile: 'minimal'`, implicit `step()` still updates counts and total duration, but leaves detailed phase timings and per-system timing entries empty. In `instrumentationProfile: 'release'`, implicit `step()` leaves this as `null` so the shipping runtime does not pay for per-tick metrics. Explicit `stepWithResult()` calls still populate the full metrics payload for callers that deliberately opt into richer diagnostics.
+ 
+@@ -2324,7 +2315,7 @@ Unsubscribes from diffs. Pass the exact same function reference used in `onDiff(
+ 
+ ```typescript
+ onDestroy(
+-  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
++  callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+ ): void
+ ```
+ 
+@@ -2346,7 +2337,7 @@ world.onDestroy((id, w) => {
+ 
+ ```typescript
+ offDestroy(
+-  callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
++  callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+ ): void
+ ```
+ 
+diff --git a/docs/architecture/ARCHITECTURE.md b/docs/architecture/ARCHITECTURE.md
+index 810a3d7..48dca94 100644
+--- a/docs/architecture/ARCHITECTURE.md
++++ b/docs/architecture/ARCHITECTURE.md
+@@ -48,7 +48,6 @@ World.step()
+       -> World.entityManager.clearDirty()
+       -> World.clearComponentDirty()   [clear dirty flags on all stores]
+       -> World.processCommands()       [drain queue, run handlers]
+-      -> World.syncSpatialIndex()      [optional direct-mutation fallback scan]
+       -> input systems
+       -> preUpdate systems
+       -> update systems
+@@ -63,17 +62,12 @@ World.step()
+ 
+ ### Spatial Index Sync
+ 
+-Each tick, before user systems run, `syncSpatialIndex()`:
+-1. Iterates all entities with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) when `detectInPlacePositionMutations` is enabled
+-2. Compares current position to `previousPositions` map
+-3. Inserts new entities into grid, moves changed ones, removes stale ones
+-
+-Position writes through `world.setPosition()` or `world.setComponent()` with the configured position key update the component store and spatial grid immediately. Direct object mutation is still picked up by the next tick's sync pass by default. Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(entity)` after an in-place position mutation to avoid the full scan.
++Position writes through `world.setPosition()` or `world.setComponent()` with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) update the component store and spatial grid in lockstep — the grid stays consistent without any per-tick scan. In-place mutation of position objects (e.g. `world.getComponent(id, 'position').x = 5`) is **not** auto-detected and is a no-op for the grid; game code must call `setPosition` for movement to take effect.
+ 
+ ### Entity Destruction
+ 
+ `destroyEntity(id)` performs immediate cleanup:
+-- Removes entity from grid using `previousPositions` (not current component data, which may have been mutated since last sync)
++- Removes entity from grid using `previousPositions` (the grid's last-seen position, kept in sync by `setPosition`)
+ - Removes all components from all stores
+ - Removes all resource pools, rates, and transfers for the entity
+ - Marks entity as dead in EntityManager (ID available for recycling)
+@@ -83,15 +77,15 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
+ - **World** is the only public entry point. EntityManager, ComponentStore, GameLoop are internal implementation details.
+ - **Systems** are pure functions `(world: World) => void` or registration objects with a `phase` and `name`. Phases are intentionally lightweight and ordered as `input`, `preUpdate`, `update`, `postUpdate`, `output`.
+ - **Components** are pure data interfaces. No methods, no inheritance.
+-- **SpatialGrid** is a sparse map of occupied cells and is synced automatically by World's internal spatial index routine. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property exposes only a read-only view.
++- **SpatialGrid** is a sparse map of occupied cells. The grid is updated lock-step with position writes — every `world.setPosition` / `world.setComponent` on the configured `positionKey` inserts/moves the entity in the grid in the same call, so no per-tick scan is needed. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property is a read-only delegate at runtime: `getAt()` returns a fresh `Set` copy on each call, and the mutating `insert`/`remove`/`move` methods of the underlying `SpatialGrid` are not exposed.
+ - **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
+ - **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly — World handles this.
+ - **CommandQueue** is owned by World. External code submits commands via `world.submit()` or `world.submitWithResult()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
+-- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 5 (WorldSnapshotV5) is the current write format and additionally round-trips per-component `ComponentStoreOptions` (the `componentOptions` field) so `diffMode` and `detectInPlaceMutations` survive save/load; version 4 includes state, tags, and metadata; version 3 includes resource state and deterministic RNG state; versions 1 and 2 remain readable for compatibility. `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` are also serialized when non-default. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects.
++- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 5 (WorldSnapshotV5) is the current write format and additionally round-trips per-component `ComponentStoreOptions` (the `componentOptions` field) so `diffMode` survives save/load; version 4 includes state, tags, and metadata; version 3 includes resource state and deterministic RNG state; versions 1 and 2 remain readable for compatibility. `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` are also serialized when non-default. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects, and component data plus state values are `structuredClone`d at both serialize and deserialize boundaries so callers cannot write through.
+ - **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick. `getDiff()` returns a JSON-deep-cloned defensive copy — callers cannot write through to live engine state. During `onDiff` listeners `world.tick === diff.tick`.
+ 
+-- **Tick failure semantics** are fail-fast. A failure in any tick phase (commands, spatialSync, systems, resources, diff, listeners) marks the world as **poisoned**. While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `world_poisoned` failure result. `world.isPoisoned()` reports the state; `world.recover()` clears the poison flag along with the cached `lastTickFailure`/`currentDiff`/`currentMetrics`. Failed ticks consume a tick number — if a tick fails at tick `N+1`, the next successful tick after `recover()` is `N+2`, so failed-tick events and successful-tick events never share a tick number.
+-- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and spatial scan counts. `instrumentationProfile: 'full'` keeps the detailed implicit metrics path, `minimal` keeps coarse implicit metrics, and `release` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
++- **Tick failure semantics** are fail-fast. A failure in any tick phase (commands, systems, resources, diff, listeners) marks the world as **poisoned**. While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `world_poisoned` failure result. `world.isPoisoned()` reports the state; `world.recover()` clears the poison flag along with the cached `lastTickFailure`/`currentDiff`/`currentMetrics`. Failed ticks consume a tick number — if a tick fails at tick `N+1`, the next successful tick after `recover()` is `N+2`, so failed-tick events and successful-tick events never share a tick number.
++- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and explicit-sync counts (`spatial.explicitSyncs`, incremented by every `setPosition`-style write). `instrumentationProfile: 'full'` keeps the detailed implicit metrics path, `minimal` keeps coarse implicit metrics, and `release` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
+ - **Rendering** belongs outside the engine. Renderer clients should consume snapshots and tick diffs through `ClientAdapter`, keep visual objects in renderer-owned state, and submit input back as commands. See `docs/guides/rendering.md` for the recommended renderer boundary and Pixi-first reference client shape.
+ - **RenderAdapter** is an optional projection helper. It turns current world state plus `TickDiff` into renderer-facing `renderSnapshot` and `renderTick` messages using game-owned callbacks. It does not own renderer objects or backend assumptions.
+ - **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
+diff --git a/docs/architecture/drift-log.md b/docs/architecture/drift-log.md
+index 6d434ca..f59d426 100644
+--- a/docs/architecture/drift-log.md
++++ b/docs/architecture/drift-log.md
+@@ -29,3 +29,5 @@ Append a row here whenever architecture changes. Each row captures the date, the
+ | 2026-04-25 | Snapshot v5 (config + per-component options) | Round-trips `maxTicksPerFrame`, `instrumentationProfile`, and per-component `ComponentStoreOptions` (diffMode + detectInPlaceMutations). v4 snapshots stay readable. |
+ | 2026-04-25 | ComponentStore.detectInPlaceMutations option | Lets callers opt out of the per-tick all-entries fingerprint scan when they only mutate via setComponent. Strict-mode set() also no longer computes fingerprint redundantly. |
+ | 2026-04-25 | GameLoop.step no longer auto-advances | World.runTick now calls gameLoop.advance() directly so the gameLoop tick aligns with the diff tick when listeners fire. GameLoop is internal-only (not in src/index.ts). |
++| 2026-04-25 | findNearest correctness + snapshot isolation (v0.4.1) | findNearest maxRadius now `ceil(hypot(W-1,H-1))` so diagonal-corner entities are reachable; serialize/deserialize structuredClone component data and state values to isolate snapshots from live engine state. |
++| 2026-04-25 | Removed in-place mutation auto-detection (v0.5.0, breaking) | `ComponentStoreOptions.detectInPlaceMutations`, `WorldConfig.detectInPlacePositionMutations`, `World.markPositionDirty`, the per-tick spatial sync scan, and `WorldMetrics.spatial.fullScans`/`scannedEntities`/`durationMs.spatialSync` all removed. All mutations must go through `setComponent`/`setPosition`. `world.grid` is now a runtime-immutable read-only delegate. `EventBus.emit` rejects non-JSON payloads. |
+diff --git a/docs/changelog.md b/docs/changelog.md
+index 143aa50..4ce74bb 100644
+--- a/docs/changelog.md
++++ b/docs/changelog.md
+@@ -1,5 +1,161 @@
+ # Changelog
+ 
++## 0.5.7 - 2026-04-25
++
++Iter-2 fix-review iteration 4 — Gemini CLEAN; Codex and Opus both flagged the same residual canonical-guide drift across 7 files (the v0.5.6 cleanup only covered the three files Codex iter-3 explicitly cited). All addressed.
++
++### Documented
++
++- **`docs/guides/concepts.md`** — corrected the "direct mutations are diff-detected" line; removed the `Sync spatial index` step from the tick-lifecycle ASCII art; rewrote the "Spatial grid syncs before systems" implication line.
++- **`docs/guides/spatial-grid.md`** — Overview rewritten (lock-step write-time sync, runtime-immutable read-only delegate, `getAt` returns a fresh `Set`); replaced the `Timing within a tick` block with the explicit-write contract.
++- **`docs/guides/systems-and-simulation.md`** — removed `syncSpatialIndex()` from the tick-lifecycle numbered list; added an explicit note that the grid is in sync at all times; replaced the "Spatial sync before systems" implication row with "Grid is updated at every position write".
++- **`docs/guides/getting-started.md`** — corrected the spatial-grid section ("direct position mutations are picked up by the next tick's spatial sync" → "Direct in-place mutation is not auto-detected and the grid will not reflect it").
++- **`docs/guides/entities-and-components.md`** — corrected the "Mutations are immediate and are detected for diffs" line.
++- **`docs/guides/serialization-and-diffs.md`** — corrected the "In-place mutation detection still works" line (no longer true in either mode); updated the deserialize version range to `1..5` and added the `references dead entity` throw to the list.
++- **`docs/guides/debugging.md`** — softened the wording on the in-place-position-mutation tip so it doesn't imply the mutation gets auto-synced later.
++
++## 0.5.6 - 2026-04-25
++
++Iter-2 fix-review iteration 3 — Gemini and Opus signed off CLEAN; Codex flagged remaining doc drift in canonical guides and the `api-reference.md` System / SystemRegistration / callback signatures (still 2-generic in docs even though src was updated to 4-generic in v0.5.2). All addressed.
++
++### Documented
++
++- **`docs/guides/public-api-and-invariants.md`** — corrected the prose describing component writes: in-place mutations of `getComponent()`-returned objects are NOT diff-detected; all changes must go through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. The pre-v0.5.0 wording suggesting otherwise is gone.
++- **`docs/guides/commands-and-events.md`** — removed `syncSpatialIndex()` from the tick-timing diagram (the per-tick scan was removed in v0.5.0).
++- **`docs/api-reference.md`** — `System`, `SystemRegistration`, `LooseSystem`, `LooseSystemRegistration` now show the four-generic signature with `TComponents` and `TState`; `ComponentRegistry` description mentions both registry generics; callback parameter signatures for `registerValidator`, `registerHandler`, `onDestroy`, `offDestroy` show the four-generic `World<TEventMap, TCommandMap, TComponents, TState>` form. The 2-generic form was the v0.5.1 baseline; v0.5.2 already updated the source.
++
++## 0.5.5 - 2026-04-25
++
++Iter-2 fix-review iteration 2 — multi-CLI re-review (Codex/Gemini/Opus). Gemini signed off CLEAN; Codex and Opus flagged remaining doc drift + missing regression tests. All addressed. 467 tests pass.
++
++### Fixed
++
++- **`cloneTickFailure` now uses `JSON.parse(JSON.stringify())`** to match `cloneTickDiff`. The previous `structuredClone` rationale (preserve Error stack) was incorrect: `createTickFailure` already normalizes `error` via `createErrorDetails` to a plain `{name, message, stack}` object before storage, so the `error` field is never an Error instance at clone time. Both helpers now use the same JSON path with a comment explaining why.
++- **`docs/architecture/ARCHITECTURE.md` Boundaries section** — three lines that still described removed v0.5.0 features cleaned up: `SpatialGrid` description now reflects lock-step write-time sync (no scan); snapshot description drops `detectInPlaceMutations`; metrics description drops "spatial scan counts" in favor of `spatial.explicitSyncs`.
++- **`docs/guides/debugging.md`** — `spatialSync` failure phase, `spatial_sync_threw` code, and `spatial-full-scan` debugger issue removed from the failure-codes / issue-codes tables; the bottleneck-finding example no longer reads removed metrics fields.
++- **`docs/guides/public-api-and-invariants.md`** — `getMetrics()` description updated to "explicit-sync counts".
++- **`docs/api-reference.md`** — `getMetrics()` description updated to mention `spatial.explicitSyncs` instead of "spatial scan counts".
++
++### Added
++
++- **Regression test for `world.grid.getAt()` Set isolation** — `mutating the Set returned by getAt does not corrupt the engine grid` directly tests the v0.5.4 fix.
++- **Regression test for `getLastTickFailure()` reference isolation** — `getLastTickFailure returns isolated copies; mutation does not bleed across calls` locks in the per-call clone contract.
++
++### Polish
++
++- Trailing blank lines inside `new World({ ... })` config literals removed in `tests/world-debugger.test.ts`, `tests/history-recorder.test.ts`, `tests/scenario-runner.test.ts` — left over after the v0.5.0 `detectInPlacePositionMutations` field removal.
++
++## 0.5.4 - 2026-04-25
++
++Iter-2 fix-review iteration 1 — multi-CLI review (Codex/Gemini/Opus) caught real issues in the v0.5.0–0.5.3 chain. 465 tests pass.
++
++### Fixed
++
++- **`world.grid.getAt()` no longer returns the live backing `Set`.** The delegate now returns a fresh `Set` copy (or `null`) so `(world.grid as any).getAt(x, y).clear()` cannot corrupt the spatial index. Closes the runtime read-only hardening hole that the v0.5.0 delegate left open.
++- **`getLastTickFailure()` returns a fresh defensive copy on every call.** Reverts the v0.5.3 cache that returned the same object reference to repeat callers — different consumers could mutate each other's view of the failure. Per-call `cloneTickFailure(...)` matches the contract of `getDiff`/`getEvents`.
++- **`cloneTickDiff()` reverts to `JSON.parse(JSON.stringify())`.** `TickDiff` is JSON-shaped by contract (assertJsonCompatible at write time), and the JSON round-trip is faster than `structuredClone` for plain objects on V8. `cloneTickFailure()` keeps `structuredClone` because `TickFailure.error` may carry an `Error` instance whose stack `JSON.stringify` would erase.
++- **`EventBus.getEvents()` reverts to `JSON.parse(JSON.stringify())`** for the same reason — emit-time validation guarantees JSON shape.
++
++### Added
++
++- **`World.serialize({ inspectPoisoned: true })` opt-out for the poisoned-world warn.** Engine-internal debug tooling (`WorldDebugger.capture()`, `scenario-runner.captureScenarioState()`, `WorldHistoryRecorder` snapshots) now passes this option so it doesn't trigger its own warning when inspecting a poisoned world. The default behavior — warn on `serialize()` and `submit()` from a poisoned world — is unchanged for normal callers.
++- **Regression tests:**
++  - `World.deserialize` rejects malformed snapshots whose `tags` or `metadata` reference dead entities (locks in L_NEW4).
++  - Legacy v0.4.x snapshot fields (`config.detectInPlacePositionMutations`, `componentOptions[*].detectInPlaceMutations`) are silently ignored on read (locks in the v0.5.0 backward-compat promise).
++  - Warn-once invariant: `submit + submit + serialize + serialize` after a single failure produces exactly one `console.warn`, and `recover()` re-arms the latch for the next poison cycle.
++  - `serialize({ inspectPoisoned: true })` does not warn.
++
++### Documented
++
++- **`docs/api-reference.md`** — removed `'spatialSync'` from `TickFailurePhase`; updated `World.deserialize` signature to four-generic form (with `LooseSystem`/`LooseSystemRegistration` in the systems-array union); updated `serialize()` docs with the new `inspectPoisoned` option and the deep-clone behavior; removed stale "submit fast path" prose under the instrumentation profile docs and the `submit()` reference; added the `references dead entity` throw to deserialize's `Throws` list.
++- **`docs/architecture/ARCHITECTURE.md`** — removed `World.syncSpatialIndex()` from the data-flow diagram and the `spatialSync` phase from the tick-failure list.
++- **`examples/debug-client/app.js`** — debug client metrics row now reads only `metrics.spatial.explicitSyncs`.
++- **`examples/debug-client/worker.js`** — removed the dead `detectInPlacePositionMutations: false` literal.
++- **`scripts/rts-benchmark.mjs`** — removed `metrics.spatial.fullScans`/`scannedEntities` reads (both `undefined` post-v0.5.0); removed the dead config field; benchmark report now publishes `spatialExplicitSyncs`.
++
++### Polish
++
++- `normalizeSystemRegistration` casts now use the four-generic `System<TEventMap, TCommandMap, TComponents, TState>` form, matching the rest of the v0.5.2 H_NEW3 refactor.
++- Trailing whitespace cleanup in `tests/world-debugger.test.ts`, `tests/history-recorder.test.ts`, `tests/scenario-runner.test.ts` left over from the v0.5.0 field removal.
++
++## 0.5.3 - 2026-04-25
++
++Iter-2 batch 5 — medium + polish items from the iter-2 review. 459 tests pass.
++
++### Fixed
++
++- **`setMeta` rejects non-finite numbers** (`NaN`, `Infinity`, `-Infinity`). Previously these were accepted and silently coerced to `null` by `JSON.stringify`, causing in-memory state to diverge from the persisted snapshot. (M_NEW2)
++- **`findPath` no longer pushes overcost neighbors onto the heap or `bestG`.** When a candidate's `newG > maxCost`, the loop now skips it before allocating heap/`cameFrom`/`bestG` entries. Pure efficiency win for path queries that exceed `maxCost`. (M_NEW3)
++- **`World.deserialize` rejects `tags`/`metadata` for dead entities.** Previously a malformed snapshot could create reverse-index entries that bled into recycled IDs when `createEntity()` reused them. (L_NEW4)
++- **`EntityManager.fromState` validates each `alive[i]` is a boolean and each `generations[i]` is a non-negative integer.** Previously only `freeList` shape was checked. (R4 from iter-2)
++- **`World.registerComponent` and `World.deserialize` clone `ComponentStoreOptions`** before storing them, so later caller mutation can't desync the snapshot's reported options from the constructed `ComponentStore`. (L_NEW7)
++- **Path cache no longer double-clones on cache miss.** The resolved path is cloned once for the cache; the original is yielded to the caller. ~3× → 2× allocation per miss. (L_NEW2)
++
++### Improved
++
++- **`getLastTickFailure()` is now O(1) on repeat calls.** The clone is cached on first read and invalidated on `recover()` or new failure. (M_NEW5)
++- **`cloneTickFailure` and `cloneTickDiff` use `structuredClone` instead of `JSON.parse(JSON.stringify())`.** Faster on hot listener paths; the JSON-shape contract is still enforced at the write side via `assertJsonCompatible`. (L_NEW1)
++- **`findNearest` early-out comment clarified** to call out the Chebyshev-bound vs Euclidean-distance distinction explicitly. (L_NEW6)
++
++### Documented
++
++- **`docs/guides/resources.md`** — added explicit FIFO priority semantics for transfers from a shared source. Per the iter-2 Q5 user decision: when demand exceeds supply, transfers drain the source in registration order. Game code that needs proportional/priority distribution must manage allocation manually. (M_NEW4)
++- **`docs/guides/rts-primitives.md`** — added a "Static blocks vs occupancy" section clarifying that `OccupancyBinding.block()` is for entity-less terrain only, `ignoreEntity` does not apply to static blocks, and entity-owned blocking should use `occupy()` instead. Per the iter-2 Q2 user decision (Option A). (R5/M10)
++
++## 0.5.2 - 2026-04-25
++
++Iter-2 batch 4 — typed registries thread through every callback boundary (H_NEW3). Type-only refactor; runtime behavior unchanged. 453 tests pass.
++
++### Changed
++
++- **`System`, `SystemRegistration`, and `RegisteredSystem` now accept `TComponents` and `TState` generics** (in addition to `TEventMap` / `TCommandMap`). Defaults match the previous behavior so existing call sites continue to compile.
++- **`registerSystem`, `registerValidator`, `registerHandler`, `onDestroy`/`offDestroy`, and `World.deserialize`** now thread the world's full generic signature into their callback parameters. Inside a system, validator, handler, or destroy hook, `world.getComponent`/`world.getState` and friends preserve the typed-registry signatures established at construction.
++- **`destroyCallbacks` field type** updated to match.
++
++### Migration
++
++No runtime change. Existing code without explicit type annotations continues to work. Code that wrote callbacks with the explicit `(world: World<Events, Commands>) => void` signature can now widen to `(world: World<Events, Commands, Components, State>) => void` to gain compile-time access to the typed component and state APIs inside the callback body.
++
++## 0.5.1 - 2026-04-25
++
++Iter-2 batch 3 — poison-contract integrity (H_NEW1 + H_NEW2). 452 tests pass.
++
++### Fixed
++
++- **Listener exceptions no longer bypass the fail-fast contract.** `commandExecutionListener`, `commandResultListener`, and `tickFailureListener` invocations are now wrapped in `try/catch`. A throwing listener logs to `console.error` and the engine continues. Previously, a synchronous listener throw inside `processCommands` propagated up through `runTick` past `finalizeTickFailure` — the world was partially mutated but `this.poisoned` was never set, so subsequent `step()` calls happily ran on inconsistent state. Listener bugs are observability bugs and no longer corrupt engine state.
++
++### Added
++
++- **`submit()` and `serialize()` warn (once per poison cycle) when called on a poisoned world.** The APIs remain available — debug/repair workflows often need to inspect or queue work against a poisoned world — but the engine now emits a single `console.warn` per `(poison → recover)` cycle so an AI-agent operator notices when their loop is missing the recovery step. The warning resets on `world.recover()`.
++
++## 0.5.0 - 2026-04-25
++
++Breaking release. Removes the in-place mutation auto-detection paths (component-store and spatial-index), tightens `world.grid` to a runtime-immutable delegate, and rejects non-JSON-compatible event payloads at `EventBus.emit`. All component and position writes must now go through `setComponent`/`addComponent`/`setPosition`. Iter-2 `R1` and `R3` from the same-day full-codebase review.
++
++### Breaking Changes
++
++- **Removed `ComponentStoreOptions.detectInPlaceMutations`.** `getDirty()` now reports only entries marked dirty via `set()` / `remove()`. `clearDirty()` only rebuilds the fingerprint baseline when `diffMode === 'semantic'`. Direct in-place mutation of component objects (`world.getComponent(id, 'pos').x = 5`) is no longer detected — game logic must call `setComponent` (or `setPosition`) for changes to land in the diff.
++- **Removed `WorldConfig.detectInPlacePositionMutations`.** The per-tick spatial index full-scan is gone. Position writes that go through `setPosition`/`setComponent` already update the grid and `previousPositions` immediately; the scan was only the fallback for in-place mutators.
++- **Removed `World.markPositionDirty()`.** It existed solely to flush in-place position mutations into the grid; without that pattern there's nothing to flush. Use `setPosition` instead.
++- **Removed `WorldMetrics.spatial.fullScans` and `.scannedEntities`.** The full-scan is gone. `WorldMetrics.spatial.explicitSyncs` (incremented by every `setPosition`-style write) and `WorldMetrics.durationMs.spatialSync` (likewise removed) are no longer reported.
++- **Removed `'spatialSync'` from `TickFailurePhase`.** No phase to fail in.
++- **`world.grid` is now a runtime-immutable read-only delegate.** Previously typed `SpatialGridView` but assigned `this.spatialGrid` directly, so `(world.grid as any).insert(...)` could mutate the index. Now `world.grid` is a small object exposing only `width`, `height`, `getAt`, `getNeighbors`, `getInRadius`. Mutating SpatialGrid methods are not present at runtime.
++- **`EventBus.emit` now rejects non-JSON-compatible payloads** (functions, symbols, BigInt, circular references, class instances) via `assertJsonCompatible`. The previous behavior was to accept anything and silently degrade `getEvents()` to a shared reference for unclonable payloads. Migration: ensure event payloads are plain JSON-shaped objects.
++- **`getEvents()` no longer falls back to a shared reference on clone failure.** It always returns a deep `structuredClone`. Combined with the emit-time validation above, this means `getEvents()` cannot return live engine references.
++
++### Migration
++
++Most consumers should be unaffected — `setPosition`, `setComponent`, and `addComponent` were already the documented write paths. Code that mutated component objects in place (`pos.x = 5`) and relied on the per-tick scan to find the change must switch to `setPosition`/`setComponent`. Snapshots from v0.4.0 still load: extra fields (`detectInPlacePositionMutations`, `componentOptions[*].detectInPlaceMutations`) are ignored on read.
++
++## 0.4.1 - 2026-04-25
++
++Iter-2 critical fixes from the same-day full-codebase review (`docs/reviews/full/2026-04-25/2/`). Two correctness/isolation bugs the iter-1 fixes left open. 450 tests pass (up from 446 in 0.4.0).
++
++### Fixed
++
++- **`findNearest` returns the entity at the diagonal corner of any non-tiny grid.** Previously the loop bound was `Math.max(width, height)` (Chebyshev), but `getInRadius` filters by Euclidean distance — so on any grid where `hypot(W-1, H-1) > max(W, H)`, entities in the diagonal corner from the search point silently returned `undefined`. Bound is now `Math.ceil(Math.hypot(W-1, H-1))`. Reproducible repro: 4×4 grid, entity at `(3, 3)`, `findNearest(0, 0)` now returns the entity.
++- **`World.serialize()` and `World.deserialize()` no longer alias caller-owned objects.** Both boundaries `structuredClone` component data and state values; mutating the returned snapshot after `serialize()` no longer mutates live engine state, and mutating the snapshot input after `deserialize()` no longer mutates the deserialized world. Other public boundaries (`getDiff`/`getEvents`/`getByTag`) already had this property in 0.4.0.
++
+ ## 0.4.0 - 2026-04-25
+ 
+ This release is the result of a multi-CLI full-codebase review (Codex `gpt-5.4`, Gemini `gemini-3.1-pro-preview`, and Claude Opus 4.7 1M-context). 25 distinct findings consolidated and addressed across the tick pipeline, snapshot fidelity, command pipeline, behavior tree, and defensive-view contracts. Two post-fix review iterations caught regressions in the fixes themselves; both were resolved before merge. 446 tests pass (up from 415).
+diff --git a/docs/guides/commands-and-events.md b/docs/guides/commands-and-events.md
+index e6946d7..9defd42 100644
+--- a/docs/guides/commands-and-events.md
++++ b/docs/guides/commands-and-events.md
+@@ -190,7 +190,6 @@ Commands submitted during a tick (e.g., from a system) are queued and processed
+ ```
+ Tick N:
+   processCommands()  ← commands submitted before tick N are processed here
+-  syncSpatialIndex()
+   system A  ← if system A calls submit(), that command waits for tick N+1
+   system B
+   ...
+diff --git a/docs/guides/concepts.md b/docs/guides/concepts.md
+index f762762..cc90869 100644
+--- a/docs/guides/concepts.md
++++ b/docs/guides/concepts.md
+@@ -64,7 +64,7 @@ world.patchComponent<Health>(unit, 'health', (hp) => {
+ **Key rules:**
+ - Register a component key before using it (enforced with errors)
+ - One component per key per entity (adding overwrites)
+-- `getComponent` returns a direct reference, not a copy; direct mutations are diff-detected, but `setComponent`/`patchComponent` are clearer write APIs
++- `getComponent` returns a direct reference, not a copy. In-place mutations are NOT diff-detected — every component change must go through `setComponent`/`addComponent`/`patchComponent` (or `setPosition` for the configured position key) for the diff and the spatial grid to see it
+ - Component data must be JSON-compatible plain data
+ - Components are stored in sparse arrays indexed by entity ID, giving O(1) lookup
+ 
+@@ -119,19 +119,18 @@ World.step()
+   ┌─ 1. Clear event buffer (events from previous tick are gone)
+   ├─ 2. Clear dirty flags (entity, component, resource tracking resets)
+   ├─ 3. Process commands (drain queue → run handlers)
+-  ├─ 4. Sync spatial index (optional direct-mutation fallback scan)
+-  ├─ 5. Run systems (your code, phase ordered)
+-  ├─ 6. Process resources (production, consumption, transfers)
+-  ├─ 7. Build diff (collect dirty state into TickDiff)
+-  ├─ 8. Update metrics (timings, query counts, spatial counts)
+-  ├─ 9. Notify diff listeners (push TickDiff to subscribers)
+-  └─ 10. Increment tick counter
++  ├─ 4. Run systems (your code, phase ordered)
++  ├─ 5. Process resources (production, consumption, transfers)
++  ├─ 6. Build diff (collect dirty state into TickDiff)
++  ├─ 7. Update metrics (timings, query counts, explicit-sync count)
++  ├─ 8. Notify diff listeners (push TickDiff to subscribers)
++  └─ 9. Increment tick counter
+ ```
+ 
+ ### What this means in practice
+ 
+ - **Commands execute before systems.** If an AI agent submits a `moveUnit` command, the handler runs before your movement system. The system then sees the already-moved entity.
+-- **Spatial grid syncs before systems.** By the time your system runs, `world.grid.getAt()` reflects position changes from commands. Explicit `setPosition()` calls also sync immediately.
++- **The spatial grid is always in sync with explicit position writes.** Every `setPosition`/`setComponent` on the configured position key updates the grid in the same call — there is no per-tick scan. In-place mutation of a position object is not auto-detected and the grid will not see it.
+ - **Resources process after systems.** Production, consumption, and transfers happen after your code. If a system adds food to an entity, the production rate still fires on top of that.
+ - **Events from the current tick are available during the tick.** A system that emits an event can trigger listeners in the same tick. Events are cleared at the **start** of the next tick.
+ - **Diffs capture everything.** The diff includes changes from commands, systems, and resource processing — everything that happened in the tick.
+diff --git a/docs/guides/debugging.md b/docs/guides/debugging.md
+index 5aac64b..02153d4 100644
+--- a/docs/guides/debugging.md
++++ b/docs/guides/debugging.md
+@@ -188,7 +188,6 @@ Read `failure.phase` to find which part of the tick failed:
+ |---|---|---|---|
+ | `commands` | `missing_handler` | No handler registered for command type | Verify `registerHandler()` was called with the correct command type string |
+ | `commands` | `command_handler_threw` | Handler threw an exception | Read `failure.details.error` for the stack trace; check the handler logic |
+-| `spatialSync` | `spatial_sync_threw` | Position/occupancy sync crashed | Check for destroyed entities with stale position components |
+ | `systems` | `system_threw` | A system's `execute()` threw | Read `failure.systemName` and `failure.details.error`; check that system's logic |
+ | `resources` | `resource_processing_threw` | Resource pool tick update crashed | Check resource definitions and pool bounds |
+ | `diff` | `diff_build_threw` | Change-set construction crashed | This is likely an engine bug — report it |
+@@ -232,7 +231,7 @@ If `tick-budget-exceeded` appears in `debug.issues`:
+ 1. Read `issue.details.slowSystems` — the top 3 systems by duration
+ 2. Read `issue.details.totalMs` vs `issue.details.tickBudgetMs` for the overage
+ 3. Check the hottest system's query — is it scanning too many entities?
+-4. Check `debug.spatial` — if `spatial-full-scan` is also present, switch to `setPosition()` / `markPositionDirty()`
++4. Check the hottest system for in-place position mutations (`pos.x = ...`) — these silently desynchronize the spatial grid; replace them with `setPosition()`
+ 5. Consider narrowing queries with tags or reducing TPS
+ 
+ ## Error Code Reference
+@@ -262,7 +261,6 @@ All codes are machine-readable strings. Custom validator codes are user-defined.
+ |---|---|---|---|
+ | `missing_handler` | `commands` | `commands` | No handler for queued command type |
+ | `command_handler_threw` | `commands` | `commands` | Command handler threw |
+-| `spatial_sync_threw` | `spatialSync` | `spatial` | Position/occupancy sync threw |
+ | `system_threw` | `systems` | `systems` | System `execute()` threw; `systemName` identifies which |
+ | `resource_processing_threw` | `resources` | `resources` | Resource pool tick threw |
+ | `diff_build_threw` | `diff` | `diff` | Change-set construction threw |
+@@ -275,7 +273,6 @@ All tick failures include `error: { name, message, stack }` when the cause is an
+ | Code | Severity | Subsystem | Meaning | Key details |
+ |---|---|---|---|---|
+ | `entity-id-recycled-in-diff` | `warn` | `diff` | Same entity ID destroyed and created in one tick | `overlappingEntityIds` |
+-| `spatial-full-scan` | `info` | `spatial` | Full-scan sync path was used | `fullScans`, `scannedEntities`, `explicitSyncs` |
+ | `tick-budget-exceeded` | `warn` | `performance` | Tick exceeded time budget by >25% | `totalMs`, `tickBudgetMs`, `overBudgetMs`, `slowSystems` |
+ 
+ Tick failures also surface as issues with severity `error`, using the tick failure's own code.
+@@ -347,7 +344,7 @@ if (!step.ok) {
+       // Check the system's logic and the entities it queries
+       break;
+     default:
+-      // spatialSync, resources, diff, listeners
++      // resources, diff, listeners
+       console.log('Phase:', f.phase, 'Code:', f.code);
+       console.log('Error:', f.error?.message);
+   }
+@@ -368,21 +365,14 @@ if (perfIssue) {
+   console.log('Over budget by:', perfIssue.details.overBudgetMs, 'ms');
+ }
+ 
+-// Check for expensive spatial sync
+-const spatialIssue = debug.issues.find(i => i.code === 'spatial-full-scan');
+-if (spatialIssue) {
+-  console.log('Full scans:', spatialIssue.details.fullScans);
+-  console.log('Scanned entities:', spatialIssue.details.scannedEntities);
+-  // Fix: use world.setPosition() instead of mutating position objects
+-}
+-
+ // Raw metrics for deeper analysis
+ const metrics = world.getMetrics();
+ if (metrics) {
+   console.log('Total tick:', metrics.durationMs.total, 'ms');
+   console.log('Commands:', metrics.durationMs.commands, 'ms');
+   console.log('Systems:', metrics.durationMs.systems, 'ms');
+-  console.log('Spatial sync:', metrics.durationMs.spatialSync, 'ms');
++  console.log('Resources:', metrics.durationMs.resources, 'ms');
++  console.log('Diff build:', metrics.durationMs.diff, 'ms');
+ }
+ ```
+ 
+diff --git a/docs/guides/entities-and-components.md b/docs/guides/entities-and-components.md
+index cc58fe4..2b3f530 100644
+--- a/docs/guides/entities-and-components.md
++++ b/docs/guides/entities-and-components.md
+@@ -125,7 +125,7 @@ No-op if the entity doesn't have the component.
+ 
+ ### Single component read
+ 
+-`getComponent` returns a **direct reference** to the stored object, not a copy. Mutations are immediate and are detected for diffs, but `setComponent` and `patchComponent` make write intent clearer and update position/grid state immediately when the key is the configured position key.
++`getComponent` returns a **direct reference** to the stored object, not a copy. In-place mutations are NOT detected by the diff system — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key) for the engine to mark the entity dirty and update derived structures like the spatial grid.
+ 
+ ```typescript
+ const hp = world.getComponent<Health>(entity, 'health');
+diff --git a/docs/guides/getting-started.md b/docs/guides/getting-started.md
+index c8d341f..ee4a701 100644
+--- a/docs/guides/getting-started.md
++++ b/docs/guides/getting-started.md
+@@ -95,7 +95,7 @@ const soldiers = [...world.query('position', 'health', 'attack')];
+ 
+ ## Spatial Grid
+ 
+-The grid tracks which entities are at each (x, y) cell. Use `setPosition()` when you need same-tick grid updates; direct position mutations are picked up by the next tick's spatial sync.
++The grid tracks which entities are at each (x, y) cell. The grid is in sync at write time — every `setPosition()` updates the grid in the same call, so subsequent `world.grid.getAt()` queries see the move immediately. Direct in-place mutation of a position object (`pos.x += 1`) is **not** auto-detected and the grid will not reflect it; always use `setPosition`/`setComponent` for movement.
+ 
+ ```typescript
+ import { ORTHOGONAL, ALL_DIRECTIONS } from 'civ-engine';
+diff --git a/docs/guides/public-api-and-invariants.md b/docs/guides/public-api-and-invariants.md
+index 003cc81..1a18036 100644
+--- a/docs/guides/public-api-and-invariants.md
++++ b/docs/guides/public-api-and-invariants.md
+@@ -39,7 +39,7 @@ world.patchComponent<{ hp: number }>(unit, 'health', (health) => {
+ });
+ ```
+ 
+-`getComponent()` returns the stored object directly. Direct mutations are diff-detected, but `setComponent()` and `patchComponent()` make write intent clearer.
++`getComponent()` returns the stored object directly, but in-place mutations are **not** picked up by the diff system. All component changes must go through `setComponent()` / `addComponent()` / `patchComponent()` (or `setPosition()` for the configured position component) for the engine to mark the entity dirty and update derived structures like the spatial grid.
+ 
+ Use `setPosition()` when same-tick grid correctness matters:
+ 
+@@ -48,7 +48,7 @@ const pos = world.getComponent<Position>(unit, 'position')!;
+ world.setPosition(unit, { x: pos.x + 1, y: pos.y });
+ ```
+ 
+-Direct position mutations are allowed, but the spatial grid sees them on the next tick's sync. For large simulations, set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(unit)` after a direct position mutation to avoid the fallback full scan.
++In-place mutation of position objects (`pos.x += 1`) is not auto-detected — neither the diff nor the grid will see the change. Always use `setPosition`/`setComponent` for movement.
+ 
+ ## Systems and Metrics
+ 
+@@ -59,7 +59,7 @@ world.registerSystem({ phase: 'input', execute: inputSystem });
+ world.registerSystem({ name: 'Combat', phase: 'postUpdate', execute: combatSystem });
+ ```
+ 
+-Use `world.getMetrics()` after `step()` to inspect query cache hits, spatial scan counts, system timings, and total tick time before choosing heavier optimizations.
++Use `world.getMetrics()` after `step()` to inspect query cache hits, explicit-sync counts, system timings, and total tick time before choosing heavier optimizations.
+ 
+ Use the instrumentation profiles deliberately:
+ 
+diff --git a/docs/guides/resources.md b/docs/guides/resources.md
+index 0c66d10..027c3d7 100644
+--- a/docs/guides/resources.md
++++ b/docs/guides/resources.md
+@@ -187,6 +187,12 @@ for (const t of transfers) {
+ 
+ Transfers involving dead entities are automatically removed during tick processing. You don't need to clean them up manually when destroying entities.
+ 
++### Priority and starvation
++
++When multiple transfers pull from the same source pool and the pool lacks enough resources to satisfy all of them, the engine processes them in **registration order (FIFO)**. The transfer registered first via `world.addTransfer(...)` drains the source first; later transfers receive only what remains. This is deterministic but can cause silent starvation: a destination registered last gets nothing if earlier transfers exhaust the pool.
++
++If your simulation needs proportional or priority-weighted distribution, manage the allocation yourself in a system before resource processing — read each source's available amount, compute the desired splits, and call `setTransfer(...)` (or remove + re-add) to set per-tick rates that respect your priority. The engine deliberately stays out of policy decisions here.
++
+ ## Processing Order
+ 
+ Resources are processed in this order each tick, **after** all systems have run:
+diff --git a/docs/guides/rts-primitives.md b/docs/guides/rts-primitives.md
+index b08982f..1eccc86 100644
+--- a/docs/guides/rts-primitives.md
++++ b/docs/guides/rts-primitives.md
+@@ -51,16 +51,18 @@ status.blockedBy; // [{ entity: 100, kind: 'building', claim: 'occupied' }]
+ 
+ Useful `OccupancyBinding` APIs:
+ 
+-- `block(area)` / `unblock(area)`
+-- `occupy(entity, area)`
+-- `reserve(entity, area)`
++- `block(area)` / `unblock(area)` — entity-less terrain (walls, cliffs, world geometry)
++- `occupy(entity, area)` — entity-owned footprint
++- `reserve(entity, area)` — short-lived entity-owned hold
+ - `clearReservation(entity)`
+ - `release(entity)`
+-- `isBlocked(x, y, options?)`
++- `isBlocked(x, y, options?)` — `options.ignoreEntity` only ignores `occupy`/`reserve` claims of that entity, not static blocks
+ - `getCellStatus(x, y, options?)`
+ - `attachWorld(world)` / `detachWorld()`
+ - `getMetrics()` / `resetMetrics()`
+ 
++**Static blocks vs occupancy.** `block()` is for terrain — cells that are impassable to everyone, with no notion of an owner. It does not accept an entity argument and is not affected by `options.ignoreEntity`. If you want a cell that blocks others but not the entity that placed it (a barricade, a construction site, an entity's own footprint), use `occupy(entity, area)` with an appropriately long lifetime — that path tracks the owner and `ignoreEntity` works correctly. Modeling all entity-blocking as occupancy keeps the passability surface simple and deterministic.
++
+ Use raw `OccupancyGrid` when you need deterministic serialization snapshots:
+ 
+ ```typescript
+diff --git a/docs/guides/serialization-and-diffs.md b/docs/guides/serialization-and-diffs.md
+index f85cf93..1ad2bc7 100644
+--- a/docs/guides/serialization-and-diffs.md
++++ b/docs/guides/serialization-and-diffs.md
+@@ -62,7 +62,7 @@ interface WorldSnapshot {
+   components: Record<string, Array<[EntityId, unknown]>>;
+   // e.g., { position: [[0, {x:5,y:3}], [1, {x:2,y:7}]], health: [[0, {hp:100}]] }
+   componentOptions?: Record<string, ComponentStoreOptions>;
+-  // per-component diffMode + detectInPlaceMutations; survives save/load
++  // per-component diffMode; survives save/load
+   resources: ResourceStoreState; // registrations, pools, rates, transfers
+   rng: RandomState;              // deterministic RNG state
+   state: Record<string, unknown>;
+@@ -71,7 +71,9 @@ interface WorldSnapshot {
+ }
+ ```
+ 
+-`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on).
++`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
++
++Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both fields are silently ignored on read in 0.5.0+ since in-place mutation auto-detection has been removed.
+ 
+ ## Loading State
+ 
+@@ -111,10 +113,11 @@ restored.onDestroy(cleanupCallback);
+ 
+ `World.deserialize()` validates the snapshot:
+ 
+-- Throws if `version` is not `1`, `2`, or `3`
++- Throws if `version` is not `1`, `2`, `3`, `4`, or `5`
+ - Throws if entity state arrays have mismatched lengths
++- Throws if `tags` or `metadata` reference a dead entity id
+ 
+-Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store. Version 2 snapshots include resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also include deterministic RNG state so restored worlds resume the same random sequence.
++Version 5 (the current write format) round-trips per-component `ComponentStoreOptions.diffMode` plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state so restored worlds resume the same random sequence. Version 2 added resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store.
+ 
+ ## What's Included and Excluded
+ 
+@@ -125,7 +128,6 @@ Version 1 snapshots still load for backward compatibility, but they restore with
+ | Grid config (width, height, TPS) | `snapshot.config` |
+ | Position key | `snapshot.config.positionKey` |
+ | Seed config | `snapshot.config.seed` |
+-| Position mutation detection mode | `snapshot.config.detectInPlacePositionMutations` |
+ | Tick count | `snapshot.tick` |
+ | Entity IDs, alive states, generations | `snapshot.entities` |
+ | All component data | `snapshot.components` |
+@@ -270,7 +272,7 @@ Opt in to semantic dirty-marking per component at registration:
+ world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
+ ```
+ 
+-In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. In-place mutation detection still works — if a system mutates the object returned from `getComponent`, the change is caught by the end-of-tick scan regardless of mode.
++In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. As of v0.5.0, in-place mutation of `getComponent`-returned objects is **not** detected in either mode — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key).
+ 
+ `diffMode: 'strict'` (the default) preserves the per-write audit semantics that serialization consumers may depend on. Choose semantic only for components where the "identical rewrite" case is load-bearing noise.
+ 
+diff --git a/docs/guides/spatial-grid.md b/docs/guides/spatial-grid.md
+index a32b8cd..3d0252c 100644
+--- a/docs/guides/spatial-grid.md
++++ b/docs/guides/spatial-grid.md
+@@ -15,30 +15,20 @@ This guide covers the 2D spatial grid, how automatic synchronization works, and
+ 
+ ## Overview
+ 
+-The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` for immediate component and grid updates, or mutate position components directly when next-tick grid sync is acceptable.
++The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` (or `world.setComponent` on the configured position key) — the grid is updated lock-step with each write. In-place mutation of position objects is not auto-detected and will leave the grid out of sync; `setPosition` is the only supported write path for movement.
+ 
+-The grid exposed as `world.grid` is a read-only view. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API.
++The grid exposed as `world.grid` is a runtime-immutable read-only delegate. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API. `getAt()` returns a fresh `Set` copy on every call so even mutating the returned cell view cannot corrupt the underlying grid.
+ 
+ ```typescript
+ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
+ // world.grid is a read-only SpatialGridView with dimensions 64x64
+ ```
+ 
+-## Automatic Synchronization
++## Synchronization
+ 
+-Each tick, before systems run, the World's `syncSpatialIndex()` routine runs the direct-mutation fallback when `detectInPlacePositionMutations` is enabled:
++The grid is updated lock-step with position writes. Calling `world.setPosition(id, { x, y })` (or `world.setComponent(id, 'position', { x, y })` when `position` is the configured `positionKey`) inserts/moves the entity in the grid and updates the engine's `previousPositions` record in the same call. `world.removeComponent(id, 'position')` removes the entity from the grid.
+ 
+-1. Iterates all entities with the configured position component
+-2. Compares each entity's current position to its last-synced position
+-3. **New entities** (not in grid) → inserted at their position
+-4. **Moved entities** (position changed) → moved from old to new cell
+-5. **Removed entities** (position component removed) → removed from grid
+-
+-This means:
+-- Direct position component mutations are picked up by the next tick's sync
+-- `world.setPosition()` updates the component and grid immediately
+-- Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation to avoid the full position-store scan
+-- Within the current tick, systems see the grid state from **after** sync
++In-place mutation of a position object (`world.getComponent(id, 'position').x = 5`) is **not** detected and the grid will not see the change. Game code must use `setPosition`/`setComponent` for movement to take effect.
+ 
+ ```typescript
+ function movementSystem(w: World): void {
+@@ -53,15 +43,11 @@ function movementSystem(w: World): void {
+ 
+ ### Timing within a tick
+ 
+-```
+-syncSpatialIndex()  ← grid is up-to-date after this
+-system A            ← reads correct grid state
+-system B            ← reads correct grid state; direct position mutations
+-                       from system A are not reflected in the grid yet,
+-                       but setPosition updates the grid immediately
+-```
++The grid is in sync with explicit position writes at all times. There is no per-tick scan or auto-detection of in-place mutations.
+ 
+-If system A directly mutates entity `5` from (0,0) to (1,0), system B (running after system A in the same tick) will still see entity `5` at (0,0) in the grid, but `getComponent('position')` will return (1,0). The grid updates at the start of the **next** tick. If system A calls `setPosition()`, both the component and grid reflect the move immediately.
++- `world.setPosition(id, { x, y })` (and `world.setComponent(id, 'position', ...)` when the configured `positionKey` is `'position'`) updates the component store **and** the spatial grid in the same call. Subsequent `world.grid.getAt()` / `getNeighbors()` / `getInRadius()` queries — including from later systems in the same tick — see the move.
++- `world.removeComponent(id, 'position')` removes the entity from the grid in the same call.
++- Direct in-place mutation (`world.getComponent(id, 'position').x = 5`) is **not** auto-detected; the grid will never see the change. Game code must call `setPosition`/`setComponent` for movement to take effect.
+ 
+ ## Querying the Grid
+ 
+diff --git a/docs/guides/systems-and-simulation.md b/docs/guides/systems-and-simulation.md
+index 5d19dcf..81993a5 100644
+--- a/docs/guides/systems-and-simulation.md
++++ b/docs/guides/systems-and-simulation.md
+@@ -48,7 +48,7 @@ Systems can:
+ - Read the spatial grid
+ - Read and modify resources
+ 
+-For position components, prefer `world.setPosition()` over direct mutation when another system needs the spatial grid to reflect the move in the same tick. Direct component mutations are diff-detected, and direct position mutations are synchronized to the grid on the next tick by default. Large simulations can opt out of that fallback with `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation.
++All component writes must go through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. In-place mutations (e.g. `pos.x += 1`) are not picked up by the diff system or the spatial grid. This is a deliberate engine contract: explicit writes keep the simulation deterministic, the grid in sync, and the dirty set accurate without any per-tick scan.
+ 
+ ## System Execution Order
+ 
+@@ -73,25 +73,26 @@ Each `step()` call executes one tick in this exact sequence:
+ 3. clearComponentDirty()         — reset component change tracking
+ 4. resourceStore.clearDirty()    — reset resource change tracking
+ 5. processCommands()             — drain command queue, run handlers
+-6. syncSpatialIndex()            — optional direct-position-mutation fallback scan
+-7. input systems                 — input phase
+-8. preUpdate systems             — setup phase
+-9. update systems                — default phase
+-10. postUpdate systems           — follow-up phase
+-11. output systems               — reporting/output phase
+-12. resourceStore.processTick()  — production, consumption, transfers
+-13. buildDiff()                  — collect all changes into TickDiff
+-14. metrics update               — collect timing/query/spatial metrics
+-15. notify diffListeners         — push TickDiff to subscribers
+-16. tick++                       — increment counter
++6. input systems                 — input phase
++7. preUpdate systems             — setup phase
++8. update systems                — default phase
++9. postUpdate systems            — follow-up phase
++10. output systems               — reporting/output phase
++11. resourceStore.processTick()  — production, consumption, transfers
++12. buildDiff()                  — collect all changes into TickDiff
++13. metrics update               — collect timing/query/explicit-sync metrics
++14. notify diffListeners         — push TickDiff to subscribers
++15. tick++                       — increment counter
+ ```
+ 
++The spatial grid is in sync at all times — every `setPosition`/`setComponent` write updates the grid in the same call. There is no separate per-tick sync phase.
++
+ ### Implications
+ 
+ | Fact | Implication |
+ |---|---|
+ | Commands process before systems | Command handlers can set up state that systems act on |
+-| Spatial sync before systems | Systems see up-to-date grid positions |
++| Grid is updated at every position write | Systems see correct grid state for every move that went through `setPosition` |
+ | Resources process after systems | Systems can add/remove resources; rates apply on top |
+ | Diff builds after everything | The diff captures all changes from the entire tick |
+ | Metrics update after diff | `world.getMetrics()` reports the most recent completed tick |
+diff --git a/examples/debug-client/app.js b/examples/debug-client/app.js
+index 32075a1..a6f8872 100644
+--- a/examples/debug-client/app.js
++++ b/examples/debug-client/app.js
+@@ -260,7 +260,7 @@ function refreshPanels() {
+         ['Diff ms', formatNumber(metrics.durationMs.diff)],
+         ['Query Calls', String(metrics.query.calls)],
+         ['Query Cache', `${metrics.query.cacheHits} hits / ${metrics.query.cacheMisses} misses`],
+-        ['Spatial Sync', `${metrics.spatial.explicitSyncs} explicit / ${metrics.spatial.fullScans} scans`],
++        ['Spatial Sync', `${metrics.spatial.explicitSyncs} explicit syncs`],
+         ['Slowest System', formatSlowestSystem(metrics.systems)],
+       ])
+     : 'No metrics yet.';
+diff --git a/examples/debug-client/worker.js b/examples/debug-client/worker.js
+index a9c4146..cfe2064 100644
+--- a/examples/debug-client/worker.js
++++ b/examples/debug-client/worker.js
+@@ -21,7 +21,6 @@ const world = new World({
+   gridHeight: GRID_HEIGHT,
+   tps: 1000 / DEFAULT_TICK_MS,
+   seed: 'debug-client',
+-  detectInPlacePositionMutations: false,
+ });
+ const occupancy = new OccupancyGrid(GRID_WIDTH, GRID_HEIGHT);
+ const visibility = new VisibilityMap(GRID_WIDTH, GRID_HEIGHT);
+diff --git a/package.json b/package.json
+index e77a2c6..126af80 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "civ-engine",
+-  "version": "0.4.0",
++  "version": "0.5.7",
+   "type": "module",
+   "main": "./dist/index.js",
+   "types": "./dist/index.d.ts",
+diff --git a/scripts/rts-benchmark.mjs b/scripts/rts-benchmark.mjs
+index 20869b9..9015f11 100644
+--- a/scripts/rts-benchmark.mjs
++++ b/scripts/rts-benchmark.mjs
+@@ -63,8 +63,7 @@ function runScenario(config) {
+   const tickDurations = [];
+   const queryHits = [];
+   const queryMisses = [];
+-  const spatialFullScans = [];
+-  const spatialScannedEntities = [];
++  const explicitSyncs = [];
+   const diffSizes = [];
+ 
+   for (let i = 0; i < config.ticks; i++) {
+@@ -74,8 +73,7 @@ function runScenario(config) {
+     tickDurations.push(metrics.durationMs.total);
+     queryHits.push(metrics.query.cacheHits);
+     queryMisses.push(metrics.query.cacheMisses);
+-    spatialFullScans.push(metrics.spatial.fullScans);
+-    spatialScannedEntities.push(metrics.spatial.scannedEntities);
++    explicitSyncs.push(metrics.spatial.explicitSyncs);
+     diffSizes.push(Buffer.byteLength(JSON.stringify(diff), 'utf8'));
+   }
+ 
+@@ -92,8 +90,7 @@ function runScenario(config) {
+     tickDurationMs: summarize(tickDurations),
+     queryCacheHits: summarize(queryHits),
+     queryCacheMisses: summarize(queryMisses),
+-    spatialFullScans: summarize(spatialFullScans),
+-    spatialScannedEntities: summarize(spatialScannedEntities),
++    spatialExplicitSyncs: summarize(explicitSyncs),
+     diffSizeBytes: summarize(diffSizes),
+     pathfinding,
+     occupancyCosts,
+@@ -111,7 +108,6 @@ function createBenchmarkWorld(config) {
+     gridHeight: config.height,
+     tps: 20,
+     seed: `bench:${config.name}`,
+-    detectInPlacePositionMutations: false,
+   });
+ 
+   world.registerComponent('position');
+diff --git a/src/component-store.ts b/src/component-store.ts
+index 8d695b9..4af23b4 100644
+--- a/src/component-store.ts
++++ b/src/component-store.ts
+@@ -3,16 +3,6 @@ import { assertJsonCompatible, jsonFingerprint } from './json.js';
+ 
+ export interface ComponentStoreOptions {
+   diffMode?: 'strict' | 'semantic';
+-  /**
+-   * When true (default), `getDirty()` scans every entry and uses fingerprint
+-   * comparison to detect in-place object mutations made after the previous
+-   * `clearDirty()`. When false, only entries marked dirty via `set()`/`remove()`
+-   * are reported. Setting this to false avoids the per-entity JSON.stringify cost
+-   * on the diff path; callers must then write through `set()` for changes to be
+-   * visible. `'semantic'` `diffMode` continues to use the baseline fingerprint
+-   * to suppress identical rewrites regardless of this flag.
+-   */
+-  detectInPlaceMutations?: boolean;
+ }
+ 
+ export class ComponentStore<T> {
+@@ -23,11 +13,9 @@ export class ComponentStore<T> {
+   private removedSet = new Set<EntityId>();
+   private baseline = new Map<EntityId, string>();
+   private diffMode: 'strict' | 'semantic';
+-  private detectInPlaceMutations: boolean;
+ 
+   constructor(options: ComponentStoreOptions = {}) {
+     this.diffMode = options.diffMode ?? 'strict';
+-    this.detectInPlaceMutations = options.detectInPlaceMutations ?? true;
+   }
+ 
+   set(entityId: EntityId, component: T): void {
+@@ -101,20 +89,8 @@ export class ComponentStore<T> {
+   }
+ 
+   getDirty(): { set: Array<[EntityId, T]>; removed: EntityId[] } {
+-    const changed = new Set(this.dirtySet);
+-    if (this.detectInPlaceMutations) {
+-      for (const [id, data] of this.entries()) {
+-        if (changed.has(id)) continue;
+-        const previous = this.baseline.get(id);
+-        const current = jsonFingerprint(data, `component ${id}`);
+-        if (previous !== current) {
+-          changed.add(id);
+-        }
+-      }
+-    }
+-
+     const set: Array<[EntityId, T]> = [];
+-    for (const id of changed) {
++    for (const id of this.dirtySet) {
+       if (this.data[id] !== undefined) {
+         set.push([id, this.data[id] as T]);
+       }
+@@ -125,7 +101,7 @@ export class ComponentStore<T> {
+   clearDirty(): void {
+     this.dirtySet.clear();
+     this.removedSet.clear();
+-    if (this.detectInPlaceMutations || this.diffMode === 'semantic') {
++    if (this.diffMode === 'semantic') {
+       this.baseline.clear();
+       for (const [id, data] of this.entries()) {
+         this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
+diff --git a/src/entity-manager.ts b/src/entity-manager.ts
+index 0d52593..574a93c 100644
+--- a/src/entity-manager.ts
++++ b/src/entity-manager.ts
+@@ -102,6 +102,19 @@ export class EntityManager {
+         'EntityManager.fromState: generations.length must equal alive.length',
+       );
+     }
++    for (let i = 0; i < state.alive.length; i++) {
++      if (typeof state.alive[i] !== 'boolean') {
++        throw new Error(
++          `EntityManager.fromState: alive[${i}] must be a boolean, got ${typeof state.alive[i]}`,
++        );
++      }
++      const gen = state.generations[i];
++      if (!Number.isInteger(gen) || gen < 0) {
++        throw new Error(
++          `EntityManager.fromState: generations[${i}] must be a non-negative integer, got ${gen}`,
++        );
++      }
++    }
+     const seen = new Set<number>();
+     for (const id of state.freeList) {
+       if (!Number.isInteger(id) || id < 0 || id >= state.alive.length) {
+diff --git a/src/event-bus.ts b/src/event-bus.ts
+index 17df969..3e4337b 100644
+--- a/src/event-bus.ts
++++ b/src/event-bus.ts
+@@ -1,12 +1,11 @@
++import { assertJsonCompatible } from './json.js';
++
+ export type Listener<T> = (event: T) => void;
+ 
+-function deepCloneJsonOrShallow<T>(value: T): T {
+-  if (value === null || typeof value !== 'object') return value;
+-  try {
+-    return JSON.parse(JSON.stringify(value)) as T;
+-  } catch {
+-    return value;
+-  }
++function deepCloneJson<T>(value: T): T {
++  return value === null || typeof value !== 'object'
++    ? value
++    : (JSON.parse(JSON.stringify(value)) as T);
+ }
+ 
+ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
+@@ -17,6 +16,7 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
+   }> = [];
+ 
+   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
++    assertJsonCompatible(data, `event '${String(type)}'`);
+     this.buffer.push({ type, data });
+     const set = this.listeners.get(type);
+     if (set) {
+@@ -52,12 +52,12 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
+     type: keyof TEventMap;
+     data: TEventMap[keyof TEventMap];
+   }> {
+-    // Deep-clone payloads so callers can't write through to the live engine.
+-    // Events flow through assertJsonCompatible at emit time elsewhere; here we
+-    // assume JSON-shape but fall back to shallow on non-cloneable payloads.
++    // Event payloads are JSON-shaped by contract (assertJsonCompatible runs
++    // at emit time). JSON round-trip is faster than structuredClone for
++    // plain objects on V8 and getEvents may be called per tick per consumer.
+     return this.buffer.map((event) => ({
+       type: event.type,
+-      data: deepCloneJsonOrShallow(event.data),
++      data: deepCloneJson(event.data),
+     }));
+   }
+ 
+diff --git a/src/history-recorder.ts b/src/history-recorder.ts
+index 50c9ddd..a779c28 100644
+--- a/src/history-recorder.ts
++++ b/src/history-recorder.ts
+@@ -136,7 +136,7 @@ export class WorldHistoryRecorder<
+     this.connected = true;
+ 
+     if (this.captureInitialSnapshot) {
+-      this.initialSnapshot = cloneJsonValue(this.world.serialize(), 'history initial snapshot');
++      this.initialSnapshot = cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot');
+     }
+ 
+     this.world.onDiff(this.diffListener);
+@@ -160,7 +160,7 @@ export class WorldHistoryRecorder<
+     this.executionEntries.length = 0;
+     this.failureEntries.length = 0;
+     this.initialSnapshot = this.captureInitialSnapshot
+-      ? cloneJsonValue(this.world.serialize(), 'history initial snapshot')
++      ? cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot')
+       : null;
+   }
+ 
+diff --git a/src/path-service.ts b/src/path-service.ts
+index e09c6b9..5f521c9 100644
+--- a/src/path-service.ts
++++ b/src/path-service.ts
+@@ -141,7 +141,7 @@ export class PathRequestQueue<TRequest, TResult> {
+       completed.push({
+         id: current.id,
+         request: current.request,
+-        result: this.clone(resolved),
++        result: resolved,
+         fromCache: false,
+       });
+     }
+diff --git a/src/pathfinding.ts b/src/pathfinding.ts
+index 4ec4a2f..1d50ec8 100644
+--- a/src/pathfinding.ts
++++ b/src/pathfinding.ts
+@@ -131,6 +131,7 @@ export function findPath<T>(config: PathConfig<T>): PathResult<T> | null {
+       if (!isFinite(edgeCost) || edgeCost < 0) continue;
+ 
+       const newG = current.g + edgeCost;
++      if (newG > maxCost) continue;
+       const neighborHash = hash(neighbor);
+       const prevG = bestG.get(neighborHash);
+ 
+diff --git a/src/scenario-runner.ts b/src/scenario-runner.ts
+index ab7cda8..471a24b 100644
+--- a/src/scenario-runner.ts
++++ b/src/scenario-runner.ts
+@@ -340,7 +340,10 @@ function captureScenarioState<
+   debuggerView: WorldDebugger<TEventMap, TCommandMap>,
+   history: WorldHistoryRecorder<TEventMap, TCommandMap, WorldDebugSnapshot>,
+ ): ScenarioCapture<TEventMap, TCommandMap> {
+-  const snapshot = cloneJsonValue(world.serialize(), 'scenario snapshot');
++  const snapshot = cloneJsonValue(
++    world.serialize({ inspectPoisoned: true }),
++    'scenario snapshot',
++  );
+   const debug = cloneJsonValue(debuggerView.capture(), 'scenario debug snapshot');
+   const diff = cloneNullableJsonValue(world.getDiff(), 'scenario diff');
+   const events = cloneJsonValue(
+diff --git a/src/types.ts b/src/types.ts
+index 1e756cc..8172200 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -19,6 +19,5 @@ export interface WorldConfig {
+   positionKey?: string;
+   maxTicksPerFrame?: number;
+   seed?: number | string;
+-  detectInPlacePositionMutations?: boolean;
+   instrumentationProfile?: InstrumentationProfile;
+ }
+diff --git a/src/world-debugger.ts b/src/world-debugger.ts
+index 0664550..6764243 100644
+--- a/src/world-debugger.ts
++++ b/src/world-debugger.ts
+@@ -139,7 +139,7 @@ export class WorldDebugger<
+   }
+ 
+   capture(): WorldDebugSnapshot {
+-    const snapshot = this.world.serialize();
++    const snapshot = this.world.serialize({ inspectPoisoned: true });
+     const metrics = this.world.getMetrics();
+     const diff = summarizeDiff(this.world.getDiff());
+     const tickFailure = this.world.getLastTickFailure();
+@@ -422,25 +422,6 @@ function collectIssues(
+     });
+   }
+ 
+-  if (metrics && metrics.spatial.fullScans > 0) {
+-    issues.push({
+-      severity: 'info',
+-      code: 'spatial-full-scan',
+-      message:
+-        'The last tick used the compatibility full-scan spatial sync path. Consider explicit position writes or markPositionDirty() for larger simulations.',
+-      subsystem: 'spatial',
+-      details: {
+-        fullScans: metrics.spatial.fullScans,
+-        scannedEntities: metrics.spatial.scannedEntities,
+-        explicitSyncs: metrics.spatial.explicitSyncs,
+-      },
+-      suggestedActions: [
+-        'Call world.setPosition() for movement writes when possible.',
+-        'If mutating position objects in place with full-scan disabled, call markPositionDirty().',
+-      ],
+-    });
+-  }
+-
+   if (metrics) {
+     const overBudgetMs =
+       metrics.durationMs.total - metrics.simulation.tickBudgetMs;
+diff --git a/src/world.ts b/src/world.ts
+index b37d594..65eaa27 100644
+--- a/src/world.ts
++++ b/src/world.ts
+@@ -29,10 +29,12 @@ import {
+ export type System<
+   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+-> = (world: World<TEventMap, TCommandMap>) => void;
++  TComponents extends ComponentRegistry = Record<string, unknown>,
++  TState extends Record<string, unknown> = Record<string, unknown>,
++> = (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
+ 
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+-export type LooseSystem = (world: World<any, any>) => void;
++export type LooseSystem = (world: World<any, any, any, any>) => void;
+ 
+ export interface LooseSystemRegistration {
+   name?: string;
+@@ -55,10 +57,12 @@ export type SystemPhase = (typeof SYSTEM_PHASES)[number];
+ export interface SystemRegistration<
+   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
++  TComponents extends ComponentRegistry = Record<string, unknown>,
++  TState extends Record<string, unknown> = Record<string, unknown>,
+ > {
+   name?: string;
+   phase?: SystemPhase;
+-  execute: System<TEventMap, TCommandMap>;
++  execute: System<TEventMap, TCommandMap, TComponents, TState>;
+   before?: string[];
+   after?: string[];
+ }
+@@ -87,14 +91,11 @@ export interface WorldMetrics {
+     results: number;
+   };
+   spatial: {
+-    fullScans: number;
+-    scannedEntities: number;
+     explicitSyncs: number;
+   };
+   durationMs: {
+     total: number;
+     commands: number;
+-    spatialSync: number;
+     systems: number;
+     resources: number;
+     diff: number;
+@@ -138,7 +139,6 @@ export interface CommandExecutionResult<
+ 
+ export type TickFailurePhase =
+   | 'commands'
+-  | 'spatialSync'
+   | 'systems'
+   | 'resources'
+   | 'diff'
+@@ -189,10 +189,12 @@ interface QueryCacheEntry {
+ interface RegisteredSystem<
+   TEventMap extends Record<keyof TEventMap, unknown>,
+   TCommandMap extends Record<keyof TCommandMap, unknown>,
++  TComponents extends ComponentRegistry = Record<string, unknown>,
++  TState extends Record<string, unknown> = Record<string, unknown>,
+ > {
+   name: string;
+   phase: SystemPhase;
+-  execute: System<TEventMap, TCommandMap>;
++  execute: System<TEventMap, TCommandMap, TComponents, TState>;
+   order: number;
+   before: string[];
+   after: string[];
+@@ -221,8 +223,8 @@ export class World<
+   private nextComponentBit = 0;
+   private entitySignatures: bigint[] = [];
+   private queryCache = new Map<string, QueryCacheEntry>();
+-  private systems: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
+-  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap>> | null = null;
++  private systems: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
++  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> | null = null;
+   private nextSystemOrder = 0;
+   private gameLoop: GameLoop;
+   private previousPositions = new Map<EntityId, { x: number; y: number }>();
+@@ -231,24 +233,24 @@ export class World<
+   private validators = new Map<
+     keyof TCommandMap,
+     Array<
+-      (data: never, world: World<TEventMap, TCommandMap>) => CommandValidationResult
++      (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => CommandValidationResult
+     >
+   >();
+   private handlers = new Map<
+     keyof TCommandMap,
+-    (data: never, world: World<TEventMap, TCommandMap>) => void
++    (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
+   >();
+   private spatialGrid: SpatialGrid;
+   readonly grid: SpatialGridView;
+   readonly positionKey: string;
+   private readonly seed: number | string | undefined;
+-  private readonly detectInPlacePositionMutations: boolean;
+   private readonly instrumentationProfile: InstrumentationProfile;
+   private currentDiff: TickDiff | null = null;
+   private currentMetrics: WorldMetrics | null = null;
+   private activeMetrics: WorldMetrics | null = null;
+   private lastTickFailure: TickFailure | null = null;
+   private poisoned: TickFailure | null = null;
++  private poisonedWarningEmitted = false;
+   private diffListeners = new Set<(diff: TickDiff) => void>();
+   private resourceStore = new ResourceStore();
+   private rng: DeterministicRandom;
+@@ -261,7 +263,7 @@ export class World<
+   >();
+   private tickFailureListeners = new Set<(failure: TickFailure) => void>();
+   private destroyCallbacks: Array<
+-    (id: EntityId, world: World<TEventMap, TCommandMap>) => void
++    (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
+   > = [];
+   private stateStore = new Map<string, unknown>();
+   private stateDirtyKeys = new Set<string>();
+@@ -278,11 +280,19 @@ export class World<
+     validateWorldConfig(config);
+     this.entityManager = new EntityManager();
+     this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
+-    this.grid = this.spatialGrid;
++    const grid = this.spatialGrid;
++    this.grid = {
++      get width() { return grid.width; },
++      get height() { return grid.height; },
++      getAt: (x, y) => {
++        const cell = grid.getAt(x, y);
++        return cell ? new Set(cell) : null;
++      },
++      getNeighbors: (x, y, offsets) => grid.getNeighbors(x, y, offsets),
++      getInRadius: (cx, cy, radius, metric) => grid.getInRadius(cx, cy, radius, metric),
++    };
+     this.positionKey = config.positionKey ?? 'position';
+     this.seed = config.seed;
+-    this.detectInPlacePositionMutations =
+-      config.detectInPlacePositionMutations ?? true;
+     this.instrumentationProfile = config.instrumentationProfile ?? 'full';
+     this.rng = new DeterministicRandom(config.seed);
+     this.gameLoop = new GameLoop({
+@@ -357,13 +367,13 @@ export class World<
+   }
+ 
+   onDestroy(
+-    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
++    callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+   ): void {
+     this.destroyCallbacks.push(callback);
+   }
+ 
+   offDestroy(
+-    callback: (id: EntityId, world: World<TEventMap, TCommandMap>) => void,
++    callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+   ): void {
+     const index = this.destroyCallbacks.indexOf(callback);
+     if (index !== -1) {
+@@ -383,7 +393,7 @@ export class World<
+     }
+     this.componentStores.set(key, new ComponentStore<unknown>(options));
+     if (options) {
+-      this.componentOptions.set(key, options);
++      this.componentOptions.set(key, { ...options });
+     }
+     this.registerComponentBit(key);
+   }
+@@ -469,20 +479,6 @@ export class World<
+     this.setComponent(entity, key, { x: position.x, y: position.y });
+   }
+ 
+-  markPositionDirty(entity: EntityId, key = this.positionKey): void {
+-    this.assertAlive(entity);
+-    if (key !== this.positionKey) {
+-      throw new Error(`Position key '${key}' is not the world's positionKey`);
+-    }
+-    const current = this.getComponent<Position>(entity, key);
+-    if (current === undefined) {
+-      throw new Error(`Entity ${entity} does not have component '${key}'`);
+-    }
+-    const position = asPosition(current);
+-    this.assertPositionInBounds(position);
+-    this.syncSpatialEntity(entity, position);
+-  }
+-
+   query<K extends keyof TComponents & string>(...keys: K[]): IterableIterator<EntityId>;
+   query(...keys: string[]): IterableIterator<EntityId>;
+   *query(...keys: string[]): IterableIterator<EntityId> {
+@@ -525,15 +521,19 @@ export class World<
+     cy: number,
+     ...components: string[]
+   ): EntityId | undefined {
+-    const maxRadius = Math.max(this.spatialGrid.width, this.spatialGrid.height);
++    const w = this.spatialGrid.width;
++    const h = this.spatialGrid.height;
++    const maxRadius = Math.ceil(Math.hypot(Math.max(w - 1, 0), Math.max(h - 1, 0)));
+     const mask = components.length > 0 ? this.queryMask(components) : 0n;
+     const seen = new Set<EntityId>();
+     let bestId: EntityId | undefined;
+     let bestDistSq = Infinity;
+ 
+     for (let r = 0; r <= maxRadius; r++) {
+-      // Early-out: any entity outside the next ring would be farther than the
+-      // best we've already found, so we can stop.
++      // Every entity returned by getInRadius(cx, cy, r) is within Euclidean
++      // distance r. If our best is already inside (r-1) the next ring cannot
++      // improve it, so we can stop. r is the cell-radius bound; bestDistSq is
++      // squared Euclidean.
+       if (bestId !== undefined && bestDistSq <= (r - 1) * (r - 1)) {
+         return bestId;
+       }
+@@ -560,15 +560,17 @@ export class World<
+   }
+ 
+   registerSystem(
+-    system: System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>,
++    system:
++      | System<TEventMap, TCommandMap, TComponents, TState>
++      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>,
+   ): void;
+   registerSystem(
+     system: LooseSystem | LooseSystemRegistration,
+   ): void;
+   registerSystem(
+     system:
+-      | System<TEventMap, TCommandMap>
+-      | SystemRegistration<TEventMap, TCommandMap>
++      | System<TEventMap, TCommandMap, TComponents, TState>
++      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
+       | LooseSystem
+       | LooseSystemRegistration,
+   ): void {
+@@ -620,6 +622,16 @@ export class World<
+     this.lastTickFailure = null;
+     this.currentDiff = null;
+     this.currentMetrics = null;
++    this.poisonedWarningEmitted = false;
++  }
++
++  private warnIfPoisoned(api: string): void {
++    if (!this.poisoned || this.poisonedWarningEmitted) return;
++    this.poisonedWarningEmitted = true;
++    console.warn(
++      `${api} called on a poisoned world (last failure: '${this.poisoned.code}' at tick ${this.poisoned.tick}). ` +
++        `Call world.recover() to clear the poison flag.`,
++    );
+   }
+ 
+   private makeWorldPoisonedFailure(prior: TickFailure): TickFailure {
+@@ -692,6 +704,7 @@ export class World<
+     type: K,
+     data: TCommandMap[K],
+   ): CommandSubmissionResult<K> {
++    this.warnIfPoisoned('submit');
+     const rejection = this.validateCommand(type, data);
+     if (rejection) {
+       const result = this.createCommandSubmissionResult(type, {
+@@ -723,7 +736,7 @@ export class World<
+     type: K,
+     fn: (
+       data: TCommandMap[K],
+-      world: World<TEventMap, TCommandMap>,
++      world: World<TEventMap, TCommandMap, TComponents, TState>,
+     ) => CommandValidationResult,
+   ): void {
+     let fns = this.validators.get(type);
+@@ -734,7 +747,7 @@ export class World<
+     fns.push(
+       fn as (
+         data: never,
+-        world: World<TEventMap, TCommandMap>,
++        world: World<TEventMap, TCommandMap, TComponents, TState>,
+       ) => CommandValidationResult,
+     );
+   }
+@@ -765,14 +778,14 @@ export class World<
+ 
+   registerHandler<K extends keyof TCommandMap>(
+     type: K,
+-    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap>) => void,
++    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+   ): void {
+     if (this.handlers.has(type)) {
+       throw new Error(`Handler already registered for command '${String(type)}'`);
+     }
+     this.handlers.set(
+       type,
+-      fn as (data: never, world: World<TEventMap, TCommandMap>) => void,
++      fn as (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+     );
+   }
+ 
+@@ -799,12 +812,21 @@ export class World<
+     return this.rng.random();
+   }
+ 
+-  serialize(): WorldSnapshot {
++  /**
++   * @param options.inspectPoisoned - When true, suppresses the "serialize on
++   *   poisoned world" warning. Intended for engine-internal debug/history
++   *   tooling that exists specifically to inspect poisoned state.
++   */
++  serialize(options?: { inspectPoisoned?: boolean }): WorldSnapshot {
++    if (!options?.inspectPoisoned) {
++      this.warnIfPoisoned('serialize');
++    }
+     const components: Record<string, Array<[EntityId, unknown]>> = {};
+     for (const [key, store] of this.componentStores) {
+-      const entries = [...store.entries()];
+-      for (const [entity, data] of entries) {
++      const entries: Array<[EntityId, unknown]> = [];
++      for (const [entity, data] of store.entries()) {
+         assertJsonCompatible(data, `component '${key}' on entity ${entity}`);
++        entries.push([entity, structuredClone(data)]);
+       }
+       components[key] = entries;
+     }
+@@ -817,9 +839,6 @@ export class World<
+     if (this.seed !== undefined) {
+       config.seed = this.seed;
+     }
+-    if (!this.detectInPlacePositionMutations) {
+-      config.detectInPlacePositionMutations = false;
+-    }
+     const maxTicksPerFrame = this.gameLoop.getMaxTicksPerFrame();
+     if (maxTicksPerFrame !== DEFAULT_MAX_TICKS_PER_FRAME) {
+       config.maxTicksPerFrame = maxTicksPerFrame;
+@@ -838,7 +857,7 @@ export class World<
+     const state: Record<string, unknown> = {};
+     for (const [key, value] of this.stateStore) {
+       assertJsonCompatible(value, `state '${key}'`);
+-      state[key] = value;
++      state[key] = structuredClone(value);
+     }
+ 
+     const tags: Record<number, string[]> = {};
+@@ -878,13 +897,15 @@ export class World<
+     TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+     TComponents extends ComponentRegistry = Record<string, unknown>,
++    TState extends Record<string, unknown> = Record<string, unknown>,
+   >(
+     snapshot: WorldSnapshot,
+     systems?: Array<
+-      System<TEventMap, TCommandMap> | SystemRegistration<TEventMap, TCommandMap>
++      System<TEventMap, TCommandMap, TComponents, TState>
++      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
+       | LooseSystem | LooseSystemRegistration
+     >,
+-  ): World<TEventMap, TCommandMap, TComponents> {
++  ): World<TEventMap, TCommandMap, TComponents, TState> {
+     const version = (snapshot as { version: number }).version;
+     if (version < 1 || version > 5) {
+       throw new Error(`Unsupported snapshot version: ${version}`);
+@@ -895,19 +916,23 @@ export class World<
+         ? snapshot.componentOptions
+         : {};
+ 
+-    const world = new World<TEventMap, TCommandMap, TComponents>(snapshot.config);
++    const world = new World<TEventMap, TCommandMap, TComponents, TState>(snapshot.config);
+     world.entityManager = EntityManager.fromState(snapshot.entities);
+ 
+     world.componentStores.clear();
+     world.componentOptions.clear();
+     for (const [key, entries] of Object.entries(snapshot.components)) {
+       const opts = componentOptions[key];
++      const cloned: Array<[number, unknown]> = [];
++      for (const [id, data] of entries as Array<[number, unknown]>) {
++        cloned.push([id, structuredClone(data)]);
++      }
+       world.componentStores.set(
+         key,
+-        ComponentStore.fromEntries(entries as Array<[number, unknown]>, opts),
++        ComponentStore.fromEntries(cloned, opts),
+       );
+       if (opts) {
+-        world.componentOptions.set(key, opts);
++        world.componentOptions.set(key, { ...opts });
+       }
+     }
+     world.rebuildComponentSignatures();
+@@ -919,7 +944,7 @@ export class World<
+     }
+     if ('state' in snapshot) {
+       for (const [key, value] of Object.entries(snapshot.state)) {
+-        world.stateStore.set(key, value);
++        world.stateStore.set(key, structuredClone(value));
+       }
+     }
+     if ('tags' in snapshot) {
+@@ -930,6 +955,11 @@ export class World<
+             `Invalid entity id key in snapshot.tags: ${JSON.stringify(entityIdStr)}`,
+           );
+         }
++        if (!world.entityManager.isAlive(entityId)) {
++          throw new Error(
++            `snapshot.tags references dead entity ${entityId}`,
++          );
++        }
+         for (const tag of tagList as string[]) {
+           world.addTagInternal(entityId, tag);
+         }
+@@ -943,6 +973,11 @@ export class World<
+             `Invalid entity id key in snapshot.metadata: ${JSON.stringify(entityIdStr)}`,
+           );
+         }
++        if (!world.entityManager.isAlive(entityId)) {
++          throw new Error(
++            `snapshot.metadata references dead entity ${entityId}`,
++          );
++        }
+         for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {
+           world.setMetaInternal(entityId, key, value);
+         }
+@@ -1234,6 +1269,11 @@ export class World<
+   }
+ 
+   private setMetaInternal(entity: EntityId, key: string, value: string | number): void {
++    if (typeof value === 'number' && !Number.isFinite(value)) {
++      throw new Error(
++        `Metadata ${JSON.stringify(key)} value must be a finite JSON number; got ${value}`,
++      );
++    }
+     const existingMeta = this.entityMeta.get(entity);
+     let keyIndex = this.metaIndex.get(key);
+     if (keyIndex) {
+@@ -1354,27 +1394,6 @@ export class World<
+         return this.finalizeTickFailure(commandsResult.failure, metrics, totalStart);
+       }
+ 
+-      const spatialStart = collectDetailedTimings ? now() : 0;
+-      try {
+-        this.syncSpatialIndex();
+-      } catch (error) {
+-        return this.finalizeTickFailure(
+-          this.createTickFailure({
+-            tick,
+-            phase: 'spatialSync',
+-            code: 'spatial_sync_threw',
+-            message: errorMessage(error),
+-            subsystem: 'spatial',
+-            error,
+-          }),
+-          metrics,
+-          totalStart,
+-        );
+-      }
+-      if (collectDetailedTimings && metrics) {
+-        metrics.durationMs.spatialSync = now() - spatialStart;
+-      }
+-
+       const systemsStart = collectDetailedTimings ? now() : 0;
+       const systemsFailure = this.executeSystems(
+         tick,
+@@ -1631,7 +1650,11 @@ export class World<
+     result: CommandSubmissionResult<K>,
+   ): void {
+     for (const listener of this.commandResultListeners) {
+-      listener(result as CommandSubmissionResult<keyof TCommandMap>);
++      try {
++        listener(result as CommandSubmissionResult<keyof TCommandMap>);
++      } catch (error) {
++        console.error('commandResultListener threw:', error);
++      }
+     }
+   }
+ 
+@@ -1639,13 +1662,21 @@ export class World<
+     result: CommandExecutionResult<K>,
+   ): void {
+     for (const listener of this.commandExecutionListeners) {
+-      listener(result as CommandExecutionResult<keyof TCommandMap>);
++      try {
++        listener(result as CommandExecutionResult<keyof TCommandMap>);
++      } catch (error) {
++        console.error('commandExecutionListener threw:', error);
++      }
+     }
+   }
+ 
+   private emitTickFailure(failure: TickFailure): void {
+     for (const listener of this.tickFailureListeners) {
+-      listener(cloneTickFailure(failure));
++      try {
++        listener(cloneTickFailure(failure));
++      } catch (error) {
++        console.error('tickFailureListener threw:', error);
++      }
+     }
+   }
+ 
+@@ -1761,12 +1792,12 @@ export class World<
+     return null;
+   }
+ 
+-  private resolveSystemOrder(): Array<RegisteredSystem<TEventMap, TCommandMap>> {
+-    const byPhase = new Map<SystemPhase, Array<RegisteredSystem<TEventMap, TCommandMap>>>();
++  private resolveSystemOrder(): Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> {
++    const byPhase = new Map<SystemPhase, Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>>();
+     for (const phase of SYSTEM_PHASES) {
+       byPhase.set(phase, []);
+     }
+-    const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap>>();
++    const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>();
+     for (const sys of this.systems) {
+       byPhase.get(sys.phase)!.push(sys);
+       if (sys.name) {
+@@ -1800,7 +1831,7 @@ export class World<
+       }
+     }
+ 
+-    const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
++    const result: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
+     for (const phase of SYSTEM_PHASES) {
+       const phaseSystems = byPhase.get(phase)!;
+       if (phaseSystems.length === 0) continue;
+@@ -1828,7 +1859,7 @@ export class World<
+       const validation = (
+         fns[index] as (
+           data: TCommandMap[K],
+-          world: World<TEventMap, TCommandMap>,
++          world: World<TEventMap, TCommandMap, TComponents, TState>,
+         ) => CommandValidationResult
+       )(data, this);
+       const rejection = normalizeCommandValidationResult(validation, index);
+@@ -1859,18 +1890,18 @@ export class World<
+ 
+   private normalizeSystemRegistration(
+     system:
+-      | System<TEventMap, TCommandMap>
+-      | SystemRegistration<TEventMap, TCommandMap>
++      | System<TEventMap, TCommandMap, TComponents, TState>
++      | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
+       | LooseSystem
+       | LooseSystemRegistration,
+-  ): RegisteredSystem<TEventMap, TCommandMap> {
++  ): RegisteredSystem<TEventMap, TCommandMap, TComponents, TState> {
+     const order = this.nextSystemOrder++;
+     this.resolvedSystemOrder = null;
+     if (typeof system === 'function') {
+       return {
+         name: system.name || `system#${order}`,
+         phase: 'update',
+-        execute: system as System<TEventMap, TCommandMap>,
++        execute: system as System<TEventMap, TCommandMap, TComponents, TState>,
+         order,
+         before: [],
+         after: [],
+@@ -1885,53 +1916,13 @@ export class World<
+     return {
+       name: system.name ?? system.execute.name ?? `system#${order}`,
+       phase,
+-      execute: system.execute as System<TEventMap, TCommandMap>,
++      execute: system.execute as System<TEventMap, TCommandMap, TComponents, TState>,
+       order,
+       before: system.before ?? [],
+       after: system.after ?? [],
+     };
+   }
+ 
+-  private syncSpatialIndex(): void {
+-    if (!this.detectInPlacePositionMutations) return;
+-
+-    const posStore = this.componentStores.get(this.positionKey) as
+-      | ComponentStore<Position>
+-      | undefined;
+-    if (!posStore) return;
+-
+-    if (this.activeMetrics) {
+-      this.activeMetrics.spatial.fullScans++;
+-    }
+-    const seen = new Set<EntityId>();
+-
+-    for (const id of posStore.entities()) {
+-      seen.add(id);
+-      if (this.activeMetrics) {
+-        this.activeMetrics.spatial.scannedEntities++;
+-      }
+-      const pos = asPosition(posStore.get(id));
+-      this.assertPositionInBounds(pos);
+-      const prev = this.previousPositions.get(id);
+-
+-      if (!prev) {
+-        this.spatialGrid.insert(id, pos.x, pos.y);
+-        this.previousPositions.set(id, { x: pos.x, y: pos.y });
+-      } else if (prev.x !== pos.x || prev.y !== pos.y) {
+-        this.spatialGrid.move(id, prev.x, prev.y, pos.x, pos.y);
+-        prev.x = pos.x;
+-        prev.y = pos.y;
+-      }
+-    }
+-
+-    for (const [id, pos] of this.previousPositions) {
+-      if (!seen.has(id)) {
+-        this.spatialGrid.remove(id, pos.x, pos.y);
+-        this.previousPositions.delete(id);
+-      }
+-    }
+-  }
+-
+   private syncSpatialEntity(entity: EntityId, pos: Position): void {
+     if (this.activeMetrics) {
+       this.activeMetrics.spatial.explicitSyncs++;
+@@ -2138,14 +2129,11 @@ function createMetrics(
+       results: 0,
+     },
+     spatial: {
+-      fullScans: 0,
+-      scannedEntities: 0,
+       explicitSyncs: 0,
+     },
+     durationMs: {
+       total: 0,
+       commands: 0,
+-      spatialSync: 0,
+       systems: 0,
+       resources: 0,
+       diff: 0,
+@@ -2225,14 +2213,19 @@ function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
+   };
+ }
+ 
++// Both helpers deep-clone via JSON. TickDiff is JSON-shaped because component
++// data and state values pass assertJsonCompatible at write time; TickFailure
++// is JSON-shaped because createTickFailure normalizes the optional Error field
++// to a plain {name, message, stack} via createErrorDetails (line ~2230) and
++// asserts JSON-compat on `details`. JSON is ~2-5× faster than structuredClone
++// for these plain shapes on V8, and cloneTickDiff runs once per tick per
++// diff listener so the throughput matters.
++
+ function cloneTickFailure(failure: TickFailure): TickFailure {
+   return JSON.parse(JSON.stringify(failure)) as TickFailure;
+ }
+ 
+ function cloneTickDiff(diff: TickDiff): TickDiff {
+-  // Deep-clone: component data and state values are JSON-compatible by
+-  // contract (assertJsonCompatible runs at write time), so structuredClone /
+-  // JSON round-trip is safe and gives true defensive isolation.
+   return JSON.parse(JSON.stringify(diff)) as TickDiff;
+ }
+ 
+@@ -2308,12 +2301,6 @@ function validateWorldConfig(config: WorldConfig): void {
+   if (config.positionKey !== undefined && config.positionKey.length === 0) {
+     throw new Error('positionKey must not be empty');
+   }
+-  if (
+-    config.detectInPlacePositionMutations !== undefined &&
+-    typeof config.detectInPlacePositionMutations !== 'boolean'
+-  ) {
+-    throw new Error('detectInPlacePositionMutations must be a boolean');
+-  }
+   if (
+     config.instrumentationProfile !== undefined &&
+     config.instrumentationProfile !== 'full' &&
+@@ -2350,11 +2337,13 @@ function asPosition(value: unknown): Position {
+ function topologicalSort<
+   TEventMap extends Record<keyof TEventMap, unknown>,
+   TCommandMap extends Record<keyof TCommandMap, unknown>,
++  TComponents extends ComponentRegistry,
++  TState extends Record<string, unknown>,
+ >(
+-  systems: Array<RegisteredSystem<TEventMap, TCommandMap>>,
+-  nameToSystem: Map<string, RegisteredSystem<TEventMap, TCommandMap>>,
+-): Array<RegisteredSystem<TEventMap, TCommandMap>> {
+-  const edges = new Map<RegisteredSystem<TEventMap, TCommandMap>, Set<RegisteredSystem<TEventMap, TCommandMap>>>();
++  systems: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>,
++  nameToSystem: Map<string, RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>,
++): Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> {
++  const edges = new Map<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>, Set<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>>();
+   for (const sys of systems) {
+     edges.set(sys, new Set());
+   }
+@@ -2370,7 +2359,7 @@ function topologicalSort<
+     }
+   }
+ 
+-  const inDegree = new Map<RegisteredSystem<TEventMap, TCommandMap>, number>();
++  const inDegree = new Map<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>, number>();
+   for (const sys of systems) {
+     inDegree.set(sys, 0);
+   }
+@@ -2384,7 +2373,7 @@ function topologicalSort<
+     .filter((s) => inDegree.get(s) === 0)
+     .sort((a, b) => a.order - b.order);
+ 
+-  const result: Array<RegisteredSystem<TEventMap, TCommandMap>> = [];
++  const result: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
+   while (queue.length > 0) {
+     const sys = queue.shift()!;
+     result.push(sys);
+diff --git a/tests/component-store.test.ts b/tests/component-store.test.ts
+index 5e5b251..a68b656 100644
+--- a/tests/component-store.test.ts
++++ b/tests/component-store.test.ts
+@@ -145,12 +145,12 @@ describe('ComponentStore', () => {
+     ]);
+   });
+ 
+-  it('tracks in-place mutations after clearDirty', () => {
++  it('in-place mutations after clearDirty are NOT detected (use set() to mark dirty)', () => {
+     const store = new ComponentStore<{ hp: number }>();
+     store.set(1, { hp: 10 });
+     store.clearDirty();
+     store.get(1)!.hp = 15;
+-    expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
++    expect(store.getDirty().set).toEqual([]);
+   });
+ 
+   it('rejects non-JSON-compatible component data', () => {
+@@ -161,59 +161,6 @@ describe('ComponentStore', () => {
+     ).toThrow();
+   });
+ 
+-  describe('detectInPlaceMutations option', () => {
+-    it('defaults to true — in-place mutations after clearDirty are detected (existing behavior)', () => {
+-      const store = new ComponentStore<{ hp: number }>();
+-      store.set(1, { hp: 10 });
+-      store.clearDirty();
+-      store.get(1)!.hp = 15;
+-      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+-    });
+-
+-    it('when false, in-place mutations after clearDirty are NOT detected', () => {
+-      const store = new ComponentStore<{ hp: number }>({
+-        detectInPlaceMutations: false,
+-      });
+-      store.set(1, { hp: 10 });
+-      store.clearDirty();
+-      store.get(1)!.hp = 15;
+-      expect(store.getDirty().set).toEqual([]);
+-    });
+-
+-    it('when false, explicit set() still marks dirty', () => {
+-      const store = new ComponentStore<{ hp: number }>({
+-        detectInPlaceMutations: false,
+-      });
+-      store.set(1, { hp: 10 });
+-      store.clearDirty();
+-      store.set(1, { hp: 15 });
+-      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+-    });
+-
+-    it('still validates JSON-compatibility on set even with detectInPlaceMutations false', () => {
+-      const store = new ComponentStore<{ value: number }>({
+-        detectInPlaceMutations: false,
+-      });
+-      expect(() => store.set(1, { value: Number.NaN })).toThrow();
+-    });
+-
+-    it('combines with semantic mode: identical rewrites suppressed AND in-place detection skipped', () => {
+-      const store = new ComponentStore<{ x: number }>({
+-        diffMode: 'semantic',
+-        detectInPlaceMutations: false,
+-      });
+-      store.set(0, { x: 5 });
+-      store.clearDirty();
+-
+-      store.set(0, { x: 5 });
+-      expect(store.getDirty().set).toEqual([]);
+-
+-      store.clearDirty();
+-      store.get(0)!.x = 99;
+-      expect(store.getDirty().set).toEqual([]);
+-    });
+-  });
+-
+   describe('semantic diffMode', () => {
+     it('defaults to strict mode (identical rewrites still mark dirty)', () => {
+       const store = new ComponentStore<{ x: number }>();
+@@ -253,18 +200,6 @@ describe('ComponentStore', () => {
+       expect(dirty.set).toEqual([[0, { x: 5 }]]);
+     });
+ 
+-    it('semantic mode still detects in-place mutations via getDirty scan', () => {
+-      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+-      store.set(0, { x: 5 });
+-      store.clearDirty();
+-
+-      const value = store.get(0)!;
+-      value.x = 99;
+-
+-      const dirty = store.getDirty();
+-      expect(dirty.set).toEqual([[0, { x: 99 }]]);
+-    });
+-
+     it('semantic mode handles removal like strict', () => {
+       const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+       store.set(0, { x: 5 });
+diff --git a/tests/diff.test.ts b/tests/diff.test.ts
+index 926385d..b267c1b 100644
+--- a/tests/diff.test.ts
++++ b/tests/diff.test.ts
+@@ -132,7 +132,7 @@ describe('State Diff', () => {
+     expect(diff.components['health'].set).toEqual([[e, { hp: 80 }]]);
+   });
+ 
+-  it('in-place component mutations appear in diff', () => {
++  it('component mutations require setComponent to appear in diff', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+     world.registerComponent<{ hp: number }>('health');
+     const e = world.createEntity();
+@@ -141,7 +141,7 @@ describe('State Diff', () => {
+ 
+     world.registerSystem((w) => {
+       const hp = w.getComponent<{ hp: number }>(e, 'health')!;
+-      hp.hp += 5;
++      w.setComponent(e, 'health', { hp: hp.hp + 5 });
+     });
+     world.step();
+ 
+diff --git a/tests/entity-manager.test.ts b/tests/entity-manager.test.ts
+index 37b8115..9979e00 100644
+--- a/tests/entity-manager.test.ts
++++ b/tests/entity-manager.test.ts
+@@ -125,4 +125,21 @@ describe('EntityManager', () => {
+     expect(dirty.created).toEqual([]);
+     expect(dirty.destroyed).toEqual([]);
+   });
++
++  describe('fromState validation', () => {
++    it('rejects non-boolean alive entries', () => {
++      const bad = { generations: [0, 0], alive: [true, 'yes' as unknown as boolean], freeList: [] };
++      expect(() => EntityManager.fromState(bad)).toThrow(/alive\[1\]/);
++    });
++
++    it('rejects negative generation entries', () => {
++      const bad = { generations: [0, -1], alive: [true, true], freeList: [] };
++      expect(() => EntityManager.fromState(bad)).toThrow(/generations\[1\]/);
++    });
++
++    it('rejects non-integer generation entries', () => {
++      const bad = { generations: [0, 1.5], alive: [true, true], freeList: [] };
++      expect(() => EntityManager.fromState(bad)).toThrow(/generations\[1\]/);
++    });
++  });
+ });
+diff --git a/tests/event-bus.test.ts b/tests/event-bus.test.ts
+index 2a9ce53..dd266f4 100644
+--- a/tests/event-bus.test.ts
++++ b/tests/event-bus.test.ts
+@@ -81,4 +81,31 @@ describe('EventBus', () => {
+     const bus = new EventBus<TestEvents>();
+     expect(bus.getEvents()).toEqual([]);
+   });
++
++  it('emit rejects non-JSON-compatible payloads', () => {
++    interface Bad {
++      bad: { fn: () => void };
++    }
++    const bus = new EventBus<Bad>();
++    expect(() => bus.emit('bad', { fn: () => undefined } as never)).toThrow();
++  });
++
++  it('emit rejects circular payloads', () => {
++    interface Circular {
++      cir: Record<string, unknown>;
++    }
++    const bus = new EventBus<Circular>();
++    const obj: Record<string, unknown> = { a: 1 };
++    obj.self = obj;
++    expect(() => bus.emit('cir', obj)).toThrow();
++  });
++
++  it('getEvents deep-clones each event payload', () => {
++    const bus = new EventBus<TestEvents>();
++    bus.emit('damage', { target: 1, amount: 10 });
++    const events = bus.getEvents();
++    (events[0].data as { amount: number }).amount = 999;
++    const refetched = bus.getEvents();
++    expect((refetched[0].data as { amount: number }).amount).toBe(10);
++  });
+ });
+diff --git a/tests/history-recorder.test.ts b/tests/history-recorder.test.ts
+index b5a26b1..94954ea 100644
+--- a/tests/history-recorder.test.ts
++++ b/tests/history-recorder.test.ts
+@@ -15,7 +15,6 @@ function createWorld(): World<Events, Commands> {
+     gridWidth: 8,
+     gridHeight: 8,
+     tps: 10,
+-    detectInPlacePositionMutations: false,
+   });
+   world.registerComponent<Position>('position');
+   world.registerComponent<{ hp: number }>('health');
+diff --git a/tests/scenario-runner.test.ts b/tests/scenario-runner.test.ts
+index 20da0a8..979eaaf 100644
+--- a/tests/scenario-runner.test.ts
++++ b/tests/scenario-runner.test.ts
+@@ -11,7 +11,6 @@ function createWorld(): World<Events, Commands> {
+     gridWidth: 8,
+     gridHeight: 8,
+     tps: 10,
+-    detectInPlacePositionMutations: false,
+   });
+ }
+ 
+diff --git a/tests/serializer.test.ts b/tests/serializer.test.ts
+index 5581e31..ecb01fb 100644
+--- a/tests/serializer.test.ts
++++ b/tests/serializer.test.ts
+@@ -275,14 +275,12 @@ describe('Serialization', () => {
+       gridHeight: 10,
+       tps: 60,
+       seed: 1234,
+-      detectInPlacePositionMutations: false,
+     });
+     world.random();
+     const snapshot = world.serialize();
+     const next = world.random();
+ 
+     expect(snapshot.config.seed).toBe(1234);
+-    expect(snapshot.config.detectInPlacePositionMutations).toBe(false);
+     const restored = World.deserialize(JSON.parse(JSON.stringify(snapshot)));
+     expect(restored.random()).toBe(next);
+   });
+@@ -403,4 +401,112 @@ describe('Serialization', () => {
+     expect(restored.tick).toBe(1);
+     expect(restored.getComponent(e, 'health')).toEqual({ hp: 100 });
+   });
++
++  describe('snapshot isolation', () => {
++    it('mutating a returned snapshot does not affect live world state', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      world.registerComponent<{ x: number; y: number }>('position');
++      const e = world.createEntity();
++      world.addComponent(e, 'position', { x: 1, y: 2 });
++      world.setState('terrain', { biome: 'grass' });
++
++      const snapshot = world.serialize();
++      if (snapshot.version !== 5) throw new Error('Expected version 5');
++
++      const positionEntries = snapshot.components['position'];
++      const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
++      posData.x = 999;
++      (snapshot.state['terrain'] as { biome: string }).biome = 'lava';
++
++      expect(world.getComponent(e, 'position')).toEqual({ x: 1, y: 2 });
++      expect(world.getState('terrain')).toEqual({ biome: 'grass' });
++    });
++
++    it('mutating snapshot input does not affect deserialized world state', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      world.registerComponent<{ x: number; y: number }>('position');
++      const e = world.createEntity();
++      world.addComponent(e, 'position', { x: 1, y: 2 });
++      world.setState('terrain', { biome: 'grass' });
++
++      const snapshot = world.serialize();
++      const restored = World.deserialize(snapshot);
++
++      if (snapshot.version !== 5) throw new Error('Expected version 5');
++      const positionEntries = snapshot.components['position'];
++      const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
++      posData.x = 999;
++      (snapshot.state['terrain'] as { biome: string }).biome = 'lava';
++
++      expect(restored.getComponent(e, 'position')).toEqual({ x: 1, y: 2 });
++      expect(restored.getState('terrain')).toEqual({ biome: 'grass' });
++    });
++  });
++
++  describe('deserialize rejects malformed snapshots', () => {
++    it('throws when tags reference a dead entity', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      const a = world.createEntity();
++      const b = world.createEntity();
++      world.addTag(a, 'live');
++      world.addTag(b, 'dies');
++      world.destroyEntity(b);
++
++      const snapshot = world.serialize();
++      if (snapshot.version !== 5) throw new Error('Expected version 5');
++      // Manually corrupt: tag a dead entity id
++      const deadId = b;
++      snapshot.tags[deadId] = ['ghost'];
++
++      expect(() => World.deserialize(snapshot)).toThrow(/references dead entity/);
++    });
++
++    it('throws when metadata references a dead entity', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      const a = world.createEntity();
++      world.setMeta(a, 'level', 1);
++
++      const snapshot = world.serialize();
++      if (snapshot.version !== 5) throw new Error('Expected version 5');
++      // Manually corrupt: meta on a non-existent entity id
++      snapshot.metadata[999] = { level: 99 };
++
++      expect(() => World.deserialize(snapshot)).toThrow(/references dead entity/);
++    });
++  });
++
++  describe('deserialize tolerates legacy snapshot fields', () => {
++    it('silently ignores config.detectInPlacePositionMutations on read', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      world.registerComponent<{ hp: number }>('health');
++      const e = world.createEntity();
++      world.addComponent(e, 'health', { hp: 50 });
++
++      const snapshot = world.serialize();
++      // Inject the legacy field a v0.4.x snapshot would carry
++      (snapshot.config as { detectInPlacePositionMutations?: boolean }).detectInPlacePositionMutations = false;
++
++      const restored = World.deserialize(snapshot);
++      expect(restored.getComponent(e, 'health')).toEqual({ hp: 50 });
++    });
++
++    it('silently ignores componentOptions[*].detectInPlaceMutations on read', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      world.registerComponent<{ hp: number }>('health');
++      const e = world.createEntity();
++      world.addComponent(e, 'health', { hp: 50 });
++
++      const snapshot = world.serialize();
++      if (snapshot.version !== 5) throw new Error('Expected version 5');
++      const opts = snapshot.componentOptions ?? {};
++      opts['health'] = {
++        ...(opts['health'] ?? {}),
++        ...({ detectInPlaceMutations: false } as Record<string, unknown>),
++      };
++      snapshot.componentOptions = opts;
++
++      const restored = World.deserialize(snapshot);
++      expect(restored.getComponent(e, 'health')).toEqual({ hp: 50 });
++    });
++  });
+ });
+diff --git a/tests/world-commands.test.ts b/tests/world-commands.test.ts
+index 4c7fd30..c703c60 100644
+--- a/tests/world-commands.test.ts
++++ b/tests/world-commands.test.ts
+@@ -1,7 +1,11 @@
+-import { describe, it, expect, vi } from 'vitest';
++import { describe, it, expect, vi, afterEach } from 'vitest';
+ import { World, WorldTickFailureError } from '../src/world.js';
+ 
+ describe('World commands', () => {
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
+   it('submit with no validators queues and returns true', () => {
+     type Cmds = { move: { x: number; y: number } };
+     const world = new World<Record<string, never>, Cmds>({
+@@ -557,4 +561,157 @@ describe('World commands', () => {
+     expect(spawnedId).toBeDefined();
+     expect(foundInGrid).toBe(true);
+   });
++
++  describe('listener exception isolation', () => {
++    it('a throwing commandExecutionListener does not leak through processCommands', () => {
++      type Cmds = { ping: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
++      world.registerHandler('ping', () => {});
++      world.onCommandExecution(() => {
++        throw new Error('listener bug');
++      });
++      world.submit('ping', null);
++
++      expect(() => world.step()).not.toThrow();
++      expect(world.isPoisoned()).toBe(false);
++      expect(world.tick).toBe(1);
++      expect(errSpy).toHaveBeenCalled();
++    });
++
++    it('a throwing tickFailureListener does not replace the original failure', () => {
++      type Cmds = { boom: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
++      world.registerHandler('boom', () => {
++        throw new Error('handler exploded');
++      });
++      world.onTickFailure(() => {
++        throw new Error('tick-failure listener bug');
++      });
++      world.submit('boom', null);
++
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++      expect(world.isPoisoned()).toBe(true);
++      expect(world.getLastTickFailure()?.code).toBe('command_handler_threw');
++      expect(errSpy).toHaveBeenCalled();
++    });
++
++    it('getLastTickFailure returns isolated copies; mutation does not bleed across calls', () => {
++      type Cmds = { boom: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 5,
++        gridHeight: 5,
++        tps: 60,
++      });
++      world.registerHandler('boom', () => {
++        throw new Error('explode');
++      });
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++
++      const a = world.getLastTickFailure();
++      const b = world.getLastTickFailure();
++      expect(a).not.toBe(b);
++      (a as { code: string }).code = 'corrupted';
++      const c = world.getLastTickFailure();
++      expect(c?.code).toBe('command_handler_threw');
++    });
++  });
++
++  describe('poisoned-world contract', () => {
++    it('submit on a poisoned world warns but still queues', () => {
++      type Cmds = { boom: null; ping: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++      world.registerHandler('boom', () => {
++        throw new Error('explode');
++      });
++      world.registerHandler('ping', () => {});
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++      expect(world.isPoisoned()).toBe(true);
++
++      expect(world.submit('ping', null)).toBe(true);
++      expect(warnSpy).toHaveBeenCalled();
++    });
++
++    it('serialize on a poisoned world warns but still returns a snapshot', () => {
++      type Cmds = { boom: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++      world.registerHandler('boom', () => {
++        throw new Error('explode');
++      });
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++
++      const snapshot = world.serialize();
++      expect(snapshot.version).toBe(5);
++      expect(warnSpy).toHaveBeenCalled();
++    });
++
++    it('warns exactly once per poison cycle across submit + serialize', () => {
++      type Cmds = { boom: null; ping: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++      world.registerHandler('boom', () => {
++        throw new Error('explode');
++      });
++      world.registerHandler('ping', () => {});
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++
++      world.submit('ping', null);
++      world.submit('ping', null);
++      world.serialize();
++      world.serialize();
++      expect(warnSpy).toHaveBeenCalledTimes(1);
++
++      world.recover();
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++      world.submit('ping', null);
++      expect(warnSpy).toHaveBeenCalledTimes(2);
++    });
++
++    it('serialize({ inspectPoisoned: true }) does not warn', () => {
++      type Cmds = { boom: null };
++      const world = new World<Record<string, never>, Cmds>({
++        gridWidth: 10,
++        gridHeight: 10,
++        tps: 60,
++      });
++      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
++      world.registerHandler('boom', () => {
++        throw new Error('explode');
++      });
++      world.submit('boom', null);
++      expect(() => world.step()).toThrow(WorldTickFailureError);
++
++      world.serialize({ inspectPoisoned: true });
++      world.serialize({ inspectPoisoned: true });
++      expect(warnSpy).not.toHaveBeenCalled();
++    });
++  });
+ });
+diff --git a/tests/world-debugger.test.ts b/tests/world-debugger.test.ts
+index 2b58a8e..22ebe56 100644
+--- a/tests/world-debugger.test.ts
++++ b/tests/world-debugger.test.ts
+@@ -20,7 +20,6 @@ describe('WorldDebugger', () => {
+       gridWidth: 8,
+       gridHeight: 8,
+       tps: 10,
+-      detectInPlacePositionMutations: false,
+     });
+     world.registerComponent<Position>('position');
+     world.registerComponent<{ role: string }>('unit');
+@@ -134,7 +133,6 @@ describe('WorldDebugger', () => {
+       gridWidth: 8,
+       gridHeight: 8,
+       tps: 10,
+-      detectInPlacePositionMutations: false,
+     });
+     world.registerComponent<Position>('position');
+     world.registerComponent<{ asset: string }>('renderable');
+@@ -192,7 +190,6 @@ describe('WorldDebugger', () => {
+       gridWidth: 8,
+       gridHeight: 8,
+       tps: 1000,
+-      detectInPlacePositionMutations: false,
+     });
+ 
+     world.registerSystem({
+@@ -239,7 +236,6 @@ describe('WorldDebugger', () => {
+       gridWidth: 8,
+       gridHeight: 8,
+       tps: 10,
+-      detectInPlacePositionMutations: false,
+     });
+     world.registerHandler('explode', () => {
+       throw new Error('boom');
+diff --git a/tests/world-spatial-query.test.ts b/tests/world-spatial-query.test.ts
+index 7de67a7..927cd02 100644
+--- a/tests/world-spatial-query.test.ts
++++ b/tests/world-spatial-query.test.ts
+@@ -102,4 +102,20 @@ describe('findNearest', () => {
+     placeEntity(world, 15, 15);
+     expect(world.findNearest(3, 3)).toBe(a);
+   });
++
++  it('finds entity in the diagonal corner of a small grid', () => {
++    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
++    world.registerComponent<Position>('position');
++    const corner = world.createEntity();
++    world.setPosition(corner, { x: 3, y: 3 });
++    expect(world.findNearest(0, 0)).toBe(corner);
++  });
++
++  it('finds diagonal entity on a non-square grid', () => {
++    const world = new World({ gridWidth: 10, gridHeight: 4, tps: 60 });
++    world.registerComponent<Position>('position');
++    const corner = world.createEntity();
++    world.setPosition(corner, { x: 9, y: 3 });
++    expect(world.findNearest(0, 0)).toBe(corner);
++  });
+ });
+diff --git a/tests/world-state.test.ts b/tests/world-state.test.ts
+index 406b1f8..1e1d53b 100644
+--- a/tests/world-state.test.ts
++++ b/tests/world-state.test.ts
+@@ -102,4 +102,48 @@ describe('World state store', () => {
+     const terrain = world.getState('terrain');
+     expect(terrain).toEqual({ biome: 'forest' });
+   });
++
++  it('typed registry threads through system, validator, handler, and onDestroy callbacks', () => {
++    type Components = {
++      health: { hp: number };
++      position: { x: number; y: number };
++    };
++    type State = {
++      kills: number;
++      [key: string]: unknown;
++    };
++    type Cmds = { revive: { entity: number } };
++
++    const world = new World<Record<string, never>, Cmds, Components, State>({
++      gridWidth: 10, gridHeight: 10, tps: 60,
++    });
++    world.registerComponent<Components['health']>('health');
++    world.registerComponent<Components['position']>('position');
++    world.setState('kills', 0);
++
++    let captured = 0;
++    world.registerSystem((w) => {
++      const kills = w.getState('kills') ?? 0;
++      captured = kills;
++    });
++    world.registerValidator('revive', (data, w) => {
++      return w.isAlive(data.entity) ? false : true;
++    });
++    world.registerHandler('revive', (_data, w) => {
++      const cur = w.getState('kills') ?? 0;
++      w.setState('kills', cur - 1);
++    });
++    world.onDestroy((_id, w) => {
++      const cur = w.getState('kills') ?? 0;
++      w.setState('kills', cur + 1);
++    });
++
++    const e = world.createEntity();
++    world.addComponent(e, 'health', { hp: 100 });
++    world.destroyEntity(e);
++    world.step();
++
++    expect(captured).toBe(1);
++    expect(world.getState('kills')).toBe(1);
++  });
+ });
+diff --git a/tests/world-tags-meta.test.ts b/tests/world-tags-meta.test.ts
+index 67b0aee..8a58cc7 100644
+--- a/tests/world-tags-meta.test.ts
++++ b/tests/world-tags-meta.test.ts
+@@ -1,6 +1,30 @@
+ import { describe, it, expect } from 'vitest';
+ import { World } from '../src/world.js';
+ 
++describe('setMeta validation', () => {
++  it('rejects NaN values', () => {
++    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
++    const id = world.createEntity();
++    expect(() => world.setMeta(id, 'level', Number.NaN)).toThrow(/finite/);
++  });
++
++  it('rejects Infinity values', () => {
++    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
++    const id = world.createEntity();
++    expect(() => world.setMeta(id, 'level', Infinity)).toThrow(/finite/);
++    expect(() => world.setMeta(id, 'level', -Infinity)).toThrow(/finite/);
++  });
++
++  it('accepts finite numbers and strings', () => {
++    const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
++    const id = world.createEntity();
++    world.setMeta(id, 'level', 42);
++    world.setMeta(id, 'tier', 'gold');
++    expect(world.getMeta(id, 'level')).toBe(42);
++    expect(world.getMeta(id, 'tier')).toBe('gold');
++  });
++});
++
+ describe('Entity tags', () => {
+   it('addTag/hasTag/getByTag round-trip', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+diff --git a/tests/world.test.ts b/tests/world.test.ts
+index 136955e..5a02cab 100644
+--- a/tests/world.test.ts
++++ b/tests/world.test.ts
+@@ -229,16 +229,14 @@ describe('World', () => {
+     expect(cell!.has(id)).toBe(true);
+   });
+ 
+-  it('updates spatial grid when position changes between ticks', () => {
++  it('updates spatial grid when position changes via setPosition between ticks', () => {
+     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+     world.registerComponent<{ x: number; y: number }>('position');
+     const id = world.createEntity();
+     world.addComponent(id, 'position', { x: 3, y: 3 });
+     world.step();
+ 
+-    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
+-    pos.x = 7;
+-    pos.y = 7;
++    world.setPosition(id, { x: 7, y: 7 });
+     world.step();
+ 
+     expect(world.grid.getAt(3, 3)?.has(id) ?? false).toBe(false);
+@@ -323,12 +321,11 @@ describe('World', () => {
+     expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+   });
+ 
+-  it('can disable full-scan position mutation detection and sync explicit dirty positions', () => {
++  it('in-place position mutations are NOT auto-synced; setPosition updates the grid', () => {
+     const world = new World({
+       gridWidth: 10,
+       gridHeight: 10,
+       tps: 60,
+-      detectInPlacePositionMutations: false,
+     });
+     world.registerComponent<{ x: number; y: number }>('position');
+     const id = world.createEntity();
+@@ -341,30 +338,12 @@ describe('World', () => {
+ 
+     expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+     expect(world.grid.getAt(2, 2)).toBeNull();
+-    expect(world.getMetrics()!.spatial.fullScans).toBe(0);
+ 
+-    world.markPositionDirty(id);
++    world.setPosition(id, { x: 2, y: 2 });
+     expect(world.grid.getAt(1, 1)).toBeNull();
+     expect(world.grid.getAt(2, 2)!.has(id)).toBe(true);
+   });
+ 
+-  it('markPositionDirty validates the current position data', () => {
+-    const world = new World({
+-      gridWidth: 10,
+-      gridHeight: 10,
+-      tps: 60,
+-      detectInPlacePositionMutations: false,
+-    });
+-    world.registerComponent<{ x: number; y: number }>('position');
+-    const id = world.createEntity();
+-    world.setPosition(id, { x: 1, y: 1 });
+-    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
+-    pos.x = 99;
+-
+-    expect(() => world.markPositionDirty(id)).toThrow(RangeError);
+-    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
+-  });
+-
+   it('validates world config', () => {
+     expect(() => new World({ gridWidth: 0, gridHeight: 10, tps: 60 })).toThrow(
+       RangeError,
+@@ -375,15 +354,6 @@ describe('World', () => {
+     expect(
+       () => new World({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: '' }),
+     ).toThrow('positionKey must not be empty');
+-    expect(
+-      () =>
+-        new World({
+-          gridWidth: 10,
+-          gridHeight: 10,
+-          tps: 60,
+-          detectInPlacePositionMutations: 'yes' as never,
+-        }),
+-    ).toThrow('detectInPlacePositionMutations must be a boolean');
+     expect(
+       () =>
+         new World({
+@@ -553,8 +523,6 @@ describe('World', () => {
+       cacheMisses: 1,
+       results: 1,
+     });
+-    expect(first.spatial.fullScans).toBe(1);
+-    expect(first.spatial.scannedEntities).toBe(1);
+     expect(first.spatial.explicitSyncs).toBe(1);
+     expect(first.systems).toHaveLength(1);
+     expect(first.systems[0].name).toBe('HealthScan');
+@@ -802,4 +770,42 @@ describe('World', () => {
+       expect(health).toEqual({ hp: 100 });
+     });
+   });
++
++  describe('world.grid is a read-only delegate', () => {
++    it('does not expose mutating SpatialGrid methods at runtime', () => {
++      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
++      const grid = world.grid as unknown as Record<string, unknown>;
++      expect(grid.insert).toBeUndefined();
++      expect(grid.remove).toBeUndefined();
++      expect(grid.move).toBeUndefined();
++    });
++
++    it('exposes read-only query surface', () => {
++      const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
++      world.registerComponent<{ x: number; y: number }>('position');
++      const id = world.createEntity();
++      world.setPosition(id, { x: 2, y: 2 });
++      expect(world.grid.width).toBe(5);
++      expect(world.grid.height).toBe(5);
++      expect(world.grid.getAt(2, 2)?.has(id)).toBe(true);
++      expect(world.grid.getNeighbors(2, 2)).toEqual([]);
++      expect(world.grid.getInRadius(2, 2, 1)).toContain(id);
++    });
++
++    it('mutating the Set returned by getAt does not corrupt the engine grid', () => {
++      const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
++      world.registerComponent<{ x: number; y: number }>('position');
++      const id = world.createEntity();
++      world.setPosition(id, { x: 2, y: 2 });
++
++      const cell = world.grid.getAt(2, 2);
++      expect(cell?.has(id)).toBe(true);
++      (cell as Set<number>).clear();
++      (cell as Set<number>).add(999);
++
++      expect(world.grid.getAt(2, 2)?.has(id)).toBe(true);
++      expect(world.grid.getAt(2, 2)?.has(999)).toBe(false);
++      expect(world.grid.getInRadius(2, 2, 0)).toContain(id);
++    });
++  });
+ });
