@@ -27,6 +27,8 @@ Complete reference for every public type, method, and module in civ-engine.
 - [SubcellOccupancyGrid](#subcelloccupancygrid)
 - [Path Service](#path-service)
 - [VisibilityMap](#visibilitymap)
+- [Command Transaction](#command-transaction)
+- [Layer](#layer)
 - [Noise](#noise)
 - [Cellular Automata](#cellular-automata)
 - [Map Generation](#map-generation)

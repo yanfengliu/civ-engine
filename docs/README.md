@@ -11,7 +11,7 @@ This is the navigation hub for `civ-engine` documentation.
 ## Reference
 
 - [API Reference](api-reference.md) - Public types, methods, and standalone utilities
-- [Architecture](ARCHITECTURE.md) - Internal structure, subsystem boundaries, and data flow
+- [Architecture](architecture/ARCHITECTURE.md) - Internal structure, subsystem boundaries, and data flow
 - [Public API & Invariants](guides/public-api-and-invariants.md) - Package boundary, JSON-safe data rules, entity refs, and write APIs
 - [Changelog](changelog.md) - Shipped changes and breaking changes
 
@@ -58,8 +58,8 @@ Active future work lives in focused plan and review documents rather than a gene
 
 ## History and Internal Process
 
-- [Devlog Summary](devlog-summary.md) - Short chronological history
-- [Devlog Detailed](devlog-detailed.md) - Detailed implementation log
+- [Devlog Summary](devlog/summary.md) - Short chronological history
+- [Devlog Detailed](devlog/detailed/) - Detailed implementation logs
 - [`superpowers/plans/`](superpowers/plans) - Historical implementation plans
 - [`superpowers/specs/`](superpowers/specs) - Historical design specs
 
