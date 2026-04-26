@@ -229,16 +229,14 @@ describe('World', () => {
     expect(cell!.has(id)).toBe(true);
   });
 
-  it('updates spatial grid when position changes between ticks', () => {
+  it('updates spatial grid when position changes via setPosition between ticks', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
     world.addComponent(id, 'position', { x: 3, y: 3 });
     world.step();
 
-    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
-    pos.x = 7;
-    pos.y = 7;
+    world.setPosition(id, { x: 7, y: 7 });
     world.step();
 
     expect(world.grid.getAt(3, 3)?.has(id) ?? false).toBe(false);
@@ -323,12 +321,11 @@ describe('World', () => {
     expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
   });
 
-  it('can disable full-scan position mutation detection and sync explicit dirty positions', () => {
+  it('in-place position mutations are NOT auto-synced; setPosition updates the grid', () => {
     const world = new World({
       gridWidth: 10,
       gridHeight: 10,
       tps: 60,
-      detectInPlacePositionMutations: false,
     });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
@@ -341,28 +338,10 @@ describe('World', () => {
 
     expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
     expect(world.grid.getAt(2, 2)).toBeNull();
-    expect(world.getMetrics()!.spatial.fullScans).toBe(0);
 
-    world.markPositionDirty(id);
+    world.setPosition(id, { x: 2, y: 2 });
     expect(world.grid.getAt(1, 1)).toBeNull();
     expect(world.grid.getAt(2, 2)!.has(id)).toBe(true);
-  });
-
-  it('markPositionDirty validates the current position data', () => {
-    const world = new World({
-      gridWidth: 10,
-      gridHeight: 10,
-      tps: 60,
-      detectInPlacePositionMutations: false,
-    });
-    world.registerComponent<{ x: number; y: number }>('position');
-    const id = world.createEntity();
-    world.setPosition(id, { x: 1, y: 1 });
-    const pos = world.getComponent<{ x: number; y: number }>(id, 'position')!;
-    pos.x = 99;
-
-    expect(() => world.markPositionDirty(id)).toThrow(RangeError);
-    expect(world.grid.getAt(1, 1)!.has(id)).toBe(true);
   });
 
   it('validates world config', () => {
@@ -375,15 +354,6 @@ describe('World', () => {
     expect(
       () => new World({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: '' }),
     ).toThrow('positionKey must not be empty');
-    expect(
-      () =>
-        new World({
-          gridWidth: 10,
-          gridHeight: 10,
-          tps: 60,
-          detectInPlacePositionMutations: 'yes' as never,
-        }),
-    ).toThrow('detectInPlacePositionMutations must be a boolean');
     expect(
       () =>
         new World({
@@ -553,8 +523,6 @@ describe('World', () => {
       cacheMisses: 1,
       results: 1,
     });
-    expect(first.spatial.fullScans).toBe(1);
-    expect(first.spatial.scannedEntities).toBe(1);
     expect(first.spatial.explicitSyncs).toBe(1);
     expect(first.systems).toHaveLength(1);
     expect(first.systems[0].name).toBe('HealthScan');
@@ -800,6 +768,28 @@ describe('World', () => {
       world.addComponent(id, 'health', { hp: 100 });
       const health = world.getComponent<Health>(id, 'health');
       expect(health).toEqual({ hp: 100 });
+    });
+  });
+
+  describe('world.grid is a read-only delegate', () => {
+    it('does not expose mutating SpatialGrid methods at runtime', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const grid = world.grid as unknown as Record<string, unknown>;
+      expect(grid.insert).toBeUndefined();
+      expect(grid.remove).toBeUndefined();
+      expect(grid.move).toBeUndefined();
+    });
+
+    it('exposes read-only query surface', () => {
+      const world = new World({ gridWidth: 5, gridHeight: 5, tps: 60 });
+      world.registerComponent<{ x: number; y: number }>('position');
+      const id = world.createEntity();
+      world.setPosition(id, { x: 2, y: 2 });
+      expect(world.grid.width).toBe(5);
+      expect(world.grid.height).toBe(5);
+      expect(world.grid.getAt(2, 2)?.has(id)).toBe(true);
+      expect(world.grid.getNeighbors(2, 2)).toEqual([]);
+      expect(world.grid.getInRadius(2, 2, 1)).toContain(id);
     });
   });
 });

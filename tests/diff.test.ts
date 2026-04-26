@@ -132,7 +132,7 @@ describe('State Diff', () => {
     expect(diff.components['health'].set).toEqual([[e, { hp: 80 }]]);
   });
 
-  it('in-place component mutations appear in diff', () => {
+  it('component mutations require setComponent to appear in diff', () => {
     const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
     world.registerComponent<{ hp: number }>('health');
     const e = world.createEntity();
@@ -141,7 +141,7 @@ describe('State Diff', () => {
 
     world.registerSystem((w) => {
       const hp = w.getComponent<{ hp: number }>(e, 'health')!;
-      hp.hp += 5;
+      w.setComponent(e, 'health', { hp: hp.hp + 5 });
     });
     world.step();
 

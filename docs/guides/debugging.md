@@ -232,7 +232,7 @@ If `tick-budget-exceeded` appears in `debug.issues`:
 1. Read `issue.details.slowSystems` — the top 3 systems by duration
 2. Read `issue.details.totalMs` vs `issue.details.tickBudgetMs` for the overage
 3. Check the hottest system's query — is it scanning too many entities?
-4. Check `debug.spatial` — if `spatial-full-scan` is also present, switch to `setPosition()` / `markPositionDirty()`
+4. Check the hottest system for in-place position mutations (`pos.x = ...`); switch to `setPosition()` so the spatial grid is in sync
 5. Consider narrowing queries with tags or reducing TPS
 
 ## Error Code Reference

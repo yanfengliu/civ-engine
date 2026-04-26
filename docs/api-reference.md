@@ -100,7 +100,6 @@ interface WorldConfig {
   positionKey?: string;    // Component key used for spatial sync (default: 'position')
   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
   seed?: number | string;  // Deterministic RNG seed
-  detectInPlacePositionMutations?: boolean; // Full-scan fallback (default: true)
   instrumentationProfile?: InstrumentationProfile; // Implicit instrumentation level (default: 'full')
 }
 ```
@@ -174,11 +173,10 @@ interface WorldMetrics {
   commandStats: { pendingBeforeTick: number; processed: number };
   systems: Array<{ name: string; phase: SystemPhase; durationMs: number }>;
   query: { calls: number; cacheHits: number; cacheMisses: number; results: number };
-  spatial: { fullScans: number; scannedEntities: number; explicitSyncs: number };
+  spatial: { explicitSyncs: number };
   durationMs: {
     total: number;
     commands: number;
-    spatialSync: number;
     systems: number;
     resources: number;
     diff: number;
@@ -354,7 +352,7 @@ interface WorldSnapshot {
     freeList: number[];
   };
   components: Record<string, Array<[EntityId, unknown]>>;
-  componentOptions?: Record<string, ComponentStoreOptions>; // diffMode + detectInPlaceMutations per component
+  componentOptions?: Record<string, ComponentStoreOptions>; // diffMode per component
   resources: ResourceStoreState;
   rng: RandomState;
   state: Record<string, unknown>;
@@ -363,7 +361,7 @@ interface WorldSnapshot {
 }
 ```
 
-JSON-serializable snapshot of the entire world state. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` / `detectInPlaceMutations` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on). Systems, validators, handlers, and event listeners are not included (they are functions, not data).
+JSON-serializable snapshot of the entire world state, deep-cloned at both serialize and deserialize boundaries so callers cannot mutate live engine state through it. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options. Systems, validators, handlers, and event listeners are not included (they are functions, not data). Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both are silently ignored on read in 0.5.0+.
 
 ### `TickDiff`
 
@@ -1107,7 +1105,6 @@ Creates a new world with the specified grid dimensions, tick rate, and optional 
 | `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
 | `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
 | `config.seed` | `number \| string` | No | Seed for deterministic `world.random()` sequences |
-| `config.detectInPlacePositionMutations` | `boolean` | No | Whether each tick scans position components to detect direct object mutations (default: `true`) |
 
 **Example:**
 
@@ -1211,7 +1208,6 @@ registerComponent<T>(key: string, options?: ComponentOptions): void
 
 interface ComponentOptions {
   diffMode?: 'strict' | 'semantic';
-  detectInPlaceMutations?: boolean;
 }
 ```
 
@@ -1221,13 +1217,9 @@ Registers a component type by string key. Must be called before using `addCompon
 - `'strict'` (default) — every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. Preserves per-write audit semantics.
 - `'semantic'` — writes are fingerprinted against the baseline from the last tick; identical rewrites do not mark the entity dirty. Use this for components whose sync systems rewrite unchanged values every tick (e.g. `position`, `transform`) to keep `TickDiff` liveness signals high.
 
-`options.detectInPlaceMutations` (default `true`) controls whether the per-tick diff scan detects mutations made to component objects via direct assignment (`world.getComponent(id, 'foo').x = 5`):
-- `true` (default) — `getDirty()` and `clearDirty()` walk every entry in the store and use a JSON fingerprint to detect in-place mutations. Backwards-compatible behavior.
-- `false` — only writes through `setComponent`/`addComponent`/`patchComponent` are tracked. The store skips the per-tick all-entries fingerprint scan, eliminating its O(N) cost. Use this for high-traffic components when you commit to writing through the explicit APIs.
+In-place mutations of component objects (`world.getComponent(id, 'foo').x = 5`) are NOT tracked by the diff system. Game code must call `setComponent`/`addComponent`/`patchComponent` for changes to land in the diff. The dirty set is updated only by the explicit write APIs.
 
-The combination `{ diffMode: 'semantic', detectInPlaceMutations: false }` is the cheapest mode: rewrite suppression in `set()`, no scan in `getDirty()`/`clearDirty()`.
-
-Both options are round-tripped in v5 snapshots so save/load preserves component-store behavior.
+`options.diffMode` is round-tripped in v5 snapshots so save/load preserves component-store behavior.
 
 **Throws:** `Error` if a component with this key is already registered.
 
@@ -1237,12 +1229,6 @@ world.registerComponent<Health>('health');
 
 interface Transform { x: number; y: number }
 world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
-
-interface Velocity { dx: number; dy: number }
-world.registerComponent<Velocity>('velocity', {
-  diffMode: 'semantic',
-  detectInPlaceMutations: false, // we only ever assign through setComponent
-});
 ```
 
 #### `addComponent<T>(entity, key, data)`
@@ -1288,14 +1274,6 @@ setPosition(entity: EntityId, position: Position, key?: string): void
 ```
 
 Sets position data and updates the spatial grid immediately when the key is the world's `positionKey`.
-
-#### `markPositionDirty(entity, key?)`
-
-```typescript
-markPositionDirty(entity: EntityId, key?: string): void
-```
-
-Synchronizes a position component that was mutated in place. This is mainly useful when `detectInPlacePositionMutations` is set to `false` and callers want to avoid the per-tick full-scan fallback.
 
 #### `getComponent<T>(entity, key)`
 

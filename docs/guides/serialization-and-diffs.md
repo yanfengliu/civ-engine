@@ -62,7 +62,7 @@ interface WorldSnapshot {
   components: Record<string, Array<[EntityId, unknown]>>;
   // e.g., { position: [[0, {x:5,y:3}], [1, {x:2,y:7}]], health: [[0, {hp:100}]] }
   componentOptions?: Record<string, ComponentStoreOptions>;
-  // per-component diffMode + detectInPlaceMutations; survives save/load
+  // per-component diffMode; survives save/load
   resources: ResourceStoreState; // registrations, pools, rates, transfers
   rng: RandomState;              // deterministic RNG state
   state: Record<string, unknown>;
@@ -71,7 +71,9 @@ interface WorldSnapshot {
 }
 ```
 
-`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode, in-place detection on).
+`World.deserialize()` still accepts versions 1–4. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
+
+Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both fields are silently ignored on read in 0.5.0+ since in-place mutation auto-detection has been removed.
 
 ## Loading State
 
@@ -125,7 +127,6 @@ Version 1 snapshots still load for backward compatibility, but they restore with
 | Grid config (width, height, TPS) | `snapshot.config` |
 | Position key | `snapshot.config.positionKey` |
 | Seed config | `snapshot.config.seed` |
-| Position mutation detection mode | `snapshot.config.detectInPlacePositionMutations` |
 | Tick count | `snapshot.tick` |
 | Entity IDs, alive states, generations | `snapshot.entities` |
 | All component data | `snapshot.components` |

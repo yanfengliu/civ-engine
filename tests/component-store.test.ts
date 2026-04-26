@@ -145,12 +145,12 @@ describe('ComponentStore', () => {
     ]);
   });
 
-  it('tracks in-place mutations after clearDirty', () => {
+  it('in-place mutations after clearDirty are NOT detected (use set() to mark dirty)', () => {
     const store = new ComponentStore<{ hp: number }>();
     store.set(1, { hp: 10 });
     store.clearDirty();
     store.get(1)!.hp = 15;
-    expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
+    expect(store.getDirty().set).toEqual([]);
   });
 
   it('rejects non-JSON-compatible component data', () => {
@@ -159,59 +159,6 @@ describe('ComponentStore', () => {
     expect(() =>
       store.set(2, { fn: () => undefined } as unknown as { value: number }),
     ).toThrow();
-  });
-
-  describe('detectInPlaceMutations option', () => {
-    it('defaults to true — in-place mutations after clearDirty are detected (existing behavior)', () => {
-      const store = new ComponentStore<{ hp: number }>();
-      store.set(1, { hp: 10 });
-      store.clearDirty();
-      store.get(1)!.hp = 15;
-      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
-    });
-
-    it('when false, in-place mutations after clearDirty are NOT detected', () => {
-      const store = new ComponentStore<{ hp: number }>({
-        detectInPlaceMutations: false,
-      });
-      store.set(1, { hp: 10 });
-      store.clearDirty();
-      store.get(1)!.hp = 15;
-      expect(store.getDirty().set).toEqual([]);
-    });
-
-    it('when false, explicit set() still marks dirty', () => {
-      const store = new ComponentStore<{ hp: number }>({
-        detectInPlaceMutations: false,
-      });
-      store.set(1, { hp: 10 });
-      store.clearDirty();
-      store.set(1, { hp: 15 });
-      expect(store.getDirty().set).toEqual([[1, { hp: 15 }]]);
-    });
-
-    it('still validates JSON-compatibility on set even with detectInPlaceMutations false', () => {
-      const store = new ComponentStore<{ value: number }>({
-        detectInPlaceMutations: false,
-      });
-      expect(() => store.set(1, { value: Number.NaN })).toThrow();
-    });
-
-    it('combines with semantic mode: identical rewrites suppressed AND in-place detection skipped', () => {
-      const store = new ComponentStore<{ x: number }>({
-        diffMode: 'semantic',
-        detectInPlaceMutations: false,
-      });
-      store.set(0, { x: 5 });
-      store.clearDirty();
-
-      store.set(0, { x: 5 });
-      expect(store.getDirty().set).toEqual([]);
-
-      store.clearDirty();
-      store.get(0)!.x = 99;
-      expect(store.getDirty().set).toEqual([]);
-    });
   });
 
   describe('semantic diffMode', () => {
@@ -251,18 +198,6 @@ describe('ComponentStore', () => {
 
       const dirty = store.getDirty();
       expect(dirty.set).toEqual([[0, { x: 5 }]]);
-    });
-
-    it('semantic mode still detects in-place mutations via getDirty scan', () => {
-      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
-      store.set(0, { x: 5 });
-      store.clearDirty();
-
-      const value = store.get(0)!;
-      value.x = 99;
-
-      const dirty = store.getDirty();
-      expect(dirty.set).toEqual([[0, { x: 99 }]]);
     });
 
     it('semantic mode handles removal like strict', () => {

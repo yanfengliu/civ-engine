@@ -48,7 +48,7 @@ const pos = world.getComponent<Position>(unit, 'position')!;
 world.setPosition(unit, { x: pos.x + 1, y: pos.y });
 ```
 
-Direct position mutations are allowed, but the spatial grid sees them on the next tick's sync. For large simulations, set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(unit)` after a direct position mutation to avoid the fallback full scan.
+In-place mutation of position objects (`pos.x += 1`) is not auto-detected — the grid will not see the change. Always use `setPosition`/`setComponent` for movement.
 
 ## Systems and Metrics
 

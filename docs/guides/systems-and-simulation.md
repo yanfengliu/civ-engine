@@ -48,7 +48,7 @@ Systems can:
 - Read the spatial grid
 - Read and modify resources
 
-For position components, prefer `world.setPosition()` over direct mutation when another system needs the spatial grid to reflect the move in the same tick. Direct component mutations are diff-detected, and direct position mutations are synchronized to the grid on the next tick by default. Large simulations can opt out of that fallback with `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation.
+All component writes must go through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. In-place mutations (e.g. `pos.x += 1`) are not picked up by the diff system or the spatial grid. This is a deliberate engine contract: explicit writes keep the simulation deterministic, the grid in sync, and the dirty set accurate without any per-tick scan.
 
 ## System Execution Order
 

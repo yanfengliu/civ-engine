@@ -87,14 +87,11 @@ export interface WorldMetrics {
     results: number;
   };
   spatial: {
-    fullScans: number;
-    scannedEntities: number;
     explicitSyncs: number;
   };
   durationMs: {
     total: number;
     commands: number;
-    spatialSync: number;
     systems: number;
     resources: number;
     diff: number;
@@ -138,7 +135,6 @@ export interface CommandExecutionResult<
 
 export type TickFailurePhase =
   | 'commands'
-  | 'spatialSync'
   | 'systems'
   | 'resources'
   | 'diff'
@@ -242,7 +238,6 @@ export class World<
   readonly grid: SpatialGridView;
   readonly positionKey: string;
   private readonly seed: number | string | undefined;
-  private readonly detectInPlacePositionMutations: boolean;
   private readonly instrumentationProfile: InstrumentationProfile;
   private currentDiff: TickDiff | null = null;
   private currentMetrics: WorldMetrics | null = null;
@@ -278,11 +273,16 @@ export class World<
     validateWorldConfig(config);
     this.entityManager = new EntityManager();
     this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
-    this.grid = this.spatialGrid;
+    const grid = this.spatialGrid;
+    this.grid = {
+      get width() { return grid.width; },
+      get height() { return grid.height; },
+      getAt: (x, y) => grid.getAt(x, y),
+      getNeighbors: (x, y, offsets) => grid.getNeighbors(x, y, offsets),
+      getInRadius: (cx, cy, radius, metric) => grid.getInRadius(cx, cy, radius, metric),
+    };
     this.positionKey = config.positionKey ?? 'position';
     this.seed = config.seed;
-    this.detectInPlacePositionMutations =
-      config.detectInPlacePositionMutations ?? true;
     this.instrumentationProfile = config.instrumentationProfile ?? 'full';
     this.rng = new DeterministicRandom(config.seed);
     this.gameLoop = new GameLoop({
@@ -467,20 +467,6 @@ export class World<
     key = this.positionKey,
   ): void {
     this.setComponent(entity, key, { x: position.x, y: position.y });
-  }
-
-  markPositionDirty(entity: EntityId, key = this.positionKey): void {
-    this.assertAlive(entity);
-    if (key !== this.positionKey) {
-      throw new Error(`Position key '${key}' is not the world's positionKey`);
-    }
-    const current = this.getComponent<Position>(entity, key);
-    if (current === undefined) {
-      throw new Error(`Entity ${entity} does not have component '${key}'`);
-    }
-    const position = asPosition(current);
-    this.assertPositionInBounds(position);
-    this.syncSpatialEntity(entity, position);
   }
 
   query<K extends keyof TComponents & string>(...keys: K[]): IterableIterator<EntityId>;
@@ -819,9 +805,6 @@ export class World<
     };
     if (this.seed !== undefined) {
       config.seed = this.seed;
-    }
-    if (!this.detectInPlacePositionMutations) {
-      config.detectInPlacePositionMutations = false;
     }
     const maxTicksPerFrame = this.gameLoop.getMaxTicksPerFrame();
     if (maxTicksPerFrame !== DEFAULT_MAX_TICKS_PER_FRAME) {
@@ -1361,27 +1344,6 @@ export class World<
         return this.finalizeTickFailure(commandsResult.failure, metrics, totalStart);
       }
 
-      const spatialStart = collectDetailedTimings ? now() : 0;
-      try {
-        this.syncSpatialIndex();
-      } catch (error) {
-        return this.finalizeTickFailure(
-          this.createTickFailure({
-            tick,
-            phase: 'spatialSync',
-            code: 'spatial_sync_threw',
-            message: errorMessage(error),
-            subsystem: 'spatial',
-            error,
-          }),
-          metrics,
-          totalStart,
-        );
-      }
-      if (collectDetailedTimings && metrics) {
-        metrics.durationMs.spatialSync = now() - spatialStart;
-      }
-
       const systemsStart = collectDetailedTimings ? now() : 0;
       const systemsFailure = this.executeSystems(
         tick,
@@ -1899,46 +1861,6 @@ export class World<
     };
   }
 
-  private syncSpatialIndex(): void {
-    if (!this.detectInPlacePositionMutations) return;
-
-    const posStore = this.componentStores.get(this.positionKey) as
-      | ComponentStore<Position>
-      | undefined;
-    if (!posStore) return;
-
-    if (this.activeMetrics) {
-      this.activeMetrics.spatial.fullScans++;
-    }
-    const seen = new Set<EntityId>();
-
-    for (const id of posStore.entities()) {
-      seen.add(id);
-      if (this.activeMetrics) {
-        this.activeMetrics.spatial.scannedEntities++;
-      }
-      const pos = asPosition(posStore.get(id));
-      this.assertPositionInBounds(pos);
-      const prev = this.previousPositions.get(id);
-
-      if (!prev) {
-        this.spatialGrid.insert(id, pos.x, pos.y);
-        this.previousPositions.set(id, { x: pos.x, y: pos.y });
-      } else if (prev.x !== pos.x || prev.y !== pos.y) {
-        this.spatialGrid.move(id, prev.x, prev.y, pos.x, pos.y);
-        prev.x = pos.x;
-        prev.y = pos.y;
-      }
-    }
-
-    for (const [id, pos] of this.previousPositions) {
-      if (!seen.has(id)) {
-        this.spatialGrid.remove(id, pos.x, pos.y);
-        this.previousPositions.delete(id);
-      }
-    }
-  }
-
   private syncSpatialEntity(entity: EntityId, pos: Position): void {
     if (this.activeMetrics) {
       this.activeMetrics.spatial.explicitSyncs++;
@@ -2145,14 +2067,11 @@ function createMetrics(
       results: 0,
     },
     spatial: {
-      fullScans: 0,
-      scannedEntities: 0,
       explicitSyncs: 0,
     },
     durationMs: {
       total: 0,
       commands: 0,
-      spatialSync: 0,
       systems: 0,
       resources: 0,
       diff: 0,
@@ -2314,12 +2233,6 @@ function validateWorldConfig(config: WorldConfig): void {
   }
   if (config.positionKey !== undefined && config.positionKey.length === 0) {
     throw new Error('positionKey must not be empty');
-  }
-  if (
-    config.detectInPlacePositionMutations !== undefined &&
-    typeof config.detectInPlacePositionMutations !== 'boolean'
-  ) {
-    throw new Error('detectInPlacePositionMutations must be a boolean');
   }
   if (
     config.instrumentationProfile !== undefined &&

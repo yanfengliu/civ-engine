@@ -1,13 +1,6 @@
-export type Listener<T> = (event: T) => void;
+import { assertJsonCompatible } from './json.js';
 
-function deepCloneJsonOrShallow<T>(value: T): T {
-  if (value === null || typeof value !== 'object') return value;
-  try {
-    return JSON.parse(JSON.stringify(value)) as T;
-  } catch {
-    return value;
-  }
-}
+export type Listener<T> = (event: T) => void;
 
 export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
   private listeners = new Map<keyof TEventMap, Set<Listener<never>>>();
@@ -17,6 +10,7 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
   }> = [];
 
   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
+    assertJsonCompatible(data, `event '${String(type)}'`);
     this.buffer.push({ type, data });
     const set = this.listeners.get(type);
     if (set) {
@@ -52,12 +46,9 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
     type: keyof TEventMap;
     data: TEventMap[keyof TEventMap];
   }> {
-    // Deep-clone payloads so callers can't write through to the live engine.
-    // Events flow through assertJsonCompatible at emit time elsewhere; here we
-    // assume JSON-shape but fall back to shallow on non-cloneable payloads.
     return this.buffer.map((event) => ({
       type: event.type,
-      data: deepCloneJsonOrShallow(event.data),
+      data: structuredClone(event.data),
     }));
   }
 

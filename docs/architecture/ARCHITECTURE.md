@@ -63,17 +63,12 @@ World.step()
 
 ### Spatial Index Sync
 
-Each tick, before user systems run, `syncSpatialIndex()`:
-1. Iterates all entities with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) when `detectInPlacePositionMutations` is enabled
-2. Compares current position to `previousPositions` map
-3. Inserts new entities into grid, moves changed ones, removes stale ones
-
-Position writes through `world.setPosition()` or `world.setComponent()` with the configured position key update the component store and spatial grid immediately. Direct object mutation is still picked up by the next tick's sync pass by default. Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(entity)` after an in-place position mutation to avoid the full scan.
+Position writes through `world.setPosition()` or `world.setComponent()` with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) update the component store and spatial grid in lockstep — the grid stays consistent without any per-tick scan. In-place mutation of position objects (e.g. `world.getComponent(id, 'position').x = 5`) is **not** auto-detected and is a no-op for the grid; game code must call `setPosition` for movement to take effect.
 
 ### Entity Destruction
 
 `destroyEntity(id)` performs immediate cleanup:
-- Removes entity from grid using `previousPositions` (not current component data, which may have been mutated since last sync)
+- Removes entity from grid using `previousPositions` (the grid's last-seen position, kept in sync by `setPosition`)
 - Removes all components from all stores
 - Removes all resource pools, rates, and transfers for the entity
 - Marks entity as dead in EntityManager (ID available for recycling)

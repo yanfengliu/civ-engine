@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 - 2026-04-25
+
+Breaking release. Removes the in-place mutation auto-detection paths (component-store and spatial-index), tightens `world.grid` to a runtime-immutable delegate, and rejects non-JSON-compatible event payloads at `EventBus.emit`. All component and position writes must now go through `setComponent`/`addComponent`/`setPosition`. Iter-2 `R1` and `R3` from the same-day full-codebase review.
+
+### Breaking Changes
+
+- **Removed `ComponentStoreOptions.detectInPlaceMutations`.** `getDirty()` now reports only entries marked dirty via `set()` / `remove()`. `clearDirty()` only rebuilds the fingerprint baseline when `diffMode === 'semantic'`. Direct in-place mutation of component objects (`world.getComponent(id, 'pos').x = 5`) is no longer detected — game logic must call `setComponent` (or `setPosition`) for changes to land in the diff.
+- **Removed `WorldConfig.detectInPlacePositionMutations`.** The per-tick spatial index full-scan is gone. Position writes that go through `setPosition`/`setComponent` already update the grid and `previousPositions` immediately; the scan was only the fallback for in-place mutators.
+- **Removed `World.markPositionDirty()`.** It existed solely to flush in-place position mutations into the grid; without that pattern there's nothing to flush. Use `setPosition` instead.
+- **Removed `WorldMetrics.spatial.fullScans` and `.scannedEntities`.** The full-scan is gone. `WorldMetrics.spatial.explicitSyncs` (incremented by every `setPosition`-style write) and `WorldMetrics.durationMs.spatialSync` (likewise removed) are no longer reported.
+- **Removed `'spatialSync'` from `TickFailurePhase`.** No phase to fail in.
+- **`world.grid` is now a runtime-immutable read-only delegate.** Previously typed `SpatialGridView` but assigned `this.spatialGrid` directly, so `(world.grid as any).insert(...)` could mutate the index. Now `world.grid` is a small object exposing only `width`, `height`, `getAt`, `getNeighbors`, `getInRadius`. Mutating SpatialGrid methods are not present at runtime.
+- **`EventBus.emit` now rejects non-JSON-compatible payloads** (functions, symbols, BigInt, circular references, class instances) via `assertJsonCompatible`. The previous behavior was to accept anything and silently degrade `getEvents()` to a shared reference for unclonable payloads. Migration: ensure event payloads are plain JSON-shaped objects.
+- **`getEvents()` no longer falls back to a shared reference on clone failure.** It always returns a deep `structuredClone`. Combined with the emit-time validation above, this means `getEvents()` cannot return live engine references.
+
+### Migration
+
+Most consumers should be unaffected — `setPosition`, `setComponent`, and `addComponent` were already the documented write paths. Code that mutated component objects in place (`pos.x = 5`) and relied on the per-tick scan to find the change must switch to `setPosition`/`setComponent`. Snapshots from v0.4.0 still load: extra fields (`detectInPlacePositionMutations`, `componentOptions[*].detectInPlaceMutations`) are ignored on read.
+
 ## 0.4.1 - 2026-04-25
 
 Iter-2 critical fixes from the same-day full-codebase review (`docs/reviews/full/2026-04-25/2/`). Two correctness/isolation bugs the iter-1 fixes left open. 450 tests pass (up from 446 in 0.4.0).

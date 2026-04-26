@@ -81,4 +81,31 @@ describe('EventBus', () => {
     const bus = new EventBus<TestEvents>();
     expect(bus.getEvents()).toEqual([]);
   });
+
+  it('emit rejects non-JSON-compatible payloads', () => {
+    interface Bad {
+      bad: { fn: () => void };
+    }
+    const bus = new EventBus<Bad>();
+    expect(() => bus.emit('bad', { fn: () => undefined } as never)).toThrow();
+  });
+
+  it('emit rejects circular payloads', () => {
+    interface Circular {
+      cir: Record<string, unknown>;
+    }
+    const bus = new EventBus<Circular>();
+    const obj: Record<string, unknown> = { a: 1 };
+    obj.self = obj;
+    expect(() => bus.emit('cir', obj)).toThrow();
+  });
+
+  it('getEvents deep-clones each event payload', () => {
+    const bus = new EventBus<TestEvents>();
+    bus.emit('damage', { target: 1, amount: 10 });
+    const events = bus.getEvents();
+    (events[0].data as { amount: number }).amount = 999;
+    const refetched = bus.getEvents();
+    expect((refetched[0].data as { amount: number }).amount).toBe(10);
+  });
 });

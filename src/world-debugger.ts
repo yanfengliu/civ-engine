@@ -422,25 +422,6 @@ function collectIssues(
     });
   }
 
-  if (metrics && metrics.spatial.fullScans > 0) {
-    issues.push({
-      severity: 'info',
-      code: 'spatial-full-scan',
-      message:
-        'The last tick used the compatibility full-scan spatial sync path. Consider explicit position writes or markPositionDirty() for larger simulations.',
-      subsystem: 'spatial',
-      details: {
-        fullScans: metrics.spatial.fullScans,
-        scannedEntities: metrics.spatial.scannedEntities,
-        explicitSyncs: metrics.spatial.explicitSyncs,
-      },
-      suggestedActions: [
-        'Call world.setPosition() for movement writes when possible.',
-        'If mutating position objects in place with full-scan disabled, call markPositionDirty().',
-      ],
-    });
-  }
-
   if (metrics) {
     const overBudgetMs =
       metrics.durationMs.total - metrics.simulation.tickBudgetMs;

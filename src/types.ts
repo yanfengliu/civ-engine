@@ -19,6 +19,5 @@ export interface WorldConfig {
   positionKey?: string;
   maxTicksPerFrame?: number;
   seed?: number | string;
-  detectInPlacePositionMutations?: boolean;
   instrumentationProfile?: InstrumentationProfile;
 }

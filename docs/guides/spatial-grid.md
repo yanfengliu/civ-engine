@@ -24,21 +24,11 @@ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 // world.grid is a read-only SpatialGridView with dimensions 64x64
 ```
 
-## Automatic Synchronization
+## Synchronization
 
-Each tick, before systems run, the World's `syncSpatialIndex()` routine runs the direct-mutation fallback when `detectInPlacePositionMutations` is enabled:
+The grid is updated lock-step with position writes. Calling `world.setPosition(id, { x, y })` (or `world.setComponent(id, 'position', { x, y })` when `position` is the configured `positionKey`) inserts/moves the entity in the grid and updates the engine's `previousPositions` record in the same call. `world.removeComponent(id, 'position')` removes the entity from the grid.
 
-1. Iterates all entities with the configured position component
-2. Compares each entity's current position to its last-synced position
-3. **New entities** (not in grid) → inserted at their position
-4. **Moved entities** (position changed) → moved from old to new cell
-5. **Removed entities** (position component removed) → removed from grid
-
-This means:
-- Direct position component mutations are picked up by the next tick's sync
-- `world.setPosition()` updates the component and grid immediately
-- Large simulations can set `detectInPlacePositionMutations: false` and call `world.markPositionDirty(id)` after direct position mutation to avoid the full position-store scan
-- Within the current tick, systems see the grid state from **after** sync
+In-place mutation of a position object (`world.getComponent(id, 'position').x = 5`) is **not** detected and the grid will not see the change. Game code must use `setPosition`/`setComponent` for movement to take effect.
 
 ```typescript
 function movementSystem(w: World): void {
