@@ -290,3 +290,29 @@ world.registerHandler('upgradeStorage', (data, w) => {
   }
 });
 ```
+
+### Cost-checked actions via `world.transaction()`
+
+For "spend resource → apply effect" actions where the resource check and the effect must succeed or fail together, use a `CommandTransaction` instead of writing the check + multiple `removeResource` / `setComponent` calls by hand:
+
+```typescript
+const result = world
+  .transaction()
+  .require((w) => {
+    const wood = w.getResource(player, 'wood');
+    return (wood?.current ?? 0) >= 80 || 'not enough wood';
+  })
+  .removeResource(player, 'wood', 80)
+  .setComponent(site, 'building', { kind: 'house' })
+  .emit('building_placed', { player, site, kind: 'house' })
+  .commit();
+
+if (!result.ok) {
+  // result.code is 'precondition_failed' (with .reason) or 'aborted'
+  // No wood was deducted; no building was placed; no event fired.
+}
+```
+
+If the player has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `building_placed` in the tick's events. If the player is short, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed.
+
+Note: the v1 `CommandTransaction` surface covers `addResource` / `removeResource` only. `setResourceMax`, `registerResource`, and rates / transfers are not buffered — perform those through the direct `World` API. The full surface and v1 limitations are documented in [API Reference → Command Transaction](../api-reference.md#command-transaction).

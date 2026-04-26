@@ -420,3 +420,47 @@ for (let i = 0; i < 3; i++) {
   grid = stepCellGrid(grid, majorityRule);
 }
 ```
+
+## Runtime Field Data with `Layer<T>`
+
+The utilities above (`createTileGrid`, noise, cellular automata) are **map-time tools** — you run them once at world setup to bake values into tile components. For **runtime field data** that changes during simulation (pollution diffusing from factories, danger zones around enemy units, magic auras, weather, faith influence around shrines), reach for `Layer<T>` instead.
+
+`Layer<T>` is a generic typed overlay map at a configurable downsampled resolution. It is a standalone utility — not owned by `World`, not registered as a component — so game code instantiates one Layer per concern and ticks it from a system.
+
+```typescript
+import { Layer } from 'civ-engine';
+
+// 64x64 world with a pollution map at 4x downsampling → 16x16 cells
+const pollution = new Layer<number>({
+  worldWidth: 64,
+  worldHeight: 64,
+  blockSize: 4,
+  defaultValue: 0,
+});
+
+// A factory adds 80 pollution to its 4x4 cell
+pollution.setAt(factory.x, factory.y, 80);
+
+// Any agent querying nearby world coords in the same 4x4 cell sees it
+console.log(pollution.getAt(factory.x + 1, factory.y + 2)); // 80
+
+// A diffusion system can iterate cells and update neighbors each tick
+function diffusionSystem(): void {
+  pollution.forEach((value, cx, cy) => {
+    if (value <= 0) return;
+    // ... apply diffusion rule to neighbors
+  });
+}
+```
+
+When to use which:
+
+| Need | Use |
+|---|---|
+| One-time map generation baked into tile components | `createTileGrid` + noise / cellular |
+| Static physical layout (terrain type per tile) | Tile component on the entity at that position |
+| Dynamic field that changes during simulation, varying spatial resolution | `Layer<T>` |
+| Per-player visibility / explored cells | `VisibilityMap` |
+| Blocked / occupied / reservation tracking | `OccupancyGrid` / `OccupancyBinding` |
+
+`Layer<T>` is JSON-serializable via `getState()` / `Layer.fromState()`, value writes are JSON-compat-validated, and reads / writes go through `structuredClone` defensive copies on every boundary so caller mutation cannot corrupt stored state. See [API Reference → Layer](../api-reference.md#layer) for the full surface.

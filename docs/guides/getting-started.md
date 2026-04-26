@@ -20,13 +20,12 @@ Everything flows through a single **World** object.
 - **Entities** are plain numeric IDs (not objects). Create them, attach data, destroy them.
 - **Components** are plain data objects (interfaces, no methods) attached to entities by string key. Register a component type before using it.
 - **Systems** are functions `(world: World) => void` or registration objects that run each tick by phase. All game logic lives in systems.
-- **Spatial grid** automatically tracks entities that have a position component.
+- **Spatial grid** automatically tracks entities that have a position component. Updates happen lock-step with every `setPosition` / `setComponent` write — there is no per-tick sync phase.
 
 ```
 World.step()
   -> process commands
-  -> sync spatial grid
-  -> run systems (in order)
+  -> run systems (in order; periodic systems gated by interval are skipped on non-firing ticks)
   -> process resources
   -> build diff
   -> tick++

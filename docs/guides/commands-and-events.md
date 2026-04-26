@@ -201,6 +201,38 @@ Tick N+1:
 
 For non-throwing AI loops, pair command submission with `stepWithResult()` so runtime failures stay machine-readable.
 
+## Atomic Transactions
+
+`world.transaction()` is a **synchronous** alternative to the queue-then-handler pattern when you want a propose-validate-commit-or-abort surface for compound actions.
+
+```typescript
+const result = world
+  .transaction()
+  .require((w) => {
+    const wood = w.getResource(player, 'wood');
+    return (wood?.current ?? 0) >= 80 || 'not enough wood';
+  })
+  .removeResource(player, 'wood', 80)
+  .setComponent(site, 'building', { kind: 'house' })
+  .emit('building_placed', { player, site, kind: 'house' })
+  .commit();
+
+if (!result.ok) {
+  // result.code is 'precondition_failed' (with .reason) or 'aborted'
+}
+```
+
+If preconditions pass, every buffered mutation applies in registration order through the same public `World` API as direct calls (so they get the same liveness/JSON-compat checks), then buffered events fire. If any precondition returns `false` or a string, **no mutation or event applies** and the result is `{ ok: false, code: 'precondition_failed', reason }`. When committed inside a system or command handler, all transaction mutations land in the same `TickDiff`.
+
+When to use a transaction vs. a queued command:
+
+- **Use a transaction** when the action is a single agent intent that needs an atomic cost/precondition check ("build a house if wood available"; "cast a spell if mana ≥ 30 and target alive"). The check and the mutation happen in one call; failure leaves the world untouched.
+- **Use a queued command** when the action originates from outside the simulation tick (player input, network message) and needs to land at a tick boundary, run through validators, and produce structured execution feedback for an external client.
+
+Transactions are single-use. `commit()` after a previous `commit()` throws; `commit()` after `abort()` returns `{ ok: false, code: 'aborted' }`. Mid-commit throw consumes the transaction (so a retry cannot re-apply earlier mutations and silently double-debit a resource), but the world is left in a partially-applied state — validate entity liveness in a `require()` predicate when buffering mutations against entities the transaction did not itself create.
+
+The full surface and the v1 limitations (no `createEntity` / `destroyEntity`, no tags / metadata / state, the buffered-value aliasing window, the mid-emit partial-event-delivery rule) are documented in [API Reference → Command Transaction](../api-reference.md#command-transaction).
+
 ## Events Overview
 
 Events are the **output API** of the simulation. Systems emit events to communicate what happened. External observers read events to understand state changes.

@@ -1447,13 +1447,14 @@ Each tick executes in this order:
 1. Clear event buffer
 2. Clear dirty flags (entities, components, resources)
 3. Process commands (drain queue, run handlers)
-4. Sync spatial index (optional direct-position-mutation fallback scan)
-5. Run systems (`input`, `preUpdate`, `update`, `postUpdate`, `output`)
-6. Process resource rates and transfers
-7. Build diff (collect dirty state into `TickDiff`)
-8. Update metrics
-9. Notify diff listeners
-10. Increment tick counter
+4. Run systems (`input`, `preUpdate`, `update`, `postUpdate`, `output`); periodic systems gated by their `interval` / `intervalOffset` are skipped on non-firing ticks
+5. Process resource rates and transfers
+6. Build diff (collect dirty state into `TickDiff`)
+7. Update metrics
+8. Notify diff listeners
+9. Increment tick counter
+
+The spatial grid is updated lock-step with every position write (`setPosition`, `setComponent` on the configured position key) — there is no separate sync phase.
 
 ```typescript
 world.step(); // always executes, even when paused

@@ -227,6 +227,39 @@ world.setConsumption(settlement, 'food', 0.5); // 0.5 food per tick
 world.registerSystem(gatheringSystem);
 ```
 
+### Cost-checked actions with `world.transaction()`
+
+For actions where a resource cost and an effect must succeed or fail together (build a building, craft an item, recruit a colonist), `world.transaction()` provides an atomic propose-validate-commit-or-abort builder. The transaction buffers mutations + events + `require()` preconditions; on `commit()` everything applies (preconditions passed) or nothing applies (any precondition failed).
+
+```typescript
+function tryBuildHouse(
+  w: World<GameEvents, GameCommands>,
+  settlement: EntityId,
+  site: { x: number; y: number },
+): void {
+  const result = w
+    .transaction()
+    .require((world) => {
+      const wood = world.getResource(settlement, 'wood');
+      return (wood?.current ?? 0) >= 80 || 'not enough wood';
+    })
+    .removeResource(settlement, 'wood', 80)
+    .setComponent(w.createEntity(), 'building', { kind: 'house', x: site.x, y: site.y })
+    .emit('buildingPlaced', { settlement, site, kind: 'house' })
+    .commit();
+
+  if (!result.ok) {
+    if (result.code === 'precondition_failed') {
+      w.emit('buildAborted', { settlement, reason: result.reason });
+    }
+  }
+}
+```
+
+If the settlement has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `buildingPlaced` in the tick's events. If the settlement is short on wood, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed.
+
+Reach for a transaction whenever you would otherwise write `if (cost-check) { ...several mutations... }` — the transaction makes the all-or-nothing invariant explicit, cheaper to reason about, and harder to break under future edits.
+
 ## 6. Commands (Player Input)
 
 Commands are how AI agents or UI send instructions to the game. They are validated on submit and executed at the start of the next tick.

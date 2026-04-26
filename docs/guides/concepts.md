@@ -198,6 +198,32 @@ Full state snapshots for save/load and initial client sync.
 world.serialize()  ──▶  WorldSnapshot (JSON)  ──▶  World.deserialize()
 ```
 
+### Atomic Transactions
+
+`world.transaction()` is a synchronous propose-validate-commit-or-abort builder over the world. Buffer mutations + events + `require()` preconditions; on `commit()` everything applies (preconditions passed) or nothing applies (any precondition failed).
+
+```
+Builder ──require()──▶ buffered preconditions
+        ──setComponent / setPosition / addResource / removeResource / emit──▶ buffered ops
+        ──commit()──▶ run preconditions ──pass──▶ apply mutations + emit events
+                                       ──fail──▶ return { ok: false, code, reason }
+```
+
+Use a transaction when an action needs an atomic cost / precondition check ("build if wood ≥ 80"); use a queued command when the action originates outside the tick and needs structured execution feedback for an external client.
+
+### Standalone Utilities (not owned by World)
+
+The engine ships several standalone data structures that game code instantiates and ticks itself. None are subsystems of `World`; all are pure data + methods, JSON-serializable, and independently testable:
+
+- **`OccupancyGrid` / `OccupancyBinding` / `SubcellOccupancyGrid`** — passability, footprints, slot-based crowding
+- **`VisibilityMap`** — per-player visible / explored cells
+- **`Layer<T>`** — typed downsampled-resolution overlay maps for field data (pollution, influence, danger, weather, faith)
+- **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing
+- **`createNoise2D` / `octaveNoise2D` / `stepCellGrid`** — map-generation primitives
+- **`createBehaviorTree` / `BTState`** — behavior-tree framework
+
+`SpatialGrid` answers proximity questions (which entities are near point P) and is owned by `World`. The standalone utilities answer different questions and let game code mix them as needed without paying for what it doesn't use.
+
 ## AI-Native Design
 
 The engine is designed for AI agents to operate. This affects several design decisions:

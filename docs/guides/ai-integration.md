@@ -70,6 +70,40 @@ This closes the gap between:
 
 For AI loops, do not infer execution success from diffs alone when an explicit execution result exists.
 
+## Atomic Transactions
+
+`world.transaction()` is the engine surface that maps cleanly onto an "agent proposes an action, engine validates cost / preconditions, mutations + events apply or none do" model. It is **synchronous** (no tick boundary required) and produces a single structured result:
+
+```typescript
+const result = world
+  .transaction()
+  .require((w) => {
+    const wood = w.getResource(player, 'wood');
+    return (wood?.current ?? 0) >= 80 || 'not enough wood';
+  })
+  .removeResource(player, 'wood', 80)
+  .setComponent(site, 'building', { kind: 'house' })
+  .emit('building_placed', { player, site, kind: 'house' })
+  .commit();
+
+// result is one of:
+//   { ok: true,  mutationsApplied: number, eventsEmitted: number }
+//   { ok: false, code: 'precondition_failed', reason: string }
+//   { ok: false, code: 'aborted' }
+```
+
+Transactions are the right shape for an AI loop's "try this action" step: the result is a discriminated union with a stable `code`, the `reason` string is human-readable but also pattern-matchable, and a precondition failure leaves the world in exactly the same state as before the call (the agent can branch on the failure code and try a different action without rolling back).
+
+When committed inside a system or command handler, every mutation lands in the same `TickDiff`, so a downstream observer sees one coherent change-set per agent intent rather than a scatter of unrelated diffs.
+
+Caveats the agent loop must handle:
+
+- Mid-commit throw (e.g., entity destroyed between buffering and commit) consumes the transaction but leaves the world in a partially-applied state. Validate liveness in a `require()` predicate when buffering against entities the transaction did not itself create.
+- Buffered values are stored by reference. Do not mutate the objects you handed to `setComponent` / `setPosition` / `emit` between the builder call and `commit()`.
+- v1 surface is components, position, events, and resource add/remove. `createEntity`, `destroyEntity`, tags, metadata, and world-state writes still go through the direct `World` API.
+
+The full surface is documented in [API Reference → Command Transaction](../api-reference.md#command-transaction).
+
 ## Tick Failure Surface
 
 Tick failures are **fail-fast**: any failure in the tick pipeline marks the world as poisoned. Subsequent calls to `step()` throw `WorldTickFailureError` and `stepWithResult()` returns a `world_poisoned` failure result until `world.recover()` is called. The contract makes the partial-mutation state explicit instead of letting agents silently re-enter a half-broken world.

@@ -71,8 +71,43 @@
 - Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` at session start.
 - Key directories:
   - `src`: app code.
-  - `docs`: architecture, devlogs, reviews.
+  - `docs`: architecture, devlogs, reviews, API, tutorials, reviews.
   - `design`: app and mechanism notes.
+
+## Documentation discipline (mandatory; not optional)
+
+Code changes are not done until the docs match. Before declaring any task complete, run through this checklist for every shipped change. Skipping any item is a regression and will be caught by the next audit.
+
+**Always update on every feature / behavior change:**
+
+- `docs/changelog.md` — new version entry with what shipped, why, validation, and behavior callouts.
+- `docs/devlog/summary.md` — one line per task; remove outdated info; compact if > 50 lines.
+- `docs/devlog/detailed/<latest>.md` — full per-task entry per the Devlog section above.
+- `package.json` — version bump per the Versioning section.
+
+**Always update if the change introduces or removes API surface (new exports, new methods, new types, removed APIs, renamed APIs):**
+
+- `docs/api-reference.md` — every new public type, method, and standalone utility gets its own section. Removed APIs get removed (not just struck through). Stale signatures must be updated.
+- `README.md` — Feature Overview table mentions the new capability if it's a user-visible feature; Public Surface bullets list the new top-level export if applicable.
+- `docs/README.md` — index links the new guide if one is added.
+
+**Always update if the change is structural (new subsystem, new boundary, changed data flow):**
+
+- `docs/architecture/ARCHITECTURE.md` — Component Map row + Boundaries paragraph for the new subsystem; tick lifecycle ASCII updated if the flow changes.
+- `docs/architecture/drift-log.md` — append a row with date + change + reason.
+- `docs/architecture/decisions.md` — append a Key Architectural Decision row when the change reflects a non-obvious tradeoff worth recording. Never delete an existing decision; add a newer one that supersedes it.
+
+**Update if applicable to the change's topic:**
+
+- `docs/guides/<topic>.md` — every guide whose subject overlaps the change. A new resource API → `resources.md`. A new system feature → `systems-and-simulation.md`. A new spatial primitive → `spatial-grid.md` / `rts-primitives.md`. A new AI-relevant surface → `ai-integration.md`. A new field-data utility → `map-generation.md`. A new tutorial-grade feature → `building-a-game.md` and `getting-started.md`. The `concepts.md` standalone-utilities list and tick-lifecycle ASCII must reflect new utilities and lifecycle changes.
+- Examples and tutorials must use the current API. If a guide demonstrates the deprecated pattern, replace the demo, don't add a "new way" sidebar.
+
+**Verification step (mandatory before declaring task done):**
+
+- Invoke the `doc-review` skill or grep for removed-API names across `docs/` and `README.md`. The audit must come back clean for the change's diff. Stale references in historical changelog / devlog / drift-log entries are intentional context and should remain — every other surface must reflect current reality.
+- The multi-CLI code review (Claude / Codex / Gemini) must explicitly verify doc accuracy as part of its review prompt — include "verify docs in the diff match implementation; flag any stale signatures, removed APIs still mentioned, or missing coverage of new APIs in canonical guides."
+
+**Why this is mandatory:** doc drift compounds. A single stale signature in `api-reference.md` becomes the source of truth for the next reader, then for the next feature built on top, then for an external consumer. Every iter-N review on this repo has caught at least one doc-drift issue; treating documentation as part of the change (not after the change) is the only way to keep the surface trustworthy. If a feature is too small to merit a guide update, it is small enough to merit one sentence in the relevant existing guide — silence is not a valid signal.
 
 ## Architecture
 

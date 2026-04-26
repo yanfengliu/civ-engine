@@ -81,6 +81,9 @@ world.step();
 | **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
 | **World State**             | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc.                          |
 | **Tags & Metadata**         | Entity labels with reverse-index (`getByTag`), per-entity metadata with unique lookup (`getByMeta`)                   |
+| **Layered Field Maps**      | `Layer<T>` typed overlay map at configurable downsampled resolution for pollution / influence / weather etc., sparse storage with default-value semantics, JSON-serializable |
+| **Atomic Transactions**     | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations + events + `require()` preconditions, apply all-or-nothing on `commit()` |
+| **System Cadence**          | Optional `interval` / `intervalOffset` on `SystemRegistration` — fire periodic systems at engine level instead of `if (w.tick % N) return;` boilerplate |
 | **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including state, tags, metadata, and RNG                   |
 | **State Diffs**             | Per-tick change sets: entities, components, resources, state, tags, and metadata changes                              |
 | **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` plus `commandExecuted`/`commandFailed`/`tickFailed` outcomes |
@@ -92,13 +95,14 @@ Everything flows through a single `World` object:
 ```
 World.step()
   -> process commands     (drain queue, run handlers)
-  -> sync spatial grid    (optional direct-mutation fallback scan)
-  -> run systems          (phase-ordered game logic)
+  -> run systems          (phase-ordered game logic; periodic systems gated by interval/intervalOffset)
   -> process resources    (production, consumption, transfers)
   -> build diff           (collect changes for observers)
-  -> update metrics       (timings, query counts, spatial sync counts)
+  -> update metrics       (timings, query counts, explicit-sync counts)
   -> tick++
 ```
+
+Position writes (`setPosition`, `setComponent` on the configured position key) update the spatial grid lock-step; there is no per-tick scan.
 
 Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 
@@ -127,10 +131,10 @@ docs/      guides, tutorials, architecture, changelog, and review history
 
 The root package centers on a few primary entry points:
 
-- `World` for simulation, commands, events, serialization, diffs, and resources
+- `World` for simulation, commands, events, serialization, diffs, resources, and atomic transactions (`world.transaction()`)
 - `ClientAdapter` and `RenderAdapter` for external clients and render transports
 - `WorldDebugger`, `WorldHistoryRecorder`, and `runScenario()` for AI/debug workflows
-- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, and behavior trees
+- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, behavior trees, and typed overlay layers (`Layer<T>`)
 
 Use [docs/api-reference.md](docs/api-reference.md) for the authoritative signatures, types, message shapes, and standalone utility docs.
 
