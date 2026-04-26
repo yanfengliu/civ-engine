@@ -95,7 +95,7 @@ const soldiers = [...world.query('position', 'health', 'attack')];
 
 ## Spatial Grid
 
-The grid tracks which entities are at each (x, y) cell. Use `setPosition()` when you need same-tick grid updates; direct position mutations are picked up by the next tick's spatial sync.
+The grid tracks which entities are at each (x, y) cell. The grid is in sync at write time — every `setPosition()` updates the grid in the same call, so subsequent `world.grid.getAt()` queries see the move immediately. Direct in-place mutation of a position object (`pos.x += 1`) is **not** auto-detected and the grid will not reflect it; always use `setPosition`/`setComponent` for movement.
 
 ```typescript
 import { ORTHOGONAL, ALL_DIRECTIONS } from 'civ-engine';

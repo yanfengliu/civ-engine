@@ -15,9 +15,9 @@ This guide covers the 2D spatial grid, how automatic synchronization works, and 
 
 ## Overview
 
-The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` for immediate component and grid updates, or mutate position components directly when next-tick grid sync is acceptable.
+The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` (or `world.setComponent` on the configured position key) — the grid is updated lock-step with each write. In-place mutation of position objects is not auto-detected and will leave the grid out of sync; `setPosition` is the only supported write path for movement.
 
-The grid exposed as `world.grid` is a read-only view. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API.
+The grid exposed as `world.grid` is a runtime-immutable read-only delegate. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API. `getAt()` returns a fresh `Set` copy on every call so even mutating the returned cell view cannot corrupt the underlying grid.
 
 ```typescript
 const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
@@ -43,15 +43,11 @@ function movementSystem(w: World): void {
 
 ### Timing within a tick
 
-```
-syncSpatialIndex()  ← grid is up-to-date after this
-system A            ← reads correct grid state
-system B            ← reads correct grid state; direct position mutations
-                       from system A are not reflected in the grid yet,
-                       but setPosition updates the grid immediately
-```
+The grid is in sync with explicit position writes at all times. There is no per-tick scan or auto-detection of in-place mutations.
 
-If system A directly mutates entity `5` from (0,0) to (1,0), system B (running after system A in the same tick) will still see entity `5` at (0,0) in the grid, but `getComponent('position')` will return (1,0). The grid updates at the start of the **next** tick. If system A calls `setPosition()`, both the component and grid reflect the move immediately.
+- `world.setPosition(id, { x, y })` (and `world.setComponent(id, 'position', ...)` when the configured `positionKey` is `'position'`) updates the component store **and** the spatial grid in the same call. Subsequent `world.grid.getAt()` / `getNeighbors()` / `getInRadius()` queries — including from later systems in the same tick — see the move.
+- `world.removeComponent(id, 'position')` removes the entity from the grid in the same call.
+- Direct in-place mutation (`world.getComponent(id, 'position').x = 5`) is **not** auto-detected; the grid will never see the change. Game code must call `setPosition`/`setComponent` for movement to take effect.
 
 ## Querying the Grid
 

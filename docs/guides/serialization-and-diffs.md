@@ -113,10 +113,11 @@ restored.onDestroy(cleanupCallback);
 
 `World.deserialize()` validates the snapshot:
 
-- Throws if `version` is not `1`, `2`, or `3`
+- Throws if `version` is not `1`, `2`, `3`, `4`, or `5`
 - Throws if entity state arrays have mismatched lengths
+- Throws if `tags` or `metadata` reference a dead entity id
 
-Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store. Version 2 snapshots include resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also include deterministic RNG state so restored worlds resume the same random sequence.
+Version 5 (the current write format) round-trips per-component `ComponentStoreOptions.diffMode` plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state so restored worlds resume the same random sequence. Version 2 added resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store.
 
 ## What's Included and Excluded
 
@@ -271,7 +272,7 @@ Opt in to semantic dirty-marking per component at registration:
 world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
 ```
 
-In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. In-place mutation detection still works — if a system mutates the object returned from `getComponent`, the change is caught by the end-of-tick scan regardless of mode.
+In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. As of v0.5.0, in-place mutation of `getComponent`-returned objects is **not** detected in either mode — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key).
 
 `diffMode: 'strict'` (the default) preserves the per-write audit semantics that serialization consumers may depend on. Choose semantic only for components where the "identical rewrite" case is load-bearing noise.
 

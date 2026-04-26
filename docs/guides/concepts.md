@@ -64,7 +64,7 @@ world.patchComponent<Health>(unit, 'health', (hp) => {
 **Key rules:**
 - Register a component key before using it (enforced with errors)
 - One component per key per entity (adding overwrites)
-- `getComponent` returns a direct reference, not a copy; direct mutations are diff-detected, but `setComponent`/`patchComponent` are clearer write APIs
+- `getComponent` returns a direct reference, not a copy. In-place mutations are NOT diff-detected — every component change must go through `setComponent`/`addComponent`/`patchComponent` (or `setPosition` for the configured position key) for the diff and the spatial grid to see it
 - Component data must be JSON-compatible plain data
 - Components are stored in sparse arrays indexed by entity ID, giving O(1) lookup
 
@@ -119,19 +119,18 @@ World.step()
   ┌─ 1. Clear event buffer (events from previous tick are gone)
   ├─ 2. Clear dirty flags (entity, component, resource tracking resets)
   ├─ 3. Process commands (drain queue → run handlers)
-  ├─ 4. Sync spatial index (optional direct-mutation fallback scan)
-  ├─ 5. Run systems (your code, phase ordered)
-  ├─ 6. Process resources (production, consumption, transfers)
-  ├─ 7. Build diff (collect dirty state into TickDiff)
-  ├─ 8. Update metrics (timings, query counts, spatial counts)
-  ├─ 9. Notify diff listeners (push TickDiff to subscribers)
-  └─ 10. Increment tick counter
+  ├─ 4. Run systems (your code, phase ordered)
+  ├─ 5. Process resources (production, consumption, transfers)
+  ├─ 6. Build diff (collect dirty state into TickDiff)
+  ├─ 7. Update metrics (timings, query counts, explicit-sync count)
+  ├─ 8. Notify diff listeners (push TickDiff to subscribers)
+  └─ 9. Increment tick counter
 ```
 
 ### What this means in practice
 
 - **Commands execute before systems.** If an AI agent submits a `moveUnit` command, the handler runs before your movement system. The system then sees the already-moved entity.
-- **Spatial grid syncs before systems.** By the time your system runs, `world.grid.getAt()` reflects position changes from commands. Explicit `setPosition()` calls also sync immediately.
+- **The spatial grid is always in sync with explicit position writes.** Every `setPosition`/`setComponent` on the configured position key updates the grid in the same call — there is no per-tick scan. In-place mutation of a position object is not auto-detected and the grid will not see it.
 - **Resources process after systems.** Production, consumption, and transfers happen after your code. If a system adds food to an entity, the production rate still fires on top of that.
 - **Events from the current tick are available during the tick.** A system that emits an event can trigger listeners in the same tick. Events are cleared at the **start** of the next tick.
 - **Diffs capture everything.** The diff includes changes from commands, systems, and resource processing — everything that happened in the tick.

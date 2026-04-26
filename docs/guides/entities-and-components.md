@@ -125,7 +125,7 @@ No-op if the entity doesn't have the component.
 
 ### Single component read
 
-`getComponent` returns a **direct reference** to the stored object, not a copy. Mutations are immediate and are detected for diffs, but `setComponent` and `patchComponent` make write intent clearer and update position/grid state immediately when the key is the configured position key.
+`getComponent` returns a **direct reference** to the stored object, not a copy. In-place mutations are NOT detected by the diff system — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key) for the engine to mark the entity dirty and update derived structures like the spatial grid.
 
 ```typescript
 const hp = world.getComponent<Health>(entity, 'health');

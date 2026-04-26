@@ -73,25 +73,26 @@ Each `step()` call executes one tick in this exact sequence:
 3. clearComponentDirty()         — reset component change tracking
 4. resourceStore.clearDirty()    — reset resource change tracking
 5. processCommands()             — drain command queue, run handlers
-6. syncSpatialIndex()            — optional direct-position-mutation fallback scan
-7. input systems                 — input phase
-8. preUpdate systems             — setup phase
-9. update systems                — default phase
-10. postUpdate systems           — follow-up phase
-11. output systems               — reporting/output phase
-12. resourceStore.processTick()  — production, consumption, transfers
-13. buildDiff()                  — collect all changes into TickDiff
-14. metrics update               — collect timing/query/spatial metrics
-15. notify diffListeners         — push TickDiff to subscribers
-16. tick++                       — increment counter
+6. input systems                 — input phase
+7. preUpdate systems             — setup phase
+8. update systems                — default phase
+9. postUpdate systems            — follow-up phase
+10. output systems               — reporting/output phase
+11. resourceStore.processTick()  — production, consumption, transfers
+12. buildDiff()                  — collect all changes into TickDiff
+13. metrics update               — collect timing/query/explicit-sync metrics
+14. notify diffListeners         — push TickDiff to subscribers
+15. tick++                       — increment counter
 ```
+
+The spatial grid is in sync at all times — every `setPosition`/`setComponent` write updates the grid in the same call. There is no separate per-tick sync phase.
 
 ### Implications
 
 | Fact | Implication |
 |---|---|
 | Commands process before systems | Command handlers can set up state that systems act on |
-| Spatial sync before systems | Systems see up-to-date grid positions |
+| Grid is updated at every position write | Systems see correct grid state for every move that went through `setPosition` |
 | Resources process after systems | Systems can add/remove resources; rates apply on top |
 | Diff builds after everything | The diff captures all changes from the entire tick |
 | Metrics update after diff | `world.getMetrics()` reports the most recent completed tick |

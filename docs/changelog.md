@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.7 - 2026-04-25
+
+Iter-2 fix-review iteration 4 — Gemini CLEAN; Codex and Opus both flagged the same residual canonical-guide drift across 7 files (the v0.5.6 cleanup only covered the three files Codex iter-3 explicitly cited). All addressed.
+
+### Documented
+
+- **`docs/guides/concepts.md`** — corrected the "direct mutations are diff-detected" line; removed the `Sync spatial index` step from the tick-lifecycle ASCII art; rewrote the "Spatial grid syncs before systems" implication line.
+- **`docs/guides/spatial-grid.md`** — Overview rewritten (lock-step write-time sync, runtime-immutable read-only delegate, `getAt` returns a fresh `Set`); replaced the `Timing within a tick` block with the explicit-write contract.
+- **`docs/guides/systems-and-simulation.md`** — removed `syncSpatialIndex()` from the tick-lifecycle numbered list; added an explicit note that the grid is in sync at all times; replaced the "Spatial sync before systems" implication row with "Grid is updated at every position write".
+- **`docs/guides/getting-started.md`** — corrected the spatial-grid section ("direct position mutations are picked up by the next tick's spatial sync" → "Direct in-place mutation is not auto-detected and the grid will not reflect it").
+- **`docs/guides/entities-and-components.md`** — corrected the "Mutations are immediate and are detected for diffs" line.
+- **`docs/guides/serialization-and-diffs.md`** — corrected the "In-place mutation detection still works" line (no longer true in either mode); updated the deserialize version range to `1..5` and added the `references dead entity` throw to the list.
+- **`docs/guides/debugging.md`** — softened the wording on the in-place-position-mutation tip so it doesn't imply the mutation gets auto-synced later.
+
 ## 0.5.6 - 2026-04-25
 
 Iter-2 fix-review iteration 3 — Gemini and Opus signed off CLEAN; Codex flagged remaining doc drift in canonical guides and the `api-reference.md` System / SystemRegistration / callback signatures (still 2-generic in docs even though src was updated to 4-generic in v0.5.2). All addressed.
