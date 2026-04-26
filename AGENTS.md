@@ -150,6 +150,10 @@ Code changes are not done until the docs match. Before declaring any task comple
 - **One version bump per coherent shipped change.** If three independent features ship as three commits on a chained branch, each commit gets its own version bump (e.g., 0.5.9 → 0.5.10 → 0.5.11). Do not roll multiple unrelated features into a single version. A single feature that needs iter-1 + iter-2 fix commits stays on the same version — the fixes are folded into the original commit's version, not new bumps.
 - Maintain `docs/changelog.md` with one entry per version. Check `docs/devlog/` for context.
 
+### Doc formatting
+
+- Don't wrap lines. Only use a new line when you are starting a new paragraph.
+
 ## Debugging
 
 - When debugging, use `docs/debugging/template.md` to record your process. Create a new file per debugging session and use it to iterate until you solve the problem.
