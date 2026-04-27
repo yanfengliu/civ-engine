@@ -59,3 +59,9 @@ export {
 } from './session-sink.js';
 // T3: FileSink
 export { FileSink } from './session-file-sink.js';
+// T5: SessionRecorder
+export {
+  SessionRecorder,
+  type SessionRecorderConfig,
+  type NewMarker,
+} from './session-recorder.js';

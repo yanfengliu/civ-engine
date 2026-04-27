@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Session-recording T5 (v0.7.11) — `SessionRecorder` class with full §7 lifecycle (connect/disconnect/addMarker/attach/takeSnapshot/toBundle). Single `submitWithResult` wrap; mutex via `__payloadCapturingRecorder` slot; periodic + terminal snapshots; live vs retroactive marker validation. 20 new tests, 711 total.
 - 2026-04-27: Session-recording T4 (v0.7.10) — `WorldHistoryRecorder.captureCommandPayloads` opt-in (additive `recordedCommands?` field, mutex via `__payloadCapturingRecorder` slot, single submitWithResult wrap, clear() resets) + `ScenarioConfig.history.captureCommandPayloads` plumbing. 9 new tests, 691 total.
 - 2026-04-27: Session-recording T3 (v0.7.9) — FileSink (disk-backed SessionSink & SessionSource) in `src/session-file-sink.ts`. Manifest cadence (open/per-snapshot/close) atomic via .tmp.json rename. Added @types/node devDep. 15 new tests, 682 total.
 - 2026-04-27: Session-recording T2 (v0.7.8) — SessionSink/SessionSource interfaces + MemorySink in `src/session-sink.ts`. 15 new tests, 667 total. Sync sinks per spec §8.

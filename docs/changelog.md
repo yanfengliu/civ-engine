@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.11 - 2026-04-27
+
+Session-recording T5: `SessionRecorder` lifecycle.
+
+### Added
+
+- `src/session-recorder.ts`: `SessionRecorder<TEventMap, TCommandMap, TDebug>` class implementing the spec §7 lifecycle:
+  - **Construction:** generates `sessionId` (UUID v4 via `node:crypto.randomUUID()`); does NOT install wraps or subscribe listeners yet (deferred to `connect()` per spec §7.1).
+  - **`connect()`:** rejects if poisoned (`code: 'world_poisoned'`), already-attached payload-capturing recorder (`code: 'recorder_already_attached'`), or post-disconnect (`code: 'already_closed'`). Captures the `__payloadCapturingRecorder` mutex slot, opens sink, writes initial snapshot, installs single `submitWithResult` wrap, subscribes to `onDiff` / `onCommandExecution` / `onTickFailure`.
+  - **Per-tick:** `onDiff` builds `SessionTickEntry` (cloned via `cloneJsonValue`), forwards to sink. Periodic snapshot fires when `world.tick > startTick && world.tick % snapshotInterval === 0`.
+  - **Submission capture:** wrap captures `RecordedCommand` payloads; SOLE writer to commands stream (no `onCommandResult` listener — would double-write).
+  - **`addMarker(input)`:** validates per §6.1 (live-tick: strict entity ref via `world.isCurrent`; retroactive: lenient, sets `validated: false`). All recorder-added markers get `provenance: 'game'`.
+  - **`attach(blob, options)`:** generates UUID, forwards to `sink.writeAttachment` with the requested `ref` shape. `options.sidecar: true` opts into sidecar storage.
+  - **`takeSnapshot()`:** writes a manual snapshot at the current world tick.
+  - **`disconnect()`:** writes terminal snapshot (when `terminalSnapshot !== false`), uninstalls wrap, unsubscribes listeners, finalizes `metadata.endTick` / `durationTicks`, calls `sink.close()`. Clears the `__payloadCapturingRecorder` slot (defensively only if it's ours).
+  - **`toBundle()`:** delegates to `sink.toBundle()`.
+- `lastError` getter exposes any wrapped sink-write or serialize failure. Sink failures terminate the recorder (subsequent listener invocations short-circuit) and set `metadata.incomplete = true` — they do NOT propagate out of the engine listener invocation.
+- New public types: `SessionRecorderConfig`, `NewMarker`.
+
+### Validation
+
+711 tests pass (was 691). Typecheck, lint, build clean. Per spec §7 + §6.1 + §11.
+
 ## 0.7.10 - 2026-04-27
 
 Session-recording T4: `WorldHistoryRecorder.captureCommandPayloads` option + `ScenarioConfig.history` plumbing.
