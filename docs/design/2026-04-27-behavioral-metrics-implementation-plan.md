@@ -28,7 +28,7 @@ Per AGENTS.md doc-discipline:
 
 - `docs/changelog.md` — version entry.
 - `docs/devlog/summary.md` — one line.
-- `docs/devlog/detailed/<latest>.md` — full entry (find via `ls -1t docs/devlog/detailed/ | head -1`).
+- `docs/devlog/detailed/<latest>.md` — full entry (find via `ls -1t docs/devlog/detailed/ | head -1`). **Devlog rollover check**: the active file may already be over the 500-line AGENTS.md soft cap before the Spec 8 entry is appended (as of plan v4, `2026-04-26_2026-04-27.md` is 841 lines). If over 500: rename the active file via `git mv docs/devlog/detailed/<active>.md docs/devlog/detailed/<active-with-end-date-as-prior-day>.md`, then create a fresh `2026-04-27_2026-04-27.md` for the Spec 8 entry. The rollover commit and the Spec 8 entry can land in the same commit (the rollover is a doc-structural change that doesn't bump the version).
 - `docs/api-reference.md` — sections for new public types/methods.
 - `package.json` + `src/version.ts` + `README.md` (badge) — version bump.
 
@@ -47,10 +47,12 @@ Per AGENTS.md doc-discipline: structural docs land in the same commit as the cod
 
 ### B. Per-task multi-CLI review (before commit)
 
-After all four engine gates pass (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) but before the commit:
+After all four engine gates pass (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) but before the commit. Review-folder layout is `docs/reviews/behavioral-metrics-T1/<date>/<iter>/raw/{codex,opus}.md` (kebab-case scope + date + iteration, matching AGENTS.md and Spec 3 / Spec 8 design-review precedent). Single task → scope is `behavioral-metrics-T1`; iteration starts at `1` and increments if reviewers' findings need a second pass.
 
 ```bash
-mkdir -p docs/reviews/behavioral-metrics-T<N>/$(date +%Y-%m-%d)/1/raw
+DATE=$(date +%Y-%m-%d)
+ITER=1
+mkdir -p docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw
 
 cat > /tmp/review-prompt.txt <<'EOF'
 [task-specific code-review prompt — see Spec 8 design + per-task scope]
@@ -58,23 +60,24 @@ EOF
 
 PROMPT=$(cat /tmp/review-prompt.txt)
 
-# Use HEAD~1..HEAD as the base (this task's diff is one commit on main).
-git diff HEAD~0 --staged | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
+# Review the staged diff before committing (pre-commit review pattern).
+git diff --staged | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
   -c approval_policy=never --sandbox read-only --ephemeral "$PROMPT" \
-  > docs/reviews/behavioral-metrics-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md 2>&1 &
+  > docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/codex.md 2>&1 &
 
-git diff HEAD~0 --staged | claude -p --model opus --effort xhigh \
+git diff --staged | claude -p --model opus --effort xhigh \
   --append-system-prompt "$PROMPT" \
   --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" \
-  > docs/reviews/behavioral-metrics-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md 2>&1 &
+  > docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/opus.md 2>&1 &
 
 # Wait via background poller.
-until [ -s docs/reviews/behavioral-metrics-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md ] && \
-      [ -s docs/reviews/behavioral-metrics-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md ]; do
+until [ -s docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/codex.md ] && \
+      [ -s docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/opus.md ]; do
   sleep 8;
 done
 
-# Synthesize REVIEW.md, address findings, iterate if needed, then commit.
+# Synthesize REVIEW.md (in the same iteration directory), address findings,
+# iterate if needed (bump ITER and re-run), then commit.
 ```
 
 If a reviewer is unreachable (Gemini quota-out has been the running condition), proceed with the remaining reviewer per AGENTS.md.
@@ -974,7 +977,7 @@ export {
 
 - [ ] `docs/devlog/summary.md`: prepend one line.
 
-- [ ] Latest detailed devlog: append Spec 8 entry per AGENTS.md template.
+- [ ] **Devlog rollover (if needed)**: check `wc -l docs/devlog/detailed/$(ls -1t docs/devlog/detailed/ | head -1)`. If > 500 lines, `git mv` the active file to update its END_DATE to the most recent entry's date (e.g., `2026-04-26_2026-04-27.md` stays as-is if today is still April 27 and we want a clean cut), then create a fresh `2026-04-27_2026-04-27.md` (today's date for both halves) and append the Spec 8 entry there. If ≤ 500 lines, append directly to the active file. Either way, this is part of the single Spec 8 commit (no separate rollover commit).
 
 - [ ] `docs/README.md`: index `[Behavioral Metrics](guides/behavioral-metrics.md)`.
 
@@ -1260,7 +1263,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 After the single Spec 8 commit (Step 20) lands:
 
 - [ ] All four engine gates pass at the tip.
-- [ ] Reviews under `docs/reviews/behavioral-metrics/2026-04-27/T1/...` show convergence (single task → single review folder).
+- [ ] Reviews under `docs/reviews/behavioral-metrics-T1/<date>/<iter>/...` show convergence (single task → single scope folder; iteration directories under it).
 - [ ] `docs/changelog.md` has one new version entry (0.8.2).
 - [ ] `docs/devlog/detailed/<latest>.md` has one new task entry.
 - [ ] `docs/api-reference.md` has the Behavioral Metrics section.

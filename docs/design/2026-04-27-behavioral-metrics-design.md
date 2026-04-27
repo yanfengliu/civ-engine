@@ -1,6 +1,6 @@
 # Behavioral Metrics over Corpus — Design Spec
 
-**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, `docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and `docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale §12 `NaN`s + 9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; iter-2 fixed 1 HIGH + 1 MED.
+**Status:** Draft v4 (2026-04-27). **CONVERGED** (iter-4: both Codex and Opus ACCEPT). Iter-1..4 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-{1,2,3,4}/REVIEW.md`. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; iter-2 fixed 1 HIGH + 1 MED; iter-3 fixed 1 MED + 2 NIT; iter-4 final.
 
 **Scope:** Tier-2 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 8). Builds on the Synthetic Playtest Harness (Spec 3, merged v0.7.20 → v0.8.1). Out of scope: persistent corpus storage / indexing (Spec 7), bundle search (Spec 7), AI playtester agent (Spec 9), counterfactual replay (Spec 5), annotation UI (Spec 2), bundle viewer (Spec 4).
 

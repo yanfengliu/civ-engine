@@ -1,0 +1,3 @@
+Plan iter-3 review. Iter-2: Codex 1 HIGH (T1/T2 doc split violates AGENTS.md) + 2 MED (versioning, shell-misread). v3 collapses to single commit (v0.8.2) — all code + unit tests + integration tests + structural docs ship together per AGENTS.md doc-with-code-that-introduces-the-subsystem rule. Renumbered to Steps 1-20: 1-12 code surface, 13-18 integration+arch docs, 19 review, 20 commit.
+
+Bar: no remaining BLOCKER/HIGH/MED. NITs allowed.
