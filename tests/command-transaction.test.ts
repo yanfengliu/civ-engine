@@ -598,6 +598,58 @@ describe('CommandTransaction', () => {
       expect(world.getProduction(e, 'wood')).toBe(0);
     });
 
+    it('predicate cannot mutate world via in-place edit of getComponent return (Codex Critical, iter-5)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      const e = world.createEntity();
+      world.setComponent(e, 'hp', { current: 100 });
+
+      const tx = world.transaction().require((w) => {
+        // Read the component, mutate its returned object in place, then
+        // return false to "abort". Pre-fix: world.getComponent(e, 'hp')
+        // handed back the live ComponentStore reference, so the mutation
+        // landed on engine state. Post-fix: the proxy clones the return.
+        const hp = w.getComponent(e, 'hp') as { current: number };
+        hp.current = 0;
+        return false;
+      });
+      const result = tx.commit();
+      expect(result.ok).toBe(false);
+      // World state untouched: hp.current still 100.
+      expect((world.getComponent(e, 'hp') as { current: number }).current).toBe(100);
+    });
+
+    it('predicate cannot mutate world state via in-place edit of getState return', () => {
+      const world = new World<Record<string, never>, Record<string, never>, Record<string, unknown>, { config: { rate: number } }>(
+        { gridWidth: 10, gridHeight: 10, tps: 60 },
+      );
+      world.setState('config', { rate: 5 });
+
+      const tx = world.transaction().require((w) => {
+        const config = w.getState('config') as { rate: number };
+        config.rate = 999;
+        return false;
+      });
+      tx.commit();
+      const live = world.getState('config') as { rate: number };
+      expect(live.rate).toBe(5);
+    });
+
+    it('predicate cannot mutate world via in-place edit of getResource return', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerResource('wood');
+      const e = world.createEntity();
+      world.addResource(e, 'wood', 100);
+
+      const tx = world.transaction().require((w) => {
+        const pool = w.getResource(e, 'wood') as { current: number; max: number | null };
+        pool.current = 0;
+        return false;
+      });
+      tx.commit();
+      expect(world.getResource(e, 'wood')?.current).toBe(100);
+    });
+
     it('predicate cannot call warnIfPoisoned (proxy blocks the call) — R1 hole', () => {
       const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
       // Use a healthy world so the outer commit's own warnIfPoisoned is a no-op,

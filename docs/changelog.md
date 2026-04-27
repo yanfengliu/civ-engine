@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.2 - 2026-04-26
+
+Multi-CLI iter-5 verification caught one new Critical (Codex; Opus reported clean — split decision, Codex's was the right call). Closes the in-place-mutation hole that the C1/R1 denylist couldn't catch. Non-breaking. 607 tests pass (up from 604).
+
+### Fixed
+
+- **Critical (Codex iter-5):** even with the denylist exhaustive, a precondition could still mutate world state by editing a returned reference in place — `w.getComponent(e, 'hp')!.current = 0` then return `false`. The store's `get` returns the live `ComponentStore.data[entityId]` reference, so the predicate's mutation landed on engine state and `commit()` then reported `precondition_failed` over an already-mutated world. This bypassed dirty tracking too. The proxy now wraps a curated set of read methods (`getComponent`, `getComponents`, `getState`, `getResource`, `getResources`, `getPosition`, `getTags`, `getByTag`, `getEvents`) and `structuredClone`s their returns before the predicate sees them. Predicates pay one clone per read; preconditions are not the hot path. Closes the residual atomicity hole that the iter-1 C1 / iter-2 R1 / iter-3 R2_REG1 fixes did not address (those handled write methods; this handles in-place mutation of read returns). Three explicit regression tests pin the headline cases (component, state, resource).
+
 ## 0.7.1 - 2026-04-26
 
 Multi-CLI iter-3 verification caught two iter-2 fix-quality regressions; both addressed in one commit. Codex + Opus reviewed; Gemini quota-exhausted post-iter-2. Non-breaking. 604 tests pass (up from 600).

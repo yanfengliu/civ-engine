@@ -76,6 +76,26 @@ const FORBIDDEN_IN_PRECONDITION: ReadonlySet<string | symbol> = new Set<string |
   FORBIDDEN_PRECONDITION_METHODS,
 );
 
+/**
+ * Read methods on `World` that return references into engine-owned storage
+ * (component data, world state, resource pools, position objects, tag sets).
+ * The precondition proxy wraps these so the returned value is `structuredClone`d
+ * before crossing into the predicate, closing the in-place-mutation hole that
+ * would otherwise let a predicate violate atomicity by mutating the live
+ * reference and returning `false`.
+ */
+const READ_METHODS_RETURNING_REFS: ReadonlySet<string | symbol> = new Set<string | symbol>([
+  'getComponent',
+  'getComponents',
+  'getState',
+  'getResource',
+  'getResources',
+  'getPosition',
+  'getTags',
+  'getByTag',
+  'getEvents',
+]);
+
 function makeReadOnlyTransactionWorld<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
@@ -92,7 +112,21 @@ function makeReadOnlyTransactionWorld<
         );
       }
       const value = Reflect.get(target, prop, receiver);
-      return typeof value === 'function' ? value.bind(target) : value;
+      if (typeof value !== 'function') return value;
+      // Methods that return live references into engine-owned storage need
+      // their returns cloned before the predicate sees them — otherwise a
+      // predicate can mutate the returned reference (e.g.
+      // `w.getComponent(e, 'hp')!.current = 0`) and return `false`, leaving
+      // the world mutated despite the documented "world untouched on
+      // precondition failure" guarantee.
+      if (READ_METHODS_RETURNING_REFS.has(prop)) {
+        return (...args: unknown[]): unknown => {
+          const result = (value as (...args: unknown[]) => unknown).apply(target, args);
+          if (result === undefined || result === null) return result;
+          return structuredClone(result);
+        };
+      }
+      return value.bind(target);
     },
     set(_target, prop) {
       throw new Error(
