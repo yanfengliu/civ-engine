@@ -500,6 +500,70 @@ describe('CommandTransaction', () => {
       expect(world.getComponent(e, 'hp')).toBeUndefined();
     });
 
+    it('FORBIDDEN list is exhaustive against World prototype (meta-test)', () => {
+      // Cross-check that every public mutating/lifecycle/listener method on
+      // World.prototype is classified — either as FORBIDDEN (predicate cannot
+      // call) or in PUBLIC_READ_OR_INTERNAL (read-only / TypeScript-private,
+      // safe-or-irrelevant for predicates). A new World method that is neither
+      // makes this test fail, forcing explicit classification.
+      const PUBLIC_READ_OR_INTERNAL = new Set<string>([
+        // Public read methods (safe inside preconditions)
+        'isAlive', 'getEntityGeneration', 'getEntityRef', 'isCurrent',
+        'getComponent', 'getComponents',
+        'query', 'findNearest', 'queryInRadius', 'getPosition',
+        'isPoisoned', 'getEvents', 'getDiff', 'getMetrics',
+        'getInstrumentationProfile', 'getLastTickFailure',
+        'getResource', 'getProduction', 'getConsumption', 'getTransfers',
+        'getState', 'hasState',
+        'hasTag', 'getByTag', 'getTags',
+        'getMeta', 'getByMeta',
+        'getSpeed', 'isPaused', 'hasCommandHandler',
+        'getAliveEntities', 'getResourceEntities', 'tick',
+        // TypeScript-private methods (not detectable at runtime; listed
+        // explicitly so new private additions still require classification).
+        'makeWorldPoisonedFailure', 'getObservableTick',
+        'clearComponentDirty', 'clearStateDirty',
+        'removeEntityTags', 'removeEntityMeta',
+        'addTagInternal', 'setMetaInternal',
+        'getStateDirty', 'buildDiff',
+        'runTick', 'processCommands', 'dropPendingCommands',
+        'createCommandSubmissionResult', 'createCommandExecutionResult',
+        'emitCommandResult', 'emitCommandExecutionResult',
+        'emitTickFailure', 'finalizeTickFailure', 'createTickFailure',
+        'executeTickOrThrow', 'executeSystems', 'resolveSystemOrder',
+        'validateCommand', 'emitCommandExecution',
+        'normalizeSystemRegistration',
+        'syncSpatialEntity', 'rebuildSpatialIndex', 'removeFromSpatialIndex',
+        'getStore', 'assertAlive', 'assertPositionInBounds',
+        'registerComponentBit', 'setEntityComponentSignature', 'setEntitySignature',
+        'updateQueryCacheMembership', 'normalizeQueryKeys', 'getQueryCache',
+        'queryMask', 'rebuildComponentSignatures',
+      ]);
+      const allMembers = Object.getOwnPropertyNames(World.prototype).filter(
+        (name) => !name.startsWith('_') && name !== 'constructor',
+      );
+      const forbidden = new Set<string>(FORBIDDEN_PRECONDITION_METHODS);
+      const uncovered: string[] = [];
+      for (const member of allMembers) {
+        if (!forbidden.has(member) && !PUBLIC_READ_OR_INTERNAL.has(member)) {
+          uncovered.push(member);
+        }
+      }
+      expect(
+        uncovered,
+        `New World members must be classified as forbidden or read-only-or-internal: ${uncovered.join(', ')}`,
+      ).toEqual([]);
+
+      // Also verify: every entry in FORBIDDEN_PRECONDITION_METHODS exists on
+      // World.prototype. Catches typos / dead entries.
+      const memberSet = new Set(allMembers);
+      const phantom = FORBIDDEN_PRECONDITION_METHODS.filter((name) => !memberSet.has(name));
+      expect(
+        phantom,
+        `FORBIDDEN_PRECONDITION_METHODS contains entries not on World.prototype: ${phantom.join(', ')}`,
+      ).toEqual([]);
+    });
+
     it('predicate cannot call random() — would advance RNG and break determinism (R1)', () => {
       const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'fixed' });
       // Capture RNG state by sampling once before the predicate.
@@ -532,6 +596,17 @@ describe('CommandTransaction', () => {
       });
       expect(() => tx.commit()).toThrow(/preconditions must be side-effect free/);
       expect(world.getProduction(e, 'wood')).toBe(0);
+    });
+
+    it('predicate cannot call warnIfPoisoned (proxy blocks the call) — R1 hole', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      // Use a healthy world so the outer commit's own warnIfPoisoned is a no-op,
+      // isolating the test to the predicate-blocking behavior.
+      const tx = world.transaction().require((w) => {
+        (w as unknown as { warnIfPoisoned: (api: string) => void }).warnIfPoisoned('hijacked');
+        return true;
+      });
+      expect(() => tx.commit()).toThrow(/preconditions must be side-effect free/);
     });
 
     it('predicate cannot call pause / start / setSpeed (R1)', () => {

@@ -3451,7 +3451,7 @@ Runs preconditions; on any failure, returns `precondition_failed` with no mutati
 
 If the transaction was previously `abort()`ed, `commit()` returns `{ ok: false, code: 'aborted' }` without throwing or mutating.
 
-`commit()` after a previous `commit()` throws `Error('CommandTransaction already committed')`.
+`commit()` on a transaction that has already reached a terminal state throws `Error('CommandTransaction already <terminalReason>')` where `<terminalReason>` is `'committed'` after a clean commit and `'aborted'` after an `abort()` followed by `commit()` (which returns `{ ok: false, code: 'aborted' }` once and then transitions to a terminal state). Builder methods (`setComponent`, `emit`, `require`, etc.) throw the same error for the same reason.
 
 ### `abort(): void`
 

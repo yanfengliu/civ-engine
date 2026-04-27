@@ -380,6 +380,25 @@ describe('Layer<T>', () => {
     });
   });
 
+  describe('forEachReadOnly contract violation safety net (L_NEW3)', () => {
+    it('getState still strips defaults if a caller mutates a stored object via forEachReadOnly to equal defaultValue', () => {
+      const layer = new Layer<{ n: number }>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: { n: 0 },
+      });
+      layer.setCell(0, 0, { n: 5 });
+      // Caller violates the "no mutation" contract on forEachReadOnly.
+      layer.forEachReadOnly((value) => {
+        if (value.n === 5) value.n = 0;
+      });
+      // Pre-fix: getState would emit (0, 0)=={n:0} as a redundant default-equal entry.
+      // Post-fix: defensive object-T fingerprint filter strips it.
+      const state = layer.getState();
+      expect(state.cells).toHaveLength(0);
+    });
+  });
+
   describe('clone', () => {
     it('clone produces independent storage', () => {
       const original = new Layer<number>({
@@ -406,6 +425,23 @@ describe('Layer<T>', () => {
       copy.setCell(1, 1, { value: 99 });
       expect(original.getCell(1, 1).value).toBe(5);
       expect(copy.getCell(1, 1).value).toBe(99);
+    });
+
+    it('clone does not double-clone defaultValue (L_NEW2 regression)', () => {
+      // Mutating the cloned layer's defaultValue accessor must not affect the
+      // original. If the constructor did not clone (e.g. due to a regression
+      // that bypassed the constructor's defensive copy), the two would share
+      // a defaultValue reference.
+      const original = new Layer<{ n: number }>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: { n: 0 },
+      });
+      const copy = original.clone();
+      const copyDefault = copy.defaultValue;
+      copyDefault.n = 999;
+      expect(original.defaultValue.n).toBe(0);
+      expect(copy.defaultValue.n).toBe(0);
     });
   });
 

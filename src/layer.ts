@@ -161,11 +161,18 @@ export class Layer<T> {
   }
 
   getState(): LayerState<T> {
-    // Strip-at-write means stored entries are never default. `cells` is
-    // private and every public path that inserts strips defaults, so no
-    // post-hoc filter is needed here.
+    // Strip-at-write means stored entries are never default at the moment of
+    // insertion. For object T, however, `forEachReadOnly` deliberately exposes
+    // live references and the documented contract is "caller must not mutate."
+    // If a caller violates that contract and mutates a stored object to equal
+    // `defaultValue`, the canonical-sparse invariant would silently break at
+    // serialize time. We re-check default-equality here for object T as a
+    // defensive backstop. Primitive T is immutable so no backstop is needed.
     const entries: Array<[number, T]> = [];
     for (const [index, value] of this.cells) {
+      if (!this._defaultIsPrimitive && jsonFingerprint(value) === this._defaultFingerprint) {
+        continue;
+      }
       entries.push([index, cloneIfNeeded(value)]);
     }
     entries.sort((a, b) => a[0] - b[0]);

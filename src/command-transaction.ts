@@ -35,6 +35,9 @@ export const FORBIDDEN_PRECONDITION_METHODS = [
   'onDiff', 'offDiff',
   // Sub-engine entry points (transaction recursion + serialize is pseudo-read but warns and clones)
   'transaction', 'serialize',
+  // Poisoned-world warning latch (mutates poisonedWarningEmitted; consuming
+  // the latch from a predicate would suppress the next legitimate warning)
+  'warnIfPoisoned',
   // RNG (mutates DeterministicRandom.state)
   'random',
 ] as const;

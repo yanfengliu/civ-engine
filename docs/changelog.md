@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.1 - 2026-04-26
+
+Multi-CLI iter-3 verification caught two iter-2 fix-quality regressions; both addressed in one commit. Codex + Opus reviewed; Gemini quota-exhausted post-iter-2. Non-breaking. 604 tests pass (up from 600).
+
+### Fixed
+
+- **R2_REG1 (Codex iter-2 regression of R1, Opus N1):** `World.warnIfPoisoned(api)` is public and stateful (mutates the `poisonedWarningEmitted` flag) but was not in `FORBIDDEN_PRECONDITION_METHODS`. A predicate could call `w.warnIfPoisoned('hijacked')` to consume the warn-once latch and suppress the next legitimate write surface's diagnostic. Added to the array. The iter-2 changelog claimed exhaustiveness; the claim is now true.
+- **R2_REG2 (Codex iter-2 regression of L_NEW3):** L_NEW3 removed `Layer.getState()`'s post-hoc default-equality filter on the assumption that all writers strip defaults. That assumption ignored `forEachReadOnly`, which deliberately exposes live object references for object T. A contract-violating caller can mutate a stored object to equal `defaultValue`; without the filter, `getState` then serializes the now-default-equal cell. Restored the filter for object T only (primitive T is immutable so no backstop is needed).
+- **L_REG1 (Opus Low):** `docs/api-reference.md:3454` still claimed `commit()` after `commit()` always throws "already committed". L_NEW1's fix made the message reflect `terminalReason`, so after `abort()` + `commit()` + `commit()` it throws "already aborted". Doc updated.
+- **L_REG3 (Opus Low):** added explicit regression test for L_NEW2's single-clone fix.
+
+### Added
+
+- **Meta-test for `FORBIDDEN_PRECONDITION_METHODS` exhaustiveness** — cross-checks the array against `Object.getOwnPropertyNames(World.prototype)`, filtering known read-only + private methods. Future World method additions that aren't classified will fail the suite, preventing R1-style holes from recurring silently. Also asserts no entries in the array reference non-existent World methods (catches typos / dead entries).
+
 ## 0.7.0 - 2026-04-26
 
 Multi-CLI iter-2 review fix-up. Closes 1 iter-1 regression (R1: C1 was incomplete) + 2 new High + 2 new Medium + 4 new Low. Breaking — `CommandTransaction` preconditions now reject 9+ additional `World` methods at runtime that previously silently worked (most damaging: `random()`, which would have advanced the deterministic RNG even on `precondition_failed`). 600 tests pass (up from 592).
