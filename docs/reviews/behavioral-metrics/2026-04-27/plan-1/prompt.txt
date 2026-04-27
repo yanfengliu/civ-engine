@@ -1,0 +1,16 @@
+Reviewing Behavioral Metrics implementation plan v1 against design v4 (converged).
+
+Surface: 11 built-in metric factories + Metric contract + runMetrics + compareMetricsResults. Two-task plan: T1 (v0.8.2) full surface + tests + docs; T2 (v0.8.3) integration tests + structural docs. Direct-to-main commits per updated AGENTS.md.
+
+Aspects to evaluate:
+1. **Concreteness** — every step has exact file paths, code blocks, run commands? Per AGENTS.md writing-plans skill: no placeholders.
+2. **Type/signature consistency** — do later tasks use types declared earlier? Same names everywhere?
+3. **TDD ordering** — tests come before implementation? Run-to-fail before run-to-pass?
+4. **Doc-with-the-code-that-introduces-it** — each task's doc surface ships in same commit as code?
+5. **Spec coverage** — does the plan implement every requirement of design v4? Missing tasks/tests?
+6. **Engine-fact accuracy** — references match reality? (RecordedCommand.result.accepted, CommandExecutionResult.executed, SessionBundle shape, etc.)
+7. **Risk capture** — Risks section identifies the right concerns?
+8. **Versioning** — c-bumps justified? No b-bumps needed since purely additive?
+9. **Hidden assumptions** — anywhere the plan assumes something untrue?
+
+Bar: only flag REAL issues. If you'd accept, say "ACCEPT".
