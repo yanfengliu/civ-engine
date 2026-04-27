@@ -473,6 +473,43 @@ describe('Serialization', () => {
 
       expect(() => World.deserialize(snapshot)).toThrow(/references dead entity/);
     });
+
+    it('throws when tick is NaN (M2)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.step();
+      const snapshot = world.serialize();
+      (snapshot as { tick: number }).tick = NaN;
+      expect(() => World.deserialize(snapshot)).toThrow(
+        /tick must be a non-negative safe integer/,
+      );
+    });
+
+    it('throws when tick is negative (M2)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const snapshot = world.serialize();
+      (snapshot as { tick: number }).tick = -1;
+      expect(() => World.deserialize(snapshot)).toThrow(
+        /tick must be a non-negative safe integer/,
+      );
+    });
+
+    it('throws when tick is fractional (M2)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const snapshot = world.serialize();
+      (snapshot as { tick: number }).tick = 3.14;
+      expect(() => World.deserialize(snapshot)).toThrow(
+        /tick must be a non-negative safe integer/,
+      );
+    });
+
+    it('throws when tick is Infinity (M2)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const snapshot = world.serialize();
+      (snapshot as { tick: number }).tick = Infinity;
+      expect(() => World.deserialize(snapshot)).toThrow(
+        /tick must be a non-negative safe integer/,
+      );
+    });
   });
 
   describe('deserialize tolerates legacy snapshot fields', () => {

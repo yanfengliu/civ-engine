@@ -996,6 +996,15 @@ export class World<
     }
     world.rebuildSpatialIndex();
 
+    if (
+      typeof snapshot.tick !== 'number' ||
+      !Number.isSafeInteger(snapshot.tick) ||
+      snapshot.tick < 0
+    ) {
+      throw new Error(
+        `WorldSnapshot.tick must be a non-negative safe integer (got ${String(snapshot.tick)})`,
+      );
+    }
     world.gameLoop.setTick(snapshot.tick);
 
     if (systems) {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 - 2026-04-26
+
+`World.deserialize` snapshot-tick validation. Multi-CLI full-review iter-1 batch 3. Non-breaking. 591 tests pass (up from 587).
+
+### Fixed
+
+- **M2 (Codex Medium):** `World.deserialize` previously passed `snapshot.tick` directly to `gameLoop.setTick()` without validation. A malformed snapshot containing `NaN`, a negative tick, a fractional tick, or `Infinity` would silently install the bad value, then propagate through `getObservableTick`, `TickDiff.tick`, and the new interval scheduling check `(tick - 1) % system.interval !== system.intervalOffset` — `(NaN - 1) % 5 === NaN`, so all interval-gated systems silently stop running. `deserialize` now validates `Number.isSafeInteger(snapshot.tick) && snapshot.tick >= 0` and throws `WorldSnapshot.tick must be a non-negative safe integer (got <value>)` on rejection.
+
 ## 0.6.1 - 2026-04-26
 
 `Layer<T>` correctness + performance overhaul. Multi-CLI full-review iter-1 batch 2. Non-breaking — all changes are additive (`clear`, `clearAt`, `forEachReadOnly`) or internal optimization (strip-at-write, primitive fast-path, single-validate `fromState`, direct `clone`). 587 tests pass (up from 576).
