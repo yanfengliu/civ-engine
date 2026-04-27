@@ -171,6 +171,12 @@ describe('GameLoop', () => {
     loop.stop();
   });
 
+  it('advance() throws RangeError if tick is at MAX_SAFE_INTEGER (L7)', () => {
+    const loop = new GameLoop({ tps: 60, onTick: () => {} });
+    loop.setTick(Number.MAX_SAFE_INTEGER);
+    expect(() => loop.advance()).toThrow(/saturated at Number\.MAX_SAFE_INTEGER/);
+  });
+
   it('step() still throws even with onError (onError is for loop only)', () => {
     const errors: unknown[] = [];
     const loop = new GameLoop({

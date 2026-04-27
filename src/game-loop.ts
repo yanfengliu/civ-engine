@@ -45,6 +45,12 @@ export class GameLoop {
   }
 
   advance(): void {
+    if (this._tick >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError(
+        `GameLoop tick counter saturated at Number.MAX_SAFE_INTEGER (${Number.MAX_SAFE_INTEGER}). ` +
+          `Modulo math used by interval scheduling would silently corrupt past this point.`,
+      );
+    }
     this._tick++;
   }
 

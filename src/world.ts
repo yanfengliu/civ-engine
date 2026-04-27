@@ -1391,6 +1391,12 @@ export class World<
       : null;
     this.activeMetrics = metrics;
     const totalStart = metrics ? now() : 0;
+    // Capture the executing tick once. Hoisted out of the try-block so the
+    // post-advance listener-failure path below uses the same value as the
+    // pre-advance failure paths inside the try-block — no off-by-one
+    // asymmetry between metrics?.tick + (gameLoop.tick + 1) and bare
+    // gameLoop.tick after advance.
+    const tick = metrics?.tick ?? this.gameLoop.tick + 1;
 
     try {
       this.eventBus.clear();
@@ -1402,7 +1408,6 @@ export class World<
         metrics.commandStats.pendingBeforeTick = this.commandQueue.pending;
       }
       const commandsStart = collectDetailedTimings ? now() : 0;
-      const tick = metrics?.tick ?? this.gameLoop.tick + 1;
       const commandsResult = this.processCommands(tick);
       if (metrics) {
         metrics.commandStats.processed = commandsResult.processed;
@@ -1483,7 +1488,6 @@ export class World<
         listener(this.currentDiff!);
       }
     } catch (error) {
-      const tick = metrics?.tick ?? this.gameLoop.tick;
       return this.finalizeTickFailure(
         this.createTickFailure({
           tick,

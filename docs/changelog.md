@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.3 - 2026-04-26
+
+Multi-CLI full-review iter-1 batch 4: polish + doc fixes. Non-breaking. 592 tests pass (up from 591).
+
+### Fixed
+
+- **L1 (Opus Low):** `World.runTick` previously captured the executing tick in two places — `tick = metrics?.tick ?? this.gameLoop.tick + 1` for the in-progress paths (success + commands/systems/resources/diff failure), then re-derived `tick = metrics?.tick ?? this.gameLoop.tick` (no `+ 1`) in the listener-failure path because `gameLoop.advance()` had already run. The asymmetry was correct today but a maintenance hazard. Tick capture is now hoisted to a single declaration above the try block; both paths use the same value. Behavior unchanged.
+- **L4 (Codex Low):** `docs/guides/resources.md:194` referenced a nonexistent `setTransfer(...)` API. Replaced with the actual pattern: `world.removeTransfer(...)` followed by `world.addTransfer(...)` with the new rate.
+- **L7 (Gemini Low):** `GameLoop.advance()` previously incremented `_tick` without bound. After `Number.MAX_SAFE_INTEGER` ticks, modulo math used by interval scheduling silently corrupts. Practical concern is zero (~4.7 million years at 60 TPS), but the cost of a guard is one comparison. Now throws `RangeError('GameLoop tick counter saturated at Number.MAX_SAFE_INTEGER ...')` rather than silently producing a corrupted value.
+
 ## 0.6.2 - 2026-04-26
 
 `World.deserialize` snapshot-tick validation. Multi-CLI full-review iter-1 batch 3. Non-breaking. 591 tests pass (up from 587).

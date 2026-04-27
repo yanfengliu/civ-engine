@@ -191,7 +191,7 @@ Transfers involving dead entities are automatically removed during tick processi
 
 When multiple transfers pull from the same source pool and the pool lacks enough resources to satisfy all of them, the engine processes them in **registration order (FIFO)**. The transfer registered first via `world.addTransfer(...)` drains the source first; later transfers receive only what remains. This is deterministic but can cause silent starvation: a destination registered last gets nothing if earlier transfers exhaust the pool.
 
-If your simulation needs proportional or priority-weighted distribution, manage the allocation yourself in a system before resource processing — read each source's available amount, compute the desired splits, and call `setTransfer(...)` (or remove + re-add) to set per-tick rates that respect your priority. The engine deliberately stays out of policy decisions here.
+If your simulation needs proportional or priority-weighted distribution, manage the allocation yourself in a system before resource processing — read each source's available amount, compute the desired splits, then call `world.removeTransfer(...)` followed by `world.addTransfer(...)` with the new rate to update per-tick rates that respect your priority. The engine deliberately stays out of policy decisions here.
 
 ## Processing Order
 
