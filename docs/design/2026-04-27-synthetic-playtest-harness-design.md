@@ -1,12 +1,12 @@
 # Synthetic Playtest Harness — Design Spec
 
-**Status:** Draft v1 (2026-04-27). Awaiting iter-1 multi-CLI review.
+**Status:** Draft v2 (2026-04-27). Awaiting iter-2 multi-CLI review. iter-1 findings synthesized in `docs/reviews/synthetic-playtest/2026-04-27/design-1/REVIEW.md`; v2 addresses 1 BLOCKER, 3 HIGH, 5 MED, 6 LOW/NIT.
 
-**Scope:** Tier-1 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 3). Builds on the session-recording substrate (Spec 1, merged v0.7.6 → v0.7.16). Out of scope: bundle search / corpus index (Spec 7), behavioral metrics over corpus (Spec 8), LLM-driven AI playtester (Spec 9).
+**Scope:** Tier-1 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 3). Builds on the session-recording substrate (Spec 1, merged v0.7.6 → v0.7.19). Out of scope: bundle search / corpus index (Spec 7), behavioral metrics over corpus (Spec 8), LLM-driven AI playtester (Spec 9).
 
 **Author:** civ-engine team
 
-**Related primitives:** `SessionRecorder`, `SessionBundle`, `MemorySink`, `FileSink`, `World`, `world.submit()`, `world.random()`, `runScenario`, `scenarioResultToBundle`.
+**Related primitives:** `SessionRecorder`, `SessionBundle`, `MemorySink`, `FileSink`, `World`, `world.submit()`, `world.random()`, `runScenario`, `scenarioResultToBundle`, `DeterministicRandom`.
 
 ## 1. Goals
 
@@ -16,7 +16,7 @@ This spec defines an engine-level harness that:
 - Provides built-in policies (random, scripted, no-op) covering the common low-effort cases.
 - Composes multiple policies — useful when different policies drive different command types (e.g., one policy spawns units, another moves them).
 - Supports configurable stop conditions (max ticks, poisoned-world detection, custom predicates).
-- Produces deterministic bundles given identical seed + setup + policies, so a synthetic playtest can be re-run with the same outcome.
+- Produces deterministic bundles given identical seed + setup + policies, so a synthetic playtest can be re-run with the same outcome and the produced bundle passes `SessionReplayer.selfCheck()`.
 - Is trivially parallelizable across processes (each playtest is a synchronous self-contained run; multiple instances can run on different cores/machines without shared state).
 
 The deliverable is an opt-in API surface; existing engine consumers see no behavioral change.
@@ -29,6 +29,7 @@ The deliverable is an opt-in API surface; existing engine consumers see no behav
 - **Cross-process orchestration**: The harness runs one playtest per call. Splitting work across cores/machines is the caller's responsibility (e.g., a CI script that runs 32 invocations in parallel). The harness is designed to be *parallelizable* (no shared state, deterministic given inputs) but doesn't ship a parallel runner.
 - **Async/streaming policies**: v1 policies are synchronous. Async policies (e.g., LLM API calls per tick) would need either an async harness or a buffered wrapper; both are deferred to future specs.
 - **Game-side integration**: This is engine-side infrastructure. Game projects build their own scenario-specific synthetic-playtest scripts on top.
+- **Replay-via-policy**: `SessionReplayer` replays from `bundle.commands`, not by re-invoking policies. The bundle stores the policy seed (§5.4) so a future spec could rebuild policy state if needed, but v1 replay never invokes policies.
 
 ## 3. Background
 
@@ -49,15 +50,21 @@ A scenario *tests* a specific outcome; a synthetic playtest *generates* an artif
 
 ## 4. Architecture Overview
 
-Three new symbols, all in `src/synthetic-playtest.ts`:
+Three new conceptual primitives, all in `src/synthetic-playtest.ts`:
 
-| Component            | Status            | Responsibility                                                                                       |
+| Primitive            | Status            | Responsibility                                                                                       |
 | -------------------- | ----------------- | ---------------------------------------------------------------------------------------------------- |
-| `Policy`             | new (interface)   | Pluggable command source. Given a read-only world snapshot and tick, returns the commands to submit. |
+| `Policy`             | new (interface)   | Pluggable command source. Given a read-only world, current tick, and seeded `random()`, returns the commands to submit. |
 | `runSynthPlaytest()` | new (function)    | Drives a World forward through `maxTicks`, calling each policy per tick, recording into a sink.      |
-| Built-in policies    | new (functions)   | `randomPolicy(catalog, seed)`, `scriptedPolicy(sequence)`, `noopPolicy()`                            |
+| Built-in policies    | new (functions)   | `randomPolicy`, `scriptedPolicy`, `noopPolicy`                                                       |
 
-Plus one additive change to `SessionMetadata.sourceKind`: extend the union from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. `SessionRecorder` and `scenarioResultToBundle` are unaffected; `runSynthPlaytest` sets `sourceKind: 'synthetic'`.
+Concrete exported surface (the eleven symbols in §18 acceptance criteria): `Policy`, `PolicyContext`, `PolicyCommand`, `StopContext`, `runSynthPlaytest`, `randomPolicy`, `scriptedPolicy`, `noopPolicy`, `SynthPlaytestConfig`, `SynthPlaytestResult`, `RandomPolicyConfig`, `ScriptedPolicyEntry`. Internally the harness owns one `DeterministicRandom` sub-instance for policy randomness (§5.4).
+
+Plus two additive changes to the merged session-recording subsystem:
+
+1. `SessionMetadata.sourceKind` widens from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. Type-additive; no consumers in the engine branch on this field today (verified — only producers in `session-recorder.ts:131` and `session-scenario-bundle.ts:71`). ADR 3 documents the trade-off.
+2. `SessionRecorderConfig` gains optional `sourceKind?: 'session' | 'scenario' | 'synthetic'` (default `'session'`). Replaces the iter-1 plan's post-hoc sink-metadata mutation, which was unsound (would lose the kind on early-crash + custom-sink shapes). See ADR 3a.
+3. `SessionMetadata` gains optional `policySeed?: number` populated when `sourceKind === 'synthetic'`. Preserves the seed for future replay-via-policy work.
 
 ```
               ┌────────────────────────────────────────────────────┐
@@ -65,12 +72,19 @@ Plus one additive change to `SessionMetadata.sourceKind`: extend the union from 
               │                                                    │
               │  ┌──────────┐    ┌──────────────┐    ┌──────────┐  │
               │  │ World    │◀───│ Policy[]     │    │ Sink     │  │
-              │  │ (driven) │    │ .decide()    │    │ (bundle) │  │
-              │  └─────┬────┘    └──────────────┘    └────┬─────┘  │
-              │        │                                  │        │
-              │        ▼                                  ▲        │
+              │  │ (driven) │    │ ctx.random() │    │ (bundle) │  │
+              │  └─────┬────┘    └──────┬───────┘    └────┬─────┘  │
+              │        │                │                 │        │
+              │        ▼                ▼                 ▲        │
+              │  ┌──────────────┐  ┌─────────────────┐    │        │
+              │  │ World RNG    │  │ Policy sub-RNG  │    │        │
+              │  │ (systems)    │  │ (DeterministicRandom) │       │
+              │  └──────┬───────┘  └─────────────────┘    │        │
+              │         │                                 │        │
+              │         ▼                                 │        │
               │  ┌──────────────────────┐                 │        │
               │  │ SessionRecorder      │─────────────────┘        │
+              │  │ sourceKind:'synthetic'                          │
               │  │ (captures all ticks) │                          │
               │  └──────────────────────┘                          │
               └────────────────────────────────────────────────────┘
@@ -84,7 +98,7 @@ Plus one additive change to `SessionMetadata.sourceKind`: extend the union from 
 
 ## 5. Policy Interface
 
-A policy is a function (or stateful class with a method) that, given a tick number, returns the commands to submit *before* `world.step()` advances the world.
+A policy is a function (or stateful class with a method) that, given a context, returns the commands to submit *before* `world.step()` advances the world.
 
 ```ts
 export interface PolicyContext<TEventMap, TCommandMap> {
@@ -92,23 +106,52 @@ export interface PolicyContext<TEventMap, TCommandMap> {
   readonly world: World<TEventMap, TCommandMap>;
   /** The tick that's about to execute (i.e., commands submitted now run during this tick). */
   readonly tick: number;
+  /**
+   * Seeded sub-RNG for the policy's own randomness. Independent of `world.random()`
+   * and replay-safe (see §5.4). Policies MUST use this — not `Math.random()` and
+   * not `world.random()` — for any randomness.
+   */
+  readonly random: () => number;
 }
 
 export type Policy<TEventMap, TCommandMap> = (
   context: PolicyContext<TEventMap, TCommandMap>,
 ) => PolicyCommand<TCommandMap>[];
 
-export interface PolicyCommand<TCommandMap> {
-  type: keyof TCommandMap & string;
-  data: TCommandMap[keyof TCommandMap];
+/** Discriminated union; `type` and `data` are correlated. */
+export type PolicyCommand<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
+
+/** Used by `stopWhen` only. Same shape as PolicyContext but `tick` is post-step. */
+export interface StopContext<TEventMap, TCommandMap> {
+  readonly world: World<TEventMap, TCommandMap>;
+  /** The tick that just executed (`world.tick` at the time of the check). */
+  readonly tick: number;
+  /** Same seeded sub-RNG instance as policies — exposed in case a stop predicate needs deterministic randomness. */
+  readonly random: () => number;
 }
 ```
 
 ### 5.1 Determinism contract for policies
 
-Policies MUST be deterministic given their inputs (`world` state + `tick`). Any randomness MUST flow through `world.random()` (the seeded engine RNG); `Math.random()` / `crypto.randomUUID()` / etc. are forbidden. `Date.now()` and `process.env` are forbidden inside a policy. Same as the spec §11 determinism contract for systems.
+Policies are **external coordinators** in the sense of the session-recording determinism contract (§11.1 clause 2 — "an external coordinator picks up and submits between ticks"). Per-clause applicability:
 
-The harness does NOT structurally enforce this; `SessionReplayer.selfCheck` on the resulting bundle is the verification mechanism. CI-style usage should run `selfCheck` on every produced bundle.
+| Spec §11.1 clause | Applies to policies? | Notes                                                                                              |
+| ----------------- | -------------------- | -------------------------------------------------------------------------------------------------- |
+| 1 (`world.tick`)  | Yes                  | `tick` exposed via `PolicyContext` is read-only and matches what systems will see.                 |
+| 2 (external coordinator) | **Positively** | Policies ARE the coordinator. They submit via `world.submit*` before each step.                  |
+| 3 (`world.random()`) | **Refined**       | Policies MUST use `ctx.random()`, not `world.random()`. See §5.4 — calling `world.random()` between ticks would advance world RNG state and break replay. `ctx.random()` is replay-safe. |
+| 4 (validators)    | N/A                  | Policies don't validate; they emit commands that go through the existing validator chain.          |
+| 5 (no wall-clock in systems) | Yes (extended) | Policies likewise must not call `Date.now()` / `process.env` / etc. Same restriction as systems.   |
+| 6 (events)        | Yes                  | Policies read events via `world.getEvents()` — same surface as systems.                            |
+| 7 (no I/O)        | Yes                  | Policies are pure / deterministic.                                                                 |
+| 8 (registration order) | Caller-side    | The harness caller registers components/handlers/systems before invoking `runSynthPlaytest`; policies don't change this. |
+| 9 (engine version)| Caller-side          | Same.                                                                                              |
+
+The harness does NOT structurally enforce these contracts; `SessionReplayer.selfCheck` on the resulting bundle is the verification mechanism. CI-style usage should run `selfCheck` on every produced bundle (§10).
+
+There is a separate notion of **production determinism**: re-running the harness with identical inputs (same world setup + same policies + same `policySeed`) produces structurally-equal bundles (modulo `metadata.sessionId` and `metadata.recordedAt`). This is distinct from `selfCheck` (which validates replay against record); both should hold and §12 tests both.
 
 ### 5.2 Policies are pure functions w.r.t. the world
 
@@ -121,7 +164,7 @@ The harness does NOT enforce this with a runtime proxy (would add overhead). It'
 A policy can carry state across calls by being a closure or a method on a class:
 
 ```ts
-function memoryPolicy(): Policy<TEventMap, TCommandMap> {
+function memoryPolicy<E, C>(): Policy<E, C> {
   const seen = new Set<EntityId>();
   return (ctx) => {
     const newOnes = [...ctx.world.query('unit')].filter((id) => !seen.has(id));
@@ -131,7 +174,19 @@ function memoryPolicy(): Policy<TEventMap, TCommandMap> {
 }
 ```
 
-Stateful policies must keep their state JSON-compat-clean and seeded from `world.random()` to remain deterministic. Replays use the same policy instance only when the harness is re-run — replay via `SessionReplayer` doesn't invoke policies (it replays from `bundle.commands`).
+Stateful policies must keep their state JSON-clean and seeded from `ctx.random()` for any randomness. Replays via `SessionReplayer` don't invoke policies — replay is from `bundle.commands` — so policy state isn't reconstructed at replay time. Re-running the harness with the same `policySeed` reproduces both the policy state evolution AND the resulting bundle.
+
+### 5.4 Policy randomness — seeded sub-RNG
+
+The harness owns a `DeterministicRandom` instance distinct from `world.rng`. `PolicyContext.random()` and `StopContext.random()` are bound to this instance. Properties:
+
+- **Seeded.** `SynthPlaytestConfig.policySeed?: number` (default: a value derived once via `world.random()` at harness construction, called BEFORE `recorder.connect()` so it's deterministic w.r.t. the pre-policy world state and is captured in the initial snapshot's RNG state).
+- **Independent of world RNG.** Calling `ctx.random()` doesn't advance `world.rng`. Replay re-executes the recorded commands and `world.step()`; `world.rng` evolves identically because policies didn't perturb it.
+- **Stored in metadata.** `SessionMetadata.policySeed?: number` is populated for synthetic bundles. Replay doesn't use it (commands are recorded directly), but the seed is preserved so future replay-via-policy work has it.
+
+`randomPolicy` (§6.2) uses `ctx.random()` internally for catalog selection. Custom policies use `ctx.random()` for any randomness they need.
+
+ADR 5 (§15) captures the design rationale for the sub-RNG.
 
 ## 6. Built-in Policies
 
@@ -140,23 +195,23 @@ Stateful policies must keep their state JSON-compat-clean and seeded from `world
 Submits nothing. Useful for letting world systems advance without external input.
 
 ```ts
-export function noopPolicy<TEventMap, TCommandMap>(): Policy<TEventMap, TCommandMap> {
+export function noopPolicy<E, C>(): Policy<E, C> {
   return () => [];
 }
 ```
 
-### 6.2 `randomPolicy({ catalog, frequency, rngState? })`
+### 6.2 `randomPolicy({ catalog, frequency, offset, burst })`
 
 Picks a random command from a caller-supplied catalog. Frequency controls how often (every N ticks).
 
 ```ts
-export interface RandomPolicyConfig<TCommandMap> {
+export interface RandomPolicyConfig<TEventMap, TCommandMap> {
   /**
    * Catalog of command-generators. Each entry is invoked with the policy
    * context to produce a concrete command. The harness picks one entry
-   * uniformly at random per emit, via `world.random()`.
+   * uniformly at random per emit, via `ctx.random()`.
    */
-  catalog: Array<(ctx: PolicyContext<never, TCommandMap>) => PolicyCommand<TCommandMap>>;
+  catalog: Array<(ctx: PolicyContext<TEventMap, TCommandMap>) => PolicyCommand<TCommandMap>>;
   /** Emit on ticks where `tick % frequency === offset`. Default frequency: 1; offset: 0. */
   frequency?: number;
   offset?: number;
@@ -165,22 +220,23 @@ export interface RandomPolicyConfig<TCommandMap> {
 }
 
 export function randomPolicy<TEventMap, TCommandMap>(
-  config: RandomPolicyConfig<TCommandMap>,
+  config: RandomPolicyConfig<TEventMap, TCommandMap>,
 ): Policy<TEventMap, TCommandMap>;
 ```
 
 The catalog is functions, not data, so commands can reference live world state (e.g., pick a random existing entity to target). This avoids requiring policies to crawl `world.query()` themselves.
+
+`randomPolicy` is fully deterministic given the harness's `policySeed`: the same seed reproduces the same catalog selections and the same generated commands.
 
 ### 6.3 `scriptedPolicy(sequence)`
 
 Plays back a pre-recorded list of `{ tick, type, data }` entries. Useful for regression scenarios derived from real bug bundles.
 
 ```ts
-export interface ScriptedPolicyEntry<TCommandMap> {
-  tick: number;       // tick on which to submit
-  type: keyof TCommandMap & string;
-  data: TCommandMap[keyof TCommandMap];
-}
+/** Discriminated union; `type` and `data` are correlated. */
+export type ScriptedPolicyEntry<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { tick: number; type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
 
 export function scriptedPolicy<TEventMap, TCommandMap>(
   sequence: ScriptedPolicyEntry<TCommandMap>[],
@@ -191,7 +247,11 @@ Pre-grouped by tick at construction (O(1) per-tick lookup). Ticks not in the seq
 
 ### 6.4 Composition
 
-Multiple policies are passed as an array. Each gets called per tick; their command outputs are concatenated and submitted in policy-array order. This is intentional — order determines `submissionSequence`, which the engine respects.
+Multiple policies are passed as an array. Each gets called per tick; their command outputs are concatenated and submitted in policy-array order via `world.submitWithResult`. Order determines `submissionSequence`, which the engine respects.
+
+**Composition observation property** (ADR 6): the harness submits each policy's commands inline before invoking the next policy. So `policies[1].decide(ctx)` runs against a world whose `commandQueue` already holds `policies[0]`'s submissions and whose `nextCommandResultSequence` has advanced. Later policies can observe earlier submissions via `world.commandQueue` (or via events fired by handlers — though handlers don't run until `world.step()`).
+
+This is intentional. If batch-and-flush semantics are needed (later policies can't observe earlier policies' work), wrap them in a single composite policy that does the batching internally.
 
 ## 7. Harness API
 
@@ -207,11 +267,14 @@ export interface SynthPlaytestConfig<TEventMap, TCommandMap, TDebug = JsonValue>
   sink?: SessionSink & SessionSource;
   /** Optional human label propagated into bundle metadata. Default: 'synthetic'. */
   sourceLabel?: string;
+  /** Seed for the policy sub-RNG. Default: `world.random()` snapshot at harness construction. */
+  policySeed?: number;
   /**
    * Stop the playtest early when this predicate returns truthy. Called after
-   * each `step()` with the post-step world. Default: never stop early.
+   * each `step()` with a fresh `StopContext` whose `tick` reflects the
+   * just-executed tick. Default: never stop early.
    */
-  stopWhen?: (ctx: PolicyContext<TEventMap, TCommandMap>) => boolean;
+  stopWhen?: (ctx: StopContext<TEventMap, TCommandMap>) => boolean;
   /**
    * If true (default), stop the playtest as soon as the world becomes
    * poisoned. The bundle still records the failed tick. If false, the
@@ -228,10 +291,16 @@ export interface SynthPlaytestConfig<TEventMap, TCommandMap, TDebug = JsonValue>
 export interface SynthPlaytestResult<TEventMap, TCommandMap, TDebug> {
   bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
   ticksRun: number;
-  /** Why the playtest stopped: 'maxTicks' | 'stopWhen' | 'poisoned'. */
-  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned';
-  /** True if the run completed without error (poisoned counts as completion). */
+  /** Why the playtest stopped. */
+  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError';
+  /** True if the run completed without a recorder/sink error. Poisoned and policyError still produce ok:true (bundle is valid up to the failure). */
   ok: boolean;
+  /** Populated only when stopReason === 'policyError'. */
+  policyError?: {
+    policyIndex: number;
+    tick: number;
+    error: { name: string; message: string; stack: string | null };
+  };
 }
 
 export function runSynthPlaytest<TEventMap, TCommandMap, TDebug = JsonValue>(
@@ -242,36 +311,50 @@ export function runSynthPlaytest<TEventMap, TCommandMap, TDebug = JsonValue>(
 ### 7.1 Lifecycle
 
 1. **Setup.** Caller constructs a `World`, registers components/handlers/validators/systems. The harness does NOT do this — game-specific setup is the caller's responsibility (mirrors `runScenario`).
-2. **Recorder attach.** The harness creates a `SessionRecorder` with the configured sink, `snapshotInterval`, `terminalSnapshot`, and `sourceLabel`. Calls `recorder.connect()`. **`metadata.sourceKind` is set to `'synthetic'`** — the harness mutates the metadata on the recorder's sink after `connect()` completes (or, simpler, the harness reads sink.metadata and mutates the field; it's a string union extension, not a structural break).
-3. **Tick loop.** For each tick from `world.tick` up to `world.tick + maxTicks`:
-    - Call each policy with `context = { world, tick: world.tick + 1 }` (the tick that's about to execute).
-    - For each `PolicyCommand` returned, call `world.submitWithResult(cmd.type, cmd.data)`.
-    - Call `world.step()`.
-    - Check `stopWhen(context)`; break with `stopReason: 'stopWhen'` if truthy.
-    - Check `world.isPoisoned()`; break with `stopReason: 'poisoned'` if `stopOnPoisoned`.
+2. **Sub-RNG init.** Harness derives `policySeed` (config value or one `world.random()` call) and constructs a private `DeterministicRandom` instance. The single `world.random()` call to derive a default seed advances `world.rng` once, but this happens BEFORE `recorder.connect()` — so the recorded initial snapshot captures the post-derivation RNG state. Replay reproduces this trivially.
+3. **Recorder attach.** Harness constructs `SessionRecorder({ world, sink, snapshotInterval, terminalSnapshot, sourceLabel, sourceKind: 'synthetic', policySeed })`. The recorder writes initial metadata with `sourceKind: 'synthetic'` and `policySeed` at `connect()` time. No post-hoc metadata mutation.
+4. **Tick loop.** For each tick from `world.tick` up to `world.tick + maxTicks`:
+    - Build `policyCtx = { world, tick: world.tick + 1, random: subRng.random.bind(subRng) }`.
+    - For each policy in `policies` array:
+        - Call `policy(policyCtx)`. If it throws, set `stopReason: 'policyError'`, populate `policyError`, break the outer loop, finalize via §7.2 H2 path. (Note: any commands submitted by earlier-index policies in this tick remain in the bundle; see L4 in §7.2.)
+        - For each `PolicyCommand` returned, call `world.submitWithResult(cmd.type, cmd.data)`.
+    - Call `world.step()`. If it throws (poison), check `stopOnPoisoned`; if true, set `stopReason: 'poisoned'`, break, finalize.
+    - Build `stopCtx = { world, tick: world.tick, random: subRng.random.bind(subRng) }`.
+    - Check `stopWhen(stopCtx)`; break with `stopReason: 'stopWhen'` if truthy.
     - Increment `ticksRun`.
-4. **Disconnect.** Call `recorder.disconnect()`. Returns `{ bundle, ticksRun, stopReason, ok }`.
+5. **Disconnect.** Call `recorder.disconnect()`. Returns `{ bundle, ticksRun, stopReason, ok, policyError? }`.
 
 ### 7.2 Failure modes
 
-- **World poisoned mid-tick.** `world.step()` throws `WorldTickFailureError`. The harness catches, sets `stopReason: 'poisoned'`, calls `recorder.disconnect()`, returns `{ bundle, ticksRun, stopReason, ok: true }`. The bundle has the failed tick recorded in `metadata.failedTicks`.
-- **World already poisoned at start.** The recorder's `connect()` throws `RecorderClosedError(code: 'world_poisoned')`. The harness propagates this — caller must `world.recover()` first.
-- **Policy throws.** The harness catches, sets `stopReason: 'poisoned'` (treating policy errors equivalently), records the failure into bundle.failures via a synthetic TickFailure, and returns. (Alternative: propagate; chosen "graceful return" because bundles from partial runs are still useful for debugging policy bugs.)
-- **Sink write failure.** `SessionRecorder` already handles this — sets `metadata.incomplete = true`, marks itself terminal. Harness sees this via `recorder.lastError` and returns `ok: false`.
+- **World poisoned mid-tick.** `world.step()` throws `WorldTickFailureError`. Harness catches, sets `stopReason: 'poisoned'`, calls `recorder.disconnect()`, returns `{ bundle, ticksRun, stopReason, ok: true }`. Bundle has the failed tick recorded in `metadata.failedTicks` via the existing `SessionRecorder` machinery — no synthesis.
+- **World already poisoned at start.** `recorder.connect()` throws `RecorderClosedError(code: 'world_poisoned')`. The harness propagates this — caller must `world.recover()` first.
+- **Policy throws.** Harness catches, sets `stopReason: 'policyError'`, populates `policyError: { policyIndex, tick, error }`, calls `recorder.disconnect()`, returns. **`bundle.failures` is NOT modified** — the world isn't poisoned, no `TickFailure` is synthesized. Callers reading `result.policyError` get the actionable info.
+- **Partial submit before policy throw.** A policy may call `world.submitWithResult` for command A, then throw on attempting command B. The recorder's wrap captures command A; the harness aborts before `world.step()`. The bundle has a command in `commands.jsonl` with no matching `executions` entry. `selfCheck` won't replay across the abort point so this is benign, but `result.policyError` carries the diagnostic and the bundle's `commands` length minus `executions` length signals the partial submission to careful readers.
+- **Sink write failure.** `SessionRecorder` already handles this — sets `metadata.incomplete = true`, marks itself terminal. Harness sees this via `recorder.lastError` and returns `{ ok: false, stopReason: 'sinkError' }`. (`'sinkError'` is the new union member that distinguishes I/O failure from logical stop reasons.)
 
 ### 7.3 Determinism
 
-A synthetic playtest is deterministic if:
+A synthetic playtest is **production-deterministic** if:
 - `world` is freshly constructed with the same seed + same registrations.
 - Same policies (functions or class instances initialized the same way).
-- Same `maxTicks` / `stopWhen` / `stopOnPoisoned`.
+- Same `maxTicks` / `stopWhen` / `stopOnPoisoned` / `policySeed`.
 - Identical engine and Node versions (per spec §11.1 clause 9).
 
-Re-running with these inputs produces the same `SessionBundle` (modulo `metadata.sessionId` and `metadata.recordedAt`, which are intentionally non-deterministic). Replay via `SessionReplayer.selfCheck()` should pass on every produced bundle.
+Re-running with these inputs produces structurally-equal bundles modulo:
+- `metadata.sessionId` (UUID, intentionally fresh).
+- `metadata.recordedAt` (wall-clock timestamp).
+- `markers[].id` and `attachments[].id` (UUIDs — though v1 harness adds none).
+
+A synthetic playtest is **replay-deterministic** (selfCheck-passing) regardless of policy implementation, because:
+- Replay re-submits recorded commands and steps the world; it never invokes policies.
+- World RNG state at any tick depends only on system code, command stream, and tick lifecycle — none of which involve policies at replay time.
+- Provided policies route their randomness through `ctx.random()` (sub-RNG, not `world.rng`), the captured snapshots contain the same world state replay reproduces.
+
+§12 tests both forms.
 
 ## 8. Bundle Format
 
-`SessionMetadata.sourceKind` extended to `'session' | 'scenario' | 'synthetic'`. Otherwise the bundle is identical to the `'session'` variant — same recorder, same sink, same replay path.
+`SessionMetadata.sourceKind` extended to `'session' | 'scenario' | 'synthetic'`. `SessionMetadata.policySeed?: number` added (populated only when `sourceKind === 'synthetic'`). Otherwise the bundle is identical to the `'session'` variant — same recorder, same sink, same replay path.
 
 `metadata.sourceLabel` defaults to `'synthetic'` but can be overridden via config (e.g., `'random-spawn-1000-ticks'`).
 
@@ -279,11 +362,12 @@ The bundle is replayable via `SessionReplayer` like any other. Useful pattern: s
 
 ## 9. Integration with Existing Primitives
 
-- **`SessionRecorder`**: used internally; the harness is a thin orchestrator.
+- **`SessionRecorder`**: used internally; the harness is a thin orchestrator. `SessionRecorderConfig` gains `sourceKind?` and `policySeed?` optional fields; defaults preserve existing behavior for non-harness callers.
 - **`SessionReplayer`**: bundles produced are replayable / selfCheckable like any other.
 - **`scenarioResultToBundle`**: orthogonal — scenarios test specific outcomes; synthetic playtests explore. A scenario can include checks; a synthetic playtest doesn't.
 - **`runScenario`**: shares the "set up world, run, capture bundle" pattern but with a scripted run callback rather than policies. The two are intentionally separate — composing them (running a scenario *as* a policy) is possible but adds no value.
 - **`SessionRecordingError` family**: same error types apply (poisoned world, sink failures, etc.).
+- **`DeterministicRandom`**: re-exported from `src/index.ts` if not already; harness uses it for the policy sub-RNG.
 
 ## 10. Determinism Self-Check (CI Pattern)
 
@@ -300,6 +384,7 @@ const result = runSynthPlaytest({
   world: setupBehavior(makeWorld()),
   policies: [randomPolicy({ catalog: [/* ... */] })],
   maxTicks: 1000,
+  policySeed: 42,
 });
 
 const replayer = SessionReplayer.fromBundle(result.bundle, {
@@ -315,9 +400,11 @@ expect(replayer.selfCheck().ok).toBe(true);
 
 Per spec §13.5 of the session-recording design (CI gate), every synthetic playtest in the engine's test corpus should pass `selfCheck` — same gate that scenario bundles use.
 
+For **production-determinism** verification (re-running produces the same bundle), the test pattern is two harness calls with identical config, then `expect(bundle1.commands).toEqual(bundle2.commands)` and the same for snapshots / events. §12 covers this.
+
 ## 11. Performance
 
-- **Per-tick cost.** Harness adds: one policy invocation per policy + one `submitWithResult` call per emitted command + the existing `step()` cost. Recorder per-tick cost is unchanged from a live recording (one `onDiff`, one `writeTick`, snapshot every N).
+- **Per-tick cost.** Harness adds: one policy invocation per policy + one `submitWithResult` call per emitted command + the existing `step()` cost. Sub-RNG `random()` cost is one `DeterministicRandom.random()` call (cheap; same as `world.random()`). Recorder per-tick cost is unchanged from a live recording (one `onDiff`, one `writeTick`, snapshot every N).
 - **Memory.** `MemorySink` accumulates the entire bundle. For 10k-tick × 50-command runs, expected size is ~O(commands × payload-size + ticks × diff-size); use `FileSink` for large captures.
 - **Parallelism.** Each `runSynthPlaytest` is self-contained (no shared state). Multiple invocations across processes scale linearly until disk I/O contends. Caller orchestrates.
 
@@ -327,56 +414,59 @@ Unit / integration tests target:
 
 - **Built-in policies**:
     - `noopPolicy` returns `[]` always.
-    - `randomPolicy` with seed produces deterministic catalog selections; respects `frequency` and `burst`.
+    - `randomPolicy` with seed produces deterministic catalog selections; respects `frequency`, `offset`, `burst`. Two runs with same seed produce identical command streams.
     - `scriptedPolicy` emits the right entry at the right tick; ignores unmatched ticks.
-- **Composition**: multiple policies' outputs concatenate in array order; `submissionSequence` respects this.
+- **Composition**: multiple policies' outputs concatenate in array order; `submissionSequence` respects this; later policies observe earlier policies' submissions in the queue (ADR 6 verification test).
+- **Sub-RNG isolation**: a policy that calls `ctx.random()` does NOT advance `world.rng`. Test: record a synthetic bundle, replay via `SessionReplayer.selfCheck()`, expect ok:true.
 - **Stop conditions**:
     - `maxTicks` fires after exactly N steps.
-    - `stopWhen` fires when predicate returns truthy.
+    - `stopWhen` fires when predicate returns truthy. `StopContext.tick === world.tick` (post-step).
     - `stopOnPoisoned` fires after a system throw.
 - **Failure modes**:
     - Poisoned world at start propagates `RecorderClosedError`.
-    - Policy throw → `stopReason: 'poisoned'`, bundle still returned.
-    - Sink write failure → `ok: false`, `recorder.lastError` populated.
-- **Determinism (the headline use case)**:
-    - Two runs with identical config produce structurally-equal bundles (modulo sessionId / recordedAt).
-    - `SessionReplayer.selfCheck()` returns `ok: true` on synthetic bundles.
+    - Policy throw → `stopReason: 'policyError'`, `policyError` populated, bundle still returned, `bundle.failures` unchanged.
+    - Partial-submit-then-throw: bundle has commands without matching executions; this is recorded but selfCheck is skipped at the abort point.
+    - Sink write failure → `ok: false`, `stopReason: 'sinkError'`.
+- **Determinism** (the headline use case):
+    - **Production-determinism**: two runs with identical config produce structurally-equal bundles (modulo sessionId / recordedAt / marker UUIDs).
+    - **Replay-determinism**: `SessionReplayer.selfCheck()` returns `ok: true` on synthetic bundles. This passes regardless of the policy's implementation as long as policies don't perturb world.rng.
+    - **Sub-RNG seeded determinism**: omitting `policySeed` works (default derived from `world.random()`); explicit `policySeed: N` reproduces.
 - **Bundle metadata**:
     - `sourceKind: 'synthetic'`.
     - `sourceLabel` defaults to `'synthetic'`; override works.
+    - `policySeed` populated.
     - `failedTicks` correctly populated when poisoning occurs mid-run.
 
-Acceptance criterion: 100% of new code covered by tests; `npm test` exercises selfCheck on a representative synthetic bundle.
+Acceptance criterion: 100% of new code covered by tests; `npm test` exercises selfCheck on a representative synthetic bundle and exercises production-determinism for at least one harness invocation.
 
 ## 13. Documentation Surface
 
 Per AGENTS.md "Always update if the change introduces or removes API surface":
 
-- `docs/api-reference.md` — new sections for `Policy`, `runSynthPlaytest`, `randomPolicy`, `scriptedPolicy`, `noopPolicy`, `SynthPlaytestConfig`, `SynthPlaytestResult`. TOC updated.
-- `docs/guides/synthetic-playtest.md` (new) — quickstart, policy authoring guide, determinism contract for policies, CI pattern.
-- `docs/guides/session-recording.md` — extend with a brief section on synthetic-source bundles.
+- `docs/api-reference.md` — new sections for `Policy`, `runSynthPlaytest`, `randomPolicy`, `scriptedPolicy`, `noopPolicy`, `SynthPlaytestConfig`, `SynthPlaytestResult`, `PolicyContext`, `StopContext`, `PolicyCommand`. Update `SessionRecorderConfig` to document the new `sourceKind?` and `policySeed?` optional fields. Update `SessionMetadata` to document the widened `sourceKind` and new `policySeed?`. TOC updated.
+- `docs/guides/synthetic-playtest.md` (new) — quickstart, policy authoring guide, determinism contract for policies, sub-RNG explanation, CI pattern.
+- `docs/guides/session-recording.md` — extend with a brief section on synthetic-source bundles and the new `sourceKind: 'synthetic'` value.
 - `docs/guides/ai-integration.md` — note synthetic playtest as a Tier-1 piece of the AI-first feedback loop.
 - `docs/architecture/ARCHITECTURE.md` — Component Map row.
-- `docs/architecture/decisions.md` — ADR for the policy contract (deterministic; no runtime enforcement).
+- `docs/architecture/decisions.md` — ADRs for the policy contract, sub-RNG design, sourceKind extension, and composition observation property.
 - `docs/architecture/drift-log.md` — entry for the subsystem.
 - `docs/changelog.md` — version entries (see §14).
 - `docs/devlog/summary.md` + `detailed/` — per-task entries.
-- `README.md` — Feature Overview row + Public Surface bullet.
+- `README.md` — Feature Overview row + Public Surface bullet + version badge.
 - `docs/README.md` — index entry.
 - `docs/design/ai-first-dev-roadmap.md` — mark Spec 3 status: Drafted → Implemented.
 
 ## 14. Versioning
 
-Per AGENTS.md per-commit `c`-bump policy. Current version: depends on followups merge state. If followups merge first, branch starts at v0.7.19; otherwise v0.7.16.
+Per AGENTS.md per-commit `c`-bump policy. Branch base: **v0.7.19** (latest on `main` after the session-recording followups merge at `c849b9a`). The `agent/synthetic-playtest` branch was rebased on top of this tip.
 
-Plan structure (estimated 4 commits):
+Plan structure (3 commits, docs folded into the commits that introduce the API):
 
-- T1 (1 c-bump): policy interface + 3 built-in policies + tests.
-- T2 (1 c-bump): `runSynthPlaytest` harness + tests covering lifecycle, stop conditions, failure modes.
-- T3 (1 c-bump): determinism integration tests (synthetic bundle round-trips through SessionReplayer.selfCheck).
-- T4 (1 c-bump): doc surface (api-reference + guides + ARCHITECTURE + ADR + drift-log + roadmap status).
+- **T1 (v0.7.20)**: Policy interface, sub-RNG plumbing, three built-in policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`), unit tests covering each policy's behavior. Doc surface: `docs/api-reference.md` policy types only (the harness API doesn't ship until T2).
+- **T2 (v0.7.21)**: `runSynthPlaytest` harness + lifecycle. `SessionRecorderConfig` widened to accept `sourceKind?` and `policySeed?`. `SessionMetadata.sourceKind` widened; `SessionMetadata.policySeed?` added. Tests cover lifecycle + each stop reason + each failure mode + composition observation. Doc surface: full `docs/api-reference.md` updates, new `docs/guides/synthetic-playtest.md`, `docs/guides/session-recording.md` extension.
+- **T3 (v0.7.22)**: Determinism integration tests (synthetic bundle round-trips through `SessionReplayer.selfCheck`; production-determinism dual-run test). Architecture docs: `docs/architecture/ARCHITECTURE.md` + 4 ADRs in `decisions.md` + drift-log entry. Roadmap status update.
 
-`SessionMetadata.sourceKind` widening from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'` is type-additive: existing producers and consumers continue to work; new producers can opt in. No `b`-bump.
+`SessionMetadata.sourceKind` widening is type-additive — existing producers and consumers continue to work; no engine-internal consumer branches on the field. `c`-bump rather than `b`-bump per ADR 3 (with explicit acknowledgement of downstream `assertNever`-style breakage).
 
 ## 15. Architectural Decisions
 
@@ -394,9 +484,22 @@ Plan structure (estimated 4 commits):
 
 ### ADR 3: `SessionMetadata.sourceKind` extended, not replaced
 
-**Decision:** Extend the union type from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. Keep `'session'` and `'scenario'` semantics unchanged.
+**Decision:** Extend the union type from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. Keep `'session'` and `'scenario'` semantics unchanged. `c`-bump (not `b`-bump) despite the type widening.
 
-**Rationale:** Bundle consumers (replayer, future viewer, future corpus index) need to distinguish synthetic from organic recordings — different policies for retention, analysis, and triage. Adding a third variant is a pure widening; existing consumers either don't care or fall through with their default handling.
+**Rationale:** Bundle consumers (replayer, future viewer, future corpus index) need to distinguish synthetic from organic recordings — different policies for retention, analysis, and triage. Adding a third variant is a pure widening; engine-internal consumers don't branch on this field (verified — only producers exist), so engine builds are unaffected.
+
+**Trade-off acknowledged:** Downstream consumer code that uses an `assertNever`-style exhaustive switch over `sourceKind` will fail to compile when upgrading. This is the expected break for a strict-mode TS consumer; it's caught at build time with a clear error pointing at the missing case. We accept this trade-off because (a) the engine is pre-1.0; (b) the use case for `sourceKind` discrimination is recently introduced and the consumer ecosystem is minimal; (c) `b`-bumps reset the `c` counter and we'd rather not blow through a major-axis bump for a type-additive change. Downstream consumers fixing exhaustive switches should add `case 'synthetic': /* handle */` next to their existing branches.
+
+### ADR 3a: `sourceKind` is set at `SessionRecorder` construction, not via post-hoc sink mutation
+
+**Decision:** `SessionRecorderConfig` gains an optional `sourceKind?: 'session' | 'scenario' | 'synthetic'` field (default `'session'`). `SessionRecorder.connect()` reads this field into the initial metadata. The harness passes `sourceKind: 'synthetic'` at construction; never mutates sink metadata.
+
+**Rationale:** The iter-1 plan had the harness mutate `sink.metadata.sourceKind` after `connect()` returns. This was unsound:
+- For `FileSink`, `sink.open()` synchronously flushes `manifest.json` to disk during `connect()`. A harness crash between `connect()` and the first periodic snapshot would leave the on-disk bundle saying `sourceKind: 'session'` despite being synthetic.
+- A custom user-implemented sink that snapshots metadata during `open()` would silently record the wrong kind.
+- It reaches into a sibling subsystem's mutable state — not how `SessionRecorder` or `scenarioResultToBundle` produce metadata today.
+
+The new field is type-additive; existing callers of `SessionRecorder` see no change.
 
 ### ADR 4: Harness is synchronous and single-process
 
@@ -404,11 +507,31 @@ Plan structure (estimated 4 commits):
 
 **Rationale:** Synchronous matches the engine's existing tick model and the session-recording subsystem's sink contract. Async policies (LLM-driven) are deferred to Spec 9 (AI Playtester); cross-process orchestration is a CI-script concern, not an engine API.
 
+### ADR 5: Policy randomness uses a separate seeded sub-RNG, not `world.random()`
+
+**Decision:** The harness owns a private `DeterministicRandom` instance. `PolicyContext.random()` and `StopContext.random()` are bound to this instance. Policies (including `randomPolicy`) MUST use `ctx.random()`, not `world.random()`, for any randomness.
+
+**Rationale:** A policy calling `world.random()` between ticks advances `world.rng`. The next snapshot captures that advance. `SessionReplayer` replays commands and `world.step()` but does NOT re-invoke policies — its `world.rng` evolves only with system code, so its captured snapshot's RNG state diverges from the recorded one. `_checkSegment` reports a state divergence at the first periodic snapshot, every time. The engine has explicit precedent against this pattern (`tests/command-transaction.test.ts:567` — "predicate cannot call random() — would advance RNG and break determinism").
+
+A separate sub-RNG eliminates the issue: `ctx.random()` doesn't touch `world.rng`, so replay reproduces world state exactly. The sub-RNG is seeded from `SynthPlaytestConfig.policySeed` (default: one `world.random()` call at harness construction, before `recorder.connect()` — so the captured initial snapshot reflects the post-derivation RNG state). The seed is stored in `SessionMetadata.policySeed` for future replay-via-policy work.
+
+**Alternative considered and rejected:** save/restore `world.rng.getState()` around each policy batch. Tradeoff: composed policies all share the saved state and re-derive identical sequences unless each gets its own sub-RNG. Cleaner to give the harness a single sub-RNG that all policies share via `ctx.random()`.
+
+### ADR 6: Composed policies observe earlier policies' submissions
+
+**Decision:** With multiple policies in the array, the harness submits each policy's commands inline before invoking the next policy. Later policies see the world's `commandQueue` containing earlier policies' submissions (and `nextCommandResultSequence` advanced).
+
+**Rationale:** This is how `world.submit()` already behaves between callers — there's no "policy boundary" in the existing engine. Forcing batch-and-flush semantics would require a separate buffered submit path, adding complexity to handle a nuance most users don't need. Users who genuinely need batched semantics can wrap their policies in a single composite policy that does the batching internally.
+
+This is documented (rather than enforced) so future readers understand the dispatch order is meaningful.
+
 ## 16. Open Questions / Deferred
 
-1. **Frequency vs interval semantics in randomPolicy.** Should `frequency` parameterize the modulo (every N ticks) or the rate (X commands per tick)? Going with modulo + `burst` for now; adjust if usability dictates.
-2. **Multi-policy dispatch order.** Strict array order (chosen) vs round-robin vs phase-tagged (input/preUpdate/...). v1 ships strict array order; phase-tagged dispatch can come later if game projects need it.
+1. **Frequency vs interval semantics in randomPolicy.** `frequency` is the modulo divisor (every N ticks); `burst` is the per-fired-tick count. v1 ships this; usability may dictate adjustment.
+2. **Multi-policy dispatch order.** Strict array order (chosen, ADR 6) vs round-robin vs phase-tagged (input/preUpdate/...). v1 ships strict array order; phase-tagged dispatch can come later if game projects need it.
 3. **Bounded vs unbounded random catalogs.** The catalog is a fixed-length array; for huge catalogs (1000s of command types), random selection becomes expensive. Out of scope for v1.
+4. **Bundle records which policies were used.** Only `sourceLabel` carries attribution today. Tier-2 work to record per-tick policy attribution (which policy emitted which command) would help corpus analysis disambiguate runs. Defer to Spec 7/8.
+5. **Replay-via-policy.** Future spec could rebuild policy state from `policySeed` and verify the policy itself produces the recorded command stream. v1 stores the seed but doesn't exercise this path.
 
 ## 17. Future Specs (this surface unlocks)
 
@@ -421,10 +544,11 @@ Plan structure (estimated 4 commits):
 
 ## 18. Acceptance Criteria
 
-- All new symbols (`Policy`, `PolicyContext`, `PolicyCommand`, `runSynthPlaytest`, `randomPolicy`, `scriptedPolicy`, `noopPolicy`, `SynthPlaytestConfig`, `SynthPlaytestResult`, `RandomPolicyConfig`, `ScriptedPolicyEntry`) exported from `src/index.ts` with full TypeScript types.
-- `SessionMetadata.sourceKind` extended.
-- Test coverage: ≥1 test per built-in policy + harness lifecycle + each stop reason + each failure mode + 1 determinism round-trip.
+- All eleven new symbols (`Policy`, `PolicyContext`, `StopContext`, `PolicyCommand`, `runSynthPlaytest`, `randomPolicy`, `scriptedPolicy`, `noopPolicy`, `SynthPlaytestConfig`, `SynthPlaytestResult`, `RandomPolicyConfig`, `ScriptedPolicyEntry`) exported from `src/index.ts` with full TypeScript types.
+- `SessionRecorderConfig` extended with optional `sourceKind?` and `policySeed?` (additive).
+- `SessionMetadata.sourceKind` widened to include `'synthetic'`. `SessionMetadata.policySeed?` added.
+- Test coverage: ≥1 test per built-in policy + harness lifecycle + each stop reason + each failure mode + 1 selfCheck round-trip + 1 production-determinism dual-run + 1 sub-RNG isolation test + 1 composition observation test.
 - All four engine gates pass (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`).
-- §13 doc updates land in the same merge.
-- Multi-CLI design review and code review reach convergence.
+- §13 doc updates land in the same commits as the code that introduces each surface.
+- Multi-CLI design review and code review reach convergence (this iteration is iter-2 of design review).
 - Branch is rebase-clean against `main` and ready for explicit user merge authorization.
