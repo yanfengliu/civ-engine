@@ -1,0 +1,18 @@
+Reviewing Spec 8 implementation plan iter-2.
+
+Iter-1: Codex 3 HIGH + 2 MED; Opus 2 HIGH + 2 MED + 1 LOW. v2 (under review via stdin) addresses:
+- T1 Step 7: 9 sub-steps with concrete factory + 3 tests each (~36 tests).
+- T2 Steps 1-4: full test bodies (`checkZeroDelta` walker, `mkBundle` helper duplicated per file, `allBuiltins` factory, etc.).
+- ADR count: 5 (23-27) consistent across all 4 sites.
+- v10 → v4 in commit message.
+- mkBundle helper: per-file duplication.
+- Runner test single-pass verification: side-effecting generator + counter.
+- failedTicks?.length > 0 → (failedTicks?.length ?? 0) > 0.
+- T2 Step 7/8: expanded from headings-only.
+- "N new tests" → concrete count.
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "iterate until reviewers nitpick instead of catching real bugs."
+
+Engine facts: SessionBundle, RecordedCommand.result.accepted, CommandExecutionResult.executed all confirmed real per iter-1 reviews.
+
+Return findings with severity tags. If accept, say "ACCEPT".
