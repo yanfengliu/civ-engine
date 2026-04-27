@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.7 - 2026-04-27
+
+Session-recording T1 (bundle types + error hierarchy). Types only; no runtime behavior. Foundation for `SessionRecorder` / `SessionReplayer` (next commits).
+
+### Added (additive, non-breaking)
+
+- `src/session-bundle.ts`:
+  - `SESSION_BUNDLE_SCHEMA_VERSION = 1` constant.
+  - `SessionBundle<TEventMap, TCommandMap, TDebug>` strict-JSON archive type.
+  - `SessionMetadata` (`sessionId`, `engineVersion`, `nodeVersion`, `recordedAt`, `startTick`, `endTick`, `persistedEndTick`, `durationTicks`, `sourceKind`, optional `sourceLabel`, `incomplete`, `failedTicks`).
+  - `SessionTickEntry`, `SessionSnapshotEntry`, `AttachmentDescriptor` (with `{ dataUrl } | { sidecar: true }` ref union), `RecordedCommand`, `EntityRef`.
+  - `Marker` with `kind: 'annotation' | 'assertion' | 'checkpoint'`, `provenance: 'engine' | 'game'`, optional `refs` (entity refs use `EntityRef` for id+generation matching), `data`, `attachments`, `validated: false` for retroactive markers.
+- `src/session-errors.ts`:
+  - `SessionRecordingError` base class.
+  - 7 subclasses: `MarkerValidationError` (with optional top-level `referencesValidationRule` field per spec §11.3), `RecorderClosedError`, `SinkWriteError`, `BundleVersionError`, `BundleRangeError`, `BundleIntegrityError`, `ReplayHandlerMissingError`.
+- `src/index.ts` exports all of the above plus `ENGINE_VERSION` from `src/version.ts`. Side-effect import of `src/session-internals.ts` to apply the `World.__payloadCapturingRecorder` declaration-merge.
+
+### Validation
+
+652 tests pass (up from 636). Typecheck, lint, build clean. Per spec sections §5, §6, §12.
+
 ## 0.7.7-pre - 2026-04-27
 
 Session-recording T0 setup (no version bump). Pure refactor + additive World API surfaces in preparation for the session-recording subsystem (T1–T9, see `docs/design/2026-04-27-session-recording-implementation-plan.md`).

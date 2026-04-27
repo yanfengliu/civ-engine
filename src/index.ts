@@ -21,3 +21,32 @@ export * from './types.js';
 export * from './visibility-map.js';
 export * from './world.js';
 export * from './world-debugger.js';
+
+// Session-recording subsystem (T1+; see docs/design/2026-04-26-session-recording-and-replay-design.md)
+export {
+  SESSION_BUNDLE_SCHEMA_VERSION,
+  type SessionBundle,
+  type SessionMetadata,
+  type SessionTickEntry,
+  type SessionSnapshotEntry,
+  type AttachmentDescriptor,
+  type RecordedCommand,
+  type Marker,
+  type MarkerKind,
+  type MarkerProvenance,
+  type MarkerRefs,
+  type EntityRef,
+} from './session-bundle.js';
+export {
+  SessionRecordingError,
+  MarkerValidationError,
+  RecorderClosedError,
+  SinkWriteError,
+  BundleVersionError,
+  BundleRangeError,
+  BundleIntegrityError,
+  ReplayHandlerMissingError,
+} from './session-errors.js';
+// Side-effect import: declaration-merge for hidden World.__payloadCapturingRecorder slot
+import './session-internals.js';
+export { ENGINE_VERSION } from './version.js';

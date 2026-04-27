@@ -1,0 +1,102 @@
+import type { TickDiff } from './diff.js';
+import type { JsonValue } from './json.js';
+import type { WorldSnapshot } from './serializer.js';
+import type { Position } from './types.js';
+import type {
+  CommandExecutionResult,
+  CommandSubmissionResult,
+  TickFailure,
+  WorldMetrics,
+} from './world.js';
+
+export const SESSION_BUNDLE_SCHEMA_VERSION = 1 as const;
+
+export type MarkerKind = 'annotation' | 'assertion' | 'checkpoint';
+export type MarkerProvenance = 'engine' | 'game';
+
+export interface EntityRef {
+  id: number;
+  generation: number;
+}
+
+export interface MarkerRefs {
+  entities?: EntityRef[];
+  cells?: Position[];
+  tickRange?: { from: number; to: number };
+}
+
+export interface Marker {
+  id: string;
+  tick: number;
+  kind: MarkerKind;
+  provenance: MarkerProvenance;
+  text?: string;
+  refs?: MarkerRefs;
+  data?: JsonValue;
+  attachments?: string[];
+  createdAt?: string;
+  validated?: false;
+}
+
+export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+  submissionTick: number;
+  sequence: number;
+  type: keyof TCommandMap & string;
+  data: TCommandMap[keyof TCommandMap];
+  result: CommandSubmissionResult<keyof TCommandMap>;
+}
+
+export interface SessionTickEntry<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  tick: number;
+  diff: TickDiff;
+  events: Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+  metrics: WorldMetrics | null;
+  debug: TDebug | null;
+}
+
+export interface SessionSnapshotEntry {
+  tick: number;
+  snapshot: WorldSnapshot;
+}
+
+export interface AttachmentDescriptor {
+  id: string;
+  mime: string;
+  sizeBytes: number;
+  ref: { dataUrl: string } | { sidecar: true };
+}
+
+export interface SessionMetadata {
+  sessionId: string;
+  engineVersion: string;
+  nodeVersion: string;
+  recordedAt: string;
+  startTick: number;
+  endTick: number;
+  persistedEndTick: number;
+  durationTicks: number;
+  sourceKind: 'session' | 'scenario';
+  sourceLabel?: string;
+  incomplete?: true;
+  failedTicks?: number[];
+}
+
+export interface SessionBundle<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+  metadata: SessionMetadata;
+  initialSnapshot: WorldSnapshot;
+  ticks: SessionTickEntry<TEventMap, TDebug>[];
+  commands: RecordedCommand<TCommandMap>[];
+  executions: CommandExecutionResult<keyof TCommandMap>[];
+  failures: TickFailure[];
+  snapshots: SessionSnapshotEntry[];
+  markers: Marker[];
+  attachments: AttachmentDescriptor[];
+}

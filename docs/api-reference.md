@@ -38,6 +38,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Scenario Runner](#scenario-runner)
 - [World History Recorder](#world-history-recorder)
 - [World Debugger](#world-debugger)
+- [Session Recording (T1: types + errors)](#session-recording-t1-types--errors)
 
 ---
 
@@ -4641,3 +4642,143 @@ createPathQueueDebugProbe(
 ```
 
 These helpers expose standalone utility state through the same debugger surface.
+
+## Session Recording (T1: types + errors)
+
+The session-recording subsystem captures deterministic, replayable bundles of `World` runs. T1 ships only the type definitions and error hierarchy; runtime behavior (`SessionRecorder`, `SessionReplayer`, sinks) lands in subsequent tasks.
+
+See the design spec (`docs/design/2026-04-26-session-recording-and-replay-design.md`) for the full subsystem overview.
+
+### `SessionBundle`
+
+```typescript
+const SESSION_BUNDLE_SCHEMA_VERSION = 1;
+
+interface SessionBundle<
+  TEventMap = Record<string, never>,
+  TCommandMap = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+  metadata: SessionMetadata;
+  initialSnapshot: WorldSnapshot;
+  ticks: SessionTickEntry<TEventMap, TDebug>[];
+  commands: RecordedCommand<TCommandMap>[];
+  executions: CommandExecutionResult<keyof TCommandMap>[];
+  failures: TickFailure[];
+  snapshots: SessionSnapshotEntry[];
+  markers: Marker[];
+  attachments: AttachmentDescriptor[];
+}
+```
+
+Strict JSON: `JSON.stringify(bundle)` is a complete, lossless representation of everything in the JSON shape (sidecar attachment bytes are stored externally; consumers retrieve them via `source.readSidecar(id)` once T2 lands).
+
+### `SessionMetadata`
+
+```typescript
+interface SessionMetadata {
+  sessionId: string;          // UUID v4
+  engineVersion: string;      // ENGINE_VERSION at recording time
+  nodeVersion: string;        // process.version at recording time
+  recordedAt: string;         // ISO 8601 timestamp
+  startTick: number;          // tick at connect()
+  endTick: number;            // tick at disconnect() (live world.tick)
+  persistedEndTick: number;   // tick of last successfully persisted snapshot
+  durationTicks: number;      // endTick - startTick
+  sourceKind: 'session' | 'scenario';
+  sourceLabel?: string;
+  incomplete?: true;          // set when recorder did not reach disconnect cleanly
+  failedTicks?: number[];     // ticks at-or-after which replay refuses (TickFailure spans)
+}
+```
+
+`endTick` is the live world tick at finalization regardless of persistence success; `persistedEndTick` is the upper bound for incomplete-bundle replay (per spec §5.2 manifest cadence).
+
+### `Marker`
+
+```typescript
+type MarkerKind = 'annotation' | 'assertion' | 'checkpoint';
+type MarkerProvenance = 'engine' | 'game';
+
+interface EntityRef { id: number; generation: number; }
+
+interface MarkerRefs {
+  entities?: EntityRef[];                           // matched by id + generation
+  cells?: Position[];                               // must be in-bounds
+  tickRange?: { from: number; to: number };
+}
+
+interface Marker {
+  id: string;                  // UUID v4
+  tick: number;                // engine tick the marker references; >= 0
+  kind: MarkerKind;
+  provenance: MarkerProvenance;
+  text?: string;
+  refs?: MarkerRefs;
+  data?: JsonValue;            // opaque game payload
+  attachments?: string[];      // attachment ids
+  createdAt?: string;          // ISO 8601 (recorder fills in if omitted)
+  validated?: false;           // retroactive markers; entity-liveness skipped
+}
+```
+
+`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()` (T7); recorder-added markers always get `provenance: 'game'`.
+
+### `RecordedCommand`
+
+```typescript
+interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+  submissionTick: number;     // CommandSubmissionResult.tick (observable tick at submit)
+  sequence: number;           // CommandSubmissionResult.sequence; orders within a tick
+  type: keyof TCommandMap & string;
+  data: TCommandMap[keyof TCommandMap];
+  result: CommandSubmissionResult<keyof TCommandMap>;
+}
+```
+
+Replay-ready: carries the original `data` payload that `CommandSubmissionResult` alone does not.
+
+### `AttachmentDescriptor`
+
+```typescript
+interface AttachmentDescriptor {
+  id: string;                 // UUID v4
+  mime: string;
+  sizeBytes: number;
+  ref: { dataUrl: string } | { sidecar: true };
+}
+```
+
+Two ref shapes: `{ dataUrl }` embeds bytes as `data:<mime>;base64,...` directly in the bundle JSON; `{ sidecar: true }` stores bytes externally (FileSink: `attachments/<id>.<ext>`; MemorySink: parallel internal map accessed via `source.readSidecar(id)`).
+
+### Error Hierarchy
+
+```typescript
+class SessionRecordingError extends Error {
+  readonly details: JsonValue | undefined;
+  constructor(message: string, details?: JsonValue);
+}
+
+class MarkerValidationError extends SessionRecordingError {
+  readonly referencesValidationRule: string | undefined;
+  constructor(message: string, details?: JsonValue, referencesValidationRule?: string);
+}
+
+class RecorderClosedError extends SessionRecordingError;     // post-disconnect, poisoned-world, recorder_already_attached
+class SinkWriteError extends SessionRecordingError;          // I/O failure during recording
+class BundleVersionError extends SessionRecordingError;      // schemaVersion / engineVersion incompat
+class BundleRangeError extends SessionRecordingError;        // openAt / tickEntriesBetween out-of-range
+class BundleIntegrityError extends SessionRecordingError;    // structural; replay_across_failure / no_replay_payloads / no_initial_snapshot
+class ReplayHandlerMissingError extends SessionRecordingError;  // worldFactory drift on a recorded command type
+```
+
+Catch sites that care about cause use `instanceof <Subclass>`; catch sites that just want "any session-recording problem" use `instanceof SessionRecordingError`.
+
+### `ENGINE_VERSION`
+
+```typescript
+const ENGINE_VERSION: '0.7.7';
+```
+
+Read by `SessionRecorder` (T5) and `scenarioResultToBundle()` (T7) for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
