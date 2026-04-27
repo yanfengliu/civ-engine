@@ -47,6 +47,20 @@ export class ComponentStore<T> {
     }
     this.data[entityId] = component;
     this._generation++;
+    if (this.diffMode === 'semantic') {
+      // Re-insert after remove (or any path where wasPresent was false): if
+      // the new value matches the cached baseline, this is a no-op revert
+      // from the consumer's perspective. Mirror the wasPresent branch so the
+      // diff doesn't carry a redundant set+remove pair (N3 iter-8, parallel
+      // class to L2 iter-7).
+      const fingerprint = jsonFingerprint(component, `component ${entityId}`);
+      const baseline = this.baseline.get(entityId);
+      if (baseline === fingerprint) {
+        this.dirtySet.delete(entityId);
+        this.removedSet.delete(entityId);
+        return;
+      }
+    }
     this.dirtySet.add(entityId);
     this.removedSet.delete(entityId);
   }

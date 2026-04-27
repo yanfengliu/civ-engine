@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.6 - 2026-04-26
+
+Multi-CLI iter-8 convergence check (Codex + Opus; Gemini quota-out 6th iter). Both verified all 7 iter-7 fixes landed cleanly with no regressions; no new Critical/High/Medium/Low. Opus flagged one Note (N3) on a parallel-class gap to L2 — taken in this iter to keep the L2 contract structurally uniform. Non-breaking. 630 tests pass (up from 627).
+
+### Fixed
+
+- **N3 (Opus, iter-8):** `ComponentStore.set` strict-path branch (taken when `wasPresent === false`, e.g. after `remove()` or on first insert with an existing baseline) did not check whether the new value matched the cached baseline. The L2 fix (iter-7) only covered the `wasPresent === true` branch — sequence `set(A) → clearDirty → remove() → set(A)` left the entity in `dirtySet`, so `getDirty()` emitted a redundant `[id, A]` entry. Same severity class as L2 (bandwidth waste, no incorrect end state); pre-existing, not an iter-7 regression. Closed in this iter to make the semantic-mode "skip dirty-marking when value matches baseline" contract uniform across both branches. Strict mode untouched (gated on `diffMode === 'semantic'`). 3 new regression tests.
+
+### README
+
+- Added a version badge and a pre-release alpha warning (already shipped in v0.7.5; restated here for completeness — the badge auto-tracks the package version).
+
 ## 0.7.5 - 2026-04-26
 
 Multi-CLI iter-7 broader sweep (first sweep beyond the iter-1–6 `CommandTransaction` chain). Codex + Opus reviewed subsystems iters 1–6 didn't focus on; Gemini quota-exhausted (5th iter in a row). 7 real findings — 1 High, 3 Medium, 3 Low — all fixed. Non-breaking. 627 tests pass (up from 608).

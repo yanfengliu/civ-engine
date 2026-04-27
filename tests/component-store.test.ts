@@ -196,6 +196,39 @@ describe('ComponentStore', () => {
       expect(dirty.removed).toEqual([]);
     });
 
+    it('semantic mode remove + set-to-baseline collapses to no-op diff (N3 iter-8)', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.remove(0);
+      expect(store.getDirty().removed).toEqual([0]);
+
+      store.set(0, { x: 5 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([]);
+      expect(dirty.removed).toEqual([]);
+    });
+
+    it('semantic mode remove + set-to-different-value still marks dirty (N3 iter-8)', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.remove(0);
+      store.set(0, { x: 9 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[0, { x: 9 }]]);
+      expect(dirty.removed).toEqual([]);
+    });
+
+    it('semantic mode first insert with no baseline still marks dirty (N3 iter-8)', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(42, { x: 5 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([[42, { x: 5 }]]);
+    });
+
     it('semantic mode still marks dirty when value changes', () => {
       const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
       store.set(0, { x: 5 });
