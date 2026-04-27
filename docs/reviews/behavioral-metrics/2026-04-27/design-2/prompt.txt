@@ -1,0 +1,13 @@
+Reviewing Spec 8 (Behavioral Metrics over Corpus) design iter-2.
+
+Iter-1: Codex 3 HIGH + 2 MED + 1 LOW; Opus 4 HIGH + 6 MED + 4 LOW + 5 NIT. v2 (under review via stdin) addresses:
+
+- HIGH: runMetrics generic over <E, C, D>; §13 v0.8.2 (was v0.9.0); observe immutability relaxed (in-place mutation OK); empty-corpus Stats fields are null (not NaN); §6.3/§6.4 use `durationTicks > 0 ? rate : 0`; percentile method pinned to NumPy linear R-type-7 with literal formula; bundle.commands submission-vs-execution semantics documented + 2 new built-ins (commandAcceptanceRate, executionFailureRate read bundle.executions).
+- MED: orderSensitive is doc-only (no auto-detect); compareMetricsResults recurses through nested records; null inputs propagate to null deltas; arrays opaque; MetricsComparison = Record<string, MetricDelta | OnlyInComparison>.
+- LOW: orthogonality notes; bundle.failures deferral; merge×orderSensitive invariant; iterable-consumed-once; schemaVersion validation deferred.
+
+11 built-ins total (was 9). Engine facts: SessionBundle has commands (submission log) + executions (CommandExecutionResult[] with executed flag). bundle.failures: TickFailure[]. metadata.failedTicks: number[]. metadata.incomplete?: true.
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "iterate until reviewers nitpick instead of catching real bugs."
+
+Return findings with severity tags. If accept, say "ACCEPT".

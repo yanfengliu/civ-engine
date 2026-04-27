@@ -1,0 +1,3188 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: C:\Users\38909\Documents\github\civ-engine
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dd0db-194f-7ef0-ae29-c2df9743d8c0
+--------
+user
+Reviewing Spec 8 (Behavioral Metrics over Corpus) design iter-2.
+
+Iter-1: Codex 3 HIGH + 2 MED + 1 LOW; Opus 4 HIGH + 6 MED + 4 LOW + 5 NIT. v2 (under review via stdin) addresses:
+
+- HIGH: runMetrics generic over <E, C, D>; §13 v0.8.2 (was v0.9.0); observe immutability relaxed (in-place mutation OK); empty-corpus Stats fields are null (not NaN); §6.3/§6.4 use `durationTicks > 0 ? rate : 0`; percentile method pinned to NumPy linear R-type-7 with literal formula; bundle.commands submission-vs-execution semantics documented + 2 new built-ins (commandAcceptanceRate, executionFailureRate read bundle.executions).
+- MED: orderSensitive is doc-only (no auto-detect); compareMetricsResults recurses through nested records; null inputs propagate to null deltas; arrays opaque; MetricsComparison = Record<string, MetricDelta | OnlyInComparison>.
+- LOW: orthogonality notes; bundle.failures deferral; merge×orderSensitive invariant; iterable-consumed-once; schemaVersion validation deferred.
+
+11 built-ins total (was 9). Engine facts: SessionBundle has commands (submission log) + executions (CommandExecutionResult[] with executed flag). bundle.failures: TickFailure[]. metadata.failedTicks: number[]. metadata.incomplete?: true.
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "iterate until reviewers nitpick instead of catching real bugs."
+
+Return findings with severity tags. If accept, say "ACCEPT".
+
+<stdin>
+# Behavioral Metrics over Corpus — Design Spec
+
+**Status:** Draft v2 (2026-04-27). Awaiting iter-2 multi-CLI review. Iter-1 synthesis at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`. v2 addresses 7 HIGH (typing, version mismatch, immutability vs state-shape contradiction, NaN JSON, rate formula contradiction, percentile method underspecified, rejected-commands handling) + 6 MED + 4 LOW + 4 NIT.
+
+**Scope:** Tier-2 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 8). Builds on the Synthetic Playtest Harness (Spec 3, merged v0.7.20 → v0.8.1). Out of scope: persistent corpus storage / indexing (Spec 7), bundle search (Spec 7), AI playtester agent (Spec 9), counterfactual replay (Spec 5), annotation UI (Spec 2), bundle viewer (Spec 4).
+
+**Author:** civ-engine team
+
+**Related primitives:** `SessionBundle`, `runSynthPlaytest`, `SessionMetadata`, `RecordedCommand`, `SessionTickEntry`.
+
+## 1. Goals
+
+This spec defines an engine-level **corpus-reducer** that:
+
+- Computes aggregate **behavioral metrics** over an `Iterable<SessionBundle>` (which arrays, generators, and future filesystem readers all satisfy).
+- Ships a small set of **engine-generic built-in metrics** derivable from bundle data alone (no game semantics).
+- Exposes an **accumulator contract** for user-defined metrics that stays streaming-friendly and one-pass-multiplex-able.
+- Provides a **thin comparison helper** for baseline vs. current — returning deltas, not regression judgments.
+- Is deterministic given the same bundle set, regardless of bundle iteration order (where order-insensitive metrics are the default).
+
+The deliverable is an opt-in API surface; existing engine consumers see no behavioral change.
+
+## 2. Non-Goals
+
+- **Persistent corpus management.** Loading thousands of bundles from disk, indexing them by metadata, querying by tags, retention policies — all Spec 7's job.
+- **Async/streaming ingestion.** v1 accepts `Iterable<SessionBundle>` only. `AsyncIterable` defers to when Spec 7 lands or when corpus loading stops being trivially local.
+- **Game-semantic metrics.** "Resource Gini coefficient", "time-to-first-conflict", "dominant strategy distribution", "decision points per minute" — these need standard event/marker contracts that the engine doesn't define. Game projects implement these as user-defined metrics.
+- **Regression judgment.** "Is this 18% shift bad?" is game- and policy-specific. v1 ships `compareMetricsResults` which returns deltas + percent changes; the threshold/judgment layer is the caller's.
+- **Per-tick runtime instrumentation.** `WorldMetrics.durationMs` and similar are runtime-perf data, not behavior data. Mixing them into Spec 8 blurs the spec.
+- **Distributed/parallel merge.** The accumulator contract reserves an optional `merge` hook for future parallel processing, but v1 doesn't implement parallel corpus-pass.
+- **`stopReason` aggregation.** `SynthPlaytestResult.stopReason` is returned by the harness but NOT persisted in the bundle (per Spec 3 v10 §8). Aggregating it would require a Spec 3 follow-up to persist it; deferred.
+- **Approximate sketches.** v1 metrics are exact. HyperLogLog / t-digest / etc. land if/when corpora exceed memory.
+
+## 3. Background
+
+Spec 3 produces `SessionBundle`s via `runSynthPlaytest`. A typical workflow generates many bundles in CI: random-policy variations, scripted regression replays, scheduled overnight runs. Today the only way to spot trends across this corpus is reading individual bundles, which doesn't scale.
+
+Spec 8 fills the gap with a pure-function reducer: feed in bundles, get out structured metrics. CI compares `metrics(today's bundles)` against `metrics(yesterday's bundles)` to detect emergent-behavior regressions before they reach players.
+
+The reducer is intentionally divorced from corpus storage. Bundles arrive as `Iterable<SessionBundle>` — callers materialize from arrays, filesystem readers, or future Spec 7 indexes. Spec 8 doesn't care.
+
+## 4. Architecture Overview
+
+Three new symbols in `src/behavioral-metrics.ts`:
+
+| Component                  | Status            | Responsibility                                                                |
+| -------------------------- | ----------------- | ----------------------------------------------------------------------------- |
+| `Metric<TState, TResult>`  | new (interface)   | Accumulator contract: `create()`, `observe(state, bundle)`, `finalize(state)`, optional `merge`. |
+| `runMetrics(bundles, metrics)` | new (function) | One-pass-per-bundle reducer. Returns `MetricsResult` (Record<string, unknown>) keyed by metric name. |
+| Built-in metrics           | new (functions)   | `bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandAcceptanceRate`, `executionFailureRate`. |
+
+Plus two helpers:
+
+- `compareMetricsResults(baseline, current)` — pure delta computation.
+- `Stats` type — `{ count; min; max; mean; p50; p95; p99 }` for built-in stats metrics.
+
+```
+              ┌─────────────────────────────────────────┐
+              │      runMetrics(bundles, metrics)       │
+              │                                         │
+              │  ┌──────────────────┐   ┌────────────┐  │
+              │  │ for each bundle  │   │ for each   │  │
+              │  │   for each metric│ ─▶│ metric:    │  │
+              │  │     observe()    │   │ finalize() │  │
+              │  └──────────────────┘   └────────────┘  │
+              └─────────────────────────────────────────┘
+                              │
+                              ▼
+                     ┌─────────────────┐
+                     │ MetricsResult   │
+                     │ {[name]: result}│
+                     └─────────────────┘
+                              │
+                              ▼
+                  ┌──────────────────────────┐
+                  │ compareMetricsResults    │
+                  │   (baseline, current)    │
+                  └──────────────────────────┘
+                              │
+                              ▼
+                     ┌────────────────┐
+                     │ MetricsDelta   │
+                     │ {[name]: delta}│
+                     └────────────────┘
+```
+
+## 5. Metric Contract
+
+### 5.1 The `Metric` interface
+
+```ts
+export interface Metric<TState, TResult> {
+  /** Human-readable name; used as the key in MetricsResult. Must be unique within a runMetrics call. */
+  readonly name: string;
+  /** Initial accumulator state. Called once at start of run. */
+  create(): TState;
+  /**
+   * Update the accumulator with a single bundle. Returns the updated state,
+   * which MAY be the same reference as the input state (in-place mutation
+   * is permitted for performance) or a new value. The contract is functional
+   * purity: output depends only on (state, bundle) and produces no global
+   * side effects. Concurrent calls observe()-ing the same state reference
+   * are NOT safe; v1's runMetrics is single-threaded so this is moot, but
+   * future parallel-merge implementations must give each worker its own
+   * accumulator state.
+   */
+  observe(state: TState, bundle: SessionBundle): TState;
+  /** Convert final accumulator state to the metric's result type. */
+  finalize(state: TState): TResult;
+  /**
+   * Optional: merge two accumulator states. If provided, marks the metric as
+   * suitable for future parallel-corpus processing. Not called by v1's
+   * synchronous runMetrics. Implied invariant: metrics that declare `merge`
+   * MUST be order-insensitive (you cannot meaningfully combine two partial
+   * accumulators if order matters across the boundary).
+   */
+  merge?(a: TState, b: TState): TState;
+  /**
+   * Optional: declare order-sensitivity. Default: false (order-insensitive).
+   * This is a doc-only declaration — runMetrics does NOT auto-detect or warn
+   * on non-deterministic iteration sources. When `orderSensitive: true` is
+   * set, the caller is responsible for materializing bundles in stable
+   * order before passing them to runMetrics.
+   */
+  readonly orderSensitive?: boolean;
+}
+```
+
+### 5.2 Why accumulator-style and not `(bundle) => T` + `combine`
+
+A `(bundle) => T` + `combine(values)` shape forces the caller to materialize one `T` per bundle, which is fine for cheap metrics (counts) but expensive for ones that buffer raw values for percentile calc. The accumulator contract lets each metric pick its own representation: `bundleCount` keeps a single integer; `sessionLengthStats` keeps a sorted-array-on-finalize buffer; `commandTypeCounts` keeps a `Map<string, number>`. One-pass through the corpus, multiplexed across all metrics.
+
+The alternative `(bundles) => TAgg` shape forces every metric to re-walk the corpus. For N metrics, that's N scans. The accumulator contract is one scan total.
+
+### 5.3 Determinism
+
+A metric is **order-insensitive** if `metric(observe(observe(s, a), b)) === metric(observe(observe(s, b), a))` for any state `s` and bundles `a`, `b`. v1's built-ins are all order-insensitive (counts, sums, sorted-on-finalize percentiles). Order-sensitive user metrics declare `orderSensitive: true` as a doc-only marker; `runMetrics` does NOT auto-detect or warn on iteration source — the caller is responsible for stable order when an `orderSensitive` metric is in the list.
+
+For the percentile metrics (`Stats` type), the implementation buffers all values and sorts on `finalize` — exact percentiles, deterministic regardless of bundle iteration order. Percentile method: NumPy `linear` (R-quantile type 7). Formula: `index = (count - 1) * p; lo = floor(index); hi = ceil(index); v = sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo)`. For `count === 1`, all percentiles equal that single value. For `count === 0`, all numeric fields are `null` (see §6.2).
+
+## 6. Built-in Metrics
+
+All built-ins return their `Metric<TState, TResult>` value from a factory function, mirroring Spec 3's `noopPolicy()` / `randomPolicy(config)` pattern.
+
+### 6.1 `bundleCount()`
+
+```ts
+function bundleCount(): Metric<{ count: number }, number>;
+// Result: total number of bundles in the corpus.
+```
+
+### 6.2 `sessionLengthStats(name?)` and the `Stats` shape
+
+```ts
+export interface Stats {
+  count: number;
+  min: number | null;   // null when count === 0
+  max: number | null;
+  mean: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+}
+
+function sessionLengthStats(name?: string): Metric<number[], Stats>;
+// State: buffered bundle.metadata.durationTicks values.
+// Result: Stats over durationTicks.
+// Default name: 'sessionLengthStats'.
+```
+
+The numeric fields are `number | null` — `null` represents "no data" and is JSON-stable (unlike `NaN`, which `JSON.stringify` coerces to `null` losslessly but `JSON.parse` cannot recover as `NaN`). For `count === 1`, `min === max === mean === p50 === p95 === p99 === <the single value>`. For `count === 0`, all are `null`.
+
+### 6.3 `commandRateStats(name?)`
+
+```ts
+function commandRateStats(name?: string): Metric<number[], Stats>;
+// Per-bundle rate: durationTicks > 0 ? bundle.commands.length / durationTicks : 0.
+// Bundles with durationTicks === 0 contribute 0 (no divide-by-zero; no inflation).
+// Note: counts SUBMITTED commands (rejected included). For accepted-only,
+// see commandAcceptanceRate (§6.10) and use bundle.executions in user-defined
+// metrics for an executed-rate variant.
+```
+
+### 6.4 `eventRateStats(name?)`
+
+```ts
+function eventRateStats(name?: string): Metric<number[], Stats>;
+// Per-bundle rate: durationTicks > 0 ? sum(bundle.ticks[].events.length) / durationTicks : 0.
+```
+
+### 6.5 `commandTypeCounts(name?)`
+
+```ts
+function commandTypeCounts(name?: string): Metric<Map<string, number>, Record<string, number>>;
+// State: Map<command-type-string, count> aggregated across all bundles.
+// Result: plain object for JSON-friendliness.
+// Note: counts ALL submissions including rejected ones (bundle.commands is
+// the submission log, not the executed log — SessionRecorder records every
+// submitWithResult call regardless of result.accepted). For executed-only
+// type counts, define a user metric reading bundle.executions[].commandType.
+```
+
+### 6.6 `eventTypeCounts(name?)`
+
+```ts
+function eventTypeCounts(name?: string): Metric<Map<string, number>, Record<string, number>>;
+// Same shape as commandTypeCounts but over bundle.ticks[].events[].type.
+```
+
+### 6.7 `failureBundleRate(name?)`
+
+```ts
+function failureBundleRate(name?: string): Metric<{ withFailure: number; total: number }, number>;
+// Counts bundles where metadata.failedTicks?.length > 0.
+// Result: failureBundleCount / totalBundles in [0, 1]. Empty corpus → 0.
+// Note: orthogonal to incompleteBundleRate. A bundle can have failedTicks
+// without being incomplete (in-flight tick failures the world recovered
+// from), and could in principle be incomplete with empty failedTicks
+// (sink failure that happened to not coincide with a tick failure).
+```
+
+### 6.8 `failedTickRate(name?)`
+
+```ts
+function failedTickRate(name?: string): Metric<{ failedTicks: number; durationTicks: number }, number>;
+// Sums failedTicks count and durationTicks across all bundles.
+// Result: totalFailedTicks / totalDurationTicks in [0, 1]. Empty corpus → 0.
+```
+
+### 6.9 `incompleteBundleRate(name?)`
+
+```ts
+function incompleteBundleRate(name?: string): Metric<{ incomplete: number; total: number }, number>;
+// Counts bundles where metadata.incomplete === true.
+// Result: incompleteBundleCount / totalBundles in [0, 1]. Empty corpus → 0.
+// Note: orthogonal to failureBundleRate (see §6.7).
+```
+
+### 6.10 `commandAcceptanceRate(name?)`
+
+```ts
+function commandAcceptanceRate(name?: string): Metric<{ accepted: number; total: number }, number>;
+// Numerator: count of bundle.executions[] where executed === true.
+// Denominator: total executions across all bundles.
+// Result: accepted / total in [0, 1]. Empty corpus or zero-execution corpus → 0.
+//
+// Distinct from §6.5/§6.3: those count SUBMISSIONS (bundle.commands).
+// This counts EXECUTIONS (bundle.executions), filtered by executed flag.
+// CommandExecutionResult.executed === false captures both validator
+// rejections and handler-side failures.
+```
+
+### 6.11 `executionFailureRate(name?)`
+
+```ts
+function executionFailureRate(name?: string): Metric<{ failed: number; total: number }, number>;
+// Numerator: count of bundle.executions[] where executed === false.
+// Denominator: total executions across all bundles.
+// Result: failed / total in [0, 1]. Empty corpus or zero-execution corpus → 0.
+//
+// Note: commandAcceptanceRate + executionFailureRate === 1 over a non-empty
+// corpus. Both are shipped because callers usually want one or the other
+// based on the regression direction they're watching for.
+```
+
+### 6.12 What's deliberately NOT built in
+
+- `stopReasonHistogram` — `stopReason` is `SynthPlaytestResult.stopReason`, NOT in `bundle.metadata`. Aggregating it would require a Spec 3 follow-up to persist it. Deferred.
+- `sourceKindHistogram` — possible from `bundle.metadata.sourceKind`, but every bundle in a synth-corpus is `'synthetic'` by construction. Trivial counter; user-defined.
+- `durationMsStats` — `WorldMetrics.durationMs` is runtime instrumentation (`performance.now()`-backed), not behavior data. Out of scope per §2.
+- Per-phase failure metrics ("what fraction of failures are in `phase: 'systems'`") — `bundle.failures: TickFailure[]` carries the phase + error info. v1 only reads `metadata.failedTicks` (just the tick numbers). User-defined for now; ship a built-in if a clear engine-generic shape emerges.
+- Executed-only command/event type histograms — see notes in §6.5/§6.6. User-defined via `bundle.executions[].commandType`.
+- Game-semantic metrics — out of scope per §2.
+
+## 7. Harness API
+
+### 7.1 `runMetrics`
+
+```ts
+export interface MetricsResult {
+  [name: string]: unknown;  // each metric's finalize() output, keyed by metric.name
+}
+
+import type { JsonValue } from './json.js';
+
+export function runMetrics<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+>(
+  bundles: Iterable<SessionBundle<TEventMap, TCommandMap, TDebug>>,
+  metrics: Metric<unknown, unknown>[],
+): MetricsResult;
+```
+
+The bundle-side generics let a caller holding `SessionBundle<MyEvents, MyCommands>[]` pass it without assignability friction. `MetricsResult` is a `Record<string, unknown>`; per-metric result narrowing happens at the consumption site (see §10's CI example for the type-assertion idiom). A typed-name-tuple builder that derives `MetricsResult` from a `const`-asserted metric tuple is doable but defers to v2 — not worth the type-level complexity for v1's primary use case (read a few metrics by name in a known position).
+
+Lifecycle:
+
+1. **Validate** metric names are unique. Throws `RangeError` on collision.
+2. **Init**: `state = metrics.map(m => m.create())`.
+3. **Observe**: for each `bundle` in `bundles`, for each `(metric, i)`, `state[i] = metric.observe(state[i], bundle)`.
+4. **Finalize**: `result[m.name] = m.finalize(state[i])`.
+5. **Return**: `result`.
+
+The `Iterable<SessionBundle>` constraint matches arrays, generators, `Set`, and any custom iterable. **The iterable is consumed once** — generator-source bundles are exhausted by the first `runMetrics` call, so a caller computing baseline + current from one stream must materialize first (e.g., `const arr = Array.from(stream)`).
+
+No `AsyncIterable` in v1 (deferred to Spec 7's corpus-loading or v2).
+
+### 7.2 `compareMetricsResults`
+
+```ts
+export type NumericDelta = {
+  baseline: number | null;
+  current: number | null;
+  delta: number | null;       // current - baseline; null when either side is null
+  pctChange: number | null;   // (current - baseline) / baseline; see conventions below
+};
+
+export type OpaqueDelta = {
+  baseline: unknown;
+  current: unknown;
+  equal: boolean;            // structural deep-equal
+};
+
+export type OnlyInComparison = {
+  baseline?: unknown;        // present iff key only in baseline
+  current?: unknown;         // present iff key only in current
+  onlyIn: 'baseline' | 'current';
+};
+
+export type MetricDelta =
+  | NumericDelta
+  | OpaqueDelta
+  | { [key: string]: MetricDelta | OnlyInComparison };  // record-typed: recurse per-key
+
+export type MetricsComparison = Record<string, MetricDelta | OnlyInComparison>;
+
+export function compareMetricsResults(
+  baseline: MetricsResult,
+  current: MetricsResult,
+): MetricsComparison;
+```
+
+**Recursion rule.** At every record-typed level (`MetricsResult` itself; nested `Record<string, number>` from `commandTypeCounts`; etc.), each key is one of:
+- present in both sides → recurse with `compareMetricsResults` semantics on the values.
+- present only in baseline → `{ baseline: <value>, onlyIn: 'baseline' }`.
+- present only in current → `{ current: <value>, onlyIn: 'current' }`.
+
+**Leaf rules.**
+- Both sides numbers → `NumericDelta` with: `delta = current - baseline`; `pctChange = (current - baseline) / baseline`.
+  - `0 / 0 → 0` (both zero, no change).
+  - `nonzero / 0 → +Infinity` or `-Infinity` (sign of `current - baseline`).
+- Either side `null` (e.g., empty-corpus `Stats` field) → both `delta` and `pctChange` are `null` (consumers can detect "no baseline data" or "no current data").
+- Both sides non-numeric same shape → `OpaqueDelta` with `equal = deepEqual(a, b)`.
+- Arrays are treated as opaque leaves — no per-element diff in v1. User metrics returning numeric arrays (e.g., histogram buckets) get only `equal: boolean`. (Per-element recursion is v2 territory.)
+- Type mismatch (e.g., baseline number, current string) → `OpaqueDelta` with `equal: false`.
+
+Game-specific judgment ("18% shift in p95 duration is bad") is up to the caller — see §10.
+
+### 7.3 Failure modes
+
+- **Empty corpus.** `runMetrics([], metrics)` runs `create()` then `finalize()` for each metric — no `observe` calls. Built-ins handle this gracefully: `bundleCount` returns `0`; `*Rate` metrics return `0` (defined via `total === 0 → 0`); `*Stats` return `{ count: 0, min: null, max: null, mean: null, p50: null, p95: null, p99: null }`. The `null` fields flag "no data" without throwing AND survive JSON round-trip (`NaN` would not — `JSON.stringify(NaN) === 'null'`, but `JSON.parse('null') !== NaN`, so a baseline saved to disk and reloaded would silently change shape).
+- **Duplicate metric names.** Throws `RangeError('duplicate metric name: <name>')`.
+- **Metric throws inside `observe`.** Propagates — the corpus pass is a pure user-controlled function; the harness doesn't catch.
+- **Bundle with `failedTicks` populated.** Built-ins handle — `failureBundleRate` and `failedTickRate` are designed for this case. Other metrics aggregate the bundle's data normally.
+
+## 8. Determinism
+
+Two `runMetrics(bundles, metrics)` calls with the same bundles (deep-equal, in any order if all metrics are order-insensitive) produce structurally-equal results. v1 built-ins are all order-insensitive. Order-sensitive user metrics declare via `orderSensitive: true` and the caller is responsible for stable iteration.
+
+Volatile bundle metadata (`sessionId`, `recordedAt`) is NOT used by any built-in metric. User-defined metrics that read these get fragile results — the §6.10 list documents the deliberate exclusion.
+
+`Stats` percentile calc uses linear interpolation between sorted samples (the standard method). Implementation: sort numeric buffer on `finalize`, then index. Exact, deterministic, O(n log n) per metric.
+
+## 9. Integration with Existing Primitives
+
+- **`runSynthPlaytest`**: produces bundles that are the natural input to `runMetrics`. CI pattern: run N synthetic playtests in parallel → collect bundles → `runMetrics(bundles, metrics)` → compare against baseline.
+- **`SessionRecorder` / `SessionReplayer`**: bundles produced by either (live recordings, scenario adapters, synthetic playtests) are accepted by `runMetrics` uniformly.
+- **`SessionBundle` shape**: all fields read by built-ins (`metadata.durationTicks`, `metadata.failedTicks`, `metadata.incomplete`, `commands[].type`, `ticks[].events[].type`) are present in v0.8.0+ bundles. Older bundles (v0.7.x) work but lack `metadata.policySeed` (which v1 metrics don't read anyway).
+
+## 10. CI Pattern
+
+```ts
+import { runSynthPlaytest, runMetrics, compareMetricsResults,
+         bundleCount, sessionLengthStats, commandRateStats,
+         commandTypeCounts, failureBundleRate } from 'civ-engine';
+
+// Generate corpus.
+const bundles: SessionBundle[] = [];
+for (let i = 0; i < 64; i++) {
+  const result = runSynthPlaytest({
+    world: setup(),
+    policies: [/* ... */],
+    maxTicks: 1000,
+    policySeed: i,  // distinct seed per run
+  });
+  if (result.ok) bundles.push(result.bundle);
+}
+
+// Compute metrics.
+const metrics = [
+  bundleCount(),
+  sessionLengthStats(),
+  commandRateStats(),
+  commandTypeCounts(),
+  failureBundleRate(),
+];
+const current = runMetrics(bundles, metrics);
+
+// Compare against baseline (loaded from previous CI run).
+const baseline = JSON.parse(fs.readFileSync('baseline-metrics.json', 'utf-8'));
+const comparison = compareMetricsResults(baseline, current);
+
+// Caller decides what's a regression. MetricsComparison is Record<string, ...>;
+// per-metric narrowing happens at the consumption site via type assertion.
+const sessionLengthDelta = comparison.sessionLengthStats as { p95: NumericDelta } | undefined;
+const p95 = sessionLengthDelta?.p95;
+if (p95 && p95.pctChange !== null && Math.abs(p95.pctChange) > 0.20) {
+  throw new Error(`p95 session length shifted ${(p95.pctChange * 100).toFixed(1)}%`);
+}
+```
+
+This `as` assertion idiom is the v1 type-narrowing pattern. v2 may add a typed-name-tuple builder (`runMetricsTyped(bundles, [bundleCount(), sessionLengthStats()] as const)` returning a literal-keyed result type). Out of scope for v1.
+
+## 11. Performance
+
+- **Per-bundle cost.** Each metric's `observe` is called once per bundle. Built-ins are O(1) (counts, sums) or O(commands+events) for the type-counts metrics. Total per-bundle cost: O(commands + events).
+- **Memory.** `Stats` metrics buffer numeric values (one number per bundle). For 10k bundles, that's ~80KB per `Stats` metric — negligible. Type-count `Map`s are bounded by distinct command/event types (typically dozens).
+- **Corpus size.** v1 holds the entire `Iterable` only as long as needed for one pass. With a generator source, bundles stream through; only the metric accumulator state is retained.
+
+## 12. Testing Strategy
+
+Unit / integration tests target:
+
+- **Built-in metrics:**
+    - `bundleCount` over empty / single / many bundles.
+    - `*Stats` — empty corpus returns `count: 0` + `NaN`s; 1-bundle corpus has `count: 1` + degenerate `min === max === mean === p50 === ...`; multi-bundle corpus matches hand-computed percentiles.
+    - `commandTypeCounts` aggregates across multiple bundles; respects discriminated-union `type` field on `RecordedCommand`.
+    - `eventTypeCounts` similarly.
+    - `failureBundleRate` over corpus with mix of failed/clean bundles.
+    - `failedTickRate` over corpus with various failedTicks counts; clean corpus → 0.
+    - `incompleteBundleRate` similarly.
+- **`runMetrics`:**
+    - Multiplexing: 9 built-ins in one pass produces all 9 results.
+    - Empty corpus: each metric produces its zero-state result.
+    - Duplicate metric names: throws `RangeError`.
+    - User-defined metric: implements the contract, observes correctly, finalizes correctly.
+    - Order-insensitivity: same bundles in different order → same result for built-ins.
+- **`compareMetricsResults`:**
+    - Numeric deltas + pctChange computed correctly.
+    - 0/0 → 0; nonzero/0 → `+Infinity` (or `-Infinity`).
+    - Non-numeric leaves report `equal: boolean`.
+    - Keys-only-in-one-side reported correctly.
+- **Determinism:**
+    - Two `runMetrics` calls on structurally-equal corpora produce deep-equal `MetricsResult`.
+    - Sub-tests for each built-in's result stability.
+
+Acceptance criterion: 100% of new code covered by tests.
+
+## 13. Documentation Surface
+
+Per AGENTS.md:
+
+- `docs/api-reference.md` — new section `## Behavioral Metrics (v0.8.2)` for `Metric`, `MetricsResult`, `MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, `compareMetricsResults`, plus subsections for each of the 11 built-in metric factories.
+- `docs/guides/behavioral-metrics.md` (new) — quickstart, custom-metric authoring guide, CI pattern, comparison-helper usage, determinism notes.
+- `docs/guides/synthetic-playtest.md` — append a §"Computing metrics over bundles" cross-reference.
+- `docs/guides/ai-integration.md` — note Spec 8 as a Tier-2 piece of the AI feedback loop.
+- `docs/architecture/ARCHITECTURE.md` — Component Map row.
+- `docs/architecture/decisions.md` — ADRs for the accumulator contract and the deliberate non-features.
+- `docs/architecture/drift-log.md` — entry.
+- `docs/changelog.md` — version entry (see §14).
+- `docs/devlog/summary.md` + `detailed/` — per-task entries.
+- `README.md` — Feature Overview row + Public Surface bullet + version badge.
+- `docs/README.md` — index entry.
+- `docs/design/ai-first-dev-roadmap.md` — Spec 8 status: Drafted → Implemented after T2 lands.
+
+## 14. Versioning
+
+Branch base: v0.8.1 (after Spec 3 merge). Direct-to-main commits per AGENTS.md (no branches).
+
+Plan structure (estimated 2 commits):
+
+- **T1 (v0.8.2 — c-bump, purely additive)**: ships:
+  - `Metric` interface, `runMetrics`, all 11 built-in metric factories, `compareMetricsResults`, `Stats` + delta types.
+  - Unit tests covering each built-in + `runMetrics` multiplexing + `compareMetricsResults`.
+  - api-reference + guide + ADRs 23, 24 (accumulator contract; non-feature catalog).
+- **T2 (v0.8.3 — c-bump)**: Determinism integration tests + structural docs:
+  - Determinism integration tests (dual-run `runMetrics` produces deep-equal results; hand-computed-percentile tests; order-insensitivity verification).
+  - `docs/architecture/ARCHITECTURE.md` Component Map row.
+  - `docs/architecture/drift-log.md` entry.
+  - `docs/design/ai-first-dev-roadmap.md` status update.
+  - `docs/guides/ai-integration.md` Tier-2 reference.
+
+(Alternative single-commit landing: v0.8.2. The two-commit split mirrors Spec 3's T2/T3 separation but is optional given Spec 8's smaller scope. Decision deferred to plan stage.)
+
+## 15. Architectural Decisions
+
+### ADR 23: Accumulator-style metric contract over reducer or per-bundle-map+combine
+
+**Decision:** `Metric<TState, TResult>` exposes `create()`, `observe(state, bundle)`, `finalize(state)`, optional `merge`. Stateful, streaming-friendly, one-pass-multiplex-able.
+
+**Rationale:** A `(bundle) => T` + `combine(T[])` shape forces materializing one T per bundle and prevents per-metric representation choice (Stats wants a sorted buffer, counts wants an integer). A `(bundles) => TAgg` shape forces per-metric corpus walks (N scans for N metrics). Accumulator-style is one scan total, each metric picks its own state shape, and `merge` is a future-compat hook for parallel/distributed corpus processing without breaking the v1 contract.
+
+### ADR 24: Engine-generic built-ins only; game-semantic metrics are user-defined
+
+**Decision:** v1 ships 9 built-in metrics that read only `SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, etc.). Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in — they require standard event/marker contracts that the engine doesn't define.
+
+**Rationale:** civ-engine is a general-purpose engine; metrics shipped in the engine package must work for any consuming game. Game-semantic metrics need game-specific event names, component shapes, and marker conventions. Game projects implement those as user-defined `Metric<TState, TResult>` instances and compose them into their own `runMetrics(bundles, [...builtins, ...gameMetrics])` calls.
+
+### ADR 25: `compareMetricsResults` returns deltas, not regression judgments
+
+**Decision:** The helper returns numeric deltas and percent changes; it does NOT classify changes as regressions, improvements, or noise.
+
+**Rationale:** "Is an 18% shift in p95 session length a regression?" is game- and policy-specific. Some games consider longer sessions a feature; others a bug. Some metrics are noisy (small corpus, high variance); others stable. Encoding judgment thresholds into the engine would either bake the wrong defaults for half the consumers or require a config surface that's its own complexity tax. Caller-side judgment is the right boundary.
+
+### ADR 26: `Iterable<SessionBundle>` only in v1; `AsyncIterable` deferred
+
+**Decision:** v1 accepts only synchronous `Iterable<SessionBundle>`. Arrays, generators, sets, and any custom synchronous iterable work. `AsyncIterable` is NOT supported.
+
+**Rationale:** Spec 3's harness is synchronous; the natural composition is synchronous corpus reduction. `AsyncIterable` is worth the complexity when corpus loading involves I/O — Spec 7's bundle index, network-backed corpora — none of which exist yet. Adding async now is abstraction-before-pressure; adding it later is a non-breaking signature widening (overload).
+
+### ADR 27: Do NOT aggregate `stopReason` in v1
+
+**Decision:** No `stopReasonHistogram` built-in. `SynthPlaytestResult.stopReason` lives outside `SessionBundle`; aggregating it requires a separate Spec 3 follow-up to persist it into `metadata`.
+
+**Rationale:** The right thing for game CI is to see "10% of synth runs ended in `policyError`" — but today that requires the test runner to track `result.stopReason` per harness call, not the corpus reducer. Forcing the metric into v1 would either (a) couple Spec 8 to Spec 3's result type (not bundle-only), or (b) require a Spec 3 follow-up that's better landed independently. Either way, v1 ships without it; users who want it accumulate `stopReason` outside `runMetrics`.
+
+## 16. Open Questions / Deferred
+
+1. **Persistent baseline storage.** This spec doesn't mandate where `baseline-metrics.json` lives. Test code or CI scripts persist their own baselines; future Spec 7 might index baselines alongside bundles.
+2. **Per-tick metrics.** Could a metric look inside `bundle.ticks[]` to compute "average commands per tick over time"? Yes — the contract allows arbitrary bundle traversal. But shipping such metrics as built-ins would explode the surface area. User-defined.
+3. **Approximate sketches.** HyperLogLog for distinct-event-type estimation, t-digest for percentiles over huge corpora. Not needed at current scales (< 10K bundles per CI run); land when memory pressure hits.
+4. **Parallel corpus processing.** The `merge` hook is reserved but unused. v2 could expose `runMetricsParallel(bundleStreams, metrics)` that splits bundles across workers and merges accumulators. Out of scope for v1.
+5. **`stopReason` persistence in `SessionMetadata`.** Separate Spec 3 follow-up. Once landed, `stopReasonHistogram` becomes a 1-day add-on.
+6. **Bundle filtering / windowing.** "Compute metrics only over bundles where `metadata.policySeed % 2 === 0`." Caller-side: materialize first if needed (e.g., `Array.from(stream).filter(...)` since `Iterable<T>` doesn't have `.filter`). Or write a generator: `function* filtered() { for (const b of bundles) if (pred(b)) yield b; }`. No new API needed.
+7. **`SESSION_BUNDLE_SCHEMA_VERSION` validation.** v1 doesn't check `bundle.schemaVersion` (only one version exists). When `schemaVersion > 1` ships, `runMetrics` should validate or accept a version-mapping option. Future spec.
+
+## 17. Future Specs (this surface unlocks)
+
+| Future Spec                          | What it adds                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| #7 Bundle Search / Corpus Index      | Persistent corpus → wraps as `Iterable<SessionBundle>` for `runMetrics`.    |
+| #9 AI Playtester Agent               | LLM-driven Policy + LLM-interpretable `MetricsResult` for analysis.         |
+| Future: Async corpus reducer (v2)    | `AsyncIterable` overload for I/O-backed sources.                            |
+| Future: Parallel corpus reducer       | Worker-distributed `runMetricsParallel` with accumulator `merge`.           |
+| Future: stopReason persistence        | Spec 3 follow-up to put `stopReason` in `metadata`; trivializes histogram.  |
+
+## 18. Acceptance Criteria
+
+- All new symbols (`Metric`, `MetricsResult`, `MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, `compareMetricsResults`, plus 11 built-in factories: `bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandAcceptanceRate`, `executionFailureRate`) exported from `src/index.ts` with TypeScript types.
+- Test coverage: each built-in tested for empty / single / multi-bundle inputs; `runMetrics` multiplexing test; `compareMetricsResults` numeric + null + opaque + only-in-side + nested-record cases; user-defined-metric round-trip; order-insensitivity verification (apply-twice-with-different-orders).
+- All four engine gates pass.
+- §13 doc updates land in the same commits as the code that introduces each surface.
+- Multi-CLI design review and code review reach convergence — reviewers nitpick rather than catching real issues, per AGENTS.md.
+</stdin>
+codex
+Using the repo instructions and reviewing the spec against current engine contracts first. I’m pulling the architecture/devlog context plus the relevant type definitions so the review is grounded in the actual `SessionBundle` surface, not just the draft text.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs\\architecture\\ARCHITECTURE.md'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|Spec 8|corpus|SessionBundle|CommandExecutionResult|behavioral-metrics|metrics' -Context 0,2" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\.codex\\skills\\programming-best-practices\\SKILL.md'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\.codex\\plugins\\cache\\openai-curated\\superpowers\\b066e4a0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs\\devlog\\summary.md'" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|Spec 8|corpus|SessionBundle|CommandExecutionResult|behavioral-metrics|metrics' -Context 0,2"` rejected: blocked by policy
+2026-04-27T21:32:16.037350Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|Spec 8|corpus|SessionBundle|CommandExecutionResult|behavioral-metrics|metrics' -Context 0,2"` rejected: blocked by policy
+ succeeded in 398ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) ƒ?" highest priority
+2. **Superpowers skills** ƒ?" override default system behavior where they conflict
+3. **Default system prompt** ƒ?" lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to youƒ?"follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOPƒ?"you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ƒ%ÿ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" ƒ+' brainstorming first, then implementation skills.
+"Fix this bug" ƒ+' debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 502ms:
+# Devlog Summary
+
+- 2026-04-27: Spec 3 T3 (v0.8.1) ƒ?" Determinism integration tests (selfCheck round-trip, production-determinism dual-run, sub-RNG positive/negative, poisoned-bundle replay throws, pre-step abort vacuous, bundleƒ+'script regression) + structural docs (ARCHITECTURE Component Map, drift-log, roadmap status ƒ+' Implemented for Spec 3 + Spec 1, ai-integration Tier-1 reference). 7 new tests; 798 passed + 2 todo. **Spec 3 implementation complete (T1+T2+T3); awaiting merge authorization.**
+- 2026-04-27: Spec 3 T2 (v0.8.0, **b-bump**) ƒ?" `runSynthPlaytest` harness + SessionMetadata.sourceKind union widened to add 'synthetic' (breaking for assertNever consumers, per ADR 20). Sub-RNG init via `Math.floor(world.random() * 0x1_0000_0000)` pre-connect; `terminalSnapshot:true` hardcoded; 5-value stopReason union with separate connect-time-failure (re-throw) and mid-tick-failure ('sinkError') paths. ADRs 20, 20a, 21, 22. 17 new harness tests; 789 passed + 2 todo.
+- 2026-04-27: Spec 3 T1 (v0.7.20) ƒ?" Synthetic Playtest Policy interface + 3 built-in policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`). 4-generic shape matches `World<...>`; sub-RNG via `PolicyContext.random()` (ADR 19). `runSynthPlaytest` harness ships in T2 (v0.8.0). 13 new tests; 772 passed + 2 todo.
+- 2026-04-27: Session-recording followup 4 (v0.7.19) ƒ?" Clause-paired determinism tests for A11.1 clauses 1, 2, 7 (clean+violation each). Clauses 4, 6 added as `it.todo` (hard fixtures). 6/8 testable clauses covered now (was 3/8). 759 tests + 2 todo.
+- 2026-04-27: Session-recording followups 2+3 (v0.7.18) ƒ?" terminated-state guard on user-facing recorder methods (Opus L2; +1 regression test); World.applySnapshot extracts `_replaceStateFrom` helper for auditability (Opus L4); api-reference T-prefix section headers renamed to feature labels (Opus L3).
+- 2026-04-27: Session-recording followup 1 (v0.7.17) ƒ?" `SessionReplayer` pre-groups bundle.commands/.ticks/.executions into per-tick maps at construction; O(NAúT) ƒ+' O(1) per-tick lookup in `selfCheck`/`openAt`. Closes iter-2 M1.
+- 2026-04-27: Session-recording iter-1 code-review fixes (v0.7.16). 2 Critical (applySnapshot component preservation + world.grid stale-grid; FileSink cross-process reload) + 4 High (attach default for FileSink; addMarker cell+attachment validation; memory aliasing in capture paths; multi-segment selfCheck submissionSequence false-positive) + 1 Medium (schemaVersion check) + 4 Low/cleanup. 751 tests still pass.
+- 2026-04-27: Session-recording T9 (v0.7.15) ƒ?" Structural docs: new `docs/guides/session-recording.md` canonical guide; ARCHITECTURE Component Map + Boundaries paragraph; decisions.md ADRs 13ƒ?"16; drift-log entry; concepts.md/ai-integration.md/debugging.md/getting-started.md/building-a-game.md/scenario-runner.md updates; README + docs/README index. Doc-only; 751 tests unchanged. Implementation phase complete; branch `agent/session-recording` (T0ƒ+'T9, 9 commits, v0.7.7ƒ+'v0.7.15) awaits merge authorization.
+- 2026-04-27: Session-recording T8 (v0.7.14) ƒ?" Integration tests (`tests/scenario-replay-integration.test.ts`, 3 tests) demonstrating scenarioResultƒ+'bundleƒ+'selfCheck round-trip with extracted setup pattern. Determinism contract paired tests (`tests/determinism-contract.test.ts`, 6 tests) for A11.1 clauses 3/5/8. 751 total tests.
+- 2026-04-27: Session-recording T7 (v0.7.13) ƒ?" `scenarioResultToBundle()` adapter translating `ScenarioResult` to `SessionBundle` (sourceKind:scenario; startTick from history.initialSnapshot.tick; assertion markers per check outcome; throws if no initial snapshot). 9 new tests, 742 total. Substrate ƒ+" scenario loop closed.
+- 2026-04-27: Session-recording T6 (v0.7.12) ƒ?" `SessionReplayer` with `openAt` + `selfCheck` (3-stream: state/events/executions), `deepEqualWithPath` helper, marker query helpers, `validateMarkers`, range checks, replay-across-failure refusal, no-payload short-circuit, cross-`b`/cross-`a` engine version refusal, cross-Node-major warning. 22 new tests, 733 total.
+- 2026-04-27: Session-recording T5 (v0.7.11) ƒ?" `SessionRecorder` class with full A7 lifecycle (connect/disconnect/addMarker/attach/takeSnapshot/toBundle). Single `submitWithResult` wrap; mutex via `__payloadCapturingRecorder` slot; periodic + terminal snapshots; live vs retroactive marker validation. 20 new tests, 711 total.
+- 2026-04-27: Session-recording T4 (v0.7.10) ƒ?" `WorldHistoryRecorder.captureCommandPayloads` opt-in (additive `recordedCommands?` field, mutex via `__payloadCapturingRecorder` slot, single submitWithResult wrap, clear() resets) + `ScenarioConfig.history.captureCommandPayloads` plumbing. 9 new tests, 691 total.
+- 2026-04-27: Session-recording T3 (v0.7.9) ƒ?" FileSink (disk-backed SessionSink & SessionSource) in `src/session-file-sink.ts`. Manifest cadence (open/per-snapshot/close) atomic via .tmp.json rename. Added @types/node devDep. 15 new tests, 682 total.
+- 2026-04-27: Session-recording T2 (v0.7.8) ƒ?" SessionSink/SessionSource interfaces + MemorySink in `src/session-sink.ts`. 15 new tests, 667 total. Sync sinks per spec A8.
+- 2026-04-27: Session-recording T1 (v0.7.7) ƒ?" bundle/marker/error type definitions in `src/session-bundle.ts` + `src/session-errors.ts`; types only, no runtime behavior. 16 new tests, 652 total. Foundation for SessionRecorder / SessionReplayer.
+- 2026-04-27: Session-recording T0 setup (v0.7.7-pre, no version bump). Extracted `cloneJsonValue` to `src/json.ts`; added `src/version.ts` (`ENGINE_VERSION`), `src/session-internals.ts` (`World.__payloadCapturingRecorder` slot), `World.applySnapshot(snapshot)` instance method (added to `FORBIDDEN_PRECONDITION_METHODS`). 6 new tests; 636 total pass. Foundation for T1ƒ?"T9 (see `docs/design/2026-04-27-session-recording-implementation-plan.md`).
+
+> Always read this file at session start to understand current project state.
+
+## Summary
+
+- 2026-04-04: Task 1 complete ƒ?" TypeScript project scaffolded with Vitest, ESLint; toolchain verified passing.
+- 2026-04-04: Task 2 complete ƒ?" EntityManager implemented with free-list recycling and generation counters; 7 tests pass, lint clean.
+- 2026-04-04: Task 3 complete ƒ?" ComponentStore implemented with sparse array storage, generation tracking, and size tracking; 10 tests pass, lint clean.
+- 2026-04-04: Task 4 complete ƒ?" SpatialGrid implemented with flat array, lazy Sets, bounds checking, and 4-directional neighbor queries; 10 tests pass, lint clean.
+- 2026-04-04: Task 5 complete ƒ?" GameLoop implemented with fixed-timestep, step() for deterministic testing, start()/stop() for real-time, spiral-of-death prevention; 4 tests pass, lint clean.
+- 2026-04-04: Task 6 complete ƒ?" World implemented as integration layer tying EntityManager, ComponentStore registry, SpatialGrid, and GameLoop; spatial index sync before each tick; 14 tests pass, all 45 total pass, lint clean.
+- 2026-04-04: Task 7 complete ƒ?" ARCHITECTURE.md created with component map, data flow, boundaries, decisions, drift log.
+- 2026-04-04: README rewritten with full usage guide ƒ?" quick start, API reference, code examples, project structure.
+- 2026-04-05: EventBus implemented with emit/on/off/getEvents/clear; generic constraint fixed for strict-mode tsc; 4 tests pass, 49 total pass, lint and typecheck clean.
+- 2026-04-05: EventBus remaining unit tests added (off, clear, getEvents); 9 tests pass (54 total), lint clean.
+- 2026-04-05: World integration complete ƒ?" World and System made generic with TEventMap; EventBus owned as private field; emit/on/off/getEvents methods added; events cleared at start of each tick; 5 new tests, 59 total pass, lint and typecheck clean.
+- 2026-04-05: CommandQueue implemented ƒ?" typed push/drain buffer with pending getter; TDD (tests-first); 4 new tests, 63 total pass, lint clean.
+- 2026-04-05: World submit/registerValidator/registerHandler added ƒ?" CommandQueue owned as private field; multi-validator support with short-circuit; duplicate handler guard; TDD; 4 new tests, 67 total pass, lint and typecheck clean.
+- 2026-04-05: World processCommands wired into executeTick ƒ?" drains CommandQueue and dispatches to handlers; ordered before syncSpatialIndex; error thrown on missing handler; TDD; 4 new tests, 71 total pass, lint and typecheck clean.
+- 2026-04-05: Tick-boundary and spatial sync ordering tests added ƒ?" 2 new tests, 73 total pass.
+- 2026-04-05: Architecture and roadmap docs updated for input command layer ƒ?" feature complete.
+- 2026-04-05: State serialization complete ƒ?" WorldSnapshot type, World.serialize/deserialize, EntityManager getState/fromState, ComponentStore entries/fromEntries, GameLoop setTick; JSON round-trip tested; 13 new tests, 86 total pass, lint and typecheck clean.
+- 2026-04-05: State diff output complete ƒ?" TickDiff type, dirty tracking on ComponentStore/EntityManager, World.getDiff/onDiff/offDiff; 16 new tests, 102 total pass, lint and typecheck clean.
+- 2026-04-05: Resource system complete ƒ?" ResourceStore with pools, rates, transfers; World integration with 13 proxy methods; TickDiff resources field; 32 new tests, 134 total pass, lint and typecheck clean.
+- 2026-04-06: Docs updated ƒ?" clarified AI-native engine scope; removed game-specific planned features from roadmap; added map infrastructure design spec.
+- 2026-04-06: Map infrastructure complete ƒ?" noise.ts (simplex + octave), cellular.ts (CellGrid + stepCellGrid), map-gen.ts (MapGenerator interface + createTileGrid); all standalone utilities, no World changes; 20 new tests, 154 total pass, lint and typecheck clean.
+- 2026-04-06: Configurability audit ƒ?" made positionKey, maxTicksPerFrame, neighbor offsets, cellular offsets, createTileGrid positionKey all configurable with backward-compatible defaults; 10 new tests, 164 total pass.
+- 2026-04-06: Pathfinding module complete ƒ?" generic A* findPath<T> with internal min-heap, PathConfig/PathResult types, maxCost/maxIterations/trackExplored options; standalone utility with no World dependency; 11 new tests, 175 total pass, lint and typecheck clean.
+- 2026-04-06: Pathfinding complex scenario tests added ƒ?" 8 tests: diamond graph, 100x100 grid, winding maze, equal-cost paths, directed edges, inadmissible heuristic, diagonal costs, node revisit; 19 total pathfinding tests pass, lint and typecheck clean.
+- 2026-04-06: Pathfinding docs update ƒ?" ARCHITECTURE.md and ROADMAP.md updated; 183 total tests pass; pathfinding feature complete.
+- 2026-04-06: GameLoop speed control ƒ?" setSpeed/getSpeed, pause/resume, isPaused added; NaN/Infinity guard; 12 new tests; 16 total GameLoop tests pass.
+- 2026-04-06: World speed control proxies ƒ?" 5 proxy methods (setSpeed/getSpeed/pause/resume/isPaused); 3 new tests; 34 total World tests pass.
+- 2026-04-06: Simulation speed control docs ƒ?" ARCHITECTURE.md and ROADMAP.md updated; "Turn / phase management" removed from roadmap; 198 total tests pass; feature complete.
+- 2026-04-06: Tutorials and README rewrite ƒ?" getting-started guide, complete colony survival game tutorial, rewritten README with API reference, CLAUDE.md doc maintenance rules.
+- 2026-04-06: Client protocol complete ƒ?" ClientAdapter with typed ServerMessage/ClientMessage/GameEvent, connect/disconnect/handleMessage; 9 new tests, 207 total pass; docs updated; all roadmap items now built.
+- 2026-04-06: Comprehensive documentation ƒ?" full API reference, 10 subsystem guides (concepts, entities, systems, spatial grid, commands/events, resources, serialization/diffs, map gen, pathfinding, behavior trees, client protocol); README updated with doc links and missing API entries.
+- 2026-04-12: Engine feedback features ƒ?" 6 ergonomics improvements from civ-sim-web audit: loose system typing, typed component registry, world-level state store, spatial query helpers (queryInRadius, findNearest), system ordering constraints (before/after), entity tags and metadata with reverse-index; 54 new tests, 377 total pass; snapshot v4; changelog v0.3.0.
+- 2026-04-20: Occupancy follow-up closed - OccupancyBinding now owns blocker metadata and destroy-time cleanup, rejects crowding conflicts for block()/occupy()/reserve(), treats fully crowded cells as blocked for passability, and ships measurable occupancy benchmark counters. Default grid-path cache keys now include movingEntity. Validation: 394 tests, typecheck, lint, build, and RTS benchmark all pass.
+- 2026-04-23: Engine feedback (civ-sim-web 2026-04-19) ƒ?" reactive BT nodes + clearRunningState helper + per-component semantic diff mode; additive, backwards-compatible; 16 new tests, 415 total pass.
+- 2026-04-25: Multi-CLI full-codebase review (Codex/Gemini/Opus 1M) ƒ+' 25 findings ƒ+' fixed in 11 commits with 2 review iterations. Fail-fast tick semantics with `World.recover()`; snapshot v5 round-trips runtime config + per-component options; `ComponentStore.detectInPlaceMutations` opt-out; reactive-BT preempt cleanup; deep-clone defensive copies on `getDiff`/`getEvents`; failed ticks consume distinct tick numbers; setMeta uniqueness throws; `TState` generic on World; 31 new tests, 446 total pass.
+- 2026-04-25: Iter-2 multi-CLI review hunt ƒ+' 5 iter-1 regressions, 2 new Critical, 3 new High, 5 new Medium, 7 new Low. Batch 1 (v0.4.1) fixes shipped: `findNearest` diagonal-corner correctness (R2) + `serialize`/`deserialize` snapshot isolation via `structuredClone` (C_NEW1). 450 tests pass.
+- 2026-04-25: Iter-2 batch 2 (v0.5.0, breaking) ƒ?" removed `ComponentStoreOptions.detectInPlaceMutations`, `WorldConfig.detectInPlacePositionMutations`, `World.markPositionDirty`, the per-tick spatial sync scan, and related metrics. All component/position writes must go through `setComponent`/`setPosition`. `world.grid` is now a runtime-immutable read-only delegate. `EventBus.emit` rejects non-JSON payloads. 448 tests pass.
+- 2026-04-25: Iter-2 batch 3 (v0.5.1) ƒ?" listener exceptions no longer bypass the fail-fast contract: `commandExecutionListener`/`commandResultListener`/`tickFailureListener` invocations are isolated in try/catch with `console.error`. `submit()`/`serialize()` warn once per poison cycle. 452 tests pass.
+- 2026-04-25: Iter-2 batch 4 (v0.5.2) ƒ?" `TComponents` and `TState` generics now thread through `System`, `SystemRegistration`, `registerSystem`/`registerValidator`/`registerHandler`/`onDestroy`, and `deserialize` so typed component/state access works inside system callbacks. Type-only refactor. 453 tests pass.
+- 2026-04-25: Iter-2 batch 5 (v0.5.3) ƒ?" medium + polish: setMeta rejects non-finite numbers; findPath skips overcost neighbors; deserialize rejects tags/meta for dead entities; EntityManager.fromState validates alive/generations entries; getLastTickFailure caches the clone; structuredClone replaces JSON.parse(JSON.stringify); registerComponent clones options. Docs: FIFO transfer priority + entity-less static blocks. 459 tests pass.
+- 2026-04-25: Iter-2 fix-review iteration 1 (v0.5.4) ƒ?" Codex/Gemini/Opus diff review caught several issues; all addressed. `world.grid.getAt()` now copies the cell Set; `getLastTickFailure()` cache reverted (per-call clone); TickDiff/event clones revert to JSON for V8 perf; `serialize({ inspectPoisoned: true })` added for engine-internal debug tooling; ARCHITECTURE/api-reference doc drift cleaned; debug client + RTS benchmark updated for the v0.5.0 metrics shape. 465 tests pass.
+- 2026-04-25: Iter-2 fix-review iteration 2 (v0.5.5) ƒ?" Gemini CLEAN; Codex/Opus flagged remaining doc drift + missing regression tests. cloneTickFailure unified to JSON (the prior structuredClone "Error preservation" rationale was incorrect ƒ?" Error is normalized to a plain object before clone time); ARCHITECTURE.md Boundaries section + debugging.md tables fully scrubbed; 2 new regression tests for the v0.5.4 fixes. 467 tests pass.
+- 2026-04-25: Iter-2 fix-review iteration 3 (v0.5.6) ƒ?" Gemini CLEAN, Opus CLEAN, Codex flagged additional doc drift in guides + api-reference (System/SystemRegistration/callback signatures still 2-generic in docs). All addressed: public-api-and-invariants.md corrected on in-place mutation semantics; commands-and-events.md tick-timing diagram updated; api-reference.md System/SystemRegistration/LooseSystem types and registerValidator/registerHandler/onDestroy callback signatures all updated to four-generic form. 467 tests pass.
+- 2026-04-25: Iter-2 fix-review iteration 4 (v0.5.7) ƒ?" Gemini CLEAN; Codex and Opus both flagged residual canonical-guide drift across 7 files (concepts, spatial-grid, systems-and-simulation, getting-started, entities-and-components, serialization-and-diffs, debugging). All addressed in a single doc-cleanup pass; tick-lifecycle diagrams + write-path semantics across all canonical guides now match v0.5.0+ runtime. 467 tests pass; doc-only change.
+- 2026-04-25: Iter-2 fix-review iteration 5 (v0.5.8) ƒ?" Codex CLEAN, Gemini CLEAN, Opus flagged one remaining stale "accepts versions 1ƒ?"4" wording in `serialization-and-diffs.md:74` (internally inconsistent with the same file's lines 116/120 saying 1ƒ?"5). One-line fix.
+- 2026-04-25: Iter-2 fix-review iteration 6 ƒ?" **all three reviewers CLEAN**. Chain converged after 6 review iterations across 10 commits (v0.4.1 ƒ+' v0.5.8). Branch `agent/iter2-fix-review-1` ready to merge. 467 tests pass.
+- 2026-04-25: MicropolisCore study ƒ+' 3 ideas extracted. Task 1 shipped (v0.5.9): per-system `interval` + `intervalOffset` fields on SystemRegistration / LooseSystemRegistration; schedule matches legacy `w.tick % N === 0` pattern by direct substitution. Iter-1 multi-CLI review (Codex/Claude; Gemini quota-exhausted) caught 2 critical correctness issues (off-by-one schedule + safe-integer hole) and 1 API issue (`phaseOffset` collided with `phase` ƒ+' renamed to `intervalOffset`); all addressed in same commit. 24 new tests (incl. legacy-parity, failed-tick interaction, 3-way stagger, MAX_SAFE_INTEGER, non-number guards), 491 total pass.
+- 2026-04-25: Task 2 shipped (v0.5.10): `Layer<T>` standalone overlay-map utility for downsampled field data (pollution / influence / weather etc.). World-coord auto-bucketing via `getAt`/`setAt`, cell-coord access via `getCell`/`setCell`, sparse storage with default-value semantics, JSON-serializable round-trip, defensive `structuredClone` on every read AND write boundary. Sibling of `OccupancyGrid` / `VisibilityMap`. Inspired by MicropolisCore's `Map<DATA, BLKSIZE>` template (`map_type.h:111`). Iter-1 multi-CLI review (Codex/Claude) caught defensive-copy holes for object-T (mutating an unset-cell read poisoned the default for every other unset cell), missing safe-integer validation, weak `fromState` shape checks, and inconsistent error types ƒ?" all addressed in same commit. 49 new tests (incl. 7 explicit defensive-copy assertions, safe-int rejections, and `fromState` shape rejections), 540 total pass.
+- 2026-04-25: Task 3 shipped (v0.5.11): `CommandTransaction` ƒ?" atomic propose-validate-commit-or-abort builder over `World` via `world.transaction()`. Buffers component/position/resource mutations + events + `require(predicate)` preconditions; on `commit()` either applies everything (preconditions passed) or applies nothing (any precondition failed). Single `TickDiff` capture when committed inside a tick. Inspired by MicropolisCore's `ToolEffects` (`tool.h:171ƒ?"305`). v1 surface: components, position, events, resource add/remove. Iter-1 multi-CLI review (Codex/Claude) caught a HIGH bug ƒ?" mid-commit throw left `status='pending'`, so retry would double-apply non-idempotent ops like `removeResource`; fixed via `try/finally` in `commit()`. Also caught: ARCHITECTURE doc drift on commit-after-abort semantics, aliasing window for buffered values, type-safety hole in `world.transaction<T>()` generic override (removed), v1 limitations list undercount. 29 new tests (incl. throw-then-no-retry-doubles, aliasing-window-pin), 569 total pass.
+- 2026-04-26: Documentation drift audit (no code changes). Fixed 6 issues: broken `[Architecture]` link in docs/README.md, broken devlog links in docs/README.md, broken API-reference link in getting-started.md, incomplete "Included" table + TickDiff structure + "Diffs capture" list in serialization-and-diffs.md, stale snapshot-version paragraph in public-api-and-invariants.md, and missing `Command Transaction` + `Layer` entries in api-reference.md Table of Contents.
+- 2026-04-26: Multi-CLI full-review iter-1 batch 1 (v0.6.0, breaking) ƒ?" `CommandTransaction` overhaul. Closes 1 Critical + 2 High + 1 Medium + 2 Low: read-only precondition faAade (`ReadOnlyTransactionWorld`) prevents side-effecting predicates from violating atomicity (C1); typed-generic threading restored on `CommandTransaction<TEventMap, TCommandMap, TComponents, TState>` (H1, three-reviewer consensus); `commit()` now warns once on poisoned world (H3); `emit()` validates JSON-compat at buffer time (M1); aborted-vs-committed terminal status separated (L2); `as unknown as` cast removed (L6). 576 tests pass.
+- 2026-04-26: Multi-CLI full-review iter-1 batch 2 (v0.6.1) ƒ?" `Layer<T>` overhaul (non-breaking). Closes 2 High + 2 Medium + 1 Low: strip-at-write sparsity with `cells.delete` on default-equal writes (H2); primitive fast-path skips `structuredClone` for `Layer<number|boolean|string|null>` (H4); `forEachReadOnly` adds zero-allocation traversal; new `clear`/`clearAt` (L5); `fromState` validates each cell value once not twice (M4); `clone` iterates sparse map directly (M5). 587 tests pass.
+- 2026-04-26: Multi-CLI full-review iter-1 batch 3 (v0.6.2) ƒ?" `World.deserialize` snapshot-tick validation (M2). Rejects `NaN`/negative/fractional/`Infinity` ticks at load time before they corrupt diff numbering, command sequencing, or interval scheduling. 591 tests pass.
+- 2026-04-26: Multi-CLI full-review iter-1 batch 4 (v0.6.3) ƒ?" polish. Closes 3 Low: `World.runTick` tick-capture asymmetry hoisted (L1); resources guide `setTransfer` dead reference fixed (L4); `GameLoop.advance` throws `RangeError` on `Number.MAX_SAFE_INTEGER` saturation instead of silent corruption (L7). 592 tests pass.
+- 2026-04-26: Multi-CLI full-review iter-1 batch 5 (v0.6.4) ƒ?" M3 partial. Extracted ~265 LOC of standalone helper functions from `src/world.ts` into `src/world-internal.ts`. `world.ts` now 2232 LOC (was 2481); deeper class-method split deferred to follow-up. 592 tests pass.
+- 2026-04-26: Iter-2 review fix-up (v0.7.0, breaking) ƒ?" closes 1 iter-1 regression (R1: C1 was incomplete, missing 9+ real mutating methods including `random()` which broke determinism on the failure path) + 2 High (`Layer.forEachReadOnly` null-coalesce bug, primitive fast-path trusts default not value) + 2 Medium (writer/fromState double-validate) + 4 Low (commit hardcoded message, clone double-clone, getState dead check, MAX_SAFE_INTEGER+1 test). New `FORBIDDEN_PRECONDITION_METHODS` const array as single source of truth. 600 tests pass.
+- 2026-04-26: Iter-3 verification caught 2 iter-2 fix-quality regressions (R2_REG1: `warnIfPoisoned` missing from R1 denylist; R2_REG2: L_NEW3 sparsity filter removal exposes object-T contract violation via `forEachReadOnly`). Both fixed in v0.7.1. New meta-test cross-checks `FORBIDDEN_PRECONDITION_METHODS` against `World.prototype` to prevent future denylist holes. Gemini quota-exhausted; Codex+Opus reached consensus. 604 tests pass.
+- 2026-04-26: Iter-4 verification ƒ?" convergence. All 5 iter-3 fixes verified. One Low caught (L_REG3 regression test was vacuous ƒ?" mutated clone-on-read getter, observable nothing); test rewritten to assert underlying-storage identity. Test-only fix, no version bump. 604 tests pass.
+- 2026-04-26: Iter-5 verification ƒ?" Codex caught new Critical (Opus reported clean, split decision favored Codex). Predicate could mutate via `w.getComponent(e, 'hp')!.current = 0` since `getComponent` returns live `ComponentStore` reference. C1/R1 denylist only blocks write method calls, not in-place edits of reads. Fix in v0.7.2: precondition proxy now `structuredClone`s returns from a curated set (getComponent, getComponents, getState, getResource, getResources, getPosition, getTags, getByTag, getEvents). 3 new regression tests, 607 total pass.
+- 2026-04-26: Iter-6 verification ƒ?" Codex caught remaining High (`world.grid` public field, not a method, so iter-5 proxy missed it; predicate could monkey-patch `w.grid.getAt`). Opus reported clean + Note about 2 ghost entries in iter-5 wrap set (`getResources`/`getPosition` don't exist on `World`). Fix in v0.7.3: `Object.freeze` on `world.grid` in constructor (structurally enforces the v0.5.0 read-only-delegate promise); ghost entries dropped. 1 new regression test, 608 total pass.
+- 2026-04-26: Followups on residuals (v0.7.4). L_NEW6: `as any` cast on commit() emit dispatch replaced with narrower `as keyof TEventMap & string` / `as TEventMap[EmitKey]` casts; eslint-disable removed. N1: `SYSTEM_PHASES` + `SystemPhase` moved from world.ts to world-internal.ts; world.ts re-exports for public API. Circular value-import resolved. M3 deeper split + occupancy-grid split remain deferred (composition redesign needed). Doc audit (api-reference, ARCHITECTURE, drift-log) refreshed for v0.6.0ƒ?"v0.7.3. 608 tests pass.
+- 2026-04-26: Multi-CLI full-review iter-7 (v0.7.5). First broader sweep beyond iter-1ƒ?"6 CommandTransaction chain. Codex+Opus, Gemini quota-out. 7 findings, all fixed: H1 deserialize accepts dead/non-integer entity IDs in components+resources (now alive+integer-validated at boundary); M1 EventBus listener can mutate engine-owned payload (clone-on-emit per listener); M2 ClientAdapter mapping race after safeSend failure (gated on send result); M3 api-reference snapshot v4ƒ+'v5 doc fix; L1 octaveNoise2D parameter validation; L2 component-store semantic-mode revert-to-baseline clears dirty; L3 deserialize tick validation hoisted above loaders. 19 new regression tests, 627 total pass.
+- 2026-04-26: Multi-CLI full-review iter-8 convergence check (v0.7.6). Codex+Opus both verified all 7 iter-7 fixes landed cleanly; no regressions; no new Critical/High/Medium/Low. Opus flagged one Note (N3) ƒ?" same severity class as L2 but on the parallel `wasPresent === false` branch of `ComponentStore.set` (taken after remove() or on first insert when baseline exists). Taken in same iter to keep the L2 contract structurally uniform. 3 new regression tests, 630 total pass. Gemini still quota-exhausted (6th iter in a row).
+- 2026-04-26: Multi-CLI full-review iter-9 closing convergence check. **Both Codex and Opus reported zero real findings** at any severity. N3 fix verified across 5 prompt checkpoints. **Loop converged after 9 iterations** (iter-1ƒ?"6 closed CommandTransaction chain, iter-7 closed 7 broader-sweep findings, iter-8 closed N3, iter-9 clean). No code changes; no version bump. Gemini quota-out 7th iter in a row.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 602ms:
+# Architecture
+
+## Overview
+
+Civ-engine is a general-purpose, headless, AI-native 2D grid-based game engine. Built in Node.js/TypeScript with a strict ECS (Entity-Component-System) architecture.
+
+**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state. Every design decision prioritizes machine-readability: deterministic tick execution, JSON-serializable state, structured diffs, typed command/event interfaces, and a purely programmatic API with no interactive UI.
+
+The engine provides reusable infrastructure (entities, components, spatial indexing, events, commands, resources, serialization) that game projects consume. It outputs state changes that a separate client can render; it contains no game-specific logic, rendering, or UI code.
+
+## Component Map
+
+| Component      | File                     | Responsibility                                                                         |
+| -------------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| World          | `src/world.ts`           | Top-level API, owns all subsystems, phased system pipeline, metrics, spatial index sync |
+| EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
+| ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
+| SpatialGrid    | `src/spatial-grid.ts`    | Sparse occupied-cell grid plus read-only view, neighbor/radius queries                 |
+| GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop, step() for testing, start()/stop() for real-time, speed multiplier, pause/resume |
+| EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
+| CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
+| CommandTransaction | `src/command-transaction.ts` | Atomic propose-validate-commit-or-abort builder over World; buffers component/position/resource mutations + events + precondition predicates, applies all-or-nothing on `commit()` |
+| Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
+| Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
+| ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
+| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, reservation, lifecycle binding, blocker metadata, metrics, and sub-cell crowding tracking |
+| Layer          | `src/layer.ts`           | Generic typed overlay map at configurable downsampled resolution; sparse cell storage with default-value semantics, JSON-serializable; multi-resolution field data (pollution, influence, weather, danger, etc.) |
+| JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
+| Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
+| Cellular       | `src/cellular.ts`        | Cellular automata step function, immutable CellGrid                                    |
+| MapGen         | `src/map-gen.ts`         | MapGenerator interface, createTileGrid bulk tile-entity helper                         |
+| Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
+| Path Service   | `src/path-service.ts`    | Grid path helper, deterministic path queue, and cache for batched request handling     |
+| RenderAdapter  | `src/render-adapter.ts`  | Projects world state into renderer-facing snapshots and diffs with generation-aware refs |
+| ScenarioRunner | `src/scenario-runner.ts` | Headless setup/run/check harness built on World, WorldDebugger, and WorldHistoryRecorder |
+| VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
+| WorldDebugger  | `src/world-debugger.ts`  | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
+| ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
+| BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, ReactiveSelector, ReactiveSequence, Action, Condition, BTState, createBehaviorTree, clearRunningState |
+| SessionRecorder | `src/session-recorder.ts` | Captures live World runs into SessionBundle via SessionSink; mutex-locked single payload-capturing recorder per world (slot at world.__payloadCapturingRecorder); marker validation per spec A6.1; terminal snapshot on disconnect |
+| SessionReplayer | `src/session-replayer.ts` | Loads a SessionBundle/Source; openAt(tick) returns paused World; selfCheck() 3-stream comparison (state via deepEqualWithPath, events, executions); failedTicks-skipping; cross-b/cross-Node-major version checks |
+| SessionBundle / SessionSink / SessionSource / Marker / RecordedCommand | `src/session-bundle.ts`, `src/session-sink.ts`, `src/session-file-sink.ts` | Shared bundle types + sink/source interfaces + MemorySink + FileSink (disk-backed; manifest atomic-rename; defaults to sidecar attachments). scenarioResultToBundle adapter at `src/session-scenario-bundle.ts`. |
+| Synthetic Playtest Harness | `src/synthetic-playtest.ts` | Tier-1 autonomous-driver primitive: `runSynthPlaytest` drives a `World` via pluggable `Policy` functions for N ticks ƒ+' `SessionBundle`. Sub-RNG (`PolicyContext.random()`) sandboxed from `world.rng`, seeded from `policySeed`. Built-in policies: `noopPolicy`, `randomPolicy`, `scriptedPolicy`. Composes with `SessionRecorder`/`SessionReplayer`. New in v0.7.20 + v0.8.0 + v0.8.1 (Spec 3). |
+| Public exports | `src/index.ts`           | Barrel export for the intended package API                                             |
+| Types          | `src/types.ts`           | Shared type definitions (EntityId, EntityRef, Position, WorldConfig, InstrumentationProfile) |
+
+## Data Flow
+
+```
+World.step()
+  -> GameLoop.step()
+    -> World.executeTick()
+      -> World.eventBus.clear()       [reset buffer from previous tick]
+      -> World.entityManager.clearDirty()
+      -> World.clearComponentDirty()   [clear dirty flags on all stores]
+      -> World.processCommands()       [drain queue, run handlers]
+      -> input systems
+      -> preUpdate systems
+      -> update systems
+      -> postUpdate systems
+      -> output systems
+      -> World.resourceStore.processTick()  [production, consumption, transfers]
+      -> World.buildDiff()             [collect dirty state into TickDiff]
+      -> World.getMetrics() state updated   [detailed in `full`, coarse in `minimal`, skipped by implicit `step()` in `release`]
+      -> notify onDiff listeners
+    -> tick++
+```
+
+### Spatial Index Sync
+
+Position writes through `world.setPosition()` or `world.setComponent()` with the configured position component (default `'position'`, configurable via `positionKey` in `WorldConfig`) update the component store and spatial grid in lockstep ƒ?" the grid stays consistent without any per-tick scan. In-place mutation of position objects (e.g. `world.getComponent(id, 'position').x = 5`) is **not** auto-detected and is a no-op for the grid; game code must call `setPosition` for movement to take effect.
+
+### Entity Destruction
+
+`destroyEntity(id)` performs immediate cleanup:
+- Removes entity from grid using `previousPositions` (the grid's last-seen position, kept in sync by `setPosition`)
+- Removes all components from all stores
+- Removes all resource pools, rates, and transfers for the entity
+- Marks entity as dead in EntityManager (ID available for recycling)
+
+## Boundaries
+
+- **World** is the only public entry point. EntityManager, ComponentStore, GameLoop are internal implementation details.
+- **Systems** are pure functions `(world: World) => void` or registration objects with a `phase` and `name`. Phases are intentionally lightweight and ordered as `input`, `preUpdate`, `update`, `postUpdate`, `output`.
+- **Components** are pure data interfaces. No methods, no inheritance.
+- **SpatialGrid** is a sparse map of occupied cells. The grid is updated lock-step with position writes ƒ?" every `world.setPosition` / `world.setComponent` on the configured `positionKey` inserts/moves the entity in the grid in the same call, so no per-tick scan is needed. User systems read grid state via `world.grid.getAt()` / `world.grid.getNeighbors()` / `world.grid.getInRadius()`. The `world.grid` property is a read-only delegate at runtime: `getAt()` returns a fresh `Set` copy on each call, the mutating `insert`/`remove`/`move` methods of the underlying `SpatialGrid` are not exposed, and the delegate object itself is `Object.freeze`d in the constructor (since v0.7.3) so attempts to monkey-patch its methods throw `TypeError` in strict mode. This makes the read-only-delegate promise structural rather than convention-only.
+- **GameLoop** handles timing only. It knows nothing about entities, components, or systems.
+- **EventBus** is owned by World. Systems emit and subscribe via `world.emit()` / `world.on()`. External consumers read events via `world.getEvents()` between ticks. Do not call `eventBus.clear()` directly ƒ?" World handles this.
+- **CommandQueue** is owned by World. External code submits commands via `world.submit()` or `world.submitWithResult()`, registers validators via `world.registerValidator()`, and registers handlers via `world.registerHandler()`. Do not access the queue directly.
+- **CommandTransaction** is a synchronous builder created via `world.transaction()`. It is generic over `<TEventMap, TCommandMap, TComponents, TState>` (matching `World`'s generic order); typed component / state access works inside the transaction the same way it works inside `world.setComponent` / `world.setState`. The transaction buffers proposed mutations (`setComponent`/`addComponent`/`patchComponent`/`removeComponent`/`setPosition`/`addResource`/`removeResource`), buffered events (`emit` ƒ?" JSON-compat validated at buffer time, not at commit), and `require()` precondition predicates. **Predicates receive a `ReadOnlyTransactionWorld` faAade**, not the live `World` ƒ?" write methods (`setComponent`, `setState`, `emit`, `addResource`, `removeResource`, `destroyEntity`, etc.) are excluded at the type level and rejected at runtime so a side-effecting predicate cannot violate the "world untouched on precondition failure" guarantee. On `commit()` the engine calls `world.warnIfPoisoned('transaction')` (warns once per poison cycle), then runs all preconditions in registration order; if any returns `false` or a string, no mutation or event is applied and the transaction returns `{ ok: false, code: 'precondition_failed', reason }`. Otherwise mutations are applied to the world in registration order via the existing public mutation API (so they get the same liveness/JSON-compat validation as direct calls), then events are emitted via `EventBus`. Transactions are single-use: `commit()` after a previous `commit()` throws; `commit()` after `abort()` returns `{ ok: false, code: 'aborted' }` without mutation, and subsequent builder calls throw an "already aborted" error (not "already committed"). If a buffered mutation throws mid-commit, the transaction is still consumed (status flips to `committed` in a `finally` block) so the caller cannot retry and double-apply earlier mutations ƒ?" the world is in a partially-applied state that the caller must reconcile. Reads inside a precondition or after commit see live world state; transactions do not provide a "shadow" overlay view of their own proposed mutations. Buffered values are stored by reference; caller must not mutate buffered objects between buffering and `commit()`. Entity create/destroy, tags, metadata, and world-state writes are not yet wrapped (v1 surface).
+- **Serialization** is accessed via `world.serialize()` and `World.deserialize()`. Snapshot version 5 (WorldSnapshotV5) is the current write format and additionally round-trips per-component `ComponentStoreOptions` (the `componentOptions` field) so `diffMode` survives save/load; version 4 includes state, tags, and metadata; version 3 includes resource state and deterministic RNG state; versions 1 and 2 remain readable for compatibility. `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` are also serialized when non-default. The `WorldSnapshot` type is exported from `src/serializer.ts`. Snapshots are plain JSON-serializable objects, and component data plus state values are `structuredClone`d at both serialize and deserialize boundaries so callers cannot write through.
+- **State Diffs** are accessed via `world.getDiff()` (pull) or `world.onDiff()` (push). The `TickDiff` type is exported from `src/diff.ts`. Diffs capture entity creation/destruction, component mutations, and resource changes per tick. `getDiff()` returns a JSON-deep-cloned defensive copy ƒ?" callers cannot write through to live engine state. During `onDiff` listeners `world.tick === diff.tick`.
+
+- **Tick failure semantics** are fail-fast. A failure in any tick phase (commands, systems, resources, diff, listeners) marks the world as **poisoned**. While poisoned, `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `world_poisoned` failure result. `world.isPoisoned()` reports the state; `world.recover()` clears the poison flag along with the cached `lastTickFailure`/`currentDiff`/`currentMetrics`. Failed ticks consume a tick number ƒ?" if a tick fails at tick `N+1`, the next successful tick after `recover()` is `N+2`, so failed-tick events and successful-tick events never share a tick number.
+- **Metrics** are accessed via `world.getMetrics()` after a tick. They report section timings, per-system timings, query cache hit/miss counts, entity counts, and explicit-sync counts (`spatial.explicitSyncs`, incremented by every `setPosition`-style write). `instrumentationProfile: 'full'` keeps the detailed implicit metrics path, `minimal` keeps coarse implicit metrics, and `release` disables implicit metrics collection on `step()` so shipping runtimes do not pay that cost unless they explicitly use `stepWithResult()`.
+- **Rendering** belongs outside the engine. Renderer clients should consume snapshots and tick diffs through `ClientAdapter`, keep visual objects in renderer-owned state, and submit input back as commands. See `docs/guides/rendering.md` for the recommended renderer boundary and Pixi-first reference client shape.
+- **RenderAdapter** is an optional projection helper. It turns current world state plus `TickDiff` into renderer-facing `renderSnapshot` and `renderTick` messages using game-owned callbacks. It does not own renderer objects or backend assumptions.
+- **Resources** are managed via `world.registerResource()`, `world.addResource()`, `world.removeResource()`, etc. The ResourceStore is owned by World as a private subsystem. Resource rates and transfers are processed automatically after user systems each tick.
+- **Noise, Cellular, MapGen** are standalone utilities. They are not owned by World and have no integration point in the tick loop. Game code imports them directly and uses them during setup (before the simulation runs).
+- **OccupancyGrid** is a standalone utility. It models blocked cells, occupied footprints, and temporary reservations. `OccupancyBinding` composes it with blocker metadata, destroy-time cleanup hooks, optional sub-cell crowding, and scan metrics when game code wants a higher-level passability surface. These occupancy helpers remain intentionally separate from `SpatialGrid`, which answers proximity rather than passability.
+- **Layer** is a standalone typed overlay map. `Layer<T>` represents field data at a configurable downsampled resolution (e.g., a `pollution` map at half-res of the world, or an `influence` map at quarter-res). World coordinates are auto-bucketed via `getAt(worldX, worldY)` / `setAt(worldX, worldY, value)`; cell coordinates are accessible via `getCell` / `setCell`. Storage is **strip-at-write sparse**: writes equal to `defaultValue` delete the underlying entry instead of storing a marker, so the in-memory map and the serialized form agree without a `getState` round-trip. Explicit `clear(cx, cy)` / `clearAt(wx, wy)` methods provide an honest "drop this cell" API. Defensive copies on every read/write boundary protect callers from internal-state aliasing for object `T`; for **primitive `T`** (`number`, `string`, `boolean`, `null`) clones are skipped because primitives are immutable on the JS side, making `Layer<number>` etc. zero-allocation across reads and writes. `forEachReadOnly(cb)` is an explicit zero-allocation read path for object `T` consumers who own the no-mutate discipline. Layers are JSON-serializable through `getState()` / `Layer.fromState()` and value writes are validated via `assertJsonCompatible`. Layers are independent of `World`; game code instantiates and ticks them from systems. They are a sibling utility to `OccupancyGrid` and `VisibilityMap` ƒ?" the engine does not own per-game field data, only the data structure.
+- **Pathfinding** is a standalone utility. It has no knowledge of the spatial grid, entities, or the tick loop. Game code provides `neighbors`, `cost`, `heuristic`, and `hash` callbacks to wire it to any graph topology.
+- **Path Service** is a standalone utility built on top of `findPath`. It provides `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for deterministic batched path processing.
+- **VisibilityMap** is a standalone utility. It tracks per-player visible and explored cells and remains independent of rendering and UI code.
+- **WorldDebugger** is a standalone inspection utility. It captures structured summaries of world state, metrics, events, last-diff data, and custom probe output for standalone utilities such as occupancy, visibility, and path queues.
+- **ScenarioRunner** is a standalone orchestration utility. It pairs prepared setup, deterministic stepping, checks, debugger output, and short-horizon history into one machine-readable result for AI agents and harnesses.
+- **BehaviorTree** is a standalone utility. It has no knowledge of World, entities, or the tick loop. Game code defines tree structure via `createBehaviorTree`, stores `BTState` as a component, and ticks trees from a system. The `TContext` generic is game-defined ƒ?" the engine does not prescribe what context contains beyond a BTState accessor. Reactive variants (`reactiveSelector`, `reactiveSequence`) re-evaluate from the root each tick without persisting running state; `clearRunningState` provides imperative subtree resets.
+- **ClientAdapter** reads World state and subscribes to diffs. It does not modify World internals directly ƒ?" it uses only the public API (`serialize`, `onDiff`/`offDiff`, `getEvents`, `submitWithResult`).
+- **World State** is owned by World as a private Map. Systems read/write via `world.setState()`/`world.getState()`. State is non-entity structured data (terrain config, simulation time, etc.). Typed against the `TState` generic on `World` (default `Record<string, unknown>`) ƒ?" independent of the `TComponents` registry. Included in serialization and diffs.
+- **Tags & Metadata** are owned by World. Tags are string labels with reverse-index lookup via `world.getByTag()`. Metadata is key-value per entity with unique reverse-index via `world.getByMeta()` ƒ?" `setMeta` throws if another live entity already owns the `(key, value)` pair. Both cleaned up on entity destruction; the cleanup is reflected in `TickDiff.tags`/`TickDiff.metadata` as `{ entity, tags: [] }` / `{ entity, meta: {} }`.
+- **System Ordering** supports optional `before`/`after` named constraints in `SystemRegistration`. Constraints resolve via topological sort within each phase at first tick (or after dynamic registration). Cross-phase constraints are errors.
+- **Session Recording** is a dedicated subsystem (`src/session-recorder.ts`, `src/session-replayer.ts`, `src/session-bundle.ts`, `src/session-sink.ts`, `src/session-file-sink.ts`, `src/session-scenario-bundle.ts`, `src/session-errors.ts`) that captures deterministic, replayable bundles of any World run. Per ADR 1, it runs as a sibling to `WorldHistoryRecorder` rather than extending it ƒ?" the two recorders have different shapes (rolling debug buffer vs. persistent archive) and different consumers. `WorldHistoryRecorder` continues to serve in-process debugging; `SessionRecorder` is for archive + replay. **Mutex:** payload-capturing recorders (any `SessionRecorder`, OR `WorldHistoryRecorder({ captureCommandPayloads: true })`) are mutually exclusive on a given world (one wrap on `submitWithResult` per world); default-config `WorldHistoryRecorder` instances compose freely. The `world.__payloadCapturingRecorder` slot enforces this. **Replay** uses the `World.applySnapshot(snap)` instance method (added in T0 of the implementation): `worldFactory` must register components/handlers on a fresh world, then call `applySnapshot` in-place ƒ?" `World.deserialize` would conflict with subsequent re-registration. Replay across recorded `TickFailure` is out of scope for v1 (`WorldSnapshotV5` doesn't carry poison state); future spec extends to v6. **Determinism contract** (spec A11) is documented but NOT structurally enforced; `SessionReplayer.selfCheck()` is the verification mechanism. See `docs/guides/session-recording.md` for the user-facing guide.
+
+## Technology Map
+
+| Technology                     | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| TypeScript 5.7+                | Language (strict mode, ES2022, ESM, Node16 module resolution) |
+| Vitest 3                       | Test framework                                                |
+| ESLint 9 + typescript-eslint 8 | Linting (flat config)                                         |
+| Node.js 18+                    | Runtime                                                       |
+
+For architectural decisions, see `docs/architecture/decisions.md`.
+For architecture drift history, see `docs/architecture/drift-log.md`.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 678ms:
+---
+name: programming-best-practices
+description: General coding workflow and engineering guardrails for planning, implementing, debugging, refactoring, reviewing, and validating code changes. Use when Codex is asked to write, edit, review, or test code in any repository, especially when correctness, maintainability, small diffs, and safe verification matter.
+---
+
+# Programming Best Practices
+
+## Operate
+
+- Read the relevant code path before editing.
+- Trace data flow end to end before deciding on a fix.
+- Prefer the smallest change that solves the actual problem.
+- Match the existing architecture and conventions unless they are the source of the defect.
+- Preserve backward compatibility unless the task explicitly requires a breaking change.
+
+## Change Safely
+
+- Do not overwrite unrelated user changes.
+- Treat the worktree as potentially dirty and isolate your diff.
+- Make state transitions explicit, especially around async flows and persistence.
+- If concurrent results can race, decide which result wins and enforce it in code.
+- Handle empty states, errors, cleanup, and cancellation paths deliberately.
+- Avoid speculative abstractions until duplication or complexity actually justifies them.
+
+## Validate
+
+- Add or update targeted tests when behavior changes or a bug is fixed.
+- Run the smallest meaningful verification first, then widen coverage if needed.
+- Verify user-visible behavior, not only internal implementation details.
+- If validation cannot run, state exactly what was blocked and what remains unverified.
+
+## Review
+
+- Prioritize bugs, regressions, broken assumptions, and missing tests.
+- Present findings before summaries.
+- Order findings by severity and include concrete file references.
+
+## Communicate
+
+- State assumptions when they affect implementation choices.
+- Call out tradeoffs plainly.
+- Explain non-obvious changes at a high level.
+- Close with outcome, verification, and remaining risk.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+I have the repo-level context. Next I’m checking the current type definitions that the spec claims to build on, especially `SessionBundle`, `SessionMetadata`, `RecordedCommand`, and the synthetic harness result shape.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-bundle.ts'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\synthetic-playtest.ts'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\index.ts'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src' -Recurse | Select-String -Pattern 'type CommandExecutionResult|interface CommandExecutionResult|export type CommandExecutionResult|export interface CommandExecutionResult|SessionMetadata|RecordedCommand'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 419ms:
+import type { TickDiff } from './diff.js';
+import type { JsonValue } from './json.js';
+import type { WorldSnapshot } from './serializer.js';
+import type { Position } from './types.js';
+import type {
+  CommandExecutionResult,
+  CommandSubmissionResult,
+  TickFailure,
+  WorldMetrics,
+} from './world.js';
+
+export const SESSION_BUNDLE_SCHEMA_VERSION = 1 as const;
+
+export type MarkerKind = 'annotation' | 'assertion' | 'checkpoint';
+export type MarkerProvenance = 'engine' | 'game';
+
+export interface EntityRef {
+  id: number;
+  generation: number;
+}
+
+export interface MarkerRefs {
+  entities?: EntityRef[];
+  cells?: Position[];
+  tickRange?: { from: number; to: number };
+}
+
+export interface Marker {
+  id: string;
+  tick: number;
+  kind: MarkerKind;
+  provenance: MarkerProvenance;
+  text?: string;
+  refs?: MarkerRefs;
+  data?: JsonValue;
+  attachments?: string[];
+  createdAt?: string;
+  validated?: false;
+}
+
+export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+  submissionTick: number;
+  sequence: number;
+  type: keyof TCommandMap & string;
+  data: TCommandMap[keyof TCommandMap];
+  result: CommandSubmissionResult<keyof TCommandMap>;
+}
+
+export interface SessionTickEntry<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  tick: number;
+  diff: TickDiff;
+  events: Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+  metrics: WorldMetrics | null;
+  debug: TDebug | null;
+}
+
+export interface SessionSnapshotEntry {
+  tick: number;
+  snapshot: WorldSnapshot;
+}
+
+export interface AttachmentDescriptor {
+  id: string;
+  mime: string;
+  sizeBytes: number;
+  /**
+   * Storage policy for the attachment. Sinks finalize this on `writeAttachment`:
+   * - `{ dataUrl: '...' }`: bytes embedded in the manifest as `data:<mime>;base64,...`.
+   *   Caller passing `{ dataUrl: '' }` opts into manifest embedding; sink populates the URL.
+   * - `{ sidecar: true }`: bytes stored externally (FileSink: `attachments/<id>.<ext>`;
+   *   MemorySink: parallel internal Map accessed via `source.readSidecar(id)`).
+   * - `{ auto: true }`: caller has no preference; each sink applies its own default
+   *   (FileSink ƒ+' sidecar; MemorySink ƒ+' dataUrl under threshold, sidecar over with
+   *   `allowSidecar: true`, otherwise throw). The `SessionRecorder.attach()` API
+   *   uses `auto` when caller didn't pass `options.sidecar`.
+   */
+  ref: { dataUrl: string } | { sidecar: true } | { auto: true };
+}
+
+export interface SessionMetadata {
+  sessionId: string;
+  engineVersion: string;
+  nodeVersion: string;
+  recordedAt: string;
+  startTick: number;
+  endTick: number;
+  persistedEndTick: number;
+  durationTicks: number;
+  /**
+   * 'synthetic' added in v0.8.0 (Spec 3 T2). Widening from 'session' | 'scenario'
+   * is a breaking change for downstream `assertNever`-style exhaustive switches;
+   * b-bump per AGENTS.md. See ADR 20 in docs/architecture/decisions.md.
+   */
+  sourceKind: 'session' | 'scenario' | 'synthetic';
+  sourceLabel?: string;
+  incomplete?: true;
+  failedTicks?: number[];
+  /**
+   * Populated only when sourceKind === 'synthetic'. The seed used for the
+   * harness's policy sub-RNG; preserved for future replay-via-policy work.
+   * Spec 3 A5.4.
+   */
+  policySeed?: number;
+}
+
+export interface SessionBundle<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+  metadata: SessionMetadata;
+  initialSnapshot: WorldSnapshot;
+  ticks: SessionTickEntry<TEventMap, TDebug>[];
+  commands: RecordedCommand<TCommandMap>[];
+  executions: CommandExecutionResult<keyof TCommandMap>[];
+  failures: TickFailure[];
+  snapshots: SessionSnapshotEntry[];
+  markers: Marker[];
+  attachments: AttachmentDescriptor[];
+}
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 550ms:
+import type { World, ComponentRegistry } from './world.js';
+import type { JsonValue } from './json.js';
+import type { SessionBundle } from './session-bundle.js';
+import { DeterministicRandom } from './random.js';
+import { MemorySink, type SessionSink, type SessionSource } from './session-sink.js';
+import { SessionRecorder } from './session-recorder.js';
+import { RecorderClosedError } from './session-errors.js';
+
+export interface PolicyContext<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
+  readonly tick: number;
+  readonly random: () => number;
+}
+
+export interface StopContext<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
+  readonly tick: number;
+  readonly random: () => number;
+}
+
+export type PolicyCommand<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
+
+export type Policy<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = (
+  context: PolicyContext<TEventMap, TCommandMap, TComponents, TState>,
+) => PolicyCommand<TCommandMap>[];
+
+export function noopPolicy<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+>(): Policy<TEventMap, TCommandMap, TComponents, TState> {
+  return () => [];
+}
+
+export type ScriptedPolicyEntry<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { tick: number; type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
+
+export function scriptedPolicy<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+>(
+  sequence: ScriptedPolicyEntry<TCommandMap>[],
+): Policy<TEventMap, TCommandMap, TComponents, TState> {
+  const byTick = new Map<number, PolicyCommand<TCommandMap>[]>();
+  for (const entry of sequence) {
+    const list = byTick.get(entry.tick);
+    const cmd = { type: entry.type, data: entry.data } as PolicyCommand<TCommandMap>;
+    if (list) list.push(cmd);
+    else byTick.set(entry.tick, [cmd]);
+  }
+  return (ctx) => byTick.get(ctx.tick) ?? [];
+}
+
+export interface RandomPolicyConfig<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  catalog: Array<(ctx: PolicyContext<TEventMap, TCommandMap, TComponents, TState>) => PolicyCommand<TCommandMap>>;
+  frequency?: number;
+  offset?: number;
+  burst?: number;
+}
+
+export function randomPolicy<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: RandomPolicyConfig<TEventMap, TCommandMap, TComponents, TState>,
+): Policy<TEventMap, TCommandMap, TComponents, TState> {
+  const { catalog, frequency = 1, offset = 0, burst = 1 } = config;
+  if (catalog.length === 0) {
+    throw new RangeError('randomPolicy.catalog must be non-empty');
+  }
+  if (!Number.isInteger(frequency) || frequency < 1) {
+    throw new RangeError('randomPolicy.frequency must be a positive integer');
+  }
+  if (!Number.isInteger(burst) || burst < 1) {
+    throw new RangeError('randomPolicy.burst must be a positive integer');
+  }
+  if (!Number.isInteger(offset) || offset < 0 || offset >= frequency) {
+    throw new RangeError(
+      `randomPolicy.offset must be a non-negative integer < frequency (got ${offset}, frequency=${frequency})`,
+    );
+  }
+  return (ctx) => {
+    if (ctx.tick % frequency !== offset) return [];
+    const out: PolicyCommand<TCommandMap>[] = [];
+    for (let i = 0; i < burst; i++) {
+      const idx = Math.floor(ctx.random() * catalog.length);
+      out.push(catalog[idx](ctx));
+    }
+    return out;
+  };
+}
+
+export interface SynthPlaytestConfig<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
+  policies: Policy<TEventMap, TCommandMap, TComponents, TState>[];
+  maxTicks: number;
+  sink?: SessionSink & SessionSource;
+  sourceLabel?: string;
+  policySeed?: number;
+  stopWhen?: (ctx: StopContext<TEventMap, TCommandMap, TComponents, TState>) => boolean;
+  snapshotInterval?: number | null;
+}
+
+export interface SynthPlaytestResult<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TDebug = JsonValue,
+> {
+  bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
+  ticksRun: number;
+  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError';
+  ok: boolean;
+  policyError?: {
+    policyIndex: number;
+    tick: number;
+    error: { name: string; message: string; stack: string | null };
+  };
+}
+
+export function runSynthPlaytest<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+>(
+  config: SynthPlaytestConfig<TEventMap, TCommandMap, TComponents, TState>,
+): SynthPlaytestResult<TEventMap, TCommandMap> {
+  // Step 1: validation. Pre-check world poison BEFORE deriving the default sub-RNG
+  // seed via world.random() ƒ?" otherwise a rejected call advances world.rng and
+  // perturbs future deterministic behavior after world.recover().
+  if (!Number.isInteger(config.maxTicks) || config.maxTicks < 1) {
+    throw new RangeError(`maxTicks must be a positive integer (got ${config.maxTicks})`);
+  }
+  if (config.policySeed !== undefined && !Number.isInteger(config.policySeed)) {
+    throw new RangeError(`policySeed must be a finite integer (got ${config.policySeed})`);
+  }
+  if (config.world.isPoisoned()) {
+    // Match SessionRecorder.connect()'s poisoned-world guard exactly so callers
+    // get a consistent error shape regardless of which check fires first.
+    throw new RecorderClosedError(
+      'cannot run synthetic playtest on a poisoned world; call world.recover() first',
+      { code: 'world_poisoned' },
+    );
+  }
+
+  const { world, policies, maxTicks, sink, sourceLabel } = config;
+  // Use 'in' to distinguish unset from explicit-null (??1000 would coerce null to 1000 ƒ?" null disables periodic snapshots).
+  const snapshotInterval: number | null =
+    'snapshotInterval' in config && config.snapshotInterval !== undefined
+      ? config.snapshotInterval
+      : 1000;
+
+  // Step 2: sub-RNG init (BEFORE recorder.connect so initial snapshot reflects post-derivation world.rng state).
+  // ADR 19: Math.floor(world.random() * 0x1_0000_0000) scales [0,1) to a uint32 ƒ?" required because
+  // DeterministicRandom.seedToUint32's Math.trunc(x)>>>0 collapses [0,1) to 0.
+  const policySeed = config.policySeed ?? Math.floor(world.random() * 0x1_0000_0000);
+  const subRng = new DeterministicRandom(policySeed);
+  const random = (): number => subRng.random();
+
+  // Step 3: recorder attach. terminalSnapshot:true is hardcoded ƒ?" every bundle gets the
+  // (initial, terminal) segment so SessionReplayer.selfCheck has a non-empty segment to validate.
+  const effectiveSink: SessionSink & SessionSource = sink ?? new MemorySink();
+  // SessionRecorder is 3-generic (no TComponents/TState); doesn't access them. Cast is structurally safe.
+  const recorder = new SessionRecorder<TEventMap, TCommandMap>({
+    world: world as unknown as World<TEventMap, TCommandMap>,
+    sink: effectiveSink,
+    snapshotInterval,
+    terminalSnapshot: true,
+    sourceLabel: sourceLabel ?? 'synthetic',
+    sourceKind: 'synthetic',
+    policySeed,
+  });
+  recorder.connect();
+  if (recorder.lastError !== null) {
+    // Connect-time sink failure: propagate. recorder.connect() does NOT throw on
+    // sink.open() failure ƒ?" it sets _lastError + _terminated and returns. The initial
+    // snapshot may not have been persisted, so there's no coherent bundle to return.
+    const err = recorder.lastError;
+    try { recorder.disconnect(); } catch { /* best-effort */ }
+    throw err;
+  }
+
+  // Step 4: tick loop.
+  let ticksRun = 0;
+  let stopReason: SynthPlaytestResult<TEventMap, TCommandMap>['stopReason'] = 'maxTicks';
+  let policyError: SynthPlaytestResult<TEventMap, TCommandMap>['policyError'];
+
+  outer: for (let i = 0; i < maxTicks; i++) {
+    const policyCtx: PolicyContext<TEventMap, TCommandMap, TComponents, TState> = {
+      world, tick: world.tick + 1, random,
+    };
+    for (let p = 0; p < policies.length; p++) {
+      let cmds: PolicyCommand<TCommandMap>[];
+      try {
+        cmds = policies[p](policyCtx);
+      } catch (err) {
+        const e = err as Error;
+        stopReason = 'policyError';
+        policyError = {
+          policyIndex: p,
+          tick: policyCtx.tick,
+          error: { name: e.name ?? 'Error', message: e.message ?? String(e), stack: e.stack ?? null },
+        };
+        break outer;
+      }
+      for (const cmd of cmds) {
+        world.submitWithResult(cmd.type, cmd.data);
+      }
+    }
+    try {
+      world.step();
+    } catch {
+      stopReason = 'poisoned';
+      break;
+    }
+    if (recorder.lastError !== null) {
+      stopReason = 'sinkError';
+      break;
+    }
+    ticksRun++;
+    const stopCtx: StopContext<TEventMap, TCommandMap, TComponents, TState> = {
+      world, tick: world.tick, random,
+    };
+    if (config.stopWhen?.(stopCtx)) {
+      stopReason = 'stopWhen';
+      break;
+    }
+  }
+
+  // Step 5: disconnect + return.
+  try { recorder.disconnect(); } catch { /* best-effort */ }
+  // Tighten ok: also flips false if disconnect-time sink failure occurred.
+  const ok = stopReason !== 'sinkError' && recorder.lastError === null;
+  const bundle = recorder.toBundle() as unknown as SessionBundle<TEventMap, TCommandMap>;
+  return { bundle, ticksRun, stopReason, ok, policyError };
+}
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 556ms:
+export * from './ai-contract.js';
+export * from './behavior-tree.js';
+export * from './cellular.js';
+export * from './client-adapter.js';
+export * from './command-transaction.js';
+export * from './diff.js';
+export * from './history-recorder.js';
+export * from './layer.js';
+export * from './map-gen.js';
+export * from './noise.js';
+export * from './occupancy-grid.js';
+export * from './path-service.js';
+export * from './pathfinding.js';
+export * from './random.js';
+export * from './render-adapter.js';
+export * from './resource-store.js';
+export * from './scenario-runner.js';
+export * from './serializer.js';
+export * from './spatial-grid.js';
+export * from './types.js';
+export * from './visibility-map.js';
+export * from './world.js';
+export * from './world-debugger.js';
+
+// Session-recording subsystem (T1+; see docs/design/2026-04-26-session-recording-and-replay-design.md)
+export {
+  SESSION_BUNDLE_SCHEMA_VERSION,
+  type SessionBundle,
+  type SessionMetadata,
+  type SessionTickEntry,
+  type SessionSnapshotEntry,
+  type AttachmentDescriptor,
+  type RecordedCommand,
+  type Marker,
+  type MarkerKind,
+  type MarkerProvenance,
+  type MarkerRefs,
+  type EntityRef,
+} from './session-bundle.js';
+export {
+  SessionRecordingError,
+  MarkerValidationError,
+  RecorderClosedError,
+  SinkWriteError,
+  BundleVersionError,
+  BundleRangeError,
+  BundleIntegrityError,
+  ReplayHandlerMissingError,
+} from './session-errors.js';
+// Side-effect import: declaration-merge for hidden World.__payloadCapturingRecorder slot
+import './session-internals.js';
+export { ENGINE_VERSION } from './version.js';
+// T2: Session sinks
+export {
+  type SessionSink,
+  type SessionSource,
+  MemorySink,
+  type MemorySinkOptions,
+} from './session-sink.js';
+// T3: FileSink
+export { FileSink } from './session-file-sink.js';
+// T5: SessionRecorder
+export {
+  SessionRecorder,
+  type SessionRecorderConfig,
+  type NewMarker,
+} from './session-recorder.js';
+// T6: SessionReplayer + selfCheck
+export {
+  SessionReplayer,
+  type ReplayerConfig,
+  type SelfCheckOptions,
+  type SelfCheckResult,
+  type StateDivergence,
+  type EventDivergence,
+  type ExecutionDivergence,
+  type SkippedSegment,
+  type MarkerValidationResult,
+  deepEqualWithPath,
+} from './session-replayer.js';
+// T7: scenarioResultToBundle adapter
+export {
+  scenarioResultToBundle,
+  type ScenarioResultToBundleOptions,
+} from './session-scenario-bundle.js';
+// Synthetic Playtest ƒ?" Spec 3 T1+T2 (v0.7.20+): Policy types, 3 built-in policies, runSynthPlaytest harness.
+export {
+  type Policy,
+  type PolicyContext,
+  type StopContext,
+  type PolicyCommand,
+  type RandomPolicyConfig,
+  type ScriptedPolicyEntry,
+  type SynthPlaytestConfig,
+  type SynthPlaytestResult,
+  noopPolicy,
+  randomPolicy,
+  scriptedPolicy,
+  runSynthPlaytest,
+} from './synthetic-playtest.js';
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 567ms:
+
+src\history-recorder.ts:3:import type { RecordedCommand } from './session-bundle.js';
+src\history-recorder.ts:56:  recordedCommands?: Array<RecordedCommand<TCommandMap>>;
+src\history-recorder.ts:121:  private readonly recordedCommandEntries: Array<RecordedCommand<TCommandMap>> = [];
+src\history-recorder.ts:143:     * `RecordedCommand` payloads (including `data`) into the new
+src\history-recorder.ts:144:     * `WorldHistoryState.recordedCommands` field. Required for replayable
+src\history-recorder.ts:232:    this.recordedCommandEntries.length = 0;
+src\history-recorder.ts:277:      state.recordedCommands = this.recordedCommandEntries.map((entry) =>
+src\history-recorder.ts:289:    const record: RecordedCommand<TCommandMap> = {
+src\history-recorder.ts:297:      this.recordedCommandEntries,
+src\index.ts:29:  type SessionMetadata,
+src\index.ts:33:  type RecordedCommand,
+src\scenario-runner.ts:116:     * `submitWithResult` to capture full `RecordedCommand` payloads. Required
+src\session-bundle.ts:41:export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+src\session-bundle.ts:83:export interface SessionMetadata {
+src\session-bundle.ts:115:  metadata: SessionMetadata;
+src\session-bundle.ts:118:  commands: RecordedCommand<TCommandMap>[];
+src\session-errors.ts:88: * Replay's `openAt()` encountered a `RecordedCommand` whose `type` has no
+src\session-file-sink.ts:8:  RecordedCommand,
+src\session-file-sink.ts:10:  SessionMetadata,
+src\session-file-sink.ts:53:  metadata: SessionMetadata;
+src\session-file-sink.ts:62: *   manifest.json                      # SessionMetadata + dataUrl attachments + sidecar 
+refs
+src\session-file-sink.ts:64: *   commands.jsonl                     # one RecordedCommand per line
+src\session-file-sink.ts:84:  private _metadata: SessionMetadata | null = null;
+src\session-file-sink.ts:111:  get metadata(): SessionMetadata {
+src\session-file-sink.ts:118:  open(metadata: SessionMetadata): void {
+src\session-file-sink.ts:217:  writeCommand(record: RecordedCommand): void {
+src\session-file-sink.ts:346:  *commands(): IterableIterator<RecordedCommand> {
+src\session-file-sink.ts:347:    for (const line of this._readJsonlLines(COMMANDS_FILE)) yield line as RecordedCommand;
+src\session-recorder.ts:8:  RecordedCommand,
+src\session-recorder.ts:10:  SessionMetadata,
+src\session-recorder.ts:57:   * 'synthetic'). Added in v0.8.0 - see SessionMetadata ADR 20.
+src\session-recorder.ts:62:   * SessionMetadata.policySeed. Added in v0.8.0.
+src\session-recorder.ts:136:    const initialMetadata: SessionMetadata = {
+src\session-recorder.ts:469:      const record = cloneJsonValue<RecordedCommand<TCommandMap>>({
+src\session-recorder.ts:476:      this._sink.writeCommand(record as unknown as RecordedCommand);
+src\session-replayer.ts:7:  SessionMetadata,
+src\session-replayer.ts:159:  get metadata(): SessionMetadata { return this._bundle.metadata; }
+src\session-scenario-bundle.ts:6:  RecordedCommand,
+src\session-scenario-bundle.ts:8:  SessionMetadata,
+src\session-scenario-bundle.ts:29: * - `bundle.commands` is `result.history.recordedCommands ?? []`. When
+src\session-scenario-bundle.ts:58:  const recordedCommands = (result.history.recordedCommands ?? []) as Array<
+src\session-scenario-bundle.ts:59:    RecordedCommand<TCommandMap>
+src\session-scenario-bundle.ts:62:  const metadata: SessionMetadata = {
+src\session-scenario-bundle.ts:90:    commands: cloneJsonValue(recordedCommands, 'scenario recordedCommands'),
+src\session-sink.ts:6:  RecordedCommand,
+src\session-sink.ts:8:  SessionMetadata,
+src\session-sink.ts:23:  open(metadata: SessionMetadata): void;
+src\session-sink.ts:25:  writeCommand(record: RecordedCommand): void;
+src\session-sink.ts:48:  readonly metadata: SessionMetadata;
+src\session-sink.ts:52:  commands(): IterableIterator<RecordedCommand>;
+src\session-sink.ts:86:  private _metadata: SessionMetadata | null = null;
+src\session-sink.ts:88:  private readonly _commands: RecordedCommand[] = [];
+src\session-sink.ts:104:  get metadata(): SessionMetadata {
+src\session-sink.ts:111:  open(metadata: SessionMetadata): void {
+src\session-sink.ts:133:  writeCommand(record: RecordedCommand): void {
+src\session-sink.ts:226:  *commands(): IterableIterator<RecordedCommand> { for (const c of this._commands) yield c; }
+src\world.ts:145:export interface CommandExecutionResult<
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\world.ts' | Select-Object -First 260" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src' -Recurse | Select-String -Pattern 'executed: false|executed: true|CommandExecutionResult|commandExecutionListener|submitWithResult\\(|writeExecution|recordExecution|bundle.executions'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 411ms:
+import type {
+  EntityId,
+  EntityRef,
+  InstrumentationProfile,
+  Position,
+  WorldConfig,
+} from './types.js';
+import type { WorldSnapshot } from './serializer.js';
+import type { TickDiff } from './diff.js';
+import { EntityManager } from './entity-manager.js';
+import { ComponentStore } from './component-store.js';
+import type { ComponentStoreOptions } from './component-store.js';
+import { SpatialGrid } from './spatial-grid.js';
+import type { SpatialGridView } from './spatial-grid.js';
+import { GameLoop, DEFAULT_MAX_TICKS_PER_FRAME } from './game-loop.js';
+import { EventBus } from './event-bus.js';
+import { CommandQueue } from './command-queue.js';
+import { ResourceStore } from './resource-store.js';
+import type { ResourceMax, ResourcePool } from './resource-store.js';
+import { assertJsonCompatible, jsonFingerprint, type JsonValue } from './json.js';
+import { DeterministicRandom } from './random.js';
+import {
+  COMMAND_EXECUTION_SCHEMA_VERSION,
+  COMMAND_RESULT_SCHEMA_VERSION,
+  TICK_FAILURE_SCHEMA_VERSION,
+  WORLD_STEP_RESULT_SCHEMA_VERSION,
+} from './ai-contract.js';
+import { CommandTransaction } from './command-transaction.js';
+import {
+  asPosition,
+  cloneMetrics,
+  cloneTickDiff,
+  cloneTickFailure,
+  createErrorDetails,
+  createMetrics,
+  errorMessage,
+  getImplicitMetricsProfile,
+  insertSorted,
+  isSystemPhase,
+  normalizeCommandValidationResult,
+  now,
+  phaseIndex,
+  SYSTEM_PHASES,
+  validateSystemInterval,
+  validateSystemIntervalOffset,
+  validateWorldConfig,
+} from './world-internal.js';
+import type { SystemPhase } from './world-internal.js';
+
+export type System<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> = (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type LooseSystem = (world: World<any, any, any, any>) => void;
+
+export interface LooseSystemRegistration {
+  name?: string;
+  phase?: SystemPhase;
+  execute: LooseSystem;
+  before?: string[];
+  after?: string[];
+  interval?: number;
+  intervalOffset?: number;
+}
+
+export { SYSTEM_PHASES } from './world-internal.js';
+export type { SystemPhase } from './world-internal.js';
+
+export interface SystemRegistration<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  name?: string;
+  phase?: SystemPhase;
+  execute: System<TEventMap, TCommandMap, TComponents, TState>;
+  before?: string[];
+  after?: string[];
+  interval?: number;
+  intervalOffset?: number;
+}
+
+export interface WorldMetrics {
+  tick: number;
+  entityCount: number;
+  componentStoreCount: number;
+  simulation: {
+    tps: number;
+    tickBudgetMs: number;
+  };
+  commandStats: {
+    pendingBeforeTick: number;
+    processed: number;
+  };
+  systems: Array<{
+    name: string;
+    phase: SystemPhase;
+    durationMs: number;
+  }>;
+  query: {
+    calls: number;
+    cacheHits: number;
+    cacheMisses: number;
+    results: number;
+  };
+  spatial: {
+    explicitSyncs: number;
+  };
+  durationMs: {
+    total: number;
+    commands: number;
+    systems: number;
+    resources: number;
+    diff: number;
+  };
+}
+
+export interface CommandValidationRejection {
+  code: string;
+  message?: string;
+  details?: JsonValue;
+}
+
+export type CommandValidationResult = boolean | CommandValidationRejection;
+
+export interface CommandSubmissionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  schemaVersion: typeof COMMAND_RESULT_SCHEMA_VERSION;
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  sequence: number;
+  validatorIndex: number | null;
+}
+
+export interface CommandExecutionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  schemaVersion: typeof COMMAND_EXECUTION_SCHEMA_VERSION;
+  submissionSequence: number | null;
+  executed: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+}
+
+export type TickFailurePhase =
+  | 'commands'
+  | 'systems'
+  | 'resources'
+  | 'diff'
+  | 'listeners';
+
+export interface TickFailure {
+  schemaVersion: typeof TICK_FAILURE_SCHEMA_VERSION;
+  tick: number;
+  phase: TickFailurePhase;
+  code: string;
+  message: string;
+  subsystem: string;
+  commandType: string | null;
+  submissionSequence: number | null;
+  systemName: string | null;
+  details: JsonValue | null;
+  error: {
+    name: string;
+    message: string;
+    stack: string | null;
+  } | null;
+}
+
+export interface WorldStepResult {
+  schemaVersion: typeof WORLD_STEP_RESULT_SCHEMA_VERSION;
+  ok: boolean;
+  tick: number;
+  failure: TickFailure | null;
+}
+
+export class WorldTickFailureError extends Error {
+  readonly failure: TickFailure;
+
+  constructor(failure: TickFailure) {
+    super(failure.message);
+    this.name = 'WorldTickFailureError';
+    this.failure = failure;
+  }
+}
+
+type ComponentTuple<T extends unknown[]> = { [K in keyof T]: T[K] | undefined };
+
+interface QueryCacheEntry {
+  readonly mask: bigint;
+  readonly entities: EntityId[];
+}
+
+interface RegisteredSystem<
+  TEventMap extends Record<keyof TEventMap, unknown>,
+  TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  name: string;
+  phase: SystemPhase;
+  execute: System<TEventMap, TCommandMap, TComponents, TState>;
+  order: number;
+  before: string[];
+  after: string[];
+  interval: number;
+  intervalOffset: number;
+}
+
+export type TickMetricsProfile = 'full' | 'minimal' | 'none';
+
+interface TickRunOptions {
+  metricsProfile: TickMetricsProfile;
+}
+
+export type ComponentRegistry = Record<string, unknown>;
+
+export type ComponentOptions = ComponentStoreOptions;
+
+export class World<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
+> {
+  private entityManager: EntityManager;
+  private componentStores = new Map<string, ComponentStore<unknown>>();
+  private componentOptions = new Map<string, ComponentOptions>();
+  private componentBits = new Map<string, bigint>();
+  private nextComponentBit = 0;
+  private entitySignatures: bigint[] = [];
+  private queryCache = new Map<string, QueryCacheEntry>();
+  private systems: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> = [];
+  private resolvedSystemOrder: Array<RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>> | null = null;
+  private nextSystemOrder = 0;
+  private gameLoop: GameLoop;
+  private previousPositions = new Map<EntityId, { x: number; y: number }>();
+  private eventBus = new EventBus<TEventMap>();
+  private commandQueue = new CommandQueue<TCommandMap>();
+  private validators = new Map<
+    keyof TCommandMap,
+    Array<
+      (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => CommandValidationResult
+    >
+  >();
+  private handlers = new Map<
+    keyof TCommandMap,
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 541ms:
+
+src\client-adapter.ts:4:  CommandExecutionResult,
+src\client-adapter.ts:102:  private commandExecutionListener:
+src\client-adapter.ts:103:    | ((result: CommandExecutionResult<keyof TCommandMap>) => void)
+src\client-adapter.ts:144:    this.commandExecutionListener = (result) => {
+src\client-adapter.ts:164:    this.world.onCommandExecution(this.commandExecutionListener);
+src\client-adapter.ts:183:    if (this.commandExecutionListener) {
+src\client-adapter.ts:184:      this.world.offCommandExecution(this.commandExecutionListener);
+src\client-adapter.ts:185:      this.commandExecutionListener = null;
+src\client-adapter.ts:235:        const result = this.world.submitWithResult(
+src\history-recorder.ts:9:  CommandExecutionResult,
+src\history-recorder.ts:47:  executions: Array<CommandExecutionResult<keyof TCommandMap>>;
+src\history-recorder.ts:118:    CommandExecutionResult<keyof TCommandMap>
+src\history-recorder.ts:129:    result: CommandExecutionResult<keyof TCommandMap>,
+src\history-recorder.ts:165:    this.executionListener = (result) => this.recordExecution(result);
+src\history-recorder.ts:248:  getCommandExecutionHistory(): Array<CommandExecutionResult<keyof TCommandMap>> {
+src\history-recorder.ts:328:  private recordExecution(
+src\history-recorder.ts:329:    result: CommandExecutionResult<keyof TCommandMap>,
+src\scenario-runner.ts:249:    submit: (type, data) => world.submitWithResult(type, data),
+src\session-bundle.ts:6:  CommandExecutionResult,
+src\session-bundle.ts:119:  executions: CommandExecutionResult<keyof TCommandMap>[];
+src\session-file-sink.ts:17:import type { CommandExecutionResult, TickFailure } from './world.js';
+src\session-file-sink.ts:65: *   executions.jsonl                   # one CommandExecutionResult per line
+src\session-file-sink.ts:223:  writeCommandExecution(result: CommandExecutionResult): void {
+src\session-file-sink.ts:349:  *executions(): IterableIterator<CommandExecutionResult> {
+src\session-file-sink.ts:350:    for (const line of this._readJsonlLines(EXECUTIONS_FILE)) yield line as 
+CommandExecutionResult;
+src\session-recorder.ts:24:  CommandExecutionResult,
+src\session-recorder.ts:94:  private _executionListener: ((r: CommandExecutionResult<keyof TCommandMap>) => void) | 
+null = null;
+src\session-recorder.ts:175:    this._executionListener = (r: CommandExecutionResult<keyof TCommandMap>): void => 
+this._onExecution(r);
+src\session-recorder.ts:438:  private _onExecution(result: CommandExecutionResult<keyof TCommandMap>): void {
+src\session-recorder.ts:444:      this._sink.writeCommandExecution(result as unknown as CommandExecutionResult);
+src\session-replayer.ts:19:import type { CommandExecutionResult, World } from './world.js';
+src\session-replayer.ts:60:  expected: CommandExecutionResult[];
+src\session-replayer.ts:61:  actual: CommandExecutionResult[];
+src\session-replayer.ts:103:  private readonly _executionsByTick: Map<number, typeof this._bundle.executions>;
+src\session-replayer.ts:129:    for (const exec of bundle.executions) {
+src\session-replayer.ts:235:        world.submitWithResult(rc.type as keyof TCommandMap, rc.data as TCommandMap[keyof 
+TCommandMap]);
+src\session-replayer.ts:348:    const replayExecs: CommandExecutionResult[] = [];
+src\session-replayer.ts:349:    const execListener: (r: CommandExecutionResult<keyof TCommandMap>) => void = (r) => {
+src\session-replayer.ts:350:      replayExecs.push(r as unknown as CommandExecutionResult);
+src\session-replayer.ts:364:          world.submitWithResult(rc.type as keyof TCommandMap, rc.data as 
+TCommandMap[keyof TCommandMap]);
+src\session-replayer.ts:397:              expected: expectedRaw as unknown as CommandExecutionResult[],
+src\session-sink.ts:14:import type { CommandExecutionResult, TickFailure } from './world.js';
+src\session-sink.ts:26:  writeCommandExecution(result: CommandExecutionResult): void;
+src\session-sink.ts:53:  executions(): IterableIterator<CommandExecutionResult>;
+src\session-sink.ts:89:  private readonly _executions: CommandExecutionResult[] = [];
+src\session-sink.ts:139:  writeCommandExecution(result: CommandExecutionResult): void {
+src\session-sink.ts:227:  *executions(): IterableIterator<CommandExecutionResult> { for (const e of this._executions) 
+yield e; }
+src\synthetic-playtest.ts:240:        world.submitWithResult(cmd.type, cmd.data);
+src\world.ts:145:export interface CommandExecutionResult<
+src\world.ts:281:  private commandExecutionListeners = new Set<
+src\world.ts:282:    (result: CommandExecutionResult<keyof TCommandMap>) => void
+src\world.ts:725:    return this.submitWithResult(type, data).accepted;
+src\world.ts:797:    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+src\world.ts:799:    this.commandExecutionListeners.add(listener);
+src\world.ts:803:    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+src\world.ts:805:    this.commandExecutionListeners.delete(listener);
+src\world.ts:1173:    //     commandResultListeners, commandExecutionListeners,
+src\world.ts:1686:          executed: false,
+src\world.ts:1711:          executed: true,
+src\world.ts:1721:          executed: false,
+src\world.ts:1769:        executed: false,
+src\world.ts:1809:  private createCommandExecutionResult<K extends keyof TCommandMap>(
+src\world.ts:1819:  ): CommandExecutionResult<K> {
+src\world.ts:1850:  private emitCommandExecutionResult<K extends keyof TCommandMap>(
+src\world.ts:1851:    result: CommandExecutionResult<K>,
+src\world.ts:1853:    for (const listener of this.commandExecutionListeners) {
+src\world.ts:1855:        listener(result as CommandExecutionResult<keyof TCommandMap>);
+src\world.ts:1857:        console.error('commandExecutionListener threw:', error);
+src\world.ts:2077:    if (this.commandExecutionListeners.size === 0) {
+src\world.ts:2080:    this.emitCommandExecutionResult(this.createCommandExecutionResult(type, config));
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\world.ts' | Select-Object -Skip 1650 -First 210" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-recorder.ts' | Select-Object -Skip 420 -First 80" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 391ms:
+    try {
+      for (const listener of this.diffListeners) {
+        listener(this.currentDiff!);
+      }
+    } catch (error) {
+      return this.finalizeTickFailure(
+        this.createTickFailure({
+          tick,
+          phase: 'listeners',
+          code: 'diff_listener_threw',
+          message: errorMessage(error),
+          subsystem: 'listeners',
+          error,
+        }),
+        metrics,
+        totalStart,
+      );
+    }
+
+    return null;
+  }
+
+  private processCommands(tick: number): {
+    processed: number;
+    failure: TickFailure | null;
+  } {
+    const commands = this.commandQueue.drain();
+    let processed = 0;
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i];
+      const handler = this.handlers.get(command.type);
+      if (!handler) {
+        const failureMessage = `No handler registered for command '${String(command.type)}'`;
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: false,
+          code: 'missing_handler',
+          message: failureMessage,
+          details: null,
+          tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'missing_handler',
+          message: failureMessage,
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: dropped.length > 0 ? { droppedCommands: dropped } : null,
+        });
+        return { processed, failure };
+      }
+
+      try {
+        handler(command.data as never, this);
+        processed++;
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: true,
+          code: 'executed',
+          message: 'Command handler completed',
+          details: null,
+          tick,
+        });
+      } catch (error) {
+        const details = createErrorDetails(error);
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: false,
+          code: 'command_handler_threw',
+          message: errorMessage(error),
+          details: {
+            error: details,
+          },
+          tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'command_handler_threw',
+          message: errorMessage(error),
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: {
+            commandType: String(command.type),
+            submissionSequence: command.submissionSequence,
+            error: details,
+            ...(dropped.length > 0 ? { droppedCommands: dropped } : {}),
+          },
+          error,
+        });
+        return { processed, failure };
+      }
+    }
+
+    return { processed, failure: null };
+  }
+
+  private dropPendingCommands(
+    commands: ReadonlyArray<{
+      type: keyof TCommandMap;
+      submissionSequence: number | null;
+    }>,
+    startIndex: number,
+    tick: number,
+  ): Array<{ commandType: string; submissionSequence: number | null }> {
+    const dropped: Array<{
+      commandType: string;
+      submissionSequence: number | null;
+    }> = [];
+    for (let i = startIndex; i < commands.length; i++) {
+      const cmd = commands[i];
+      this.emitCommandExecution(cmd.type, {
+        submissionSequence: cmd.submissionSequence,
+        executed: false,
+        code: 'tick_aborted_before_handler',
+        message: 'Command was queued for this tick but the tick aborted before its handler ran',
+        details: null,
+        tick,
+      });
+      dropped.push({
+        commandType: String(cmd.type),
+        submissionSequence: cmd.submissionSequence,
+      });
+    }
+    return dropped;
+  }
+
+  private createCommandSubmissionResult<K extends keyof TCommandMap>(
+    type: K,
+    config: {
+      accepted: boolean;
+      code: string;
+      message: string;
+      details: JsonValue | null;
+      validatorIndex: number | null;
+    },
+  ): CommandSubmissionResult<K> {
+    if (config.details !== null) {
+      assertJsonCompatible(config.details, `command result details for '${String(type)}'`);
+    }
+    return {
+      schemaVersion: COMMAND_RESULT_SCHEMA_VERSION,
+      accepted: config.accepted,
+      commandType: type,
+      code: config.code,
+      message: config.message,
+      details: config.details,
+      tick: this.getObservableTick(),
+      sequence: this.nextCommandResultSequence++,
+      validatorIndex: config.validatorIndex,
+    };
+  }
+
+  private createCommandExecutionResult<K extends keyof TCommandMap>(
+    type: K,
+    config: {
+      submissionSequence: number | null;
+      executed: boolean;
+      code: string;
+      message: string;
+      details: JsonValue | null;
+      tick: number;
+    },
+  ): CommandExecutionResult<K> {
+    if (config.details !== null) {
+      assertJsonCompatible(
+        config.details,
+        `command execution details for '${String(type)}'`,
+      );
+    }
+    return {
+      schemaVersion: COMMAND_EXECUTION_SCHEMA_VERSION,
+      submissionSequence: config.submissionSequence,
+      executed: config.executed,
+      commandType: type,
+      code: config.code,
+      message: config.message,
+      details: config.details,
+      tick: config.tick,
+    };
+  }
+
+  private emitCommandResult<K extends keyof TCommandMap>(
+    result: CommandSubmissionResult<K>,
+  ): void {
+    for (const listener of this.commandResultListeners) {
+      try {
+        listener(result as CommandSubmissionResult<keyof TCommandMap>);
+      } catch (error) {
+        console.error('commandResultListener threw:', error);
+      }
+    }
+  }
+
+  private emitCommandExecutionResult<K extends keyof TCommandMap>(
+    result: CommandExecutionResult<K>,
+  ): void {
+    for (const listener of this.commandExecutionListeners) {
+      try {
+        listener(result as CommandExecutionResult<keyof TCommandMap>);
+      } catch (error) {
+        console.error('commandExecutionListener threw:', error);
+      }
+    }
+  }
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 460ms:
+        debug: this._debugCapture?.() ?? null,
+      } as SessionTickEntry<TEventMap, TDebug>, `session tick ${diff.tick}`);
+      // Sink uses default-generic SessionTickEntry shape; runtime structure
+      // is identical, cast reconciles compile-time generic variance.
+      this._sink.writeTick(entry as unknown as SessionTickEntry);
+      this._tickCount++;
+      // Periodic snapshot: fire only after the start tick (initial snapshot
+      // already covered) and at multiples of the configured interval.
+      if (this._snapshotInterval !== null && this._world.tick > this._startTick && this._world.tick % this._snapshotInterval === 0) {
+        this._sink.writeSnapshot({ tick: this._world.tick, snapshot: this._world.serialize() });
+        this._snapshotCount++;
+      }
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _onExecution(result: CommandExecutionResult<keyof TCommandMap>): void {
+    if (this._terminated) return;
+    try {
+      // SessionSink.writeCommandExecution accepts the default-generic shape;
+      // the runtime structure is identical, the cast reconciles compile-time
+      // variance over the TCommandMap key constraint.
+      this._sink.writeCommandExecution(result as unknown as CommandExecutionResult);
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _onFailure(failure: TickFailure): void {
+    if (this._terminated) return;
+    try {
+      this._sink.writeTickFailure(failure);
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _captureCommand<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+    result: CommandSubmissionResult<keyof TCommandMap>,
+  ): void {
+    if (this._terminated) return;
+    try {
+      // Clone via cloneJsonValue to detach from caller-owned references.
+      // Otherwise post-submit mutation by user code would corrupt the
+      // recorded bundle. Iter-1 code review fix (Codex H3).
+      const record = cloneJsonValue<RecordedCommand<TCommandMap>>({
+        submissionTick: result.tick,
+        sequence: result.sequence,
+        type: type as keyof TCommandMap & string,
+        data,
+        result,
+      }, `recorded command ${result.sequence}`);
+      this._sink.writeCommand(record as unknown as RecordedCommand);
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _handleSinkError(e: unknown): void {
+    const err = e instanceof SessionRecordingError ? e : new SinkWriteError(
+      String((e as Error)?.message ?? e),
+      { wrapped: true, original: String(e) },
+    );
+    this._lastError = err;
+    if (this._world.__payloadCapturingRecorder) {
+      this._world.__payloadCapturingRecorder.lastError = { message: err.message, details: err.details };
+    }
+    this._terminated = true;
+  }
+}
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\world.ts' | Select-Object -Skip 700 -First 140" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\history-recorder.ts' | Select-Object -Skip 300 -First 60" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 399ms:
+
+  get isPaused(): boolean {
+    return this.gameLoop.isPaused;
+  }
+
+  emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
+    this.eventBus.emit(type, data);
+  }
+
+  on<K extends keyof TEventMap>(
+    type: K,
+    listener: (event: TEventMap[K]) => void,
+  ): void {
+    this.eventBus.on(type, listener);
+  }
+
+  off<K extends keyof TEventMap>(
+    type: K,
+    listener: (event: TEventMap[K]) => void,
+  ): void {
+    this.eventBus.off(type, listener);
+  }
+
+  submit<K extends keyof TCommandMap>(type: K, data: TCommandMap[K]): boolean {
+    return this.submitWithResult(type, data).accepted;
+  }
+
+  transaction(): CommandTransaction<TEventMap, TCommandMap, TComponents, TState> {
+    return new CommandTransaction<TEventMap, TCommandMap, TComponents, TState>(this);
+  }
+
+  submitWithResult<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+  ): CommandSubmissionResult<K> {
+    this.warnIfPoisoned('submit');
+    const rejection = this.validateCommand(type, data);
+    if (rejection) {
+      const result = this.createCommandSubmissionResult(type, {
+        accepted: false,
+        code: rejection.code,
+        message: rejection.message,
+        details: rejection.details,
+        validatorIndex: rejection.validatorIndex,
+      });
+      this.emitCommandResult(result);
+      return result;
+    }
+
+    const result = this.createCommandSubmissionResult(type, {
+      accepted: true,
+      code: 'accepted',
+      message: 'Queued command',
+      details: null,
+      validatorIndex: null,
+    });
+    this.commandQueue.push(type, data, {
+      submissionSequence: result.sequence,
+    });
+    this.emitCommandResult(result);
+    return result;
+  }
+
+  registerValidator<K extends keyof TCommandMap>(
+    type: K,
+    fn: (
+      data: TCommandMap[K],
+      world: World<TEventMap, TCommandMap, TComponents, TState>,
+    ) => CommandValidationResult,
+  ): void {
+    let fns = this.validators.get(type);
+    if (!fns) {
+      fns = [];
+      this.validators.set(type, fns);
+    }
+    fns.push(
+      fn as (
+        data: never,
+        world: World<TEventMap, TCommandMap, TComponents, TState>,
+      ) => CommandValidationResult,
+    );
+  }
+
+  onCommandResult(
+    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandResultListeners.add(listener);
+  }
+
+  offCommandResult(
+    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandResultListeners.delete(listener);
+  }
+
+  onCommandExecution(
+    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandExecutionListeners.add(listener);
+  }
+
+  offCommandExecution(
+    listener: (result: CommandExecutionResult<keyof TCommandMap>) => void,
+  ): void {
+    this.commandExecutionListeners.delete(listener);
+  }
+
+  registerHandler<K extends keyof TCommandMap>(
+    type: K,
+    fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+  ): void {
+    if (this.handlers.has(type)) {
+      throw new Error(`Handler already registered for command '${String(type)}'`);
+    }
+    this.handlers.set(
+      type,
+      fn as (data: never, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
+    );
+  }
+
+  hasCommandHandler(type: keyof TCommandMap): boolean {
+    return this.handlers.has(type);
+  }
+
+  onTickFailure(listener: (failure: TickFailure) => void): void {
+    this.tickFailureListeners.add(listener);
+  }
+
+  offTickFailure(listener: (failure: TickFailure) => void): void {
+    this.tickFailureListeners.delete(listener);
+  }
+
+  getEvents(): ReadonlyArray<{
+    type: keyof TEventMap;
+    data: TEventMap[keyof TEventMap];
+  }> {
+    return this.eventBus.getEvents();
+  }
+
+  random(): number {
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 461ms:
+  }
+
+  private recordTick(diff: TickDiff): void {
+    const debug = this.captureDebug();
+    const entry: WorldHistoryTick<TEventMap, TDebug> = {
+      tick: diff.tick,
+      diff: cloneJsonValue(diff, `history diff tick ${diff.tick}`),
+      events: cloneJsonValue(
+        [...this.world.getEvents()],
+        `history events tick ${diff.tick}`,
+      ),
+      metrics: this.world.getMetrics(),
+      debug,
+    };
+    pushBounded(this.tickEntries, entry, this.tickCapacity);
+  }
+
+  private recordCommand(
+    result: CommandSubmissionResult<keyof TCommandMap>,
+  ): void {
+    pushBounded(
+      this.commandEntries,
+      cloneJsonValue(result, `history command result ${result.sequence}`),
+      this.commandCapacity,
+    );
+  }
+
+  private recordExecution(
+    result: CommandExecutionResult<keyof TCommandMap>,
+  ): void {
+    pushBounded(
+      this.executionEntries,
+      cloneJsonValue(
+        result,
+        `history command execution result ${result.submissionSequence ?? 'none'}:${result.tick}`,
+      ),
+      this.commandCapacity,
+    );
+  }
+
+  private recordFailure(failure: TickFailure): void {
+    pushBounded(
+      this.failureEntries,
+      cloneJsonValue(failure, `history tick failure ${failure.tick}`),
+      this.tickCapacity,
+    );
+  }
+
+  private captureDebug(): TDebug | null {
+    const debug = this.debugCapture?.() ?? null;
+    if (debug === null) return null;
+    return cloneJsonValue(debug, 'history debug payload') as TDebug;
+  }
+}
+
+export function summarizeWorldHistoryRange<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+>(
+  state: WorldHistoryState<TEventMap, TCommandMap, WorldDebugSnapshot>,
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+I found one likely contract problem around submission vs. execution outcomes, so I’m validating it against the recorder and metadata behavior before I call it. I’m also checking for any count/shape mismatches in the draft itself.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-recorder.ts' | Select-Object -Skip 120 -First 120" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-recorder.ts' | Select-Object -Skip 300 -First 160" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-scenario-bundle.ts' | Select-Object -First 140" in C:\Users\38909\Documents\github\civ-engine
+2026-04-27T21:33:20.735981Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$spec = @"
+# Behavioral Metrics over Corpus — Design Spec
+"@
+'"'@"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$spec = @"
+# Behavioral Metrics over Corpus — Design Spec
+"@
+'"'@" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$spec = @"
+# Behavioral Metrics over Corpus — Design Spec
+"@
+'"'@"` rejected: blocked by policy
+ succeeded in 404ms:
+    if (this._connected) return;
+    if (this._world.isPoisoned()) {
+      throw new RecorderClosedError('cannot connect to a poisoned world; call world.recover() first',
+        { code: 'world_poisoned' });
+    }
+    if (this._world.__payloadCapturingRecorder) {
+      throw new RecorderClosedError(
+        `another payload-capturing recorder is attached (sessionId=${this._world.__payloadCapturingRecorder.sessionId})`,
+        { code: 'recorder_already_attached', existing: this._world.__payloadCapturingRecorder.sessionId },
+      );
+    }
+
+    this._world.__payloadCapturingRecorder = { sessionId: this.sessionId, lastError: null };
+    this._startTick = this._world.tick;
+
+    const initialMetadata: SessionMetadata = {
+      sessionId: this.sessionId,
+      engineVersion: ENGINE_VERSION,
+      nodeVersion: typeof process !== 'undefined' && process.version ? process.version : 'unknown',
+      recordedAt: new Date().toISOString(),
+      startTick: this._startTick,
+      endTick: this._startTick,
+      persistedEndTick: this._startTick,
+      durationTicks: 0,
+      sourceKind: this._sourceKind ?? 'session',
+      ...(this._sourceLabel ? { sourceLabel: this._sourceLabel } : {}),
+      ...(this._policySeed !== undefined ? { policySeed: this._policySeed } : {}),
+    };
+    try {
+      this._sink.open(initialMetadata);
+      // Write initial snapshot synchronously so bundles always have one.
+      const initial = this._world.serialize();
+      this._sink.writeSnapshot({ tick: this._startTick, snapshot: initial });
+      this._snapshotCount++;
+    } catch (e) {
+      this._handleSinkError(e);
+      // Still flip connected to ensure disconnect() is callable
+      this._connected = true;
+      return;
+    }
+
+    // Install single submitWithResult wrap (per spec A7.3).
+    const original = this._world.submitWithResult.bind(this._world) as SubmitWithResultFn<TCommandMap>;
+    this._originalSubmitWithResult = original;
+    const capture = this._captureCommand.bind(this);
+    (this._world as { submitWithResult: SubmitWithResultFn<TCommandMap> }).submitWithResult = <
+      K extends keyof TCommandMap,
+    >(type: K, data: TCommandMap[K]): CommandSubmissionResult<keyof TCommandMap> => {
+      const result = original(type, data);
+      capture(type, data, result);
+      return result;
+    };
+
+    this._diffListener = (diff: TickDiff): void => this._onDiff(diff);
+    this._executionListener = (r: CommandExecutionResult<keyof TCommandMap>): void => this._onExecution(r);
+    this._failureListener = (f: TickFailure): void => this._onFailure(f);
+
+    this._world.onDiff(this._diffListener);
+    this._world.onCommandExecution(this._executionListener);
+    this._world.onTickFailure(this._failureListener);
+
+    this._connected = true;
+  }
+
+  disconnect(): void {
+    if (!this._connected || this._closed) {
+      this._closed = true;
+      return;
+    }
+    // Optionally write terminal snapshot.
+    if (this._terminalSnapshot && !this._terminated) {
+      try {
+        const terminal = this._world.serialize();
+        this._sink.writeSnapshot({ tick: this._world.tick, snapshot: terminal });
+        this._snapshotCount++;
+      } catch (e) {
+        this._handleSinkError(e);
+      }
+    }
+
+    // Uninstall wrap + listeners.
+    if (this._originalSubmitWithResult) {
+      (this._world as { submitWithResult: SubmitWithResultFn<TCommandMap> }).submitWithResult =
+        this._originalSubmitWithResult;
+      this._originalSubmitWithResult = null;
+    }
+    if (this._diffListener) { this._world.offDiff(this._diffListener); this._diffListener = null; }
+    if (this._executionListener) { this._world.offCommandExecution(this._executionListener); this._executionListener = null; }
+    if (this._failureListener) { this._world.offTickFailure(this._failureListener); this._failureListener = null; }
+
+    if (this._world.__payloadCapturingRecorder?.sessionId === this.sessionId) {
+      delete this._world.__payloadCapturingRecorder;
+    }
+
+    // Finalize metadata via a fresh open() with the final values would be wrong;
+    // sinks already track persistedEndTick on writeSnapshot. We mutate the
+    // sink's metadata directly via close() ƒ?" sinks rewrite the manifest on close.
+    // For sinks that don't expose metadata mutation (defensively), the
+    // close() path is sufficient; the bundle's metadata.endTick is read from
+    // the sink at toBundle() time, and FileSink/MemorySink both keep it
+    // synced with whatever was passed to open() plus any incremental updates
+    // (failedTicks, persistedEndTick).
+    // However the spec calls for finalized endTick + durationTicks at
+    // disconnect; we set them via a sink hook.
+    const finalMetadata = this._sink.metadata;
+    finalMetadata.endTick = this._world.tick;
+    finalMetadata.durationTicks = this._world.tick - this._startTick;
+    if (this._terminated) {
+      finalMetadata.incomplete = true;
+    }
+
+    try {
+      this._sink.close();
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+
+    this._connected = false;
+    this._closed = true;
+  }
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 490ms:
+          `marker.refs.tickRange invalid: { from: ${from}, to: ${to} }`,
+          { field: 'refs.tickRange', from, to }, '6.1.tickrange_shape',
+        );
+      }
+    }
+    if (input.refs?.cells) {
+      // Validate cells against world bounds. Out-of-bounds cells are rejected
+      // per spec A6.1. Iter-1 code review fix.
+      const w = this._world.grid.width;
+      const h = this._world.grid.height;
+      for (const cell of input.refs.cells) {
+        if (cell.x < 0 || cell.x >= w || cell.y < 0 || cell.y >= h) {
+          throw new MarkerValidationError(
+            `marker.refs.cells contains out-of-bounds cell { x: ${cell.x}, y: ${cell.y} } (world is ${w}A-${h})`,
+            { field: 'refs.cells', x: cell.x, y: cell.y, gridWidth: w, gridHeight: h },
+            '6.1.cell_bounds',
+          );
+        }
+      }
+    }
+    if (input.attachments) {
+      // Validate that each referenced attachment id was actually registered
+      // via attach(). Iter-1 code review fix.
+      for (const attId of input.attachments) {
+        if (!this._registeredAttachmentIds.has(attId)) {
+          throw new MarkerValidationError(
+            `marker.attachments references unknown attachment id "${attId}" ƒ?" call recorder.attach() first`,
+            { field: 'attachments', id: attId },
+            '6.1.attachment_unknown',
+          );
+        }
+      }
+    }
+    // Clone refs/data/attachments arrays to detach from caller-owned references.
+    // Otherwise post-call mutation by user code would corrupt the recorded
+    // bundle. Iter-1 code review fix (Codex H3 / memory aliasing).
+    const marker: Marker = cloneJsonValue({
+      id: randomUUID(),
+      tick,
+      kind: input.kind,
+      provenance: 'game' as MarkerProvenance,
+      createdAt: new Date().toISOString(),
+      ...(input.text !== undefined ? { text: input.text } : {}),
+      ...(input.refs !== undefined ? { refs: input.refs } : {}),
+      ...(input.data !== undefined ? { data: input.data } : {}),
+      ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+      ...(isLive ? {} : { validated: false as const }),
+    } as Marker, 'session marker');
+    try {
+      this._sink.writeMarker(marker);
+    } catch (e) {
+      this._handleSinkError(e);
+      throw e;
+    }
+    this._markerCount++;
+    return marker.id;
+  }
+
+  attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string {
+    this._assertOperational('attach');
+    const id = randomUUID();
+    // Default ref selection: when caller hasn't explicitly specified
+    // `options.sidecar`, pass `{ auto: true }` so each sink applies its
+    // own default policy:
+    // - `MemorySink`: routes under-threshold attachments to dataUrl,
+    //   oversize to sidecar (when `allowSidecar`) or throws.
+    // - `FileSink`: keeps blobs as files (sidecar) ƒ?" disk-backed sink
+    //   default.
+    // Caller can force a specific policy via `options.sidecar: true`
+    // (sidecar) or `options.sidecar: false` (dataUrl).
+    let ref: AttachmentDescriptor['ref'];
+    if (options?.sidecar === false) {
+      ref = { dataUrl: '' };  // explicit opt-in to manifest embedding
+    } else if (options?.sidecar === true) {
+      ref = { sidecar: true };  // explicit opt-in to sidecar storage
+    } else {
+      ref = { auto: true };    // no preference; each sink applies its own default
+    }
+    const desc: AttachmentDescriptor = {
+      id, mime: blob.mime, sizeBytes: blob.data.byteLength, ref,
+    };
+    try {
+      this._sink.writeAttachment(desc, blob.data);
+      this._registeredAttachmentIds.add(id);
+    } catch (e) {
+      this._handleSinkError(e);
+      throw e;
+    }
+    return id;
+  }
+
+  takeSnapshot(): SessionSnapshotEntry {
+    this._assertOperational('takeSnapshot');
+    const entry: SessionSnapshotEntry = {
+      tick: this._world.tick, snapshot: this._world.serialize(),
+    };
+    try {
+      this._sink.writeSnapshot(entry);
+      this._snapshotCount++;
+    } catch (e) {
+      this._handleSinkError(e);
+      throw e;
+    }
+    return entry;
+  }
+
+  toBundle(): SessionBundle {
+    return this._sink.toBundle();
+  }
+
+  // --- internal ---
+
+  private _onDiff(diff: TickDiff): void {
+    if (this._terminated) return;
+    try {
+      const events = [...this._world.getEvents()] as Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+      const entry: SessionTickEntry<TEventMap, TDebug> = cloneJsonValue({
+        tick: diff.tick, diff,
+        events,
+        metrics: this._world.getMetrics(),
+        debug: this._debugCapture?.() ?? null,
+      } as SessionTickEntry<TEventMap, TDebug>, `session tick ${diff.tick}`);
+      // Sink uses default-generic SessionTickEntry shape; runtime structure
+      // is identical, cast reconciles compile-time generic variance.
+      this._sink.writeTick(entry as unknown as SessionTickEntry);
+      this._tickCount++;
+      // Periodic snapshot: fire only after the start tick (initial snapshot
+      // already covered) and at multiples of the configured interval.
+      if (this._snapshotInterval !== null && this._world.tick > this._startTick && this._world.tick % this._snapshotInterval === 0) {
+        this._sink.writeSnapshot({ tick: this._world.tick, snapshot: this._world.serialize() });
+        this._snapshotCount++;
+      }
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _onExecution(result: CommandExecutionResult<keyof TCommandMap>): void {
+    if (this._terminated) return;
+    try {
+      // SessionSink.writeCommandExecution accepts the default-generic shape;
+      // the runtime structure is identical, the cast reconciles compile-time
+      // variance over the TCommandMap key constraint.
+      this._sink.writeCommandExecution(result as unknown as CommandExecutionResult);
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _onFailure(failure: TickFailure): void {
+    if (this._terminated) return;
+    try {
+      this._sink.writeTickFailure(failure);
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _captureCommand<K extends keyof TCommandMap>(
+    type: K,
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 375ms:
+import { randomUUID } from 'node:crypto';
+import { cloneJsonValue } from './json.js';
+import type { ScenarioResult } from './scenario-runner.js';
+import type {
+  Marker,
+  RecordedCommand,
+  SessionBundle,
+  SessionMetadata,
+} from './session-bundle.js';
+import { SESSION_BUNDLE_SCHEMA_VERSION } from './session-bundle.js';
+import { BundleIntegrityError } from './session-errors.js';
+import { ENGINE_VERSION } from './version.js';
+import type { WorldDebugSnapshot } from './world-debugger.js';
+
+export interface ScenarioResultToBundleOptions {
+  /** Override `metadata.sourceLabel`. Defaults to `result.name`. */
+  sourceLabel?: string;
+  /** Override `metadata.nodeVersion`. Defaults to `process.version`. */
+  nodeVersion?: string;
+}
+
+/**
+ * Translate a `ScenarioResult` (returned by `runScenario`) into a
+ * `SessionBundle` with `sourceKind: 'scenario'`. Per spec A10:
+ *
+ * - `metadata.startTick` comes from `result.history.initialSnapshot.tick`
+ *   (NOT hardcoded to 0; scenarios may run on a non-zero-start world).
+ * - `metadata.endTick = result.tick`.
+ * - `bundle.commands` is `result.history.recordedCommands ?? []`. When
+ *   the scenario was NOT configured with `history.captureCommandPayloads:
+ *   true`, this is empty and the bundle is diagnostic-only ƒ?" replay /
+ *   selfCheck refuse with `BundleIntegrityError(code: 'no_replay_payloads')`
+ *   per spec A10.3.
+ * - One `kind: 'assertion'` marker per `result.checks` outcome with
+ *   `provenance: 'engine'`. All assertion markers share `tick: result.tick`
+ *   because `ScenarioCheckOutcome` doesn't currently track per-check tick
+ *   (a future spec extension).
+ *
+ * Throws `BundleIntegrityError(code: 'no_initial_snapshot')` if the
+ * scenario's `WorldHistoryRecorder` was configured with
+ * `captureInitialSnapshot: false` (initial snapshot is required).
+ */
+export function scenarioResultToBundle<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+>(
+  result: ScenarioResult<TEventMap, TCommandMap>,
+  options?: ScenarioResultToBundleOptions,
+): SessionBundle<TEventMap, TCommandMap, WorldDebugSnapshot> {
+  if (!result.history.initialSnapshot) {
+    throw new BundleIntegrityError(
+      'scenario history has no initialSnapshot ƒ?" adapter requires captureInitialSnapshot: true',
+      { code: 'no_initial_snapshot', scenarioName: result.name },
+    );
+  }
+  const startTick = result.history.initialSnapshot.tick;
+  const endTick = result.tick;
+  const recordedCommands = (result.history.recordedCommands ?? []) as Array<
+    RecordedCommand<TCommandMap>
+  >;
+
+  const metadata: SessionMetadata = {
+    sessionId: randomUUID(),
+    engineVersion: ENGINE_VERSION,
+    nodeVersion: options?.nodeVersion ?? (typeof process !== 'undefined' ? process.version : 'unknown'),
+    recordedAt: new Date().toISOString(),
+    startTick,
+    endTick,
+    persistedEndTick: endTick,
+    durationTicks: endTick - startTick,
+    sourceKind: 'scenario',
+    sourceLabel: options?.sourceLabel ?? result.name,
+  };
+
+  const markers: Marker[] = result.checks.map((outcome) => ({
+    id: randomUUID(),
+    tick: endTick,
+    kind: 'assertion' as const,
+    provenance: 'engine' as const,
+    text: outcome.name,
+    data: { passed: outcome.passed, failure: outcome.failure } as never,
+    createdAt: new Date().toISOString(),
+  }));
+
+  const bundle: SessionBundle<TEventMap, TCommandMap, WorldDebugSnapshot> = {
+    schemaVersion: SESSION_BUNDLE_SCHEMA_VERSION,
+    metadata,
+    initialSnapshot: result.history.initialSnapshot,
+    ticks: cloneJsonValue(result.history.ticks, 'scenario history ticks'),
+    commands: cloneJsonValue(recordedCommands, 'scenario recordedCommands'),
+    executions: cloneJsonValue(result.history.executions, 'scenario history executions'),
+    failures: cloneJsonValue(result.history.failures, 'scenario history failures'),
+    snapshots: [{ tick: result.tick, snapshot: result.snapshot }],
+    markers,
+    attachments: [],
+  };
+  return bundle;
+}
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src' -Recurse | Select-String -Pattern 'failedTicks'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs\\reviews\\behavioral-metrics\\2026-04-27\\design-1\\REVIEW.md'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 348ms:
+# Spec 8 (Behavioral Metrics) ƒ?" Design iter-1 Review Synthesis
+
+**Iteration:** 1. **Subject:** v1 (commit c469822). **Reviewers:** Codex 3 HIGH + 2 MED + 1 LOW; Opus 4 HIGH + 6 MED + 4 LOW + 5 NIT.
+
+**Verdict:** REJECT ƒ?" re-spin to v2 required. Architecture (accumulator contract, engine-generic-only built-ins, deltas-not-judgments, Iterable-only) is sound per both reviewers. The HIGH issues are spec-tightening and missing-feature additions, not architecture.
+
+## Convergent HIGHs
+
+### H-TYPING ƒ?" runMetrics signature typing is too weak
+
+Codex HIGH-2 + Opus HIGH-4. Two distinct sub-issues:
+
+- **Codex HIGH-2:** `runMetrics(..., Metric<unknown, unknown>[]) => MetricsResult` erases per-metric result shape. The A10 CI example dereferences `comparison.sessionLengthStats?.p95` ƒ?" that doesn't typecheck against `Record<string, unknown>`. Acceptance criterion "full TypeScript types" not met.
+
+- **Opus HIGH-4:** `bundles: Iterable<SessionBundle>` defaults to `SessionBundle<Record<string, never>, Record<string, never>, JsonValue>`. A user holding `SessionBundle<MyEvents, MyCommands>[]` won't assign it ergonomically.
+
+**Fix (v2):** `runMetrics<E, C, D>(bundles: Iterable<SessionBundle<E, C, D>>, metrics: Metric[]): MetricsResult` for the bundle generics. For the result-shape typing, accept the runtime reality: `MetricsResult = Record<string, unknown>` with the example using a type assertion `(comparison.sessionLengthStats as MetricDelta<Stats>)?.p95.pctChange`. A fully-typed-name-tuple builder is doable but adds complexity we don't need in v1; document the type assertion as the v1 idiom and consider a typed builder in v2.
+
+### H-VERSION ƒ?" A13 vs A14 version mismatch
+
+Codex LOW-1 + Opus MED-6. A13 doc-section heading says "Behavioral Metrics (v0.9.0)"; A14 says T1 = v0.8.2 / T2 = v0.8.3.
+
+**Fix (v2):** A13 ƒ+' v0.8.2. Drop v0.9.0. A14 keeps c-bump.
+
+## Codex HIGHs (unique)
+
+### H-IMMUTABLE ƒ?" Accumulator immutability contradicts state-shape choices
+
+Codex HIGH-1. A5.1 says `observe` is pure: "must return new state, not mutate." But built-in state shapes are `number[]` and `Map<string, number>`. Honoring immutability forces clone-per-bundle (`[...state, x]`, `new Map(state)`), killing the one-pass/low-memory story in A5.2 and A11.
+
+**Fix (v2):** Relax the contract. `observe(state, bundle)` returns the updated state, which MAY be the same reference (in-place mutation allowed for performance) or a new value. The contract is functional purity (output depends only on inputs, no global side effects), not reference-immutability. Update A5.1 wording. Add a sentence: "Implementations are responsible for ensuring concurrent calls observe() with the same state are not safe; v1's runMetrics is single-threaded so this is moot, but parallel-merge implementations must avoid sharing accumulator state."
+
+### H-JSON-NAN ƒ?" Empty-corpus NaN breaks JSON round-trip
+
+Codex HIGH-3. `JSON.stringify(NaN) === 'null'`. Empty-corpus `Stats { p95: NaN }` doesn't round-trip through `baseline-metrics.json`. The A10 CI workflow loads `JSON.parse(fs.readFileSync(...))` ƒ?" the parsed `null` doesn't compare correctly against runtime `NaN`.
+
+**Fix (v2):** Empty-corpus `Stats` returns numeric fields as `null` rather than `NaN`. Final shape: `{ count: number; min: number | null; max: number | null; mean: number | null; p50: number | null; p95: number | null; p99: number | null }`. JSON-stable. `compareMetricsResults` treats `null` deltas explicitly (see MED-3).
+
+## Opus HIGHs (unique)
+
+### H-RATE-FORMULA ƒ?" commandRateStats formula contradicts zero-duration semantics
+
+Opus HIGH-1. A6.3 says "buffered (bundle.commands.length / max(durationTicks, 1))" AND "Bundles with durationTicks === 0 contribute 0". These contradict ƒ?" `N / max(0, 1) = N`, not 0.
+
+**Fix (v2):** A6.3 + A6.4 use `durationTicks > 0 ? rate : 0`. Drop the `max(...)` formula.
+
+### H-PERCENTILE ƒ?" Stats percentile method underspecified
+
+Opus HIGH-2. "Linear interpolation between sorted samples (the standard method)" is ambiguous ƒ?" there are 9 R-quantile types. Different methods ƒ+' different answers ƒ+' tests can't unambiguously match hand-computed values.
+
+**Fix (v2):** Pin NumPy `linear` (R type 7): `index = (count - 1) * p; lo = floor(index); hi = ceil(index); v = sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo)`. Pin `count === 1` behavior: all percentiles equal that single value. Pin `count === 0`: see H-JSON-NAN above (`null`).
+
+### H-REJECTED-COMMANDS ƒ?" bundle.commands includes rejected submissions
+
+Opus HIGH-3. `SessionRecorder._captureCommand` records every submission regardless of `result.accepted`. So `bundle.commands.length` = submissions, not executions. Built-ins aggregate over `bundle.commands.length` and `bundle.commands[].type` without addressing this.
+
+Game-CI question is usually "what commands ran." A misbehaving validator that rejects 100% of inputs would inflate `commandTypeCounts` and `commandRateStats` exactly like a healthy run.
+
+**Fix (v2):** Document the semantics explicitly: built-ins like `commandTypeCounts` count **submissions** (including rejected). Add **two new built-ins** (Codex MED-2 also asks for these) that read `bundle.executions` for the executed view:
+
+- `commandAcceptanceRate`: from `bundle.executions[].executed`. Numerator: count where `executed === true`. Denominator: total executions. Returns ratio in [0, 1].
+- `executionFailureRate`: numerator: count where `executed === false`. Denominator: total executions. Returns ratio.
+
+Plus a A6.10 note that for "executed-only" command-type histograms, use `bundle.executions[].commandType` as a user-defined metric.
+
+## Convergent MED ƒ?" orderSensitive over-promises
+
+Codex MED-1 + Opus MED-1. Spec promises `runMetrics` warns when iterating non-deterministic source (e.g., `Map.values()`). Real issues:
+- No portable way to introspect arbitrary `Iterable<T>`'s ordering.
+- `Map.values()` IS deterministic (insertion order) ƒ?" wrong example.
+- Engine has no logger primitive ƒ?" where does the warning go?
+
+**Fix (v2):** Drop the auto-detect promise. `orderSensitive: true` is a doc-only declaration; the caller is responsible for passing bundles in stable order. Update A5.3 + A8 wording. Drop A16's `bundles.filter(...)` example since `.filter` isn't on generic iterables.
+
+## Codex MED ƒ?" Missing engine-generic execution metrics
+
+Codex MED-2. v1 tells you command volume changed but not that 30% of executions failed. `bundle.executions[].executed` is engine-generic + bundle-derivable.
+
+**Fix (v2):** add `commandAcceptanceRate` and `executionFailureRate` built-ins (folded into H-REJECTED-COMMANDS fix above).
+
+## Opus MEDs
+
+- **M-COMPARE-RECURSE (Opus MED-2):** `compareMetricsResults` only-in-key handling needs to recurse into nested records (e.g., `commandTypeCounts: Record<string, number>`). Spec implies but doesn't say. **Fix:** state explicitly. Per-key only-in-side reporting at every record-typed level.
+- **M-COMPARE-NAN (Opus MED-3):** `null` (was NaN) propagation undefined. **Fix:** `null` inputs ƒ+' `null` deltas; consumers can detect "no baseline" or "no current" via `=== null`.
+- **M-COMPARE-ARRAY (Opus MED-4):** arrays as opaque. **Fix:** state explicitly in A7.2. Per-element diff is overkill for v1.
+- **M-COMPARE-TYPE (Opus MED-5):** `MetricsComparison` index sig `[name: string]: MetricDelta` is incomplete ƒ?" also needs only-in-side variant. **Fix:** `MetricsComparison = Record<string, MetricDelta | OnlyInComparison>`.
+
+## Opus LOWs (apply)
+
+- **LOW-1:** `incomplete` vs `failedTicks` orthogonality. **Fix:** one sentence in A6.7/A6.9.
+- **LOW-2:** `bundle.failures` unused. **Fix:** A6.10 line deferring per-phase failure metrics.
+- **LOW-3:** `merge?` A- `orderSensitive` invariant. **Fix:** A5.1 sentence.
+- **LOW-4:** AsyncIterable overload returns Promise. **Fix:** ADR 26 parenthetical.
+
+## NITs (apply where trivial, defer otherwise)
+
+- **NIT-1 (Opus):** A14 self-correcting v0.9.0 reference. Already covered by H-VERSION fix.
+- **NIT-2 (Opus):** "100% of new code covered" performative. Drop.
+- **NIT-3 (Opus):** rename `failureBundleRate` ƒ+' `bundleFailureRate`. **Defer** ƒ?" minor renaming churn for cosmetic gain.
+- **NIT-4 (Opus):** Iterable consumed once. **Fix:** one sentence in A7.1.
+- **NIT-5 (Opus):** `SESSION_BUNDLE_SCHEMA_VERSION` not validated. **Fix:** A16 deferral note.
+
+## Action plan for v2
+
+1. **H-TYPING:** generic over `<E, C, D>` for bundle types; document `MetricsResult` typing reality + assertion idiom in A10 example.
+2. **H-VERSION:** A13 ƒ+' v0.8.2.
+3. **H-IMMUTABLE:** relax A5.1 contract ƒ?" in-place mutation allowed; functional purity is the contract.
+4. **H-JSON-NAN:** empty-corpus `Stats` returns `null` for numeric fields, not `NaN`.
+5. **H-RATE-FORMULA:** A6.3/A6.4 use `durationTicks > 0 ? rate : 0`.
+6. **H-PERCENTILE:** pin NumPy linear (R type 7) with literal formula.
+7. **H-REJECTED-COMMANDS:** document submission-semantics; add `commandAcceptanceRate` + `executionFailureRate` built-ins (10 ƒ+' 11 built-ins).
+8. **M-ORDER:** drop auto-detect; doc-only declaration. Update A16 filter example.
+9. **M-COMPARE-RECURSE:** explicit recursive only-in-side handling.
+10. **M-COMPARE-NAN:** define null-input propagation.
+11. **M-COMPARE-ARRAY:** state opaque-equality explicitly.
+12. **M-COMPARE-TYPE:** `MetricsComparison` includes `OnlyInComparison` variant.
+13. **L-1, L-2, L-3, L-4, NIT-2, NIT-4, NIT-5:** apply per above.
+
+After v2, request iter-2 review. Expecting convergence (no remaining HIGH).
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 476ms:
+
+src\session-bundle.ts:100:  failedTicks?: number[];
+src\session-file-sink.ts:234:      this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
+src\session-recorder.ts:222:    // (failedTicks, persistedEndTick).
+src\session-replayer.ts:202:    if (md.failedTicks?.some((ft) => targetTick >= ft)) {
+src\session-replayer.ts:205:        { code: 'replay_across_failure', failedTicks: md.failedTicks, requested: 
+targetTick },
+src\session-replayer.ts:286:      if (md.failedTicks?.some((ft) => ft >= a.tick && ft < b.tick)) {
+src\session-sink.ts:150:      this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+I’ve validated the main contract issue against the code. I’m pulling exact line anchors now so the findings point at the repo evidence, not just the spec sections.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-bundle.ts' -Pattern 'export interface RecordedCommand|export interface SessionBundle|executions: CommandExecutionResult|result: CommandSubmissionResult'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\world.ts' -Pattern 'submitWithResult<|accepted: false|accepted: true|emitCommandExecution\\(|executed: false|executed: true|createCommandExecutionResult'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\src\\session-recorder.ts' -Pattern '_captureCommand|writeCommandExecution|const result = original\\(type, data\\);|capture\\(type, data, result\\);'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs\\reviews\\behavioral-metrics\\2026-04-27\\design-1\\REVIEW.md' -Pattern 'H-REJECTED-COMMANDS|commandAcceptanceRate|executionFailureRate'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 382ms:
+
+src\session-bundle.ts:41:export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+src\session-bundle.ts:46:  result: CommandSubmissionResult<keyof TCommandMap>;
+src\session-bundle.ts:109:export interface SessionBundle<
+src\session-bundle.ts:119:  executions: CommandExecutionResult<keyof TCommandMap>[];
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 400ms:
+
+docs\reviews\behavioral-metrics\2026-04-27\design-1\REVIEW.md:53:### H-REJECTED-COMMANDS - bundle.commands includes 
+rejected submissions
+docs\reviews\behavioral-metrics\2026-04-27\design-1\REVIEW.md:61:- `commandAcceptanceRate`: from 
+`bundle.executions[].executed`. Numerator: count where `executed === true`. Denominator: total executions. Returns 
+ratio in [0, 1].
+docs\reviews\behavioral-metrics\2026-04-27\design-1\REVIEW.md:62:- `executionFailureRate`: numerator: count where 
+`executed === false`. Denominator: total executions. Returns ratio.
+docs\reviews\behavioral-metrics\2026-04-27\design-1\REVIEW.md:79:**Fix (v2):** add `commandAcceptanceRate` and 
+`executionFailureRate` built-ins (folded into H-REJECTED-COMMANDS fix above).
+docs\reviews\behavioral-metrics\2026-04-27\design-1\REVIEW.md:111:7. **H-REJECTED-COMMANDS:** document 
+submission-semantics; add `commandAcceptanceRate` + `executionFailureRate` built-ins (10  11 built-ins).
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 468ms:
+
+src\world.ts:732:  submitWithResult<K extends keyof TCommandMap>(
+src\world.ts:740:        accepted: false,
+src\world.ts:751:      accepted: true,
+src\world.ts:1684:        this.emitCommandExecution(command.type, {
+src\world.ts:1686:          executed: false,
+src\world.ts:1709:        this.emitCommandExecution(command.type, {
+src\world.ts:1711:          executed: true,
+src\world.ts:1719:        this.emitCommandExecution(command.type, {
+src\world.ts:1721:          executed: false,
+src\world.ts:1767:      this.emitCommandExecution(cmd.type, {
+src\world.ts:1769:        executed: false,
+src\world.ts:1809:  private createCommandExecutionResult<K extends keyof TCommandMap>(
+src\world.ts:2080:    this.emitCommandExecutionResult(this.createCommandExecutionResult(type, config));
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 525ms:
+
+src\session-recorder.ts:165:    const capture = this._captureCommand.bind(this);
+src\session-recorder.ts:169:      const result = original(type, data);
+src\session-recorder.ts:170:      capture(type, data, result);
+src\session-recorder.ts:441:      // SessionSink.writeCommandExecution accepts the default-generic shape;
+src\session-recorder.ts:444:      this._sink.writeCommandExecution(result as unknown as CommandExecutionResult);
+src\session-recorder.ts:459:  private _captureCommand<K extends keyof TCommandMap>(
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+2026-04-27T21:35:09.343373Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus' } | Select-Object -ExpandProperty FullName"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus' } | Select-Object -ExpandProperty FullName" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\docs' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus' } | Select-Object -ExpandProperty FullName"` rejected: blocked by policy
+2026-04-27T21:35:09.344924Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\design' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus|spec' } | Select-Object -ExpandProperty FullName"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\design' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus|spec' } | Select-Object -ExpandProperty FullName" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-ChildItem -Path 'C:\\Users\\38909\\Documents\\github\\civ-engine\\design' -Recurse -File | Where-Object { "'$_.Name -match '"'behavioral|metrics|corpus|spec' } | Select-Object -ExpandProperty FullName"` rejected: blocked by policy
+codex
+[HIGH] §6.10/§6.11 still mis-specify submission acceptance vs execution outcome. Repo contract says `bundle.commands` records every `submitWithResult(...)` result, including `accepted: false`, via `RecordedCommand.result` ([session-bundle.ts](/C:/Users/38909/Documents/github/civ-engine/src/session-bundle.ts:41), [session-recorder.ts](/C:/Users/38909/Documents/github/civ-engine/src/session-recorder.ts:165), [session-recorder.ts](/C:/Users/38909/Documents/github/civ-engine/src/session-recorder.ts:169)). `bundle.executions` is populated later from command-execution listeners only for queued commands that reach processing or are dropped after queueing ([session-bundle.ts](/C:/Users/38909/Documents/github/civ-engine/src/session-bundle.ts:109), [world.ts](/C:/Users/38909/Documents/github/civ-engine/src/world.ts:732), [world.ts](/C:/Users/38909/Documents/github/civ-engine/src/world.ts:1684)). Validator rejections therefore never appear in `bundle.executions`. As written, `commandAcceptanceRate` would over-report acceptance whenever validators reject commands, and the §6.10 note claiming `executed === false` covers validator rejections is false. Fix: define acceptance over `bundle.commands` (`accepted submissions / total submissions`) and keep `executionFailureRate` as an execution-stage metric over `bundle.executions`.
+
+[MED] The draft still contains stale pre-v2 normative guidance: §12 says empty `Stats` returns `NaN`s and `runMetrics` multiplexes 9 built-ins, while the body now defines `null` for empty numeric stats and 11 built-ins; ADR 24 also still says v1 ships 9 built-ins. That is not cosmetic drift, because §12 is the implementation/test plan and can directly recreate the fixed empty-corpus bug or send TDD against the wrong surface. Update every remaining empty-state/count reference to `null` + 11 built-ins before calling this converged.
+
+Remaining blockers above; not at ACCEPT yet.
+tokens used
+119,471
