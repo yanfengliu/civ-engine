@@ -427,21 +427,25 @@ describe('Layer<T>', () => {
       expect(copy.getCell(1, 1).value).toBe(99);
     });
 
-    it('clone does not double-clone defaultValue (L_NEW2 regression)', () => {
-      // Mutating the cloned layer's defaultValue accessor must not affect the
-      // original. If the constructor did not clone (e.g. due to a regression
-      // that bypassed the constructor's defensive copy), the two would share
-      // a defaultValue reference.
+    it('clone produces an independently-cloned _defaultValue (L_NEW2 regression)', () => {
+      // The earlier vacuous form of this test mutated `copy.defaultValue`,
+      // but `defaultValue` is a clone-on-read getter — mutating the return is
+      // unobservable. Pin "constructor cloned independently" by reaching past
+      // the getter and asserting underlying-storage identity differs.
       const original = new Layer<{ n: number }>({
         worldWidth: 2,
         worldHeight: 2,
         defaultValue: { n: 0 },
       });
       const copy = original.clone();
-      const copyDefault = copy.defaultValue;
-      copyDefault.n = 999;
-      expect(original.defaultValue.n).toBe(0);
-      expect(copy.defaultValue.n).toBe(0);
+      const originalRaw = (
+        original as unknown as { _defaultValue: { n: number } }
+      )._defaultValue;
+      const copyRaw = (copy as unknown as { _defaultValue: { n: number } })._defaultValue;
+      expect(copyRaw).not.toBe(originalRaw);
+      // Sanity: the values match by content even though the references differ.
+      expect(copyRaw.n).toBe(0);
+      expect(originalRaw.n).toBe(0);
     });
   });
 
