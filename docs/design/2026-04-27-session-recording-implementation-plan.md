@@ -10,9 +10,149 @@
 
 **Spec sections referenced throughout:** §-numbered references in this plan map 1:1 to sections in `2026-04-26-session-recording-and-replay-design.md`.
 
-**Branch strategy:** All work on a single chained branch `agent/session-recording`, one commit per Task (see §Task list below for one-`c`-bump-per-commit policy from AGENTS.md). Branch stays at the tip awaiting explicit user merge authorization per AGENTS.md.
+**Branch strategy:** All work on a single chained branch `agent/session-recording`, one commit per Task. Branch stays at the tip awaiting explicit user merge authorization per AGENTS.md. **Per-task multi-CLI review** lands before each commit (see "Per-task review pattern" below) — this is mandatory per AGENTS.md, not optional.
 
 **Versioning:** Current version `0.7.6`. Each Task ships a `c`-bump (`0.7.7` through `0.7.15`). All additions are non-breaking; no `b`-bump expected.
+
+---
+
+## Per-task review and doc pattern (applies to every T1–T8)
+
+Per `AGENTS.md`, every behavior/code change ships with both per-commit doc updates and a multi-CLI review BEFORE the commit lands. Each task therefore ends with these steps in order:
+
+### A. Per-task documentation update (always in the same commit)
+
+For every task T1–T8 that adds public surface, the same commit also updates:
+
+- `docs/changelog.md` — version entry with what shipped, behavior callouts, validation.
+- `docs/devlog/summary.md` — one line.
+- `docs/devlog/detailed/<latest>.md` — full per-task entry.
+- `docs/api-reference.md` — new sections for any new public types / methods (`AGENTS.md` mandatory rule for API-surface changes).
+- `docs/guides/session-recording.md` — extend with the surface added (start as a stub in T2, expand each task; final shape lands at T9 cross-cutting).
+- `docs/guides/scenario-runner.md` — extend in T4 + T7 (the two tasks that touch scenario integration).
+- `package.json` — `c`-bump.
+
+`README.md`, `ARCHITECTURE.md`, `decisions.md`, `drift-log.md`, `concepts.md`, `ai-integration.md`, `getting-started.md`, `building-a-game.md`, and `docs/README.md` are cross-cutting structural docs landed in T9 (their content depends on the full subsystem being in place).
+
+### B. Per-task multi-CLI review (before commit)
+
+After tests + impl + all four engine gates pass, but before the commit:
+
+```bash
+# 1. Generate the WIP diff against main.
+git diff main..HEAD <files staged for this task> > /tmp/task-diff.patch
+
+# 2. Create review folder.
+mkdir -p docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw
+
+# 3. Run Codex + Opus + Gemini in parallel (background; ~5 min each).
+git diff main..HEAD | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
+  -c approval_policy=never --sandbox read-only --ephemeral '<task-specific prompt>' \
+  > docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md &
+git diff main..HEAD | claude -p --model opus --effort xhigh \
+  --append-system-prompt '<task-specific prompt>' \
+  --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" \
+  > docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md &
+# Gemini: skip with note if quota-out.
+
+# 4. Wait for both to land via background polling pattern.
+# 5. Synthesize into REVIEW.md, address findings, iterate to convergence.
+# 6. THEN bump version, finalize changelog/devlog, commit.
+```
+
+Task-specific prompts focus reviewers on the new slice (e.g., for T2: "Review the new `MemorySink` implementation and tests against the spec §5 + §8 contracts").
+
+### C. Convergence rule
+
+Iterate per-task review until both reviewers approve OR until 3 iterations have passed and remaining findings are nitpicks (per AGENTS.md "Continue iterating until reviewers nitpick instead of catching real bugs"). Then commit.
+
+---
+
+## Task 0 (Setup): preflight + shared helpers
+
+Before T1 starts, this preflight extracts shared code that multiple tasks depend on, so they don't duplicate it (AGENTS.md anti-duplication rule).
+
+**Files:**
+- Modify: `src/json.ts` (export `cloneJsonValue` — currently duplicated as private in `history-recorder.ts:430` and `scenario-runner.ts:474`).
+- Modify: `src/history-recorder.ts` (import from `./json.js` instead of local copy).
+- Modify: `src/scenario-runner.ts` (same).
+- Create: `src/version.ts` (`export const ENGINE_VERSION = '0.7.6' as const;` — the build/release process keeps this in sync with `package.json`'s `version`; T7 reads this for `metadata.engineVersion`).
+- Create: `src/session-internals.ts` (declaration merge for `World.__payloadCapturingRecorder`).
+
+### Step 0.1: Extract `cloneJsonValue` from history-recorder.ts to json.ts
+
+In `src/json.ts`, add at the bottom:
+
+```ts
+export function cloneJsonValue<T>(value: T, label: string): T {
+  assertJsonCompatible(value, label);
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+```
+
+In `src/history-recorder.ts:430`, remove the local definition. Add to imports:
+
+```ts
+import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
+```
+
+In `src/scenario-runner.ts:474`, remove the local definition. Add to imports:
+
+```ts
+import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
+```
+
+### Step 0.2: Create `src/version.ts`
+
+```ts
+/**
+ * Engine version, kept in sync with package.json's "version" field by the
+ * release process. Read by SessionRecorder / scenarioResultToBundle for
+ * metadata.engineVersion. Avoids relying on process.env.npm_package_version
+ * (only set under `npm run`).
+ */
+export const ENGINE_VERSION = '0.7.6' as const;
+```
+
+(T7 / each version-bumping task increments this in lockstep with `package.json`.)
+
+### Step 0.3: Create `src/session-internals.ts`
+
+```ts
+import type { SessionRecordingError } from './session-errors.js';
+
+declare module './world.js' {
+  interface World<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TComponents extends Record<string, unknown> = Record<string, unknown>,
+    TState extends Record<string, unknown> = Record<string, unknown>,
+  > {
+    /**
+     * Hidden slot tracking the single payload-capturing recorder attached to this
+     * world. Set by SessionRecorder.connect() or WorldHistoryRecorder({
+     * captureCommandPayloads: true }).connect(); cleared on disconnect(). Mutex
+     * enforcement (one payload-capturing recorder per world) reads this.
+     * Internal to civ-engine; callers MUST NOT touch it directly.
+     */
+    __payloadCapturingRecorder?: { sessionId: string; lastError: SessionRecordingError | null };
+  }
+}
+```
+
+### Step 0.4: Verify all gates still pass after extraction
+
+```bash
+npm test && npm run typecheck && npm run lint && npm run build
+```
+
+All four pass — `cloneJsonValue` extraction is a pure refactor.
+
+### Step 0.5: Per-task review + commit (per the pattern above)
+
+`refactor(json): extract cloneJsonValue + add ENGINE_VERSION + WorldInternals (v0.7.7-pre)`
+
+(Note: this commit does NOT bump version since it's pure refactor; T1 is the first version bump.)
 
 ---
 
@@ -573,16 +713,26 @@ const mkMetadata = (): SessionMetadata => ({
   sourceKind: 'session',
 });
 
+const mkSnapshot = (tick: number) => ({ version: 5, tick, config: {}, entities: {}, components: {}, resources: {}, rng: { state: '0' }, state: {}, tags: {}, metadata: {} } as never);
+
 describe('MemorySink', () => {
-  it('open() stores metadata; toBundle() returns the snapshot of state', () => {
+  it('toBundle() throws when no snapshots have been written', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
+    expect(() => sink.toBundle()).toThrow(/snapshot/);
+  });
+
+  it('open() + writeSnapshot() + toBundle() produces a bundle with that snapshot as initialSnapshot', () => {
+    const sink = new MemorySink();
+    sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
     const bundle = sink.toBundle();
     expect(bundle.schemaVersion).toBe(1);
     expect(bundle.metadata.sessionId).toBe('00000000-0000-0000-0000-000000000000');
+    expect((bundle.initialSnapshot as { tick: number }).tick).toBe(0);
     expect(bundle.ticks).toEqual([]);
     expect(bundle.commands).toEqual([]);
-    expect(bundle.snapshots).toEqual([]);
+    expect(bundle.snapshots).toEqual([]);  // first snapshot consumed as initialSnapshot
   });
 
   it('writeMarker accumulates markers in the bundle', () => {
@@ -635,9 +785,10 @@ describe('MemorySink', () => {
     expect(recovered[0]).toBe(99);
   });
 
-  it('writeTick / writeCommand / writeSnapshot accumulate in order', () => {
+  it('writeTick / writeCommand / writeSnapshot accumulate in order; subsequent snapshots populate snapshots[]', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });        // becomes initialSnapshot
     sink.writeTick({ tick: 1, diff: { tick: 1 } as never, events: [], metrics: null, debug: null });
     sink.writeTick({ tick: 2, diff: { tick: 2 } as never, events: [], metrics: null, debug: null });
     sink.writeCommand({
@@ -645,19 +796,20 @@ describe('MemorySink', () => {
       result: { schemaVersion: 1, accepted: true, commandType: 'spawn', code: 'ok',
         message: '', details: null, tick: 1, sequence: 1, validatorIndex: null } as never,
     });
-    sink.writeSnapshot({ tick: 1, snapshot: { tick: 1 } as never });
+    sink.writeSnapshot({ tick: 2, snapshot: mkSnapshot(2) });        // becomes snapshots[0]
     const bundle = sink.toBundle();
     expect(bundle.ticks).toHaveLength(2);
     expect(bundle.ticks[0].tick).toBe(1);
     expect(bundle.commands).toHaveLength(1);
     expect(bundle.snapshots).toHaveLength(1);
+    expect(bundle.snapshots[0].tick).toBe(2);
   });
 
   it('close() advances persistedEndTick on the metadata to last snapshot tick', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
-    sink.writeSnapshot({ tick: 100, snapshot: { tick: 100 } as never });
-    sink.writeSnapshot({ tick: 200, snapshot: { tick: 200 } as never });
+    sink.writeSnapshot({ tick: 100, snapshot: mkSnapshot(100) });
+    sink.writeSnapshot({ tick: 200, snapshot: mkSnapshot(200) });
     sink.close();
     const bundle = sink.toBundle();
     expect(bundle.metadata.persistedEndTick).toBe(200);
@@ -666,6 +818,7 @@ describe('MemorySink', () => {
   it('toBundle() is JSON-stringify-roundtrippable', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });        // required for toBundle()
     sink.writeMarker({ id: 'a', tick: 0, kind: 'annotation', provenance: 'game' });
     const bundle = sink.toBundle();
     const round = JSON.parse(JSON.stringify(bundle));
@@ -993,33 +1146,57 @@ describe('FileSink', () => {
     sink.close();
   });
 
-  it('writeAttachment under threshold goes to manifest as dataUrl', () => {
+  it('writeAttachment defaults to sidecar (FileSink is disk-backed; spec §7.1 step 5)', () => {
     const sink = new FileSink(bundleDir);
     sink.open(mkMetadata());
     sink.writeAttachment(
-      { id: 'small', mime: 'text/plain', sizeBytes: 5, ref: { dataUrl: '' } },
+      { id: 'small', mime: 'image/png', sizeBytes: 5, ref: { sidecar: true } },
+      new Uint8Array([1, 2, 3, 4, 5]),
+    );
+    sink.close();
+    expect(existsSync(join(bundleDir, 'attachments', 'small.png'))).toBe(true);
+    const m = JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8'));
+    const a = m.attachments.find((x: { id: string }) => x.id === 'small');
+    expect(a.ref).toEqual({ sidecar: true });
+  });
+
+  it('writeAttachment with explicit { sidecar: false } embeds as dataUrl in manifest', () => {
+    const sink = new FileSink(bundleDir);
+    sink.open(mkMetadata());
+    sink.writeAttachment(
+      // The descriptor's ref signals the desired policy. dataUrl payload
+      // populated by the sink. (Caller passes a placeholder; sink rewrites.)
+      { id: 'tiny', mime: 'text/plain', sizeBytes: 5, ref: { dataUrl: '' } },
       new Uint8Array([104, 101, 108, 108, 111]),
     );
     sink.close();
     const m = JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8'));
-    const a = m.attachments.find((x: { id: string }) => x.id === 'small');
+    const a = m.attachments.find((x: { id: string }) => x.id === 'tiny');
     expect(a.ref).toHaveProperty('dataUrl');
+    expect(a.ref.dataUrl).toMatch(/^data:text\/plain;base64,/);
   });
 
-  it('writeAttachment over threshold persists to attachments/<id>.<ext> as sidecar', () => {
+  it('MIME → file extension mapping for sidecar attachments', () => {
     const sink = new FileSink(bundleDir);
     sink.open(mkMetadata());
-    const huge = new Uint8Array(70_000);
-    huge[0] = 7;
-    sink.writeAttachment(
-      { id: 'big', mime: 'image/png', sizeBytes: huge.byteLength, ref: { sidecar: true } },
-      huge,
-    );
+    const cases = [
+      { id: 'a1', mime: 'image/png', ext: '.png' },
+      { id: 'a2', mime: 'image/jpeg', ext: '.jpg' },
+      { id: 'a3', mime: 'application/json', ext: '.json' },
+      { id: 'a4', mime: 'application/octet-stream', ext: '.bin' },
+      { id: 'a5', mime: 'text/plain', ext: '.txt' },
+      { id: 'a6', mime: 'application/x-custom', ext: '.bin' },  // fallback
+    ];
+    for (const c of cases) {
+      sink.writeAttachment(
+        { id: c.id, mime: c.mime, sizeBytes: 4, ref: { sidecar: true } },
+        new Uint8Array([1, 2, 3, 4]),
+      );
+    }
     sink.close();
-    expect(existsSync(join(bundleDir, 'attachments', 'big.png'))).toBe(true);
-    const m = JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8'));
-    const a = m.attachments.find((x: { id: string }) => x.id === 'big');
-    expect(a.ref).toEqual({ sidecar: true });
+    for (const c of cases) {
+      expect(existsSync(join(bundleDir, 'attachments', `${c.id}${c.ext}`))).toBe(true);
+    }
   });
 
   // ... add 9 more tests covering: writeTick → ticks.jsonl, writeCommand → commands.jsonl,
@@ -1062,12 +1239,27 @@ Same pattern as T1/T2. Commit message: `feat(session-recording): FileSink (v0.7.
 
 ---
 
-## Task 4: WorldHistoryRecorder.captureCommandPayloads (v0.7.10)
+## Task 4: WorldHistoryRecorder.captureCommandPayloads + scenario plumbing (v0.7.10)
 
 **Files:**
-- Modify: `src/history-recorder.ts` (~80 LOC change)
+- Modify: `src/history-recorder.ts` (~100 LOC change: option, recordedCommands field, wrap install/uninstall, clear() reset)
+- Modify: `src/scenario-runner.ts` (extend `ScenarioConfig.history` to include `captureCommandPayloads?: boolean`; thread into `new WorldHistoryRecorder({...})`)
 - Create: `tests/history-recorder-payloads.test.ts`
-- Modify: `package.json`, changelog/devlog
+- Modify: `src/index.ts`, `package.json`, changelog/devlog/api-reference/scenario-runner.md (per per-task doc pattern)
+
+**Test helper:** all T4+ tests use a shared `mkWorld()` helper to avoid per-test `WorldConfig` boilerplate. Define once in `tests/test-utils.ts`:
+
+```ts
+import { World, type WorldConfig } from '../src/index.js';
+export function mkWorld(config?: Partial<WorldConfig>) {
+  return new World({
+    positionKey: 'position',
+    maxTicksPerFrame: 5,
+    instrumentationProfile: 'minimal',
+    ...config,
+  });
+}
+```
 
 ### Step 4.1: Write failing tests
 
@@ -1080,7 +1272,7 @@ import type { RecordedCommand } from '../src/index.js';
 
 describe('WorldHistoryRecorder.captureCommandPayloads', () => {
   it('default config: recordedCommands is undefined; commands is CommandSubmissionResult[]', () => {
-    const world = new World();
+    const world = mkWorld();
     world.registerHandler('spawn', () => ({ ok: true }));
     const rec = new WorldHistoryRecorder({ world });
     rec.connect();
@@ -1093,7 +1285,7 @@ describe('WorldHistoryRecorder.captureCommandPayloads', () => {
   });
 
   it('captureCommandPayloads:true populates recordedCommands with full payload', () => {
-    const world = new World();
+    const world = mkWorld();
     world.registerHandler('spawn', () => ({ ok: true }));
     const rec = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec.connect();
@@ -1110,7 +1302,7 @@ describe('WorldHistoryRecorder.captureCommandPayloads', () => {
   });
 
   it('two recorders with captureCommandPayloads:true cannot coexist on same world', () => {
-    const world = new World();
+    const world = mkWorld();
     const rec1 = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec1.connect();
     const rec2 = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
@@ -1119,7 +1311,7 @@ describe('WorldHistoryRecorder.captureCommandPayloads', () => {
   });
 
   it('default-config recorder + payload-capturing recorder coexist', () => {
-    const world = new World();
+    const world = mkWorld();
     const rec1 = new WorldHistoryRecorder({ world });            // default
     const rec2 = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec1.connect();
@@ -1131,17 +1323,22 @@ describe('WorldHistoryRecorder.captureCommandPayloads', () => {
   });
 
   it('disconnect unwraps submitWithResult so subsequent recorders see clean delegation', () => {
-    const world = new World();
-    const before = world.submitWithResult.toString();
+    const world = mkWorld();
+    world.registerHandler('spawn', () => ({ ok: true }));
     const rec1 = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec1.connect();
-    expect(world.submitWithResult.toString()).not.toBe(before);
     rec1.disconnect();
-    expect(world.submitWithResult.toString()).toBe(before);
+    // Behavioral check: after disconnect, the slot is cleared and a submission
+    // post-disconnect doesn't appear in rec1's recordedCommands. Avoids brittle
+    // .toString() comparison.
+    expect((world as { __payloadCapturingRecorder?: unknown }).__payloadCapturingRecorder).toBeUndefined();
+    world.submit('spawn', { afterDisconnect: true });
+    const recorded = (rec1.getState() as { recordedCommands?: RecordedCommand[] }).recordedCommands ?? [];
+    expect(recorded.find((rc) => (rc.data as { afterDisconnect?: boolean })?.afterDisconnect)).toBeUndefined();
   });
 
   it('submit() and submitWithResult() both captured (single wrap on submitWithResult)', () => {
-    const world = new World();
+    const world = mkWorld();
     world.registerHandler('spawn', () => ({ ok: true }));
     const rec = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec.connect();
@@ -1154,13 +1351,45 @@ describe('WorldHistoryRecorder.captureCommandPayloads', () => {
     rec.disconnect();
   });
 
-  it('captureCommandPayloads:true with a SessionRecorder attached throws (mutex; T5 dependency)', () => {
-    // This test will be skipped or marked .todo until T5 lands. Note: kept as a placeholder
-    // here so the test-suite stub exists; full assertion happens after T5.
+  it('clear() resets recordedCommands (so post-setup scenario rebase is clean)', () => {
+    const world = mkWorld();
+    world.registerHandler('spawn', () => ({ ok: true }));
+    const rec = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
+    rec.connect();
+    world.submit('spawn', { phase: 'setup' });
+    world.step();
+    expect((rec.getState() as { recordedCommands: RecordedCommand[] }).recordedCommands).toHaveLength(1);
+    rec.clear();
+    expect((rec.getState() as { recordedCommands: RecordedCommand[] }).recordedCommands).toHaveLength(0);
+    world.submit('spawn', { phase: 'run' });
+    world.step();
+    const after = (rec.getState() as { recordedCommands: RecordedCommand[] }).recordedCommands;
+    expect(after).toHaveLength(1);
+    expect((after[0].data as { phase: string }).phase).toBe('run');
+    rec.disconnect();
+  });
+
+  it('runScenario({ history: { captureCommandPayloads: true } }) threads the option through', () => {
+    // Verifies T4's scenario-runner.ts plumbing — ScenarioConfig.history.captureCommandPayloads
+    // is forwarded to the internal WorldHistoryRecorder.
+    const world = mkWorld();
+    world.registerHandler('spawn', () => ({ ok: true }));
+    const result = runScenario({
+      name: 't4-thread-test',
+      world,
+      setup: () => {},
+      run: (ctx) => { ctx.submit('spawn', { x: 1 }); },
+      checks: [],
+      history: { capacity: 100, captureCommandPayloads: true, captureInitialSnapshot: true },
+    });
+    const recorded = (result.history as { recordedCommands?: RecordedCommand[] }).recordedCommands;
+    expect(recorded).toBeDefined();
+    expect(recorded).toHaveLength(1);
+    expect((recorded![0].data as { x: number }).x).toBe(1);
   });
 
   it('replayed (deserialized) WorldHistoryState preserves recordedCommands', () => {
-    const world = new World();
+    const world = mkWorld();
     world.registerHandler('spawn', () => ({ ok: true }));
     const rec = new WorldHistoryRecorder({ world, captureCommandPayloads: true });
     rec.connect();
@@ -1197,19 +1426,161 @@ Same pattern. Commit: `feat(history-recorder): captureCommandPayloads option (v0
 - Create: `tests/session-recorder.test.ts`
 - Modify: `src/index.ts`, `package.json`, changelog/devlog
 
-### Implementation summary
+### Implementation skeletons
 
-Per spec §7. Class with constructor accepting `{ world, sink?, snapshotInterval?, terminalSnapshot?, debug?, sourceLabel? }`. Implements:
+Per spec §7.
 
-- Construction: generates `sessionId` (UUID), prepares listener+wrap closures, does NOT install.
-- `connect()`: calls `sink.open(initialMetadata)`, captures initial snapshot, installs `submitWithResult` wrap (via the same hidden-slot mutex as T4), subscribes to `world.onDiff` / `world.onCommandExecution` / `world.onTickFailure`. Throws `RecorderClosedError` if poisoned, already-attached, or post-disconnect.
-- Per-tick capture: `onDiff` builds `SessionTickEntry` via `cloneJsonValue`, calls `sink.writeTick`, takes periodic snapshot if `world.tick % snapshotInterval === 0`.
-- Submission capture: wrap synchronously calls `sink.writeCommand({ type, data, sequence: result.sequence, submissionTick: result.tick, result })`.
-- `addMarker`: validates per §6.1 (live-tick path), calls `sink.writeMarker`.
-- `attach`: validates JSON-compat, calls `sink.writeAttachment`.
-- `takeSnapshot`: calls `sink.writeSnapshot`.
-- `disconnect()`: writes terminal snapshot (if enabled), uninstalls wrap, unsubscribes, finalizes metadata, calls `sink.close()`. Tolerates destroyed world (catches serialize failures into `lastError`).
-- `toBundle()`: delegates to `sink.toBundle()`.
+**Type aliases:**
+
+```ts
+export type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance'> & { tick?: number };
+type AttachmentId = string;
+type MarkerId = string;
+```
+
+**Class shape:**
+
+```ts
+import { randomUUID } from 'node:crypto';
+import { ENGINE_VERSION } from './version.js';
+
+export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
+  readonly sessionId: string;
+  readonly _config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug>;
+  private _connected = false;
+  private _closed = false;
+  private _originalSubmitWithResult: typeof this._config.world.submitWithResult | null = null;
+  private _diffListener: ((d: TickDiff) => void) | null = null;
+  // ... similar for execution / failure listeners
+  lastError: SessionRecordingError | null = null;
+
+  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug>) {
+    this.sessionId = randomUUID();
+    this._config = { ...config, sink: config.sink ?? new MemorySink() };
+  }
+
+  connect(): void {
+    if (this._closed) throw new RecorderClosedError('recorder already disconnected', { code: 'already_closed' });
+    if (this._connected) return;
+    const world = this._config.world;
+    if (world.isPoisoned()) throw new RecorderClosedError('world is poisoned', { code: 'world_poisoned' });
+    if (world.__payloadCapturingRecorder) {
+      throw new RecorderClosedError('another payload-capturing recorder is attached',
+        { code: 'recorder_already_attached', existing: world.__payloadCapturingRecorder.sessionId });
+    }
+    world.__payloadCapturingRecorder = { sessionId: this.sessionId, lastError: null };
+
+    // Open sink + write initial snapshot
+    const initialMetadata: SessionMetadata = {
+      sessionId: this.sessionId,
+      engineVersion: ENGINE_VERSION,
+      nodeVersion: process.version,
+      recordedAt: new Date().toISOString(),
+      startTick: world.tick,
+      endTick: world.tick,
+      persistedEndTick: world.tick,
+      durationTicks: 0,
+      sourceKind: 'session',
+      sourceLabel: this._config.sourceLabel,
+    };
+    this._config.sink.open(initialMetadata);
+    const initialSnapshot = world.serialize();
+    this._config.sink.writeSnapshot({ tick: world.tick, snapshot: initialSnapshot });
+
+    // Install wrap on submitWithResult only (NOT submit; spec §7.3)
+    this._originalSubmitWithResult = world.submitWithResult.bind(world);
+    const sink = this._config.sink;
+    world.submitWithResult = ((type, data) => {
+      const result = this._originalSubmitWithResult!(type, data);
+      try {
+        sink.writeCommand({
+          type: type as never,
+          data: data as never,
+          sequence: result.sequence,
+          submissionTick: result.tick,
+          result,
+        });
+      } catch (e) {
+        this._handleSinkError(e);
+      }
+      return result;
+    }) as typeof world.submitWithResult;
+
+    // Subscribe to listeners
+    this._diffListener = (diff) => this._onDiff(diff);
+    world.onDiff(this._diffListener);
+    // similar for onCommandExecution → sink.writeCommandExecution
+    // similar for onTickFailure → sink.writeTickFailure (also push to metadata.failedTicks)
+
+    this._connected = true;
+  }
+
+  private _onDiff(diff: TickDiff): void {
+    try {
+      const world = this._config.world;
+      const entry: SessionTickEntry<TEventMap, TDebug> = cloneJsonValue({
+        tick: diff.tick,
+        diff,
+        events: [...world.getEvents()],
+        metrics: world.getMetrics(),
+        debug: this._config.debug?.capture() ?? null,
+      }, 'session tick entry');
+      this._config.sink.writeTick(entry);
+      const interval = this._config.snapshotInterval ?? 1000;
+      if (interval !== null && world.tick % interval === 0 && world.tick !== this._config.world.tick /*initial*/) {
+        this._config.sink.writeSnapshot({ tick: world.tick, snapshot: world.serialize() });
+      }
+    } catch (e) {
+      this._handleSinkError(e);
+    }
+  }
+
+  private _handleSinkError(e: unknown): void {
+    const err = e instanceof SessionRecordingError ? e : new SinkWriteError(String(e), { wrapped: true });
+    this.lastError = err;
+    // Mark metadata.incomplete via a sink-specific helper (or via re-open with updated metadata in close())
+    // Subsequent listener invocations short-circuit: this._connected -> false-ish flag.
+    this._terminate();
+  }
+
+  private _terminate(): void {
+    // Unsubscribe listeners + uninstall wrap, but do NOT clear __payloadCapturingRecorder
+    // (caller must still call disconnect() to finalize).
+    if (this._diffListener) { this._config.world.offDiff(this._diffListener); this._diffListener = null; }
+    if (this._originalSubmitWithResult) {
+      this._config.world.submitWithResult = this._originalSubmitWithResult;
+      this._originalSubmitWithResult = null;
+    }
+    // similar for other listeners
+  }
+
+  addMarker(input: NewMarker): MarkerId {
+    if (!this._connected || this._closed) throw new RecorderClosedError('cannot addMarker on disconnected recorder');
+    const tick = input.tick ?? this._config.world.tick;
+    // Live-tick path: validate strictly (entity liveness, cell bounds)
+    // Retroactive path: skip entity liveness, set validated: false
+    const marker: Marker = {
+      id: randomUUID(),
+      tick,
+      kind: input.kind,
+      provenance: 'game',
+      text: input.text,
+      refs: input.refs,
+      data: input.data,
+      attachments: input.attachments,
+      createdAt: new Date().toISOString(),
+      ...(tick < this._config.world.tick ? { validated: false as const } : {}),
+    };
+    this._validateMarker(marker);
+    this._config.sink.writeMarker(marker);
+    return marker.id;
+  }
+
+  // ... attach, takeSnapshot, disconnect, toBundle similarly per spec §7
+}
+```
+
+`_validateMarker` enforces §6.1 — for live tick: every `EntityRef` matches a live entity (uses `world.isAlive(id, generation)` — add to `World` API in T0/T5 if not present), every `cell` is in-bounds, `tickRange` valid. Retroactive markers skip entity liveness.
 
 ### Test coverage (~18 tests)
 
@@ -1260,24 +1631,189 @@ Methods:
 
 Engine version compat checks per §11.1 clause 9: cross-`b` throws `BundleVersionError`; within-`b` warns; cross-Node-major warns.
 
-### Test coverage (~16 tests)
+### Key implementation sketches
+
+**Engine version compatibility** (per spec §11.1 clause 9):
+
+```ts
+function checkVersionCompat(bundleVersion: string, runtimeVersion: string): void {
+  // Both '0.X.Y' shape; X is the "b" component (breaking-change axis pre-1.0)
+  const [a1, b1] = bundleVersion.split('.').map(Number);
+  const [a2, b2] = runtimeVersion.split('.').map(Number);
+  if (a1 !== a2 || b1 !== b2) {
+    throw new BundleVersionError(
+      `engineVersion mismatch: bundle ${bundleVersion} vs runtime ${runtimeVersion} (cross-b)`,
+      { code: 'cross_b', bundleVersion, runtimeVersion },
+    );
+  }
+  // Within-b: c-component differences warn but proceed.
+  // (No-op here; warning emitted at openAt() boundary if the .c differs.)
+}
+```
+
+**deepEqualWithPath helper** (~80 LOC):
+
+```ts
+export function deepEqualWithPath(a: unknown, b: unknown, path = ''): { equal: boolean; firstDifferingPath?: string } {
+  if (Object.is(a, b)) return { equal: true };
+  if (typeof a !== typeof b) return { equal: false, firstDifferingPath: path };
+  if (a === null || b === null) return { equal: false, firstDifferingPath: path };
+  if (typeof a !== 'object') return { equal: false, firstDifferingPath: path };
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return { equal: false, firstDifferingPath: path };
+    if (a.length !== b.length) return { equal: false, firstDifferingPath: `${path}.length` };
+    for (let i = 0; i < a.length; i++) {
+      const r = deepEqualWithPath(a[i], b[i], `${path}[${i}]`);
+      if (!r.equal) return r;
+    }
+    return { equal: true };
+  }
+
+  const aKeys = Object.keys(a as object);
+  const bKeys = Object.keys(b as object);
+  if (aKeys.length !== bKeys.length) {
+    return { equal: false, firstDifferingPath: `${path}<keys>` };
+  }
+  // Snapshot serialization preserves insertion order (Map → Object.fromEntries),
+  // so we can iterate aKeys in order without canonicalizing.
+  for (const k of aKeys) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) {
+      return { equal: false, firstDifferingPath: `${path}.${k}<missing>` };
+    }
+    const r = deepEqualWithPath(
+      (a as Record<string, unknown>)[k],
+      (b as Record<string, unknown>)[k],
+      path ? `${path}.${k}` : k,
+    );
+    if (!r.equal) return r;
+  }
+  return { equal: true };
+}
+```
+
+**openAt** (key flow):
+
+```ts
+openAt(targetTick: number): World<TEventMap, TCommandMap> {
+  const md = this.metadata;
+  // Range check
+  const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+  if (targetTick < md.startTick || targetTick > upper) {
+    throw new BundleRangeError(`tick ${targetTick} outside [${md.startTick}, ${upper}]`,
+      { code: targetTick < md.startTick ? 'too_low' : 'too_high', requested: targetTick });
+  }
+  // Failure span check
+  if (md.failedTicks?.some((ft) => targetTick >= ft)) {
+    throw new BundleIntegrityError('replay across recorded TickFailure is out of scope',
+      { code: 'replay_across_failure', failedTicks: md.failedTicks });
+  }
+  // No-replay-payloads check
+  if (targetTick > md.startTick && this.bundle.commands.length === 0) {
+    throw new BundleIntegrityError('bundle has no command payloads; replay forward is impossible',
+      { code: 'no_replay_payloads' });
+  }
+
+  // Build normalized snapshot list
+  const allSnapshots: SessionSnapshotEntry[] = [
+    { tick: md.startTick, snapshot: this.bundle.initialSnapshot },
+    ...this.bundle.snapshots,
+  ];
+  const start = [...allSnapshots].reverse().find((s) => s.tick <= targetTick)!;
+  // Construct world via factory
+  const world = this.config.worldFactory(start.snapshot);
+
+  // Replay forward
+  for (let t = start.tick; t < targetTick; t++) {
+    const tickCommands = this.bundle.commands
+      .filter((c) => c.submissionTick === t)
+      .sort((a, b) => a.sequence - b.sequence);
+    for (const rc of tickCommands) {
+      if (!world.hasHandler(rc.type)) {
+        throw new ReplayHandlerMissingError(
+          `replay needs handler for command type "${String(rc.type)}", not registered in worldFactory's world`,
+          { code: 'handler_missing', commandType: String(rc.type), tick: t },
+        );
+      }
+      world.submitWithResult(rc.type, rc.data);
+    }
+    world.step();
+  }
+  return world;
+}
+```
+
+(Note: `world.hasHandler(type)` may need to be added to `World` if not present; check `src/world.ts` and add if needed as a setup step in T0.)
+
+**selfCheck failedTicks-skipping**:
+
+```ts
+selfCheck(options: SelfCheckOptions = {}): SelfCheckResult {
+  const md = this.metadata;
+  // No-payload bundles: ok with checkedSegments: 0 + warning
+  if (this.bundle.commands.length === 0 && md.endTick > md.startTick) {
+    console.warn(`[SessionReplayer] selfCheck on bundle without command payloads is a no-op (${md.sessionId})`);
+    return { ok: true, checkedSegments: 0, stateDivergences: [], eventDivergences: [], executionDivergences: [], skippedSegments: [] };
+  }
+  // Build normalized snapshot list
+  const allSnapshots: SessionSnapshotEntry[] = [
+    { tick: md.startTick, snapshot: this.bundle.initialSnapshot },
+    ...this.bundle.snapshots,
+  ];
+  const segments: Array<[SessionSnapshotEntry, SessionSnapshotEntry]> = [];
+  for (let i = 0; i < allSnapshots.length - 1; i++) {
+    segments.push([allSnapshots[i], allSnapshots[i + 1]]);
+  }
+  const result: SelfCheckResult = {
+    ok: true, checkedSegments: 0,
+    stateDivergences: [], eventDivergences: [], executionDivergences: [],
+    skippedSegments: [],
+  };
+  for (const [a, b] of segments) {
+    // Skip segments containing a recorded TickFailure (replay refuses across failures)
+    if (md.failedTicks?.some((ft) => ft >= a.tick && ft < b.tick)) {
+      result.skippedSegments.push({ fromTick: a.tick, toTick: b.tick, reason: 'failure_in_segment' });
+      continue;
+    }
+    const segmentResult = this._checkSegment(a, b, options);
+    result.checkedSegments++;
+    result.stateDivergences.push(...segmentResult.stateDivergences);
+    result.eventDivergences.push(...segmentResult.eventDivergences);
+    result.executionDivergences.push(...segmentResult.executionDivergences);
+    if (segmentResult.stateDivergences.length || segmentResult.eventDivergences.length || segmentResult.executionDivergences.length) {
+      result.ok = false;
+      if (options.stopOnFirstDivergence) break;
+    }
+  }
+  return result;
+}
+```
+
+(The `_checkSegment` helper does the per-segment replay + 3-stream comparison using `deepEqualWithPath` for state and ordered-deep-equal for events/executions.)
+
+### Test coverage (~18 tests; expanded from 16)
 
 - `fromBundle` accepts a bundle.
 - `fromSource` accepts a sink-as-source.
 - `openAt(startTick)` returns world from initialSnapshot directly.
 - `openAt(midTick)` walks from prior snapshot.
 - `openAt(endTick)` walks from terminal snapshot or replay.
-- `openAt(< startTick)` throws `BundleRangeError`.
-- `openAt(> endTick)` throws `BundleRangeError`.
+- `openAt(< startTick)` throws `BundleRangeError(code: 'too_low')`.
+- `openAt(> endTick)` throws `BundleRangeError(code: 'too_high')`.
+- `openAt(> persistedEndTick)` on incomplete bundle throws `BundleRangeError`.
 - `openAt(failedTick)` throws `BundleIntegrityError(code: 'replay_across_failure')`.
-- Cross-`b` engineVersion throws `BundleVersionError`.
-- Within-`b` engineVersion warns (capture `console.warn`).
-- `selfCheck` on clean recording returns `ok: true`.
-- `selfCheck` on `Math.random()`-violating recording reports state divergence.
-- `selfCheck` on event-emitting violation reports event divergence.
-- `selfCheck` on execution-divergent violation reports execution divergence.
+- `openAt(tick > startTick)` on bundle with empty commands throws `BundleIntegrityError(code: 'no_replay_payloads')`.
+- `openAt` on a bundle whose RecordedCommand.type has no handler in factory-built world throws `ReplayHandlerMissingError`.
+- Cross-`b` engineVersion throws `BundleVersionError(code: 'cross_b')`.
+- Within-`b` engineVersion warns (`console.warn` mocked) and proceeds.
+- `selfCheck` on clean recording returns `ok: true`, `checkedSegments >= 1`.
+- `selfCheck` on `Math.random()`-violating recording reports `stateDivergences[0]`.
+- `selfCheck` on event-emitting violation reports `eventDivergences[0]`.
+- `selfCheck` on execution-divergent violation reports `executionDivergences[0]`.
+- `selfCheck` on no-payload bundle returns `ok: true, checkedSegments: 0` + console.warn.
+- `selfCheck` skips segments containing a recorded TickFailure (records in `skippedSegments`).
 - `stopOnFirstDivergence` truncates result.
-- Self-check covers initial-to-first-snapshot segment.
+- Self-check covers initial-to-first-snapshot segment (regression test).
 
 ### Commit
 
@@ -1334,13 +1870,45 @@ Per spec §10. Standalone exported function `scenarioResultToBundle(result, opti
 - Create: `tests/determinism-contract.test.ts`
 - Modify: `package.json`, changelog/devlog
 
-### Step 8.1: Migration
+### Step 8.1: Refactor existing scenarios — extract setup-as-reusable-function pattern
 
-For every existing call to `runScenario({ ... })`, add `history: { capacity: Number.MAX_SAFE_INTEGER, captureCommandPayloads: true, captureInitialSnapshot: true }` to the config. After the run, add:
+All 4 scenarios in `tests/scenario-runner.test.ts` currently register components and handlers inline inside their `setup` callback. For replay's `worldFactory` to reproduce that registration, each scenario's setup must be extracted into a standalone function reusable by both `scenario.setup` and `worldFactory`.
+
+Pattern:
 
 ```ts
+// Before (current shape, e.g. tests/scenario-runner.test.ts:25-36):
+runScenario({
+  name: 'move',
+  world: mkWorld(),
+  setup: (ctx) => {
+    ctx.world.registerComponent('position');
+    ctx.world.registerHandler('move', (cmd) => { /* ... */ });
+  },
+  // ...
+});
+
+// After:
+function setupMoveScenario(world: World): void {
+  world.registerComponent('position');
+  world.registerHandler('move', (cmd) => { /* ... */ });
+}
+const result = runScenario({
+  name: 'move',
+  world: mkWorld(),
+  setup: (ctx) => setupMoveScenario(ctx.world),
+  run: ...,
+  checks: ...,
+  history: { capacity: Number.MAX_SAFE_INTEGER, captureCommandPayloads: true, captureInitialSnapshot: true },
+});
 const bundle = scenarioResultToBundle(result);
-const replayer = SessionReplayer.fromBundle(bundle, { worldFactory: (snap) => /* construct an equivalent World */ });
+const replayer = SessionReplayer.fromBundle(bundle, {
+  worldFactory: (snap) => {
+    const w = mkWorld();
+    setupMoveScenario(w);                    // re-register components/handlers
+    return World.deserialize(w, snap);       // OR reconstruct a World from snap; verify the engine's deserialize path
+  },
+});
 const check = replayer.selfCheck();
 expect(check.ok).toBe(true);
 expect(check.stateDivergences).toEqual([]);
@@ -1348,21 +1916,75 @@ expect(check.eventDivergences).toEqual([]);
 expect(check.executionDivergences).toEqual([]);
 ```
 
-### Step 8.2: Determinism clause-paired tests
+**Note:** `World.deserialize` does NOT re-register handlers/validators (per `src/world.ts:921`); the factory must register them BEFORE deserializing snapshot state. The refactor pattern above captures this correctly.
 
-Create `tests/determinism-contract.test.ts` with one paired test (clean + violating) for each clause 1–9 of §11.1. Use small custom scenarios (~10 entities, ~50–200 ticks). Each violating test asserts `check.ok === false` and the violation's first divergence falls in the expected category (state / event / execution).
+Refactor each of the 4 scenarios in `tests/scenario-runner.test.ts`:
+- `setupMoveScenario(world)` — for the move test
+- `setupSpawnScenario(world)` — for the spawn test
+- `setupQueryScenario(world)` — for the query test
+- `setupCrashScenario(world)` — for the handler-crash test
 
-### Step 8.3: Commit
+### Step 8.2: Handler-crash scenario semantics
 
-`test(session-recording): CI gate - migrate scenarios + clause-paired tests (v0.7.14)`.
+The handler-crash scenario (currently `tests/scenario-runner.test.ts:185-210`) intentionally records a `TickFailure`. Per spec §9.1, `openAt(failedTick)` throws. selfCheck per §9.3 (with the failedTicks-skipping logic from T6) skips segments containing the failure. So the migrated test asserts:
+
+```ts
+const check = replayer.selfCheck();
+expect(check.ok).toBe(true);                            // remaining segments are clean
+expect(check.skippedSegments).toHaveLength(1);          // one segment skipped
+expect(check.skippedSegments[0].reason).toBe('failure_in_segment');
+```
+
+### Step 8.3: Determinism clause-paired tests
+
+Create `tests/determinism-contract.test.ts` with one paired test (clean + violating) for each clause 1–8 of §11.1 (clause 9 is special-cased — see below).
+
+For clauses 1–8, each violating test asserts `check.ok === false` AND the violation's first divergence falls in the expected category:
+
+| Clause | Violation pattern | Expected divergence category |
+| ------ | ----------------- | ---------------------------- |
+| 1 | Direct `world.setComponent` from external test code between ticks | `stateDivergences` |
+| 2 | A system calls `world.submit()` mid-tick | `executionDivergences` (double-submit shows up here) |
+| 3 | A system calls `Math.random()` | `stateDivergences` |
+| 4 | A validator calls `world.setComponent` (side effect) | `stateDivergences` |
+| 5 | A system reads `Date.now()` and writes to a component | `stateDivergences` |
+| 6 | A system iterates a `Set` whose contents differ across runs | `stateDivergences` |
+| 7 | A system reads `process.env.SOME_FLAG` (use `vi.stubEnv` + `vi.unstubAllEnvs` to flip between record and replay) | `stateDivergences` |
+| 8 | Factory registers two systems in different order than recorder | `stateDivergences` (last-writer-wins on shared component) |
+
+Clause 9 (engine + Node version compat) is enforced at `openAt`/`fromBundle` time, NOT via selfCheck divergence:
+
+```ts
+it('clause 9: cross-b engineVersion throws BundleVersionError at openAt', () => {
+  // Construct bundle with metadata.engineVersion = '0.6.0'; runtime is 0.7.x.
+  // Expect BundleVersionError on fromBundle (or openAt; spec §9.1).
+});
+
+it.todo('clause 9: cross-Node-major mismatches warn but proceed (requires multi-Node CI matrix)');
+```
+
+### Step 8.4: Commit
+
+`test(session-recording): CI gate - migrate scenarios + clause-paired tests (v0.7.14)`. Per-task review per the pattern at the top.
 
 ---
 
-## Task 9: Documentation surface + final integration (v0.7.15)
+## Task 9: Cross-cutting structural docs + final integration (v0.7.15)
 
-**Files:** (per spec §14)
-- Create: `docs/guides/session-recording.md`
-- Modify: `docs/api-reference.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/decisions.md`, `docs/architecture/drift-log.md`, `docs/guides/scenario-runner.md`, `docs/guides/debugging.md`, `docs/guides/concepts.md`, `docs/guides/ai-integration.md`, `docs/guides/getting-started.md`, `docs/guides/building-a-game.md`, `README.md`, `docs/README.md`
+**Note:** Per the per-task doc pattern at the top of this plan, T1–T8 already landed `docs/api-reference.md` updates, `docs/changelog.md` entries, `docs/devlog/*` entries, and incrementally built `docs/guides/session-recording.md` and `docs/guides/scenario-runner.md` updates in their own commits. T9 lands ONLY the cross-cutting structural docs whose content depends on the full subsystem being in place.
+
+**Files:** (only those NOT updated per-task)
+- Modify: `docs/architecture/ARCHITECTURE.md` (Component-Map rows + Boundaries paragraph + tick-lifecycle ASCII)
+- Modify: `docs/architecture/decisions.md` (ADRs 1–4 per spec §15)
+- Modify: `docs/architecture/drift-log.md` (one row 2026-04-27)
+- Modify: `docs/guides/concepts.md` (standalone-utilities list + tick-lifecycle ASCII)
+- Modify: `docs/guides/ai-integration.md` (new section: session recording as foundation of AI debugging)
+- Modify: `docs/guides/getting-started.md` (brief "Recording your first session" example)
+- Modify: `docs/guides/building-a-game.md` ("Recording sessions for debugging" section)
+- Modify: `docs/guides/debugging.md` (pointer to session-recording for replay-based debugging)
+- Modify: `README.md` (Feature Overview row + Public Surface bullets)
+- Modify: `docs/README.md` (index link)
+- Final pass on `docs/guides/session-recording.md` and `docs/api-reference.md` to ensure cross-references resolve and no stale wording remains
 - Modify: `package.json`, changelog/devlog
 
 ### Step 9.1: Write `docs/guides/session-recording.md`
