@@ -57,3 +57,5 @@ export {
   MemorySink,
   type MemorySinkOptions,
 } from './session-sink.js';
+// T3: FileSink
+export { FileSink } from './session-file-sink.js';

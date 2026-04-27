@@ -40,6 +40,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [World Debugger](#world-debugger)
 - [Session Recording (T1: types + errors)](#session-recording-t1-types--errors)
 - [Session Recording (T2: sinks)](#session-recording-t2-sinks)
+- [Session Recording (T3: FileSink)](#session-recording-t3-filesink)
 
 ---
 
@@ -4841,3 +4842,39 @@ Holds writes in in-memory arrays. Sidecar attachment bytes go in a parallel inte
 Defaults: attachments under the threshold embed as `data:<mime>;base64,...` URLs in the manifest. Attachments over the threshold throw `SinkWriteError(code: 'oversize_attachment')` UNLESS `allowSidecar: true` is set, in which case they're stored as sidecars. Callers can also force sidecar storage explicitly by passing `ref: { sidecar: true }` to `writeAttachment`.
 
 `toBundle()` returns the canonical strict-JSON `SessionBundle`. The first written snapshot becomes `bundle.initialSnapshot`; subsequent snapshots populate `bundle.snapshots[]`. Throws `SinkWriteError(code: 'no_snapshots')` if no snapshots have been written.
+
+## Session Recording (T3: FileSink)
+
+T3 ships `FileSink`, the disk-backed `SessionSink & SessionSource`.
+
+### `FileSink`
+
+```typescript
+new FileSink(bundleDir: string);
+```
+
+On-disk layout:
+
+```
+<bundleDir>/
+  manifest.json            // SessionMetadata + dataUrl attachments + sidecar refs
+  ticks.jsonl              // append-only; one SessionTickEntry per line
+  commands.jsonl           // append-only; one RecordedCommand per line
+  executions.jsonl         // append-only; one CommandExecutionResult per line
+  failures.jsonl           // append-only; one TickFailure per line
+  markers.jsonl            // append-only; one Marker per line
+  snapshots/<tick>.json    // one snapshot per file
+  attachments/<id>.<ext>   // sidecar bytes (extension from MIME table)
+```
+
+Manifest is rewritten on `open()`, on each `writeSnapshot()` (advancing `metadata.persistedEndTick`), and on `close()` — atomic via `.tmp.json` → `.json` rename. Per-tick rewrites are NOT performed.
+
+**Default attachment policy: sidecar.** FileSink is disk-backed; the disk-storage path is the natural default. Pass `descriptor.ref: { dataUrl: '<placeholder>' }` to opt into manifest embedding (only useful for very small blobs).
+
+**MIME → file extension table:** `image/png` → `.png`, `image/jpeg` → `.jpg`, `image/gif` → `.gif`, `image/webp` → `.webp`, `image/svg+xml` → `.svg`, `application/json` → `.json`, `application/octet-stream` → `.bin`, `text/plain` → `.txt`, `text/csv` → `.csv`. Unknown MIMEs fall back to `.bin`. The manifest carries the full MIME so readers can recover the original.
+
+`SessionSource` methods:
+- `readSnapshot(tick)`: reads from `snapshots/<tick>.json`. Throws if missing.
+- `readSidecar(id)`: reads from `attachments/<id>.<ext>`. Throws if the descriptor is `dataUrl`-mode rather than sidecar.
+- `ticks()`, `commands()`, `executions()`, `failures()`, `markers()`: lazy generators streaming the JSONL files. Tolerate a trailing partial line (e.g. a crash mid-write).
+- `toBundle()`: reads all snapshot files, sorts numerically, returns a `SessionBundle` whose `initialSnapshot` is the lowest-tick snapshot.

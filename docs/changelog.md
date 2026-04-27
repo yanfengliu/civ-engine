@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.9 - 2026-04-27
+
+Session-recording T3: `FileSink` reference implementation (disk-backed `SessionSink & SessionSource`).
+
+### Added
+
+- `src/session-file-sink.ts`:
+  - `FileSink(bundleDir: string)` constructor.
+  - On-disk layout: `manifest.json` + `ticks.jsonl` / `commands.jsonl` / `executions.jsonl` / `failures.jsonl` / `markers.jsonl` + `snapshots/<tick>.json` + `attachments/<id>.<ext>`.
+  - Manifest cadence: rewritten on `open()`, on each `writeSnapshot()`, and on `close()`. Atomic via `manifest.tmp.json` → `manifest.json` rename. Per-tick rewrites are NOT performed.
+  - **FileSink defaults to sidecar attachment storage** unconditionally — disk-backed sinks keep blobs as files. Pass `descriptor.ref: { dataUrl: '<placeholder>' }` to opt into manifest embedding for very small blobs only.
+  - MIME → file-extension table covering `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `application/json`, `application/octet-stream`, `text/plain`, `text/csv`. Fallback `.bin`. Manifest carries the full MIME so readers can recover the original from the descriptor regardless of extension.
+  - `readSidecar(id)` reads bytes back from `attachments/<id>.<ext>`; `readSnapshot(tick)` from `snapshots/<tick>.json`. JSONL streams stream lazily via generators; tolerate a final partial line (crash recovery).
+  - `toBundle()` reads all snapshot files from disk, sorts by tick, exposes the first as `initialSnapshot`, the rest as `bundle.snapshots[]`.
+
+### Tooling
+
+- Added `@types/node` as a devDependency. Required for FileSink's `node:fs` / `node:path` / `node:os` imports. The engine now has full Node-typed surfaces for any future Node-flavored code (`BufferedSink`, etc.).
+
+### Validation
+
+682 tests pass (was 667). Typecheck, lint, build clean. Per spec §5.2 + §8.
+
 ## 0.7.8 - 2026-04-27
 
 Session-recording T2: `SessionSink` / `SessionSource` interfaces + `MemorySink` reference implementation.
