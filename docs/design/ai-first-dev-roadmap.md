@@ -157,9 +157,9 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 
 | Spec | Title                                | Status     | File                                                      |
 | ---- | ------------------------------------ | ---------- | --------------------------------------------------------- |
-| 1    | Session Recording & Replay           | Drafted    | `2026-04-26-session-recording-and-replay-design.md`       |
+| 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `2026-04-26-session-recording-and-replay-design.md` (v5)  |
 | 2    | Game-Side Annotation UI              | Proposed   | not yet drafted                                           |
-| 3    | Synthetic Playtest Harness           | Proposed   | not yet drafted                                           |
+| 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `2026-04-27-synthetic-playtest-harness-design.md` (v10) + `2026-04-27-synthetic-playtest-implementation-plan.md` (v7) |
 | 4    | Standalone Bundle Viewer             | Proposed   | not yet drafted                                           |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |

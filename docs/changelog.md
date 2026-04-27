@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.1 - 2026-04-27
+
+Synthetic Playtest T3: cross-cutting determinism integration tests + structural docs (closes Spec 3 implementation).
+
+### Tests added (`tests/synthetic-determinism.test.ts`, 7 cases)
+
+- **selfCheck round-trip:** non-poisoned bundle with `ticksRun >= 1` passes `replayer.selfCheck().ok`.
+- **Production-determinism dual-run:** same `policySeed` + same setup → deep-equal bundles modulo sessionId/recordedAt/durationMs.
+- **Sub-RNG isolation positive:** policy using `ctx.random()` is replay-deterministic.
+- **Sub-RNG isolation negative:** policy calling `ctx.world.random()` directly causes selfCheck to report state divergences (terminal-snapshot segment with default snapshotInterval) — proves the safety net works.
+- **Poisoned-bundle replay:** `SessionReplayer.selfCheck()` re-throws the original tick failure (the failed-tick-bounded final segment is replayed, not skipped — verified at session-replayer.ts:286).
+- **Pre-step abort vacuous case:** policy throws on tick 1 → `ticksRun === 0`, terminal == initial → selfCheck returns `ok:true` vacuously over zero-length segment.
+- **Bundle → script conversion regression:** record → `+1` formula on submissionTick → replay through `scriptedPolicy` → assert identical command stream (types + data + submissionTicks).
+
+### Structural docs
+
+- `docs/architecture/ARCHITECTURE.md`: Component Map row for Synthetic Playtest Harness.
+- `docs/architecture/drift-log.md`: 2026-04-27 entry describing the Spec 3 implementation chain (T1 v0.7.20 + T2 v0.8.0 + T3 v0.8.1).
+- `docs/design/ai-first-dev-roadmap.md`: Spec 3 status → Implemented; Spec 1 status corrected to Implemented (v0.7.7-pre → v0.7.19) with link to converged spec.
+- `docs/guides/ai-integration.md`: appended Tier-1 reference linking to the synthetic-playtest guide.
+
+### Validation
+
+All four engine gates pass: `npm test` (798 + 2 todo, 7 new in `tests/synthetic-determinism.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
 ## 0.8.0 - 2026-04-27 — BREAKING (b-bump)
 
 Synthetic Playtest T2: `runSynthPlaytest` harness + b-bump-axis `SessionMetadata.sourceKind` union widening.

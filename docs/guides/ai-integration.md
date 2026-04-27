@@ -251,3 +251,24 @@ for (const marker of stuckMarkers) {
 ```
 
 See `docs/guides/session-recording.md` for the canonical reference.
+
+## Synthetic Playtest Harness (Tier 1)
+
+`runSynthPlaytest` is the Tier-1 piece of the AI-first feedback loop (Spec 3 of `docs/design/ai-first-dev-roadmap.md`). It drives a `World` autonomously via pluggable `Policy` functions for N ticks and produces a replayable `SessionBundle`. Tier-2 specs (corpus indexing, behavioral metrics, AI playtester agent) build on the synthetic-bundle corpus this harness generates.
+
+```typescript
+import { runSynthPlaytest, randomPolicy } from 'civ-engine';
+
+const result = runSynthPlaytest({
+  world: setup(),
+  policies: [randomPolicy({ catalog: [/* ... */] })],
+  maxTicks: 1000,
+  policySeed: 42,  // optional; deterministic across runs.
+});
+
+// result.bundle is a SessionBundle replayable via SessionReplayer.
+// CI guard: result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1
+//           → expect(replayer.selfCheck().ok).toBe(true).
+```
+
+See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
