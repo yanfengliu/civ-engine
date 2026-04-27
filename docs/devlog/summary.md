@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Session-recording T7 (v0.7.13) — `scenarioResultToBundle()` adapter translating `ScenarioResult` to `SessionBundle` (sourceKind:scenario; startTick from history.initialSnapshot.tick; assertion markers per check outcome; throws if no initial snapshot). 9 new tests, 742 total. Substrate ↔ scenario loop closed.
 - 2026-04-27: Session-recording T6 (v0.7.12) — `SessionReplayer` with `openAt` + `selfCheck` (3-stream: state/events/executions), `deepEqualWithPath` helper, marker query helpers, `validateMarkers`, range checks, replay-across-failure refusal, no-payload short-circuit, cross-`b`/cross-`a` engine version refusal, cross-Node-major warning. 22 new tests, 733 total.
 - 2026-04-27: Session-recording T5 (v0.7.11) — `SessionRecorder` class with full §7 lifecycle (connect/disconnect/addMarker/attach/takeSnapshot/toBundle). Single `submitWithResult` wrap; mutex via `__payloadCapturingRecorder` slot; periodic + terminal snapshots; live vs retroactive marker validation. 20 new tests, 711 total.
 - 2026-04-27: Session-recording T4 (v0.7.10) — `WorldHistoryRecorder.captureCommandPayloads` opt-in (additive `recordedCommands?` field, mutex via `__payloadCapturingRecorder` slot, single submitWithResult wrap, clear() resets) + `ScenarioConfig.history.captureCommandPayloads` plumbing. 9 new tests, 691 total.

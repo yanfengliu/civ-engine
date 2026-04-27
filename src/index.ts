@@ -78,3 +78,8 @@ export {
   type MarkerValidationResult,
   deepEqualWithPath,
 } from './session-replayer.js';
+// T7: scenarioResultToBundle adapter
+export {
+  scenarioResultToBundle,
+  type ScenarioResultToBundleOptions,
+} from './session-scenario-bundle.js';

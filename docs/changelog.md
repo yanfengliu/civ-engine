@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.13 - 2026-04-27
+
+Session-recording T7: `scenarioResultToBundle()` adapter — translates `ScenarioResult` to `SessionBundle`.
+
+### Added
+
+- `src/session-scenario-bundle.ts`: `scenarioResultToBundle(result, options?)` exported function.
+  - `metadata.sourceKind: 'scenario'`, `sourceLabel: result.name` (override via `options.sourceLabel`).
+  - `metadata.startTick: result.history.initialSnapshot.tick` (NOT hardcoded 0; respects scenarios on pre-advanced worlds).
+  - `metadata.endTick: result.tick`, `durationTicks` derived.
+  - `bundle.commands: result.history.recordedCommands ?? []`. Empty when scenario didn't opt into `captureCommandPayloads: true` → diagnostic-only bundle (replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')` per spec §10.3).
+  - `bundle.snapshots: [{ tick: result.tick, snapshot: result.snapshot }]`. Single segment from `initialSnapshot` to terminal — selfCheck verifies the full scenario span.
+  - `bundle.markers`: one `{ kind: 'assertion', provenance: 'engine', tick: result.tick, text: outcome.name, data: { passed, failure } }` per `result.checks` outcome.
+- Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`.
+- New public type `ScenarioResultToBundleOptions`.
+
+### Validation
+
+742 tests pass (was 733). Typecheck, lint, build clean. Per spec §10. Closes the substrate-→-scenario integration loop.
+
 ## 0.7.12 - 2026-04-27
 
 Session-recording T6: `SessionReplayer` + 3-stream `selfCheck`.
