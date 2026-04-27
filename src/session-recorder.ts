@@ -52,6 +52,16 @@ export interface SessionRecorderConfig<
   debug?: { capture(): TDebug | null };
   /** Optional human label propagated into bundle metadata. */
   sourceLabel?: string;
+  /**
+   * Default: 'session'. Set by harnesses (e.g., runSynthPlaytest passes
+   * 'synthetic'). Added in v0.8.0 — see SessionMetadata ADR 20.
+   */
+  sourceKind?: 'session' | 'scenario' | 'synthetic';
+  /**
+   * Optional. Populated only when sourceKind === 'synthetic'. Stored as
+   * SessionMetadata.policySeed. Added in v0.8.0.
+   */
+  policySeed?: number;
 }
 
 export class SessionRecorder<
@@ -66,6 +76,8 @@ export class SessionRecorder<
   private readonly _terminalSnapshot: boolean;
   private readonly _debugCapture?: () => TDebug | null;
   private readonly _sourceLabel?: string;
+  private readonly _sourceKind?: 'session' | 'scenario' | 'synthetic';
+  private readonly _policySeed?: number;
 
   private _connected = false;
   private _closed = false;
@@ -90,6 +102,8 @@ export class SessionRecorder<
     this._terminalSnapshot = config.terminalSnapshot ?? true;
     this._debugCapture = config.debug?.capture.bind(config.debug);
     this._sourceLabel = config.sourceLabel;
+    this._sourceKind = config.sourceKind;
+    this._policySeed = config.policySeed;
   }
 
   get tickCount(): number { return this._tickCount; }
@@ -128,8 +142,9 @@ export class SessionRecorder<
       endTick: this._startTick,
       persistedEndTick: this._startTick,
       durationTicks: 0,
-      sourceKind: 'session',
+      sourceKind: this._sourceKind ?? 'session',
       ...(this._sourceLabel ? { sourceLabel: this._sourceLabel } : {}),
+      ...(this._policySeed !== undefined ? { policySeed: this._policySeed } : {}),
     };
     try {
       this._sink.open(initialMetadata);

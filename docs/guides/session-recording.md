@@ -179,6 +179,14 @@ const bundle = scenarioResultToBundle(result);
 
 Without `captureCommandPayloads: true`, the bundle is diagnostic-only — `openAt(tick > startTick)` throws `BundleIntegrityError(code: 'no_replay_payloads')` and `selfCheck` returns `ok: true, checkedSegments: 0`.
 
+## Synthetic-source bundles
+
+In v0.8.0, `SessionMetadata.sourceKind` widened to `'session' | 'scenario' | 'synthetic'` to distinguish bundles produced by the synthetic playtest harness (`runSynthPlaytest`). Synthetic bundles carry `metadata.sourceKind: 'synthetic'` plus an optional `metadata.policySeed: number` (the seed used for the harness's policy sub-RNG, preserved for future replay-via-policy work).
+
+Replay treats synthetic bundles like organic recordings: `SessionReplayer.fromBundle` accepts them, `selfCheck()` validates them (modulo the poisoned-bundle caveat — `selfCheck` re-throws on `stopReason === 'poisoned'` synthetic bundles because the failed-tick-bounded final segment isn't skipped). See `docs/guides/synthetic-playtest.md` for the harness API and CI patterns.
+
+`SessionRecorderConfig` now accepts optional `sourceKind?` and `policySeed?` fields; the synthetic playtest harness uses these to set the metadata at recorder construction time (no post-hoc sink mutation — see ADR 20a). For non-harness consumers, the defaults preserve the existing `sourceKind: 'session'` behavior.
+
 ## Limitations (v1)
 
 - **Single payload-capturing recorder per world.** A `SessionRecorder` and a `WorldHistoryRecorder({ captureCommandPayloads: true })` cannot both attach to the same world. Default-config `WorldHistoryRecorder` (no payload capture) is unrestricted.

@@ -4691,10 +4691,11 @@ interface SessionMetadata {
   endTick: number;            // tick at disconnect() (live world.tick)
   persistedEndTick: number;   // tick of last successfully persisted snapshot
   durationTicks: number;      // endTick - startTick
-  sourceKind: 'session' | 'scenario';
+  sourceKind: 'session' | 'scenario' | 'synthetic';  // 'synthetic' added in v0.8.0 (b-bump per ADR 20)
   sourceLabel?: string;
   incomplete?: true;          // set when recorder did not reach disconnect cleanly
   failedTicks?: number[];     // ticks at-or-after which replay refuses (TickFailure spans)
+  policySeed?: number;        // populated only when sourceKind === 'synthetic' (added in v0.8.0)
 }
 ```
 
@@ -4909,6 +4910,8 @@ interface SessionRecorderConfig {
   terminalSnapshot?: boolean;                // default: true
   debug?: { capture(): TDebug | null };
   sourceLabel?: string;
+  sourceKind?: 'session' | 'scenario' | 'synthetic';  // default: 'session'. Added in v0.8.0; set by harnesses (e.g., runSynthPlaytest passes 'synthetic'). See ADR 20a.
+  policySeed?: number;                        // populated when sourceKind === 'synthetic'. Added in v0.8.0.
 }
 
 type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance' | 'tick'> & { tick?: number };
@@ -5061,3 +5064,79 @@ const sequence = bundle.commands.map((cmd) => ({
   data: cmd.data,
 }));
 ```
+
+## Synthetic Playtest — Harness (v0.8.0)
+
+`runSynthPlaytest` drives a `World` via pluggable policies for `N` ticks and produces a `SessionBundle`. T2 of Spec 3.
+
+### `runSynthPlaytest(config)`
+
+```typescript
+function runSynthPlaytest<TEventMap, TCommandMap, TComponents, TState, TDebug = JsonValue>(
+  config: SynthPlaytestConfig<TEventMap, TCommandMap, TComponents, TState>,
+): SynthPlaytestResult<TEventMap, TCommandMap, TDebug>;
+```
+
+Lifecycle (per spec v10 §7.1):
+1. **Validate** `maxTicks >= 1`, `policySeed` is finite integer.
+2. **Init sub-RNG** from `policySeed` (default: `Math.floor(world.random() * 0x1_0000_0000)`). Happens BEFORE `recorder.connect()` so the initial snapshot captures post-derivation `world.rng` state.
+3. **Attach** `SessionRecorder` with `sourceKind: 'synthetic'` and `terminalSnapshot: true` hardcoded. If `recorder.lastError` is set after `connect()` (sink open failure), re-throw — no coherent bundle to return.
+4. **Tick loop**: per tick, build `policyCtx`, call each policy in array order, submit returned commands via `world.submitWithResult`, call `world.step()`, check `recorder.lastError`, increment `ticksRun`, evaluate `stopWhen` with a fresh `StopContext`. Stop conditions: `maxTicks`, `stopWhen`, `poisoned`, `policyError`, `sinkError` (mid-tick).
+5. **Disconnect** + return `{ bundle, ticksRun, stopReason, ok, policyError? }`.
+
+`ok` is `true` for `'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError'` (bundle is valid up to the failure point); `false` for `'sinkError'`. **Edge case:** `ok` also flips to `false` if a sink failure occurs during `disconnect()` (e.g., the terminal-snapshot write throws). In that case `stopReason` reports the original loop-exit reason but `recorder.lastError !== null`. CI guards should check `result.ok` rather than just `stopReason !== 'sinkError'`.
+
+### `SynthPlaytestConfig`
+
+```typescript
+interface SynthPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
+  policies: Policy<TEventMap, TCommandMap, TComponents, TState>[];
+  maxTicks: number;                    // required, >= 1
+  sink?: SessionSink & SessionSource;  // default: new MemorySink()
+  sourceLabel?: string;                 // default: 'synthetic'
+  policySeed?: number;                  // default: derived from world.random() at construction
+  stopWhen?: (ctx: StopContext<...>) => boolean;
+  snapshotInterval?: number | null;    // default 1000; null disables periodic snapshots
+}
+```
+
+`terminalSnapshot` is intentionally NOT exposed — the harness always passes `terminalSnapshot: true` to `SessionRecorder` so every bundle has the `(initial, terminal)` segment for `selfCheck`.
+
+### `SynthPlaytestResult`
+
+```typescript
+interface SynthPlaytestResult<TEventMap, TCommandMap, TDebug = JsonValue> {
+  bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
+  ticksRun: number;
+  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError';
+  ok: boolean;
+  policyError?: { policyIndex: number; tick: number; error: { name; message; stack } };
+}
+```
+
+`ticksRun` = count of `world.step()` invocations that completed AND were followed by a clean `recorder.lastError` check. With `K = world.tick - startTick`:
+
+| stopReason | ticksRun |
+|---|---|
+| `'maxTicks'`, `'stopWhen'`, `'policyError'` | `K` |
+| `'poisoned'`, `'sinkError'` (mid-tick) | `K - 1` |
+
+`policyError` is populated only when `stopReason === 'policyError'`. `bundle.failures` is NOT modified for policy throws — `failedTicks` is reserved for world-level tick failures.
+
+### Determinism — CI guard pattern
+
+`SessionReplayer.selfCheck()` is meaningful for non-poisoned synthetic bundles where `ticksRun >= 1`. For `stopReason === 'poisoned'` bundles, `selfCheck()` re-throws the original tick failure (the failed-tick-bounded final segment is replayed). For `ticksRun === 0`, the terminal snapshot equals the initial → `selfCheck()` returns `ok:true` vacuously.
+
+```typescript
+if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
+  expect(replayer.selfCheck().ok).toBe(true);
+}
+```
+
+### Updated existing surface
+
+- `SessionMetadata.sourceKind` widened to `'session' | 'scenario' | 'synthetic'`. **Breaking** for downstream `assertNever` exhaustive switches (b-bump in 0.8.0).
+- `SessionMetadata.policySeed?: number` added. Populated when `sourceKind === 'synthetic'`.
+- `SessionRecorderConfig.sourceKind?: 'session' | 'scenario' | 'synthetic'` added (default `'session'`).
+- `SessionRecorderConfig.policySeed?: number` added.

@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Spec 3 T2 (v0.8.0, **b-bump**) — `runSynthPlaytest` harness + SessionMetadata.sourceKind union widened to add 'synthetic' (breaking for assertNever consumers, per ADR 20). Sub-RNG init via `Math.floor(world.random() * 0x1_0000_0000)` pre-connect; `terminalSnapshot:true` hardcoded; 5-value stopReason union with separate connect-time-failure (re-throw) and mid-tick-failure ('sinkError') paths. ADRs 20, 20a, 21, 22. 17 new harness tests; 789 passed + 2 todo.
 - 2026-04-27: Spec 3 T1 (v0.7.20) — Synthetic Playtest Policy interface + 3 built-in policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`). 4-generic shape matches `World<...>`; sub-RNG via `PolicyContext.random()` (ADR 19). `runSynthPlaytest` harness ships in T2 (v0.8.0). 13 new tests; 772 passed + 2 todo.
 - 2026-04-27: Session-recording followup 4 (v0.7.19) — Clause-paired determinism tests for §11.1 clauses 1, 2, 7 (clean+violation each). Clauses 4, 6 added as `it.todo` (hard fixtures). 6/8 testable clauses covered now (was 3/8). 759 tests + 2 todo.
 - 2026-04-27: Session-recording followups 2+3 (v0.7.18) — terminated-state guard on user-facing recorder methods (Opus L2; +1 regression test); World.applySnapshot extracts `_replaceStateFrom` helper for auditability (Opus L4); api-reference T-prefix section headers renamed to feature labels (Opus L3).

@@ -89,10 +89,21 @@ export interface SessionMetadata {
   endTick: number;
   persistedEndTick: number;
   durationTicks: number;
-  sourceKind: 'session' | 'scenario';
+  /**
+   * 'synthetic' added in v0.8.0 (Spec 3 T2). Widening from 'session' | 'scenario'
+   * is a breaking change for downstream `assertNever`-style exhaustive switches;
+   * b-bump per AGENTS.md. See ADR 20 in docs/architecture/decisions.md.
+   */
+  sourceKind: 'session' | 'scenario' | 'synthetic';
   sourceLabel?: string;
   incomplete?: true;
   failedTicks?: number[];
+  /**
+   * Populated only when sourceKind === 'synthetic'. The seed used for the
+   * harness's policy sub-RNG; preserved for future replay-via-policy work.
+   * Spec 3 §5.4.
+   */
+  policySeed?: number;
 }
 
 export interface SessionBundle<

@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.8.0 - 2026-04-27 — BREAKING (b-bump)
+
+Synthetic Playtest T2: `runSynthPlaytest` harness + b-bump-axis `SessionMetadata.sourceKind` union widening.
+
+### Breaking change
+
+`SessionMetadata.sourceKind` widened from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. Downstream consumers using `assertNever`-style exhaustive switches over `sourceKind` will fail to compile until they add a `case 'synthetic':` branch. This is the only breaking change in 0.8.0; engine-internal code is unaffected (verified — no engine consumers branch on `sourceKind` exhaustively).
+
+### New (additive)
+
+- **`runSynthPlaytest(config)`**: synchronous Tier-1 synthetic playtest harness. Drives a `World` via pluggable `Policy` functions for N ticks → SessionBundle. Stop conditions: `maxTicks`, `stopWhen`, built-in poison stop, policy throw, sink failure. Sub-RNG init via `Math.floor(world.random() * 0x1_0000_0000)` BEFORE `recorder.connect()` so initial snapshot reflects post-derivation `world.rng` state. `terminalSnapshot:true` hardcoded for non-vacuous selfCheck guarantee.
+- **`SynthPlaytestConfig`** + **`SynthPlaytestResult`** types.
+- **`SessionRecorderConfig.sourceKind?`** + **`SessionRecorderConfig.policySeed?`** (additive optional fields).
+- **`SessionMetadata.policySeed?`** field (populated when `sourceKind === 'synthetic'`).
+
+### Determinism guarantees
+
+- **Production-determinism:** same `policySeed` + same setup → structurally identical bundles modulo `metadata.sessionId`, `metadata.recordedAt`, and `WorldMetrics.durationMs`.
+- **Replay-determinism:** non-poisoned synthetic bundles with `ticksRun >= 1` pass `SessionReplayer.selfCheck()`.
+- **Sub-RNG isolation:** `PolicyContext.random()` is independent of `world.rng`; replay reproduces world RNG state because policies don't perturb it.
+
+### Failure mode taxonomy
+
+| `stopReason` | Bundle returned? | `ok` |
+|---|---|---|
+| `'maxTicks'`, `'stopWhen'`, `'poisoned'`, `'policyError'` | yes | `true` |
+| `'sinkError'` (mid-tick) | yes (incomplete) | `false` |
+| Connect-time sink failure | NO — `recorder.lastError` re-thrown | n/a |
+
+### ADRs
+
+- ADR 20: SessionMetadata.sourceKind extended, lands as b-bump.
+- ADR 20a: `sourceKind` set at SessionRecorder construction (no post-hoc sink mutation).
+- ADR 21: Harness is synchronous and single-process.
+- ADR 22: Composed policies do NOT observe each other within a tick.
+
+### Migration
+
+Downstream `assertNever(sourceKind)` consumers add `case 'synthetic':` next to existing branches. No engine changes required.
+
+### Validation
+
+All four engine gates pass: `npm test` (789 + 2 todo, 17 new in `tests/synthetic-playtest.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
 ## 0.7.20 - 2026-04-27
 
 Synthetic Playtest T1: Policy interface + 3 built-in policies (Tier 1 of Spec 3 implementation, `docs/design/2026-04-27-synthetic-playtest-harness-design.md` v10).

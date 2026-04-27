@@ -83,8 +83,7 @@ export {
   scenarioResultToBundle,
   type ScenarioResultToBundleOptions,
 } from './session-scenario-bundle.js';
-// Synthetic Playtest — Spec 3 T1 (v0.7.20+): Policy interface + 3 built-in policies.
-// Harness (runSynthPlaytest) ships in T2 (v0.8.0).
+// Synthetic Playtest — Spec 3 T1+T2 (v0.7.20+): Policy types, 3 built-in policies, runSynthPlaytest harness.
 export {
   type Policy,
   type PolicyContext,
@@ -92,7 +91,10 @@ export {
   type PolicyCommand,
   type RandomPolicyConfig,
   type ScriptedPolicyEntry,
+  type SynthPlaytestConfig,
+  type SynthPlaytestResult,
   noopPolicy,
   randomPolicy,
   scriptedPolicy,
+  runSynthPlaytest,
 } from './synthetic-playtest.js';
