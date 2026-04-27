@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.4 - 2026-04-26
+
+Followups on residuals from the iter-1 → iter-6 review chain. Non-breaking. 608 tests pass.
+
+### Fixed
+
+- **L_NEW6 (residual from v0.6.0):** `CommandTransaction.commit()`'s `world.emit` dispatch line dropped its `// eslint-disable-next-line @typescript-eslint/no-explicit-any` and `as any` casts. Replaced with narrower `as keyof TEventMap & string` / `as TEventMap[EmitKey]` casts that preserve the type-system shape across the loose-typed buffered event boundary. Runtime behavior unchanged.
+- **N1 (residual from v0.6.4):** `SYSTEM_PHASES` and `SystemPhase` moved from `src/world.ts` to `src/world-internal.ts`. Previously `world-internal.ts` imported `SYSTEM_PHASES` from `world.ts` while `world.ts` imported value functions from `world-internal.ts` — a circular value-import that worked only because `SYSTEM_PHASES` was read inside function bodies. Now one-way: `world.ts` imports from `world-internal.ts` (and re-exports for public API compatibility — `SYSTEM_PHASES` and `SystemPhase` remain importable from the package root via the existing `export * from './world.js'` barrel).
+
+### Still deferred (queued for dedicated follow-up)
+
+- **M3 deeper world.ts split:** `world.ts` is at 2227 LOC vs the 500 LOC cap. The deeper split (serialize, system scheduling, tick pipeline, tags/state into separate files) requires a composition redesign because those subsystems read/write many private fields. Mechanical extraction would either loosen `World`'s encapsulation broadly or require pervasive `as unknown as` casts. Out of scope for review-fix iterations; queued for a dedicated refactor branch.
+- **`occupancy-grid.ts` split:** 1602 LOC; same reasoning.
+
 ## 0.7.3 - 2026-04-26
 
 Multi-CLI iter-6 verification caught one new High (Codex) plus one cleanup note (Opus). Both fixed. Non-breaking. 608 tests pass (up from 607).

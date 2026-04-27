@@ -299,8 +299,17 @@ export class CommandTransaction<
 
       let emitted = 0;
       for (const event of this.events) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.world.emit(event.type as any, event.data as any);
+        // BufferedEvent stores type/data as loose strings/unknown so the
+        // builder's `emit(type: string, data: unknown)` overload can buffer
+        // events that haven't been typed against TEventMap. At dispatch we
+        // cross back into the typed surface; the casts below narrow without
+        // reaching for `any`. The runtime is sound because emit() validated
+        // payload JSON-compat at buffer time.
+        type EmitKey = keyof TEventMap & string;
+        this.world.emit(
+          event.type as EmitKey,
+          event.data as TEventMap[EmitKey],
+        );
         emitted++;
       }
 

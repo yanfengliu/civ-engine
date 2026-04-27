@@ -40,10 +40,12 @@ import {
   normalizeCommandValidationResult,
   now,
   phaseIndex,
+  SYSTEM_PHASES,
   validateSystemInterval,
   validateSystemIntervalOffset,
   validateWorldConfig,
 } from './world-internal.js';
+import type { SystemPhase } from './world-internal.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -65,15 +67,8 @@ export interface LooseSystemRegistration {
   intervalOffset?: number;
 }
 
-export const SYSTEM_PHASES = [
-  'input',
-  'preUpdate',
-  'update',
-  'postUpdate',
-  'output',
-] as const;
-
-export type SystemPhase = (typeof SYSTEM_PHASES)[number];
+export { SYSTEM_PHASES } from './world-internal.js';
+export type { SystemPhase } from './world-internal.js';
 
 export interface SystemRegistration<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,

@@ -3,12 +3,20 @@ import type { TickDiff } from './diff.js';
 import { assertJsonCompatible, type JsonValue } from './json.js';
 import type {
   CommandValidationResult,
-  SystemPhase,
   TickFailure,
   TickMetricsProfile,
   WorldMetrics,
 } from './world.js';
-import { SYSTEM_PHASES } from './world.js';
+
+export const SYSTEM_PHASES = [
+  'input',
+  'preUpdate',
+  'update',
+  'postUpdate',
+  'output',
+] as const;
+
+export type SystemPhase = (typeof SYSTEM_PHASES)[number];
 
 export function createMetrics(
   tick: number,
