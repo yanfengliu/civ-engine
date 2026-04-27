@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.5 - 2026-04-26
+
+Multi-CLI iter-7 broader sweep (first sweep beyond the iter-1–6 `CommandTransaction` chain). Codex + Opus reviewed subsystems iters 1–6 didn't focus on; Gemini quota-exhausted (5th iter in a row). 7 real findings — 1 High, 3 Medium, 3 Low — all fixed. Non-breaking. 627 tests pass (up from 608).
+
+### Fixed
+
+- **H1 (Codex):** `World.deserialize` accepted component / resource records keyed by **dead** or **non-integer / negative** entity IDs. Snapshot loaders ran without entity-id validation, then `rebuildSpatialIndex` and `rebuildComponentSignatures` re-populated stores with rows whose `entityManager.isAlive(id)` was `false`, leaving them queryable through `world.grid` / `queryInRadius` / `query()`. Negative or fractional IDs were worse: `ComponentStore.set` wrote them as JS array properties (silent: `arr.length` doesn't grow), but `_size` did increment, so iteration / serialization / `size` disagreed forever. Fixed in `world.ts` by validating every key in `snapshot.components[*]`, `snapshot.resources.pools/production/consumption[*]`, and `snapshot.resources.transfers[*].from/to` against the alive-set + non-negative-integer check before any loader runs. Throws on violation, mirroring the v0.6.2 `snapshot.tick` validation precedent. 6 new regression tests.
+- **M1 (Codex):** `EventBus.emit` pushed the caller's `data` reference into the buffer and passed the same reference to every listener. A listener that mutated `data` (or made it circular) corrupted buffered history visible to later listeners and to `world.getEvents()`; `getEvents()` could throw on later calls. Fixed by deep-cloning `data` once for the buffer and once per listener. Mirrors the iter-6 atomicity discipline (engine-owned state structurally isolated from external callbacks). `getEvents()` still clones on read for caller-side defensive isolation. 3 new regression tests.
+- **M2 (Codex):** `ClientAdapter.handleMessage` unconditionally set `clientCommandIds.set(result.sequence, id)` after `safeSend` of `commandAccepted`, ignoring the return value. On transport failure `safeSend` already disconnected and cleared the map; the post-send `set` would then either leak (no reconnect) or surface `commandExecuted` / `commandFailed` against an unknown sequence on the next session. Fixed by gating the `set` on `safeSend`'s `boolean` return. 1 new regression test.
+- **M3 (Opus):** `docs/api-reference.md` sections "World State" and "Tags & Metadata" both said `(snapshot v4)`. Current `SCHEMA_VERSION` is 5. Replaced both labels with `(snapshot v5)`.
+- **L1 (Codex):** `octaveNoise2D` did not validate `octaves`, `persistence`, or `lacunarity`. `octaves <= 0` left `maxAmplitude = 0` → returns NaN; non-finite `persistence` / `lacunarity` could silently corrupt downstream map-gen. Public docs claim `[-1, 1]` without parameter constraints. Fixed: now throws `RangeError` on `octaves < 1` or non-integer, `persistence < 0` or non-finite, `lacunarity <= 0` or non-finite. `api-reference.md` updated with the constraint table. 6 new regression tests.
+- **L2 (Opus):** `ComponentStore` semantic-mode `set` did not clear `dirtySet` / `removedSet` when the new value matched the baseline — the early-return path skipped both. Sequence `set(A) → clearDirty → set(B) → set(A)` ended with the entity still in `dirtySet`, so `getDirty()` emitted a redundant entry. Diff bandwidth waste, no incorrect end state. Fixed: revert-to-baseline now clears both sets before returning. 1 new regression test.
+- **L3 (Opus):** `World.deserialize` validated `snapshot.tick` *after* `rebuildSpatialIndex()` already ran — wasted O(positionEntities) work on bad input. Hoisted the tick validation block to the top of `deserialize`, just after the `version` check. 1 new regression test.
+
 ## 0.7.4 - 2026-04-26
 
 Followups on residuals from the iter-1 → iter-6 review chain. Non-breaking. 608 tests pass.

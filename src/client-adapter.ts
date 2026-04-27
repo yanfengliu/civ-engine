@@ -251,7 +251,7 @@ export class ClientAdapter<
           });
           return;
         }
-        this.safeSend({
+        const accepted = this.safeSend({
           protocolVersion: CLIENT_PROTOCOL_VERSION,
           type: 'commandAccepted',
           data: {
@@ -261,7 +261,13 @@ export class ClientAdapter<
             message: result.message,
           },
         });
-        this.clientCommandIds.set(result.sequence, id);
+        // safeSend disconnects + clears clientCommandIds on transport failure.
+        // Re-seating the mapping here would either leak (no reconnect) or
+        // surface commandExecuted/commandFailed against an unknown sequence
+        // on the next session (M2 iter-7).
+        if (accepted) {
+          this.clientCommandIds.set(result.sequence, id);
+        }
         break;
       }
       case 'requestSnapshot':

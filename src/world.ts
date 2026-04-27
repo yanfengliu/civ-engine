@@ -936,6 +936,19 @@ export class World<
       throw new Error(`Unsupported snapshot version: ${version}`);
     }
 
+    // Validate snapshot.tick at the boundary before any mutating work runs
+    // (L3 iter-7). Cheap constant-time check; no point doing O(N) loaders
+    // for a snapshot that will be rejected.
+    if (
+      typeof snapshot.tick !== 'number' ||
+      !Number.isSafeInteger(snapshot.tick) ||
+      snapshot.tick < 0
+    ) {
+      throw new Error(
+        `WorldSnapshot.tick must be a non-negative safe integer (got ${String(snapshot.tick)})`,
+      );
+    }
+
     const componentOptions =
       'componentOptions' in snapshot && snapshot.componentOptions
         ? snapshot.componentOptions
@@ -944,12 +957,25 @@ export class World<
     const world = new World<TEventMap, TCommandMap, TComponents, TState>(snapshot.config);
     world.entityManager = EntityManager.fromState(snapshot.entities);
 
+    const assertEntityIdAlive = (rawId: unknown, ctx: string): EntityId => {
+      if (typeof rawId !== 'number' || !Number.isInteger(rawId) || rawId < 0) {
+        throw new Error(
+          `${ctx} key must be a non-negative integer (got ${JSON.stringify(rawId)})`,
+        );
+      }
+      if (!world.entityManager.isAlive(rawId)) {
+        throw new Error(`${ctx} references dead entity ${rawId}`);
+      }
+      return rawId;
+    };
+
     world.componentStores.clear();
     world.componentOptions.clear();
     for (const [key, entries] of Object.entries(snapshot.components)) {
       const opts = componentOptions[key];
       const cloned: Array<[number, unknown]> = [];
       for (const [id, data] of entries as Array<[number, unknown]>) {
+        assertEntityIdAlive(id, `snapshot.components['${key}']`);
         cloned.push([id, structuredClone(data)]);
       }
       world.componentStores.set(
@@ -962,7 +988,33 @@ export class World<
     }
     world.rebuildComponentSignatures();
     if ('resources' in snapshot) {
-      world.resourceStore = ResourceStore.fromState(snapshot.resources);
+      const rs = snapshot.resources;
+      for (const [key, entries] of Object.entries(rs.pools)) {
+        for (const [id] of entries as Array<[number, unknown]>) {
+          assertEntityIdAlive(id, `snapshot.resources.pools['${key}']`);
+        }
+      }
+      for (const [key, entries] of Object.entries(rs.production)) {
+        for (const [id] of entries as Array<[number, number]>) {
+          assertEntityIdAlive(id, `snapshot.resources.production['${key}']`);
+        }
+      }
+      for (const [key, entries] of Object.entries(rs.consumption)) {
+        for (const [id] of entries as Array<[number, number]>) {
+          assertEntityIdAlive(id, `snapshot.resources.consumption['${key}']`);
+        }
+      }
+      for (const transfer of rs.transfers) {
+        assertEntityIdAlive(
+          transfer.from,
+          `snapshot.resources.transfers[${transfer.id}].from`,
+        );
+        assertEntityIdAlive(
+          transfer.to,
+          `snapshot.resources.transfers[${transfer.id}].to`,
+        );
+      }
+      world.resourceStore = ResourceStore.fromState(rs);
     }
     if ('rng' in snapshot) {
       world.rng = DeterministicRandom.fromState(snapshot.rng);
@@ -1009,16 +1061,6 @@ export class World<
       }
     }
     world.rebuildSpatialIndex();
-
-    if (
-      typeof snapshot.tick !== 'number' ||
-      !Number.isSafeInteger(snapshot.tick) ||
-      snapshot.tick < 0
-    ) {
-      throw new Error(
-        `WorldSnapshot.tick must be a non-negative safe integer (got ${String(snapshot.tick)})`,
-      );
-    }
     world.gameLoop.setTick(snapshot.tick);
 
     if (systems) {

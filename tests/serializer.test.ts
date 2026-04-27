@@ -555,4 +555,121 @@ describe('Serialization', () => {
       expect(restored.getComponent(e, 'health')).toEqual({ hp: 50 });
     });
   });
+
+  describe('deserialize entity-id validation (H1 / L3 iter-7)', () => {
+    function baseSnapshot(): {
+      version: 5;
+      config: { gridWidth: number; gridHeight: number; tps: number };
+      tick: number;
+      entities: { generations: number[]; alive: boolean[]; freeList: number[] };
+      components: Record<string, Array<[number, unknown]>>;
+      componentOptions: Record<string, Record<string, unknown>>;
+      resources: {
+        registered: Array<[string, { defaultMax: number | null }]>;
+        pools: Record<string, Array<[number, { current: number; max: number | null }]>>;
+        production: Record<string, Array<[number, number]>>;
+        consumption: Record<string, Array<[number, number]>>;
+        transfers: Array<{ id: number; from: number; to: number; resource: string; rate: number }>;
+        nextTransferId: number;
+      };
+      rng: { state: number };
+      state: Record<string, unknown>;
+      tags: Record<number, string[]>;
+      metadata: Record<number, Record<string, string | number>>;
+    } {
+      return {
+        version: 5,
+        config: { gridWidth: 10, gridHeight: 10, tps: 60 },
+        tick: 0,
+        entities: { generations: [0, 0], alive: [true, false], freeList: [1] },
+        components: {},
+        componentOptions: {},
+        resources: {
+          registered: [],
+          pools: {},
+          production: {},
+          consumption: {},
+          transfers: [],
+          nextTransferId: 0,
+        },
+        rng: { state: 1 },
+        state: {},
+        tags: {},
+        metadata: {},
+      };
+    }
+
+    it('rejects component records keyed by a dead entity id', () => {
+      const bad = baseSnapshot();
+      bad.components['health'] = [[1, { hp: 50 }]]; // entity 1 is dead
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /references dead entity 1/,
+      );
+    });
+
+    it('rejects component records keyed by a negative entity id', () => {
+      const bad = baseSnapshot();
+      bad.components['health'] = [[-1, { hp: 50 }]];
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /must be a non-negative integer/,
+      );
+    });
+
+    it('rejects component records keyed by a fractional entity id', () => {
+      const bad = baseSnapshot();
+      bad.components['health'] = [[1.5, { hp: 50 }]];
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /must be a non-negative integer/,
+      );
+    });
+
+    it('rejects resource pool entries keyed by a dead entity id', () => {
+      const bad = baseSnapshot();
+      bad.resources.registered = [['gold', { defaultMax: null }]];
+      bad.resources.pools = { gold: [[1, { current: 5, max: null }]] };
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /references dead entity 1/,
+      );
+    });
+
+    it('rejects resource production entries keyed by a dead entity id', () => {
+      const bad = baseSnapshot();
+      bad.resources.registered = [['gold', { defaultMax: null }]];
+      bad.resources.production = { gold: [[1, 1]] };
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /references dead entity 1/,
+      );
+    });
+
+    it('rejects resource transfers referencing a dead entity', () => {
+      const bad = baseSnapshot();
+      bad.resources.registered = [['gold', { defaultMax: null }]];
+      bad.resources.pools = { gold: [[0, { current: 10, max: null }]] };
+      bad.resources.transfers = [
+        { id: 0, from: 0, to: 1, resource: 'gold', rate: 1 },
+      ];
+      bad.resources.nextTransferId = 1;
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /references dead entity 1/,
+      );
+    });
+
+    it('valid alive-only snapshot still round-trips', () => {
+      const snap = baseSnapshot();
+      snap.components['health'] = [[0, { hp: 50 }]];
+      snap.resources.registered = [['gold', { defaultMax: null }]];
+      snap.resources.pools = { gold: [[0, { current: 10, max: null }]] };
+      const restored = World.deserialize(snap as never);
+      expect(restored.tick).toBe(0);
+    });
+
+    it('rejects bad tick before any loader runs (L3 iter-7)', () => {
+      const bad = baseSnapshot();
+      bad.tick = -1;
+      bad.components['health'] = [[1, { hp: 50 }]]; // also dead — but tick should fail first
+      expect(() => World.deserialize(bad as never)).toThrow(
+        /WorldSnapshot.tick must be a non-negative safe integer/,
+      );
+    });
+  });
 });

@@ -371,4 +371,49 @@ describe('ClientAdapter', () => {
       },
     ]);
   });
+
+  it('does not record clientCommandIds when commandAccepted send fails (M2 iter-7)', () => {
+    const world = new World<Events, Commands>({
+      gridWidth: 10,
+      gridHeight: 10,
+      tps: 10,
+    });
+    world.registerHandler('move', () => {});
+    const messages: ServerMessage<Events>[] = [];
+    let sendsBeforeBreaking = 1; // allow snapshot through
+    const errors: unknown[] = [];
+    const adapter = new ClientAdapter<Events, Commands>({
+      world,
+      send: (msg) => {
+        if (sendsBeforeBreaking > 0) {
+          sendsBeforeBreaking--;
+          messages.push(msg);
+          return;
+        }
+        throw new Error('transport down on accept');
+      },
+      onError: (err) => errors.push(err),
+    });
+
+    adapter.connect();
+    messages.length = 0;
+    adapter.handleMessage({
+      type: 'command',
+      data: {
+        id: 'cmd-broken-accept',
+        commandType: 'move',
+        payload: { id: 0, x: 1, y: 1 },
+      },
+    });
+
+    expect(errors).toHaveLength(1);
+
+    // Step the world. The command IS still in the queue and will execute,
+    // but since the mapping was never set the adapter should not surface
+    // commandExecuted/commandFailed against an unknown sequence.
+    world.step();
+
+    // Adapter disconnected on transport failure → no further messages.
+    expect(messages).toEqual([]);
+  });
 });

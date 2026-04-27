@@ -83,4 +83,38 @@ describe('octaveNoise2D', () => {
     const noise = createNoise2D(42);
     expect(octaveNoise2D(noise, 3.5, 7.2, 1)).toBe(noise(3.5, 7.2));
   });
+
+  it('rejects octaves <= 0 (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    expect(() => octaveNoise2D(noise, 0, 0, 0)).toThrow(RangeError);
+    expect(() => octaveNoise2D(noise, 0, 0, -1)).toThrow(RangeError);
+  });
+
+  it('rejects fractional octaves (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    expect(() => octaveNoise2D(noise, 0, 0, 1.5)).toThrow(RangeError);
+  });
+
+  it('rejects negative persistence (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    expect(() => octaveNoise2D(noise, 0, 0, 4, -0.1)).toThrow(RangeError);
+  });
+
+  it('rejects non-positive lacunarity (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    expect(() => octaveNoise2D(noise, 0, 0, 4, 0.5, 0)).toThrow(RangeError);
+    expect(() => octaveNoise2D(noise, 0, 0, 4, 0.5, -1)).toThrow(RangeError);
+  });
+
+  it('rejects non-finite parameters (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    expect(() => octaveNoise2D(noise, 0, 0, 4, NaN)).toThrow(RangeError);
+    expect(() => octaveNoise2D(noise, 0, 0, 4, 0.5, Infinity)).toThrow(RangeError);
+  });
+
+  it('persistence=0 yields finite output (single octave dominates) (L1 iter-7)', () => {
+    const noise = createNoise2D(42);
+    const v = octaveNoise2D(noise, 1, 2, 4, 0);
+    expect(Number.isFinite(v)).toBe(true);
+  });
 });

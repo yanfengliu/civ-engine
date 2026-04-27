@@ -108,4 +108,35 @@ describe('EventBus', () => {
     const refetched = bus.getEvents();
     expect((refetched[0].data as { amount: number }).amount).toBe(10);
   });
+
+  it('listener mutating payload does not corrupt buffered event (M1 iter-7)', () => {
+    const bus = new EventBus<TestEvents>();
+    const listener = vi.fn((data: { target: number; amount: number }) => {
+      data.amount = 999;
+    });
+    bus.on('damage', listener);
+    bus.emit('damage', { target: 1, amount: 10 });
+    const events = bus.getEvents();
+    expect((events[0].data as { amount: number }).amount).toBe(10);
+  });
+
+  it('listener mutating payload does not affect later listeners (M1 iter-7)', () => {
+    const bus = new EventBus<TestEvents>();
+    const second = vi.fn();
+    bus.on('damage', (data) => {
+      data.amount = 999;
+    });
+    bus.on('damage', second);
+    bus.emit('damage', { target: 1, amount: 10 });
+    expect(second).toHaveBeenCalledWith({ target: 1, amount: 10 });
+  });
+
+  it('caller mutating payload after emit does not corrupt buffered event (M1 iter-7)', () => {
+    const bus = new EventBus<TestEvents>();
+    const payload = { target: 1, amount: 10 };
+    bus.emit('damage', payload);
+    payload.amount = 999;
+    const events = bus.getEvents();
+    expect((events[0].data as { amount: number }).amount).toBe(10);
+  });
 });

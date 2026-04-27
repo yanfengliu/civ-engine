@@ -2023,7 +2023,7 @@ for (const id of world.getResourceEntities('food')) {
 
 ### World State
 
-Non-entity structured state stored at the world level. Values must be JSON-compatible. World state is included in serialization (snapshot v4) and tick diffs.
+Non-entity structured state stored at the world level. Values must be JSON-compatible. World state is included in serialization (snapshot v5) and tick diffs.
 
 #### `setState(key, value)`
 
@@ -2078,7 +2078,7 @@ if (world.hasState('turnNumber')) {
 
 ### Tags & Metadata
 
-String tags and key-value metadata attached to individual entities. Both are cleaned up automatically on `destroyEntity()` and included in serialization (snapshot v4) and tick diffs.
+String tags and key-value metadata attached to individual entities. Both are cleaned up automatically on `destroyEntity()` and included in serialization (snapshot v5) and tick diffs.
 
 #### `addTag(entity, tag)`
 
@@ -3697,13 +3697,15 @@ octaveNoise2D(
 ): number
 ```
 
-Layers multiple noise samples at increasing frequency and decreasing amplitude (fractal Brownian motion). Produces more natural-looking terrain than single-octave noise. Returns values in `[-1, 1]`.
+Layers multiple noise samples at increasing frequency and decreasing amplitude (fractal Brownian motion). Produces more natural-looking terrain than single-octave noise. Returns values in `[-1, 1]` when the input `noise` function is bounded to `[-1, 1]`.
+
+Throws `RangeError` if `octaves < 1` or non-integer, `persistence < 0` or non-finite, or `lacunarity <= 0` or non-finite.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `octaves` | (required) | Number of noise layers |
-| `persistence` | `0.5` | Amplitude multiplier per octave (lower = smoother) |
-| `lacunarity` | `2.0` | Frequency multiplier per octave (higher = more detail) |
+| `octaves` | (required) | Number of noise layers (positive integer) |
+| `persistence` | `0.5` | Amplitude multiplier per octave (lower = smoother; must be `>= 0`) |
+| `lacunarity` | `2.0` | Frequency multiplier per octave (higher = more detail; must be `> 0`) |
 
 ```typescript
 const noise = createNoise2D(42);

@@ -30,6 +30,10 @@ export class ComponentStore<T> {
       this.data[entityId] = component;
       this._generation++;
       if (baseline === fingerprint) {
+        // Revert-to-baseline within a tick: clear any earlier dirty/removed
+        // marks so the diff doesn't carry a no-op write (L2 iter-7).
+        this.dirtySet.delete(entityId);
+        this.removedSet.delete(entityId);
         return;
       }
       this.dirtySet.add(entityId);

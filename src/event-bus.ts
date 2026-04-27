@@ -17,11 +17,15 @@ export class EventBus<TEventMap extends Record<keyof TEventMap, unknown>> {
 
   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
     assertJsonCompatible(data, `event '${String(type)}'`);
-    this.buffer.push({ type, data });
+    // Clone for the buffer + per-listener so neither the caller's reference,
+    // nor a listener's reference, can corrupt the engine-owned buffer or
+    // what other listeners observe. Mirrors the iter-6 atomicity discipline
+    // (engine-owned state is structurally isolated from external callbacks).
+    this.buffer.push({ type, data: deepCloneJson(data) });
     const set = this.listeners.get(type);
     if (set) {
       for (const listener of set) {
-        (listener as Listener<TEventMap[K]>)(data);
+        (listener as Listener<TEventMap[K]>)(deepCloneJson(data));
       }
     }
   }

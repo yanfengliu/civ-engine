@@ -99,6 +99,22 @@ export function octaveNoise2D(
   persistence = 0.5,
   lacunarity = 2.0,
 ): number {
+  if (!Number.isInteger(octaves) || octaves < 1) {
+    throw new RangeError(
+      `octaveNoise2D: octaves must be a positive integer (got ${octaves})`,
+    );
+  }
+  if (!Number.isFinite(persistence) || persistence < 0) {
+    throw new RangeError(
+      `octaveNoise2D: persistence must be a finite non-negative number (got ${persistence})`,
+    );
+  }
+  if (!Number.isFinite(lacunarity) || lacunarity <= 0) {
+    throw new RangeError(
+      `octaveNoise2D: lacunarity must be a positive finite number (got ${lacunarity})`,
+    );
+  }
+
   let total = 0;
   let amplitude = 1;
   let frequency = 1;
@@ -111,5 +127,5 @@ export function octaveNoise2D(
     frequency *= lacunarity;
   }
 
-  return total / maxAmplitude;
+  return maxAmplitude > 0 ? total / maxAmplitude : 0;
 }

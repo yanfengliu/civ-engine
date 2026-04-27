@@ -182,6 +182,20 @@ describe('ComponentStore', () => {
       expect(dirty.set).toEqual([]);
     });
 
+    it('semantic mode revert-to-baseline mid-tick clears prior dirty (L2 iter-7)', () => {
+      const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
+      store.set(0, { x: 5 });
+      store.clearDirty();
+
+      store.set(0, { x: 7 });
+      expect(store.getDirty().set).toEqual([[0, { x: 7 }]]);
+
+      store.set(0, { x: 5 });
+      const dirty = store.getDirty();
+      expect(dirty.set).toEqual([]);
+      expect(dirty.removed).toEqual([]);
+    });
+
     it('semantic mode still marks dirty when value changes', () => {
       const store = new ComponentStore<{ x: number }>({ diffMode: 'semantic' });
       store.set(0, { x: 5 });
