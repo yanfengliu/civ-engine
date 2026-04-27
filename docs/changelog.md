@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.19 - 2026-04-27
+
+Session-recording followup 4: additional determinism-contract paired tests for clauses 1, 2, 7.
+
+### Tests
+
+- `tests/determinism-contract.test.ts` adds clean+violation pairs for spec §11.1 clauses:
+  - **Clause 1** (route input through `world.submit()` from outside the tick loop): violation = external `setComponent` between ticks during recording → terminal snapshot captures the mutation but `bundle.commands` doesn't reflect it; replay state diverges.
+  - **Clause 2** (no mid-tick `submit()` from systems): violation = a system submits a follow-up command during `step()` → recording's wrap captures the submission, replayer feeds it from `bundle.commands` AND the system re-submits during replay → double-submit; execution-stream divergence.
+  - **Clause 7** (no environment-driven branching inside a tick): violation = system reads `process.env.SESSION_RECORDING_TEST_FLAG`; test stubs different env values for record vs replay → state diverges.
+- **Clauses 4 (impure validators) and 6 (unordered Set iteration)** added as `it.todo` with rationale: clean fixtures for these are hard to construct without crossing into other clauses (e.g., clause 6 requires a Set whose iteration order differs across runs without using random / wall-clock). Coverage: 6 of 8 testable clauses (clause 9 is enforced at construction by `BundleVersionError` — covered separately in `session-replayer.test.ts`).
+
+### Validation
+
+759 tests pass (was 753) + 2 it.todo. Typecheck, lint, build clean.
+
 ## 0.7.18 - 2026-04-27
 
 Session-recording followups 2 + 3: terminated-state guards, applySnapshot helper extraction, doc-section renames.

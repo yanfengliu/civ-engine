@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Session-recording followup 4 (v0.7.19) — Clause-paired determinism tests for §11.1 clauses 1, 2, 7 (clean+violation each). Clauses 4, 6 added as `it.todo` (hard fixtures). 6/8 testable clauses covered now (was 3/8). 759 tests + 2 todo.
 - 2026-04-27: Session-recording followups 2+3 (v0.7.18) — terminated-state guard on user-facing recorder methods (Opus L2; +1 regression test); World.applySnapshot extracts `_replaceStateFrom` helper for auditability (Opus L4); api-reference T-prefix section headers renamed to feature labels (Opus L3).
 - 2026-04-27: Session-recording followup 1 (v0.7.17) — `SessionReplayer` pre-groups bundle.commands/.ticks/.executions into per-tick maps at construction; O(N·T) → O(1) per-tick lookup in `selfCheck`/`openAt`. Closes iter-2 M1.
 - 2026-04-27: Session-recording iter-1 code-review fixes (v0.7.16). 2 Critical (applySnapshot component preservation + world.grid stale-grid; FileSink cross-process reload) + 4 High (attach default for FileSink; addMarker cell+attachment validation; memory aliasing in capture paths; multi-segment selfCheck submissionSequence false-positive) + 1 Medium (schemaVersion check) + 4 Low/cleanup. 751 tests still pass.
