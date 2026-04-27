@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.18 - 2026-04-27
+
+Session-recording followups 2 + 3: terminated-state guards, applySnapshot helper extraction, doc-section renames.
+
+### Bug fix (Opus L2)
+
+- `SessionRecorder.addMarker` / `attach` / `takeSnapshot` now reject calls on a terminated recorder via a new `_assertOperational(method)` guard. Previously the methods checked only `!_connected || _closed`, so a partial-`connect()` sink failure (which sets `_terminated = true` but keeps `_connected = true` so `disconnect()` can finalize cleanly) caused subsequent user calls to re-enter the failed sink path and re-throw `SinkWriteError` per call. Now they fail fast with `RecorderClosedError(code: 'recorder_terminated', lastErrorMessage)`. Regression test added.
+
+### Refactor (Opus L4)
+
+- `World.applySnapshot` extracts the field-by-field state transfer into a private `_replaceStateFrom(other: World)` helper. The body is now grouped by concern (entities / components / spatial / resources / RNG / state / tags+metadata / cached per-tick / failure / command queue / system order) with an explicit "NOT transferred (preserved)" comment block at the end. Adding a future state-bearing field surfaces clearly here and the preserved set is auditable in one place. No behavioral change.
+
+### Documentation (Opus L3)
+
+- `docs/api-reference.md` section headers renamed from `(T1: …)` / `(T2: …)` / etc. (implementation-plan task IDs that mean nothing to external readers) to descriptive feature labels: `Bundle Types & Errors`, `Sinks (SessionSink, SessionSource, MemorySink)`, `FileSink`, `SessionRecorder`, `SessionReplayer`, `scenarioResultToBundle`. TOC updated.
+
+### Validation
+
+753 tests pass (was 752; +1 regression test for L2). Typecheck, lint, build clean.
+
 ## 0.7.17 - 2026-04-27
 
 Session-recording followup 1: pre-grouped per-tick lookup indices in `SessionReplayer`.

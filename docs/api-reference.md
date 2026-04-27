@@ -38,12 +38,12 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Scenario Runner](#scenario-runner)
 - [World History Recorder](#world-history-recorder)
 - [World Debugger](#world-debugger)
-- [Session Recording (T1: types + errors)](#session-recording-t1-types--errors)
-- [Session Recording (T2: sinks)](#session-recording-t2-sinks)
-- [Session Recording (T3: FileSink)](#session-recording-t3-filesink)
-- [Session Recording (T5: SessionRecorder)](#session-recording-t5-sessionrecorder)
-- [Session Recording (T6: SessionReplayer)](#session-recording-t6-sessionreplayer)
-- [Session Recording (T7: scenarioResultToBundle)](#session-recording-t7-scenarioresulttobundle)
+- [Session Recording — Bundle Types & Errors](#session-recording--bundle-types--errors)
+- [Session Recording — Sinks (SessionSink, SessionSource, MemorySink)](#session-recording--sinks-sessionsink-sessionsource-memorysink)
+- [Session Recording — FileSink](#session-recording--filesink)
+- [Session Recording — SessionRecorder](#session-recording--sessionrecorder)
+- [Session Recording — SessionReplayer](#session-recording--sessionreplayer)
+- [Session Recording — scenarioResultToBundle](#session-recording--scenarioresulttobundle)
 
 ---
 
@@ -4648,11 +4648,11 @@ createPathQueueDebugProbe(
 
 These helpers expose standalone utility state through the same debugger surface.
 
-## Session Recording (T1: types + errors)
+## Session Recording — Bundle Types & Errors
 
-The session-recording subsystem captures deterministic, replayable bundles of `World` runs. T1 ships only the type definitions and error hierarchy; runtime behavior (`SessionRecorder`, `SessionReplayer`, sinks) lands in subsequent tasks.
+The session-recording subsystem captures deterministic, replayable bundles of `World` runs. This section documents the bundle / marker / error type definitions; subsequent sections cover the sink interfaces, recorder, replayer, and scenario adapter.
 
-See the design spec (`docs/design/2026-04-26-session-recording-and-replay-design.md`) for the full subsystem overview.
+See `docs/guides/session-recording.md` for the user-facing guide and `docs/design/2026-04-26-session-recording-and-replay-design.md` for the full subsystem design.
 
 ### `SessionBundle`
 
@@ -4788,9 +4788,9 @@ const ENGINE_VERSION: string;  // matches package.json's `version` field
 
 Read by `SessionRecorder` (T5) and `scenarioResultToBundle()` (T7) for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
 
-## Session Recording (T2: sinks)
+## Session Recording — Sinks (SessionSink, SessionSource, MemorySink)
 
-T2 ships the `SessionSink` (write) / `SessionSource` (read) interfaces plus `MemorySink` reference implementation. T1's bundle types travel through these.
+`SessionSink` (write) / `SessionSource` (read) interfaces plus `MemorySink` reference implementation. Bundle types travel through these.
 
 ### `SessionSink`
 
@@ -4846,9 +4846,9 @@ Defaults: attachments under the threshold embed as `data:<mime>;base64,...` URLs
 
 `toBundle()` returns the canonical strict-JSON `SessionBundle`. The first written snapshot becomes `bundle.initialSnapshot`; subsequent snapshots populate `bundle.snapshots[]`. Throws `SinkWriteError(code: 'no_snapshots')` if no snapshots have been written.
 
-## Session Recording (T3: FileSink)
+## Session Recording — FileSink
 
-T3 ships `FileSink`, the disk-backed `SessionSink & SessionSource`.
+Disk-backed `SessionSink & SessionSource`.
 
 ### `FileSink`
 
@@ -4882,7 +4882,7 @@ Manifest is rewritten on `open()`, on each `writeSnapshot()` (advancing `metadat
 - `ticks()`, `commands()`, `executions()`, `failures()`, `markers()`: lazy generators streaming the JSONL files. Tolerate a trailing partial line (e.g. a crash mid-write).
 - `toBundle()`: reads all snapshot files, sorts numerically, returns a `SessionBundle` whose `initialSnapshot` is the lowest-tick snapshot.
 
-## Session Recording (T5: SessionRecorder)
+## Session Recording — SessionRecorder
 
 ```typescript
 class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
@@ -4920,7 +4920,7 @@ type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance' | 'tick'> & { ti
 
 `attach(blob, options)` defaults to sidecar storage; pass `{ sidecar: false }` to opt into manifest embedding (only useful for very small blobs).
 
-## Session Recording (T6: SessionReplayer)
+## Session Recording — SessionReplayer
 
 ```typescript
 class SessionReplayer<TEventMap, TCommandMap, TDebug> {
@@ -4969,7 +4969,7 @@ Range checks per spec §9.1: `< startTick` or `> endTick` (or `> persistedEndTic
 
 `selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
 
-## Session Recording (T7: scenarioResultToBundle)
+## Session Recording — scenarioResultToBundle
 
 ```typescript
 function scenarioResultToBundle(

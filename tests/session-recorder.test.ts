@@ -151,6 +151,42 @@ describe('SessionRecorder', () => {
     rec.disconnect();
   });
 
+  it('after sink failure (terminated state), addMarker / attach / takeSnapshot throw RecorderClosedError(code: recorder_terminated)', () => {
+    // Iter-2 review L2 regression: previously these methods only checked
+    // !_connected || _closed; after a sink failure flipped _terminated=true
+    // but kept _connected=true, subsequent calls re-entered the failed
+    // sink path and re-threw SinkWriteError. Now they fail fast.
+    const world = mkWorld();
+    // Build a sink that throws on any write after a successful open().
+    let metadataObj: { [k: string]: unknown } | null = null;
+    const failingSink = {
+      open(metadata: { [k: string]: unknown }): void { metadataObj = { ...metadata }; },
+      writeTick(): void {},
+      writeCommand(): void {},
+      writeCommandExecution(): void {},
+      writeTickFailure(): void {},
+      writeSnapshot(): void { throw new Error('disk full'); },  // initial-snapshot write fails
+      writeMarker(): void { throw new Error('disk full'); },
+      writeAttachment(): never { throw new Error('disk full'); },
+      close(): void {},
+      get metadata(): { [k: string]: unknown } { return metadataObj ?? {}; },
+      readSnapshot(): never { throw new Error('not opened'); },
+      readSidecar(): never { throw new Error('not opened'); },
+      *ticks() {},
+      *commands() {},
+      *executions() {},
+      *failures() {},
+      *markers() {},
+      *attachments() {},
+      toBundle(): never { throw new Error('not opened'); },
+    } as never;
+    const rec = new SessionRecorder({ world, sink: failingSink });
+    rec.connect();  // initial-snapshot write throws → recorder enters _terminated
+    expect(rec.lastError).not.toBeNull();
+    expect(() => rec.addMarker({ kind: 'annotation' })).toThrow(/recorder_terminated|terminated/);
+    rec.disconnect();
+  });
+
   it('addMarker after disconnect throws RecorderClosedError', () => {
     const world = mkWorld();
     const rec = new SessionRecorder({ world });

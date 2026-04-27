@@ -1093,18 +1093,33 @@ export class World<
       this.recover();
     }
     const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot);
-    // Transfer state-bearing fields from `fresh` into `this`. TypeScript's
-    // `private` is compile-time only; same-class access is permitted.
-    this.entityManager = fresh.entityManager;
-    // MERGE component stores rather than wholesale-replace. For each component
-    // in the snapshot, take fresh's store. For each component pre-registered
-    // on `this` but NOT in the snapshot, preserve `this`'s (empty) store so
-    // user pre-registrations survive applySnapshot. Iter-1 code review fix.
+    this._replaceStateFrom(fresh);
+    this.gameLoop.setTick(snapshot.tick);
+  }
+
+  /**
+   * Transfer state-bearing private fields from `other` into `this`.
+   * Preserves registration-bearing fields (handlers, validators, systems,
+   * eventBus listeners, diff/command/tick-failure listener sets, the
+   * `__payloadCapturingRecorder` slot, instrumentationProfile, seed,
+   * positionKey, and the public `grid` delegate which reads through to
+   * `this.spatialGrid` on every call). Component stores are merged so
+   * user pre-registrations of components not in the snapshot survive.
+   *
+   * Adding a new state-bearing field to `World`? Add a transfer line
+   * here. Forgetting to do so leaks prior state and surfaces as a
+   * `selfCheck` divergence after `applySnapshot`. Used by `applySnapshot`
+   * and any future "load this state into me" use case.
+   */
+  private _replaceStateFrom(other: World<TEventMap, TCommandMap, TComponents, TState>): void {
+    // --- Entities ---
+    this.entityManager = other.entityManager;
+    // --- Components: merge to preserve user pre-registrations not in `other`. ---
     const preservedComponentStores = new Map(this.componentStores);
     const preservedComponentOptions = new Map(this.componentOptions);
     const preservedComponentBits = new Map(this.componentBits);
-    this.componentStores = new Map(fresh.componentStores);
-    this.componentOptions = new Map(fresh.componentOptions);
+    this.componentStores = new Map(other.componentStores);
+    this.componentOptions = new Map(other.componentOptions);
     for (const [key, store] of preservedComponentStores) {
       if (!this.componentStores.has(key)) {
         this.componentStores.set(key, store);
@@ -1112,46 +1127,53 @@ export class World<
         if (opts) this.componentOptions.set(key, opts);
       }
     }
-    // Component bits: take fresh's, then add bits for any preserved-but-fresh-missing
-    // components. Reassigns bits for those, which is fine because no entity has
-    // them populated.
-    this.componentBits = new Map(fresh.componentBits);
-    this.nextComponentBit = fresh.nextComponentBit;
+    this.componentBits = new Map(other.componentBits);
+    this.nextComponentBit = other.nextComponentBit;
     for (const key of preservedComponentBits.keys()) {
       if (!this.componentBits.has(key)) {
         this.componentBits.set(key, 1n << BigInt(this.nextComponentBit));
         this.nextComponentBit++;
       }
     }
-    this.entitySignatures = fresh.entitySignatures;
-    this.spatialGrid = fresh.spatialGrid;
-    this.previousPositions = fresh.previousPositions;
-    this.resourceStore = fresh.resourceStore;
-    this.rng = fresh.rng;
-    this.stateStore = fresh.stateStore;
-    this.stateDirtyKeys = fresh.stateDirtyKeys;
-    this.stateRemovedKeys = fresh.stateRemovedKeys;
-    this.stateBaseline = fresh.stateBaseline;
-    this.entityTags = fresh.entityTags;
-    this.tagIndex = fresh.tagIndex;
-    this.entityMeta = fresh.entityMeta;
-    this.metaIndex = fresh.metaIndex;
-    this.tagsDirtyEntities = fresh.tagsDirtyEntities;
-    this.metaDirtyEntities = fresh.metaDirtyEntities;
-    this.gameLoop.setTick(snapshot.tick);
-    // Clear cached per-tick state; queries will rebuild on demand.
+    this.entitySignatures = other.entitySignatures;
+    // --- Spatial / position bookkeeping ---
+    this.spatialGrid = other.spatialGrid;
+    this.previousPositions = other.previousPositions;
+    // --- Resources ---
+    this.resourceStore = other.resourceStore;
+    // --- RNG ---
+    this.rng = other.rng;
+    // --- World state ---
+    this.stateStore = other.stateStore;
+    this.stateDirtyKeys = other.stateDirtyKeys;
+    this.stateRemovedKeys = other.stateRemovedKeys;
+    this.stateBaseline = other.stateBaseline;
+    // --- Tags + metadata ---
+    this.entityTags = other.entityTags;
+    this.tagIndex = other.tagIndex;
+    this.entityMeta = other.entityMeta;
+    this.metaIndex = other.metaIndex;
+    this.tagsDirtyEntities = other.tagsDirtyEntities;
+    this.metaDirtyEntities = other.metaDirtyEntities;
+    // --- Cached per-tick state — clear; will rebuild on next step ---
     this.currentDiff = null;
     this.currentMetrics = null;
     this.activeMetrics = null;
     this.queryCache.clear();
+    // --- Failure / poison state — clear ---
     this.lastTickFailure = null;
     this.poisoned = null;
     this.poisonedWarningEmitted = false;
-    // Drain any pending commands (snapshot is a clean state; queue is empty).
+    // --- Command queue — drain (snapshot is a clean state) ---
     this.commandQueue = new CommandQueue<TCommandMap>();
-    // resolvedSystemOrder depends on registered systems (preserved); invalidate
-    // so the next tick re-resolves under the new state.
+    // --- System ordering — invalidate so next tick re-resolves ---
     this.resolvedSystemOrder = null;
+    // --- NOT transferred (preserved): handlers, validators, systems,
+    //     diffListeners, commandResultListeners, commandExecutionListeners,
+    //     tickFailureListeners, eventBus, destroyCallbacks,
+    //     __payloadCapturingRecorder slot, instrumentationProfile, seed,
+    //     positionKey, gameLoop (caller updates tick separately), grid
+    //     delegate (reads through to this.spatialGrid). ---
   }
 
   get tick(): number {

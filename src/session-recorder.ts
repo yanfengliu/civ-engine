@@ -224,10 +224,35 @@ export class SessionRecorder<
     this._closed = true;
   }
 
-  addMarker(input: NewMarker): string {
-    if (!this._connected || this._closed) {
-      throw new RecorderClosedError('cannot addMarker on disconnected recorder');
+  /**
+   * Guard for `addMarker` / `attach` / `takeSnapshot`. Rejects calls on
+   * disconnected, closed, or post-failure (`_terminated`) recorders. After
+   * a partial-`connect()` sink failure, the recorder enters `_terminated`
+   * state but stays nominally `_connected` so `disconnect()` can still
+   * finalize cleanly. Iter-2 code review L2 fix: previously these methods
+   * only checked `!_connected || _closed`, so post-failure calls re-entered
+   * the failed sink path and re-threw `SinkWriteError` — now they fail
+   * fast with `RecorderClosedError(code: 'recorder_terminated')`.
+   */
+  private _assertOperational(method: string): void {
+    if (this._closed) {
+      throw new RecorderClosedError(`cannot ${method} on closed recorder`,
+        { code: 'already_closed' });
     }
+    if (!this._connected) {
+      throw new RecorderClosedError(`cannot ${method} on disconnected recorder`,
+        { code: 'not_connected' });
+    }
+    if (this._terminated) {
+      throw new RecorderClosedError(
+        `cannot ${method} on terminated recorder (${this._lastError?.message ?? 'unknown error'})`,
+        { code: 'recorder_terminated', lastErrorMessage: this._lastError?.message ?? null },
+      );
+    }
+  }
+
+  addMarker(input: NewMarker): string {
+    this._assertOperational('addMarker');
     const tick = input.tick ?? this._world.tick;
     if (tick < 0) {
       throw new MarkerValidationError(`marker.tick must be >= 0 (got ${tick})`,
@@ -317,9 +342,7 @@ export class SessionRecorder<
   }
 
   attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string {
-    if (!this._connected || this._closed) {
-      throw new RecorderClosedError('cannot attach on disconnected recorder');
-    }
+    this._assertOperational('attach');
     const id = randomUUID();
     // Default ref selection: when caller hasn't explicitly specified, leave
     // `ref` as `{ sidecar: true }` so each sink applies its own default.
@@ -351,9 +374,7 @@ export class SessionRecorder<
   }
 
   takeSnapshot(): SessionSnapshotEntry {
-    if (!this._connected || this._closed) {
-      throw new RecorderClosedError('cannot takeSnapshot on disconnected recorder');
-    }
+    this._assertOperational('takeSnapshot');
     const entry: SessionSnapshotEntry = {
       tick: this._world.tick, snapshot: this._world.serialize(),
     };
