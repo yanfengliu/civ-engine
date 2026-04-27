@@ -1072,6 +1072,61 @@ export class World<
     return world;
   }
 
+  /**
+   * Apply a `WorldSnapshot` to this world in place. Replaces entity / component /
+   * resource / state / tag / metadata / RNG state from the snapshot, but
+   * preserves user-registered handlers, validators, systems, and event/diff
+   * listeners. Used by `SessionReplayer.openAt()`'s `worldFactory` pattern:
+   * register first (handlers, validators, systems) on a fresh `World`, then
+   * `applySnapshot(snap)` to load state without conflict.
+   *
+   * Note: replay across recorded tick failures is out of scope (see
+   * `docs/design/2026-04-26-session-recording-and-replay-design.md` §2).
+   * `applySnapshot` clears any current `lastTickFailure` / poison state.
+   */
+  applySnapshot(snapshot: WorldSnapshot): void {
+    if (this.isPoisoned()) {
+      this.recover();
+    }
+    const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot);
+    // Transfer state-bearing fields from `fresh` into `this`. TypeScript's
+    // `private` is compile-time only; same-class access is permitted.
+    this.entityManager = fresh.entityManager;
+    this.componentStores = fresh.componentStores;
+    this.componentOptions = fresh.componentOptions;
+    this.componentBits = fresh.componentBits;
+    this.nextComponentBit = fresh.nextComponentBit;
+    this.entitySignatures = fresh.entitySignatures;
+    this.spatialGrid = fresh.spatialGrid;
+    this.previousPositions = fresh.previousPositions;
+    this.resourceStore = fresh.resourceStore;
+    this.rng = fresh.rng;
+    this.stateStore = fresh.stateStore;
+    this.stateDirtyKeys = fresh.stateDirtyKeys;
+    this.stateRemovedKeys = fresh.stateRemovedKeys;
+    this.stateBaseline = fresh.stateBaseline;
+    this.entityTags = fresh.entityTags;
+    this.tagIndex = fresh.tagIndex;
+    this.entityMeta = fresh.entityMeta;
+    this.metaIndex = fresh.metaIndex;
+    this.tagsDirtyEntities = fresh.tagsDirtyEntities;
+    this.metaDirtyEntities = fresh.metaDirtyEntities;
+    this.gameLoop.setTick(snapshot.tick);
+    // Clear cached per-tick state; queries will rebuild on demand.
+    this.currentDiff = null;
+    this.currentMetrics = null;
+    this.activeMetrics = null;
+    this.queryCache.clear();
+    this.lastTickFailure = null;
+    this.poisoned = null;
+    this.poisonedWarningEmitted = false;
+    // Drain any pending commands (snapshot is a clean state; queue is empty).
+    this.commandQueue = new CommandQueue<TCommandMap>();
+    // resolvedSystemOrder depends on registered systems (preserved); invalidate
+    // so the next tick re-resolves under the new state.
+    this.resolvedSystemOrder = null;
+  }
+
   get tick(): number {
     return this.gameLoop.tick;
   }

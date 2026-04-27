@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.7-pre - 2026-04-27
+
+Session-recording T0 setup (no version bump). Pure refactor + additive World API surfaces in preparation for the session-recording subsystem (T1–T9, see `docs/design/2026-04-27-session-recording-implementation-plan.md`).
+
+### Refactored
+
+- Extracted `cloneJsonValue<T>(value, label): T` from private duplicates in `src/history-recorder.ts:430` and `src/scenario-runner.ts:474` into a single export from `src/json.ts`. Both call sites updated. Behavior identical (validates JSON-compat then deep-clones via JSON round-trip). Eliminates the pre-existing AGENTS.md anti-duplication-rule violation.
+
+### Added (additive, non-breaking)
+
+- `src/version.ts` exporting `ENGINE_VERSION = '0.7.6' as const`. Read by upcoming `SessionRecorder` / `scenarioResultToBundle()` for `metadata.engineVersion` in session bundles. Avoids `process.env.npm_package_version` (only set under `npm run`).
+- `src/session-internals.ts` declaration-merging an internal `World.__payloadCapturingRecorder?: { sessionId, lastError }` slot. Used by upcoming mutex (one payload-capturing recorder per world). Internal; user code MUST NOT touch it directly.
+- `World.applySnapshot(snapshot)` instance method. Loads a `WorldSnapshot` into an existing world in-place: replaces entity / component / resource / state / tag / metadata / RNG state from the snapshot; **preserves user-registered handlers, validators, systems, event/diff listeners, and the `__payloadCapturingRecorder` slot**. Required for the upcoming `SessionReplayer` `worldFactory` pattern (register first → `applySnapshot(snap)` to load state without `registerComponent` / `registerHandler` duplicate-throw). Listed in `FORBIDDEN_PRECONDITION_METHODS` so a `CommandTransaction` predicate can't bulk-mutate via it. 6 new tests in `tests/world-applysnapshot.test.ts`.
+
+### Validation
+
+636 tests pass (up from 630). Typecheck, lint, build clean. No version bump (T0 is preparatory; T1 is the first c-bump to v0.7.7).
+
 ## 0.7.6 - 2026-04-26
 
 Multi-CLI iter-8 convergence check (Codex + Opus; Gemini quota-out 6th iter). Both verified all 7 iter-7 fixes landed cleanly with no regressions; no new Critical/High/Medium/Low. Opus flagged one Note (N3) on a parallel-class gap to L2 — taken in this iter to keep the L2 contract structurally uniform. Non-breaking. 630 tests pass (up from 627).

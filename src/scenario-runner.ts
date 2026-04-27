@@ -1,4 +1,4 @@
-import { assertJsonCompatible, type JsonValue } from './json.js';
+import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
 import type { TickDiff } from './diff.js';
 import type { WorldSnapshot } from './serializer.js';
 import { WorldHistoryRecorder, type WorldHistoryState } from './history-recorder.js';
@@ -469,11 +469,6 @@ class ScenarioTickFailure extends Error {
     this.name = 'ScenarioTickFailure';
     this.failure = failure;
   }
-}
-
-function cloneJsonValue<T>(value: T, label: string): T {
-  assertJsonCompatible(value, label);
-  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function cloneNullableJsonValue<T>(

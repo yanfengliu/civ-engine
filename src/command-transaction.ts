@@ -35,6 +35,9 @@ export const FORBIDDEN_PRECONDITION_METHODS = [
   'onDiff', 'offDiff',
   // Sub-engine entry points (transaction recursion + serialize is pseudo-read but warns and clones)
   'transaction', 'serialize',
+  // Snapshot replacement (replays state from a snapshot; bulk mutation of
+  // entity/component/resource/state/tag/metadata stores)
+  'applySnapshot',
   // Poisoned-world warning latch (mutates poisonedWarningEmitted; consuming
   // the latch from a predicate would suppress the next legitimate warning)
   'warnIfPoisoned',

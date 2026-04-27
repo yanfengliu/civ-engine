@@ -1,4 +1,4 @@
-import { assertJsonCompatible, type JsonValue } from './json.js';
+import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
 import type { TickDiff } from './diff.js';
 import type { WorldSnapshot } from './serializer.js';
 import type { EntityId } from './types.js';
@@ -425,11 +425,6 @@ function pushBounded<T>(target: T[], value: T, capacity: number): void {
   if (target.length > capacity) {
     target.splice(0, target.length - capacity);
   }
-}
-
-function cloneJsonValue<T>(value: T, label: string): T {
-  assertJsonCompatible(value, label);
-  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function increment(target: Map<string, number>, key: string, amount: number): void {

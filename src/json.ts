@@ -60,3 +60,14 @@ export function jsonFingerprint(value: unknown, label = 'value'): string {
   assertJsonCompatible(value, label);
   return JSON.stringify(value)!;
 }
+
+/**
+ * Validates that `value` is JSON-compatible, then deep-clones via JSON
+ * round-trip. Used by recorders and capture utilities to detach values
+ * from caller-owned references so subsequent mutation cannot corrupt
+ * stored snapshots.
+ */
+export function cloneJsonValue<T>(value: T, label: string): T {
+  assertJsonCompatible(value, label);
+  return JSON.parse(JSON.stringify(value)) as T;
+}
