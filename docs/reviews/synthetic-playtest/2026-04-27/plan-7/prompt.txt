@@ -1,0 +1,9 @@
+Reviewing plan iter-7 of docs/design/2026-04-27-synthetic-playtest-implementation-plan.md.
+
+Iter-6: both reviewers converged on 1 HIGH — v6 claimed metrics-strip fix landed at both T2+T3 sites but only T2 was actually patched. v7 (under review) directly patches T3 step 2 with the stripTickMetrics helper. Post-fix grep verification:
+- `bundle.ticks).toEqual` → 0 matches.
+- `bundle.ticks.map.*stripTickMetrics` → 2 matches (T2 step 9 and T3 step 2).
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "Continue iterating until reviewers nitpick instead of catching real bugs / Do not get stuck in an infinite loop."
+
+If accept, say "ACCEPT".
