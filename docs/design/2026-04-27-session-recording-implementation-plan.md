@@ -140,19 +140,75 @@ declare module './world.js' {
 }
 ```
 
-### Step 0.4: Verify all gates still pass after extraction
+### Step 0.4: Add two World API surfaces needed by T5/T6
+
+Marker validation in T5 (per spec §6.1) needs to verify that an `EntityRef` (id+generation) matches a live entity. Replay in T6 (per spec §9.1 step 3b) needs to detect missing handlers. Current `World.isAlive(id: EntityId)` (`src/world.ts:366`) takes only id; there is no `hasHandler(type)`. Add both as additive public methods:
+
+In `src/world.ts`:
+
+```ts
+// Existing isAlive — keep:
+isAlive(id: EntityId): boolean { /* ... */ }
+
+// NEW: generation-aware check
+isAliveAtGeneration(id: EntityId, generation: number): boolean {
+  return this.isAlive(id) && this.entityManager.getGeneration(id) === generation;
+}
+
+// NEW: handler presence check
+hasHandler<K extends keyof TCommandMap>(type: K): boolean {
+  return this.commandQueue.hasHandler(type as string);
+}
+```
+
+(`CommandQueue.hasHandler` may also need to be added — verify in `src/command-queue.ts` and add a one-line public check if missing.)
+
+Add tests for both:
+
+```ts
+// in tests/world.test.ts (or a new tests/world-public-api.test.ts)
+describe('World.isAliveAtGeneration', () => {
+  it('returns true for a live entity matching its current generation', () => {
+    const world = mkWorld();
+    const id = world.createEntity();
+    expect(world.isAliveAtGeneration(id, 0)).toBe(true);
+  });
+  it('returns false for a recycled id with a stale generation', () => {
+    const world = mkWorld();
+    const id = world.createEntity();
+    world.destroyEntity(id);
+    const recycled = world.createEntity();  // same numeric id, generation 1
+    expect(world.isAliveAtGeneration(recycled, 0)).toBe(false);
+    expect(world.isAliveAtGeneration(recycled, 1)).toBe(true);
+  });
+});
+
+describe('World.hasHandler', () => {
+  it('returns true for a registered handler', () => {
+    const world = mkWorld();
+    world.registerHandler('spawn', () => ({ ok: true }));
+    expect(world.hasHandler('spawn')).toBe(true);
+  });
+  it('returns false for an unregistered command type', () => {
+    const world = mkWorld();
+    expect(world.hasHandler('never-registered')).toBe(false);
+  });
+});
+```
+
+### Step 0.5: Verify all gates still pass after extraction
 
 ```bash
 npm test && npm run typecheck && npm run lint && npm run build
 ```
 
-All four pass — `cloneJsonValue` extraction is a pure refactor.
+All four pass — `cloneJsonValue` extraction is a pure refactor; new World methods are additive.
 
-### Step 0.5: Per-task review + commit (per the pattern above)
+### Step 0.6: Per-task review + commit (per the pattern above)
 
-`refactor(json): extract cloneJsonValue + add ENGINE_VERSION + WorldInternals (v0.7.7-pre)`
+`refactor(engine): extract cloneJsonValue + add ENGINE_VERSION + WorldInternals + isAliveAtGeneration/hasHandler (v0.7.7-pre)`
 
-(Note: this commit does NOT bump version since it's pure refactor; T1 is the first version bump.)
+(Note: this commit does NOT bump version since it's pure refactor + additive World methods that nothing else uses yet; T1 is the first version bump.)
 
 ---
 
@@ -738,6 +794,7 @@ describe('MemorySink', () => {
   it('writeMarker accumulates markers in the bundle', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });        // required for toBundle()
     sink.writeMarker({ id: 'a', tick: 0, kind: 'annotation', provenance: 'game', text: 'hi' });
     sink.writeMarker({ id: 'b', tick: 1, kind: 'checkpoint', provenance: 'game' });
     const bundle = sink.toBundle();
@@ -1217,7 +1274,7 @@ The implementation:
 - `open(metadata)`: creates the directory if missing; creates `manifest.json` (atomic write via `.tmp.json` rename); touches the five `.jsonl` files (creates if missing); creates `snapshots/` and `attachments/` subdirs.
 - Each `writeX` appends a JSON-stringified line to the corresponding `.jsonl` (with `\n` terminator).
 - `writeSnapshot` writes `snapshots/<tick>.json` and rewrites the manifest (`metadata.persistedEndTick = tick` + atomic rename).
-- `writeAttachment`: if `data.byteLength > threshold` OR descriptor is sidecar-refed, write to `attachments/<id>.<ext>` and append the sidecar-ref descriptor to the manifest's attachments index. Else dataUrl in manifest.
+- `writeAttachment`: **FileSink defaults to sidecar unconditionally** (per spec §7.1 step 5). If the caller passes `descriptor.ref = { dataUrl: ... }` (any value; the field's presence is the opt-in signal), embed as dataUrl in the manifest. Otherwise write bytes to `attachments/<id>.<ext>` and append the sidecar-ref descriptor to the manifest's attachments index. There is NO threshold-based branching on FileSink — disk-backed sinks default to disk-backed storage. The threshold-based logic is MemorySink-specific (per Step 2.2).
 - `close()`: rewrites manifest with final `metadata.endTick`/`durationTicks`/optional `incomplete: true`.
 - SessionSource reads: stream JSONL via `readline` (or sync `fs.readFileSync` + split on `\n` for v1 simplicity); `readSnapshot` reads the file; `readSidecar` reads from `attachments/`.
 
@@ -1515,6 +1572,8 @@ export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
     this._connected = true;
   }
 
+  private _startTick = 0;  // captured in connect()
+
   private _onDiff(diff: TickDiff): void {
     try {
       const world = this._config.world;
@@ -1527,7 +1586,10 @@ export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
       }, 'session tick entry');
       this._config.sink.writeTick(entry);
       const interval = this._config.snapshotInterval ?? 1000;
-      if (interval !== null && world.tick % interval === 0 && world.tick !== this._config.world.tick /*initial*/) {
+      // Periodic snapshot fires when the current tick is a non-zero multiple of interval
+      // AND we've advanced past the start tick (initial snapshot was taken at startTick;
+      // don't double-write at tick == startTick).
+      if (interval !== null && world.tick > this._startTick && world.tick % interval === 0) {
         this._config.sink.writeSnapshot({ tick: world.tick, snapshot: world.serialize() });
       }
     } catch (e) {
@@ -1580,7 +1642,7 @@ export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
 }
 ```
 
-`_validateMarker` enforces §6.1 — for live tick: every `EntityRef` matches a live entity (uses `world.isAlive(id, generation)` — add to `World` API in T0/T5 if not present), every `cell` is in-bounds, `tickRange` valid. Retroactive markers skip entity liveness.
+`_validateMarker` enforces §6.1 — for live tick: every `EntityRef` matches a live entity via `world.isAliveAtGeneration(id, generation)` (added in T0 step 0.4), every `cell` is in-bounds, `tickRange` valid. Retroactive markers skip entity liveness.
 
 ### Test coverage (~18 tests)
 
@@ -1743,7 +1805,7 @@ openAt(targetTick: number): World<TEventMap, TCommandMap> {
 }
 ```
 
-(Note: `world.hasHandler(type)` may need to be added to `World` if not present; check `src/world.ts` and add if needed as a setup step in T0.)
+(`world.hasHandler(type)` is added in T0 step 0.4.)
 
 **selfCheck failedTicks-skipping**:
 
@@ -1833,7 +1895,7 @@ selfCheck(options: SelfCheckOptions = {}): SelfCheckResult {
 Per spec §10. Standalone exported function `scenarioResultToBundle(result, options?)`:
 
 - `metadata.sourceKind = 'scenario'`, `sourceLabel = options?.sourceLabel ?? result.name`.
-- `metadata.engineVersion` from `package.json` at translate time (read via `process.env.npm_package_version` or import-meta-style; whichever the engine already uses).
+- `metadata.engineVersion` from `ENGINE_VERSION` exported from `src/version.ts` (created in T0). DO NOT use `process.env.npm_package_version` — only populated under `npm run`, breaks in test runners launched directly.
 - `metadata.nodeVersion = options?.nodeVersion ?? process.version`.
 - `metadata.startTick = result.history.initialSnapshot.tick` (throw `BundleIntegrityError(code: 'no_initial_snapshot')` if null).
 - `metadata.endTick = result.tick`, `durationTicks = endTick - startTick`, `persistedEndTick = endTick`.
@@ -1904,9 +1966,13 @@ const result = runScenario({
 const bundle = scenarioResultToBundle(result);
 const replayer = SessionReplayer.fromBundle(bundle, {
   worldFactory: (snap) => {
-    const w = mkWorld();
-    setupMoveScenario(w);                    // re-register components/handlers
-    return World.deserialize(w, snap);       // OR reconstruct a World from snap; verify the engine's deserialize path
+    // Per src/world.ts:921, World.deserialize(snapshot, systems?) returns a fresh World.
+    // It does NOT re-register handlers/validators (only systems). Component
+    // registrations + handlers must be applied manually before/after.
+    // Approach: use the deserialized world directly, then apply registrations.
+    const w = World.deserialize(snap);
+    setupMoveScenario(w);                    // re-registers components/handlers; idempotent
+    return w;
   },
 });
 const check = replayer.selfCheck();
