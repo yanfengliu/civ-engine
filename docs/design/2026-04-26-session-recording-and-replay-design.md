@@ -1,6 +1,6 @@
 # Session Recording & Replay — Design Spec
 
-**Status:** Draft v4 (2026-04-27). Revised after iter-3 multi-CLI review (Codex + Opus; Gemini quota-out 10th iter). See `docs/reviews/session-recording-spec/2026-04-26/1/REVIEW.md` (iter-1), `docs/reviews/session-recording-spec/2026-04-27/2/REVIEW.md` (iter-2), and `docs/reviews/session-recording-spec/2026-04-27/3/REVIEW.md` (iter-3) for the findings folded into each revision. Awaiting iter-4 convergence verification before writing-plans.
+**Status:** Draft v5 — converged (2026-04-27). Iter-4 multi-CLI convergence review (Codex + Opus; Gemini quota-out 11th iter) verified all iter-1 / iter-2 / iter-3 findings closed; v5 folds in three small wording fixes flagged by iter-4 (ADR 1 mutex wording, §12 error table for `recorder_already_attached` + `BundleRangeError`, architecture overview table for `captureCommandPayloads`, §10.2 sample completeness). Both reviewers verdict: converged. Ready for implementation. See `docs/reviews/session-recording-spec/2026-04-26/1/REVIEW.md` (iter-1), `docs/reviews/session-recording-spec/2026-04-27/2/REVIEW.md` (iter-2), `docs/reviews/session-recording-spec/2026-04-27/3/REVIEW.md` (iter-3), and `docs/reviews/session-recording-spec/2026-04-27/4/REVIEW.md` (iter-4) for the full iteration history.
 
 **Scope:** Engine-level primitives only (Scope B from brainstorming). Game-side annotation UI, standalone viewer, synthetic playtest harness, counterfactual replay, and strict-mode determinism enforcement are explicitly out of scope and tracked in `docs/design/ai-first-dev-roadmap.md`.
 
@@ -56,7 +56,7 @@ Six new symbols, plus one new exported function:
 | `Marker`                       | new (in `src/session-bundle.ts`) | `{ tick, kind, text?, refs?, data?, attachments?, provenance }` with closed `kind` enum and `EntityRef`-typed entity refs. |
 | `RecordedCommand`              | new (in `src/session-bundle.ts`) | Captures a submitted command's `type`, `data`, submission tick, sequence, and result. Replaces `CommandSubmissionResult[]` for replay-relevant purposes (the result-only type still travels for diagnostics). |
 | `scenarioResultToBundle()`     | new exported function (`src/session-bundle.ts`) | Translates `ScenarioResult` → `SessionBundle` with `sourceKind: 'scenario'` and `assertion` markers. Takes `ScenarioResult` (not `ScenarioCapture`) because the adapter needs `result.name` and `result.checks`. |
-| `WorldHistoryRecorder.captureCommandPayloads` | new constructor option | Additive, opt-in. When `true`, records full `RecordedCommand` (with payload) instead of payload-less `CommandSubmissionResult`. Required for scenario-derived replayable bundles. |
+| `WorldHistoryRecorder.captureCommandPayloads` | new constructor option | Additive, opt-in. When `true`, records full `RecordedCommand` (with payload) into a NEW `WorldHistoryState.recordedCommands?: RecordedCommand[]` field. The existing `WorldHistoryState.commands: CommandSubmissionResult[]` is unchanged (additive, not widening). Required for scenario-derived replayable bundles. Mutually exclusive with `SessionRecorder` per §7.1 step 2 (only one payload-capturing wrap per world). |
 
 `WorldHistoryRecorder` and `runScenario` are unchanged. `SessionRecorder` and the legacy recorder coexist with distinct purposes (rolling debug buffer vs persistent archive).
 
@@ -577,8 +577,9 @@ This is an additive, opt-in change to `WorldHistoryRecorder`. The default behavi
 ```ts
 const result = runScenario({
   name: 'my-scenario',
+  world,                // required: ScenarioConfig.world per src/scenario-runner.ts:107
   setup: ...,
-  run: ...,           // 'run', not 'steps' — matches ScenarioConfig at src/scenario-runner.ts:106
+  run: ...,             // 'run', not 'steps' — matches ScenarioConfig at :106
   checks: ...,
   history: {
     capacity: Number.MAX_SAFE_INTEGER,    // unbounded; default capacity 64 silently truncates long scenarios
@@ -645,10 +646,10 @@ The contract is documented in `docs/guides/session-recording.md` (new) with conc
 | Error                     | When                                                                                            |
 | ------------------------- | ----------------------------------------------------------------------------------------------- |
 | `MarkerValidationError`   | `addMarker()` receives a marker that fails §6.1 rules. Includes `details` naming the field and optional `referencesValidationRule` (e.g., `"6.1.entity_liveness"`). |
-| `RecorderClosedError`     | `connect()` after `disconnect()`; `connect()` on a poisoned world (`code: 'world_poisoned'`); `connect()` when another `SessionRecorder` is attached (`code: 'recorder_already_attached'`); `addMarker()` / `attach()` / `takeSnapshot()` after `disconnect()`. |
+| `RecorderClosedError`     | `connect()` after `disconnect()`; `connect()` on a poisoned world (`code: 'world_poisoned'`); `connect()` when another payload-capturing recorder (any `SessionRecorder`, OR any `WorldHistoryRecorder` with `captureCommandPayloads: true`) is already attached (`code: 'recorder_already_attached'`); `addMarker()` / `attach()` / `takeSnapshot()` after `disconnect()`. |
 | `SinkWriteError`          | A sink write fails (FileSink: ENOSPC, EACCES, etc.). Wraps the underlying I/O error. The recorder catches the error, sets `metadata.incomplete = true`, sets `recorder.lastError`, and marks itself terminal (subsequent listener invocations short-circuit). The error is observable via `recorder.lastError` and via the bundle's `incomplete` flag — never propagates out of the engine listener invocation. |
 | `BundleVersionError`      | `SessionReplayer.fromBundle/fromSource` receives a bundle with a `schemaVersion` it does not understand, OR a bundle with `engineVersion` whose `b`-component differs from the running engine (per §11.1 clause 9). Within-`b` mismatches warn but proceed. |
-| `BundleRangeError`        | `openAt(tick)` / `tickEntriesBetween(...)` / `stateAtTick(...)` called with a tick outside `[metadata.startTick, metadata.endTick]`. |
+| `BundleRangeError`        | `openAt(tick)` / `tickEntriesBetween(...)` / `stateAtTick(...)` called with a tick outside the bundle's valid range: `[metadata.startTick, metadata.endTick]` for complete bundles; `[metadata.startTick, metadata.persistedEndTick]` for incomplete bundles (per §9.1). |
 | `BundleIntegrityError`    | Loaded bundle has missing snapshots, broken attachment refs, non-monotonic tick entries, an attempt to replay across a recorded `TickFailure` (`code: 'replay_across_failure'`), or a scenario bundle without command payloads being asked to replay (`code: 'no_replay_payloads'`). Stale entity refs in markers are NOT integrity errors — markers are point-in-time annotations and may legitimately reference entities that no longer exist by bundle finalization. |
 | `ReplayHandlerMissingError` | `openAt()` runs a `RecordedCommand` whose `type` has no registered handler in the replayer's `worldFactory`-built world. Distinguishes "world factory drift" from "determinism violation". |
 
@@ -772,7 +773,7 @@ This spec lands the following doc updates per the `AGENTS.md` Documentation disc
 **Consequences:**
 
 - ~80–100 LOC of structurally similar listener wiring (`onDiff`, `onCommandResult`, `onCommandExecution`, `onTickFailure`) plus per-tick `getEvents()`/`getMetrics()` collection plus `cloneJsonValue` discipline. Acceptable in v1; flagged honestly so the future "extract `TickStream` when third consumer materializes" trigger isn't gated on a wrong cost basis.
-- Both recorders can attach to the same `World` simultaneously without interference (each subscribes independently and chains the `submit()` wrap).
+- Default-config `WorldHistoryRecorder` (no `captureCommandPayloads`) attaches to the same `World` alongside `SessionRecorder` without interference (each subscribes independently to listeners; only `SessionRecorder` wraps `submitWithResult`). **Payload-capturing variants are mutually exclusive** per §7.1 step 2 — only one of `SessionRecorder` or `WorldHistoryRecorder({ captureCommandPayloads: true })` may attach to a given world at a time.
 - Future synthetic playtest spec will likely use `SessionRecorder` directly, not `WorldHistoryRecorder`.
 
 ### ADR 2: Bundle format as a first-class shared type, not a recorder-private shape
