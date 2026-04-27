@@ -1,0 +1,20 @@
+Reviewing plan iter-2 of docs/design/2026-04-27-synthetic-playtest-implementation-plan.md.
+
+Iter-1: Codex 2 BLOCKER + 3 HIGH; Opus 5 BLOCKER + 11 HIGH + 4 MED + 4 LOW. v2 (under review via stdin) addresses ALL with:
+- Concretized every test placeholder into full it() bodies (~30 cases).
+- Added 4 missing acceptance tests (poisoned-at-start, sourceLabel default+override, failedTicks-on-poison, composed-partial-submit).
+- T2 step 1 type-narrowing uses `npm run typecheck` not `npm test`.
+- Dropped unused JsonValue import in T1; harness uses `'snapshotInterval' in config && ... !== undefined` to preserve null semantics.
+- T3 setupWorld registers spawn handler.
+- T2 step 12 lands docs/README.md + README Feature Overview/Public Surface alongside the guide.
+- Added grep-verify step for sourceKind union literal copies.
+- Tightened ok = stopReason !== 'sinkError' && recorder.lastError === null.
+- Added catalog ctx-test, offset/policySeed validation, missing-default test for sourceKind.
+- Devlog file selection via `ls -1t`.
+- FileSink manifest round-trip test for policySeed.
+
+Engine facts: World 4-generic, SessionRecorder.connect doesn't throw on sink.open() failure, RecordedCommand.sequence at session-bundle.ts:43, world.tick advances on poison, etc.
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "Continue iterating until reviewers nitpick instead of catching real bugs." If accept, say "ACCEPT".
+
+Return findings with severity tags. No patches.
