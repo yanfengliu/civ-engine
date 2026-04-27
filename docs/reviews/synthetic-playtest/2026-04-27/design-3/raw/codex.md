@@ -1,0 +1,11 @@
+**Findings**
+
+- [HIGH] `docs/design/2026-04-27-synthetic-playtest-harness-design.md` §7.1 step 3 and §7.2 still describe an impossible connect-time sink-error return path. The spec says to detect `recorder.lastError` right after `connect()` and return `{ bundle: recorder.toBundle(), stopReason: 'sinkError' }`. But the current substrate sets `lastError` precisely when `sink.open()` or the initial snapshot write fails (`src/session-recorder.ts`), and both built-in sinks require at least one snapshot for `toBundle()` (`src/session-sink.ts`, `src/session-file-sink.ts`). On the “no initial snapshot persisted” branch, there is no valid bundle to return, so this API contract cannot be implemented as written.
+
+- [HIGH] The new harness API drops `World`’s `TComponents` / `TState` generics across the public surface. In §5 and §7, `PolicyContext.world`, `StopContext.world`, `SynthPlaytestConfig.world`, `Policy`, and `randomPolicy` are all typed only as `World<TEventMap, TCommandMap>`, while the actual engine surface is `World<TEventMap, TCommandMap, TComponents, TState>` (`src/world.ts`). That erases typed `getComponent` / `getState` access inside policies and stop predicates, which is a real API regression for a policy-authoring surface. If this ships, fixing it later is itself a breaking public-type change.
+
+- [MED] `ticksRun` is underspecified and currently placed inconsistently with failed-tick semantics. In §7.1 step 4, the increment happens after the post-`world.step()` poison / sink checks, so a tick that actually executed can still leave `ticksRun` unchanged. `docs/architecture/ARCHITECTURE.md` explicitly states that failed ticks consume a tick number, so on `stopReason: 'poisoned'` this result field would disagree with the bundle/world timeline. The spec needs to define whether `ticksRun` means successful ticks or attempted `world.step()` calls, then align the loop and tests to that definition.
+
+The iter-2 findings called out in your prompt do look landed cleanly: the pinned seed expression, ADR 6 rewrite, explicit `lastError` checks, ADR distribution, T1 doc scope, negative-path determinism test, and wording cleanups are all present.
+
+Not ready for implementation yet. Required changes are the three items above.
