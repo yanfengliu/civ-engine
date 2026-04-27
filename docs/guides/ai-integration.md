@@ -229,3 +229,25 @@ Good MCP tools would wrap existing engine-native operations such as:
 - compare recorded ticks
 
 Do not invent semantics in the MCP layer that the engine itself does not already expose.
+
+## Session Recording for AI-Driven Debugging
+
+Session recording is the foundational substrate for AI-driven debugging in civ-engine. It allows agents to:
+
+- Load a recorded session bundle and inspect any tick.
+- Filter markers by entity, kind, or tick range.
+- Replay forward from any snapshot to watch a bug unfold.
+- Run `selfCheck` to verify the recording is internally consistent before diagnosing.
+
+```ts
+import { SessionReplayer } from 'civ-engine';
+
+const replayer = SessionReplayer.fromBundle(bundle, { worldFactory });
+const stuckMarkers = replayer.markersOfKind('annotation').filter(m => m.text?.includes('stuck'));
+for (const marker of stuckMarkers) {
+  const inspectable = replayer.openAt(marker.tick);
+  // Inspect entity components, events, etc. at the marked tick
+}
+```
+
+See `docs/guides/session-recording.md` for the canonical reference.

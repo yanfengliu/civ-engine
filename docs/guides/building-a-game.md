@@ -566,3 +566,9 @@ If you're an AI agent building a game on civ-engine:
 4. **Events are your output API.** Emit events for everything interesting that happens. Read them with `getEvents()` after each tick.
 5. **Serialize for checkpoints.** Save state periodically with `serialize()`. If something goes wrong, load a previous state with `World.deserialize()`.
 6. **Systems run in order.** Register systems in the order their logic should execute. Movement before combat before production, etc.
+
+## Recording Sessions for Debugging
+
+When players hit bugs in a built game, the most valuable artifact is a deterministic record of the session up to that moment. `SessionRecorder` captures everything needed to replay: initial state, every command submission, per-tick events and diffs, periodic snapshots. Players annotate "the bug happened here" via `recorder.addMarker({ kind: 'annotation', text: '...' })`, then the bundle is shared (file + JSON) for the team — or for an AI agent — to load and replay.
+
+See [Session Recording](./session-recording.md) for the canonical reference.

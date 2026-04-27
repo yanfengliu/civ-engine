@@ -435,3 +435,9 @@ if (!result.passed) {
   console.log('Summary:', summary);
 }
 ```
+
+## Replay-Based Debugging via Session Recording
+
+For non-trivial issues — especially bugs that surface only after long playthroughs — `SessionRecorder` captures a deterministic record that can be replayed and inspected at any tick. Markers let players or developers annotate "this is when the bug happened" so the debug loop starts at the right moment instead of scrubbing linearly.
+
+See `docs/guides/session-recording.md` for the full guide.

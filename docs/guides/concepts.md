@@ -221,6 +221,7 @@ The engine ships several standalone data structures that game code instantiates 
 - **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing
 - **`createNoise2D` / `octaveNoise2D` / `stepCellGrid`** — map-generation primitives
 - **`createBehaviorTree` / `BTState`** — behavior-tree framework
+- **`SessionRecorder` / `SessionReplayer` / `SessionBundle` / `SessionSink` / `SessionSource` / `MemorySink` / `FileSink` / `Marker` / `RecordedCommand`** — capture deterministic, replayable bundles of any World run; load + replay + selfCheck; companion adapter `scenarioResultToBundle()`. See `docs/guides/session-recording.md`.
 
 `SpatialGrid` answers proximity questions (which entities are near point P) and is owned by `World`. The standalone utilities answer different questions and let game code mix them as needed without paying for what it doesn't use.
 

@@ -168,3 +168,50 @@ When that single object is still too verbose, pair it with `summarizeWorldHistor
 ## Debugging Scenario Results
 
 For the recommended AI diagnosis loop, error code reference, and worked debugging examples using `runScenario()`, see the [Debugging Guide](./debugging.md).
+
+## Replayable Scenario Bundles via `scenarioResultToBundle()`
+
+Scenarios can produce `SessionBundle`s that drop into the same `SessionReplayer` used for live captures, unlocking deterministic regression testing and AI-driven scenario debugging.
+
+```ts
+import { runScenario, scenarioResultToBundle, SessionReplayer } from 'civ-engine';
+
+function setupBehavior(world) {
+  world.registerComponent('position');
+  world.registerHandler('move', moveHandler);
+}
+
+const result = runScenario({
+  name: 'my-test', world,
+  setup: (ctx) => setupBehavior(ctx.world),
+  run: (ctx) => { /* ... */ },
+  checks: [{ name: 'final state', check: ctx => ctx.world.getComponent(0, 'position')?.x === 5 }],
+  history: {
+    capacity: Number.MAX_SAFE_INTEGER,        // unbounded; default 64 truncates long scenarios
+    captureCommandPayloads: true,             // required for replay
+    captureInitialSnapshot: true,             // default; required for replay
+  },
+});
+const bundle = scenarioResultToBundle(result);
+
+// Replay
+const replayer = SessionReplayer.fromBundle(bundle, {
+  worldFactory: (snap) => {
+    const w = new World(config);
+    setupBehavior(w);                         // re-register handlers
+    w.applySnapshot(snap);                    // load state in-place
+    return w;
+  },
+});
+const checkResult = replayer.selfCheck();
+```
+
+`scenarioResultToBundle()` produces one `kind: 'assertion'` marker (provenance: 'engine') per scenario check outcome — `data.passed` and `data.failure` carry the verdict.
+
+**Caveats:**
+
+- Without `captureCommandPayloads: true`, the bundle is diagnostic-only — `openAt(tick > startTick)` throws `BundleIntegrityError(code: 'no_replay_payloads')`.
+- `WorldHistoryRecorder` defaults to capacity 64 ticks; long scenarios MUST set `capacity: Number.MAX_SAFE_INTEGER` (or a sufficient value) to avoid silent truncation.
+- The `worldFactory` must register handlers/validators/systems on a fresh world THEN call `applySnapshot(snap)` — `World.deserialize` would conflict with subsequent re-registration.
+
+See [Session Recording](./session-recording.md) for the canonical reference.

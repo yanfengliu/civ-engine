@@ -30,6 +30,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Serialization & Diffs](guides/serialization-and-diffs.md)
 - [Client Protocol](guides/client-protocol.md)
 - [Debugging](guides/debugging.md)
+- [Session Recording & Replay](guides/session-recording.md)
 - [Renderer Integration](guides/rendering.md)
 - [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)

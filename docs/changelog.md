@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.15 - 2026-04-27
+
+Session-recording T9: structural docs + final integration. Doc-only commit.
+
+### Documentation
+
+- `docs/guides/session-recording.md` (NEW): canonical user-facing guide. Quickstart, sinks (MemorySink + FileSink with their default attachment policies), markers (kinds + provenance + EntityRef), replay (worldFactory + applySnapshot pattern), selfCheck (3-stream comparison + skippedSegments), full §11 determinism contract, scenario integration via `scenarioResultToBundle()`, v1 limitations.
+- `docs/architecture/ARCHITECTURE.md`: Component Map rows for `SessionRecorder`, `SessionReplayer`, and the bundle/sink/source/marker/recorded-command type cluster. Boundaries paragraph for the session-recording subsystem covering ADRs, mutex semantics, applySnapshot worldFactory pattern, and v1 limitations.
+- `docs/architecture/decisions.md`: ADRs 13–16 (separate `SessionRecorder` vs extending `WorldHistoryRecorder`; strict-JSON shared `SessionBundle` with sidecar bytes external; documented-not-enforced determinism contract with selfCheck verification; worldFactory as part of the determinism contract).
+- `docs/architecture/drift-log.md`: 2026-04-27 entry for the session-recording subsystem.
+- `docs/guides/concepts.md`: standalone-utilities list updated to include the session-recording surface.
+- `docs/guides/ai-integration.md`: new "Session Recording for AI-Driven Debugging" section.
+- `docs/guides/debugging.md`: pointer to `session-recording.md` for replay-based debugging.
+- `docs/guides/getting-started.md`: brief "Recording Your First Session" example.
+- `docs/guides/building-a-game.md`: "Recording Sessions for Debugging" section.
+- `docs/guides/scenario-runner.md`: extended with the `scenarioResultToBundle()` pattern, `captureCommandPayloads` caveats, and the worldFactory replay pattern.
+- `README.md`: Feature Overview row + Public Surface bullet for Session Recording.
+- `docs/README.md`: Guides index entry.
+
+### Validation
+
+751 tests pass (unchanged from T8 — doc-only). Typecheck, lint, build clean.
+
+Implementation phase complete. Branch `agent/session-recording` ready for merge authorization.
+
 ## 0.7.14 - 2026-04-27
 
 Session-recording T8: integration + clause-paired determinism tests (CI gate).

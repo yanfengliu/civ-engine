@@ -311,3 +311,23 @@ Client messages: `command` (submit a game command), `requestSnapshot` (request f
 - [Debugging](./debugging.md) — Diagnostic flowchart, error code reference, and debugging scenarios
 - [Architecture](../ARCHITECTURE.md) — Detailed architecture documentation
 - [API Reference](../api-reference.md) — Full method listing
+
+## Recording Your First Session
+
+Once you have a working scenario, capture it as a replayable bundle:
+
+```ts
+import { SessionRecorder, MemorySink } from 'civ-engine';
+
+const sink = new MemorySink();
+const recorder = new SessionRecorder({ world, sink });
+recorder.connect();
+
+// ...your scenario logic...
+
+recorder.disconnect();
+const bundle = recorder.toBundle();
+// Save bundle as JSON, share with the team, load via SessionReplayer for replay.
+```
+
+See [Session Recording](./session-recording.md) for the canonical reference.
