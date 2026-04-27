@@ -3518,13 +3518,16 @@ new Layer<T>(options: LayerOptions<T>)
 
 Creates a Layer of cell type `T`. The constructor validates dimensions and JSON-compatibility, and `structuredClone`s `defaultValue` so caller mutation cannot bleed in.
 
-**Defensive-copy contract.** All values flowing across the Layer's API surface are `structuredClone`d:
+**Defensive-copy contract.** Values flowing across the Layer's API surface are `structuredClone`d for object `T`; for primitive `T` (`number`, `string`, `boolean`, `null`) the clone is skipped because primitives are immutable on the JS side:
 
-- **Writes** (`setCell`, `setAt`, `fill`): the input value is cloned before storage. Mutating the original after the call does not affect the Layer.
-- **Reads** (`getCell`, `getAt`, `forEach`, `defaultValue` getter): the returned value is a fresh clone of internal storage. Mutating the returned value does not affect the Layer or other readers.
-- **Serialization** (`getState`, `Layer.fromState`, `clone`): values are cloned at both ends.
+- **Writes** (`setCell`, `setAt`, `fill`): for object `T`, the input value is cloned before storage. Mutating the original after the call does not affect the Layer. For primitive `T`, the value is stored by value (no clone).
+- **Reads** (`getCell`, `getAt`, `forEach`, `defaultValue` getter): for object `T`, the returned value is a fresh clone of internal storage. For primitive `T`, the value is returned directly.
+- **Read-only traversal** (`forEachReadOnly`): zero-allocation — yields the live stored reference even for object `T`. Caller must NOT mutate.
+- **Serialization** (`getState`, `Layer.fromState`, `clone`): for object `T`, values are cloned at both ends.
 
-For primitive `T` (`number`, `string`, `boolean`, `null`) clones are zero-cost. For object `T`, cloning every read costs O(value size) per call — if profiling shows this dominates, batch reads via `getState()` (one bulk clone) rather than calling `getCell` in a hot loop.
+The primitive fast-path makes `Layer<number>`, `Layer<boolean>`, `Layer<string>`, and `Layer<null>` zero-allocation across reads and writes. For object `T`, cloning every read costs O(value size) per call — if profiling shows this dominates, use `forEachReadOnly` in tight loops or batch reads via `getState()`.
+
+**Strip-at-write sparsity.** Writes that match `defaultValue` (by `===` for primitive `T`, by `jsonFingerprint` for object `T`) `delete` the underlying entry instead of storing it. `fill(defaultValue)` short-circuits to clearing the entire sparse map. The in-memory and canonical-sparse representations stay in sync without a `getState` round-trip.
 
 ### Properties
 
@@ -3569,7 +3572,24 @@ Sets every cell to `value`. Validates once via `assertJsonCompatible`, then `str
 forEach(cb: (value: T, cx: number, cy: number) => void): void
 ```
 
-Visits every cell in row-major order (`cy` outer, `cx` inner). Each invocation receives a fresh `structuredClone` — mutating the callback's `value` argument does not affect the Layer. Unset cells yield clones of `defaultValue`.
+Visits every cell in row-major order (`cy` outer, `cx` inner). For object `T`, each invocation receives a fresh `structuredClone` — mutating the callback's `value` argument does not affect the Layer. For primitive `T`, the value is passed directly (no clone). Unset cells yield `defaultValue` (cloned for object `T`).
+
+### `forEachReadOnly(cb)`
+
+```typescript
+forEachReadOnly(cb: (value: T, cx: number, cy: number) => void): void
+```
+
+Zero-allocation traversal. For non-default cells, yields the live stored reference. For unset cells, yields the live `_defaultValue`. **Caller must not mutate the value** — for object `T` the reference is shared with internal storage. Use `forEach` if you need a defensive copy. Use `forEachReadOnly` in hot paths where you only read.
+
+### `clear(cx, cy)` / `clearAt(worldX, worldY)`
+
+```typescript
+clear(cx: number, cy: number): void
+clearAt(worldX: number, worldY: number): void
+```
+
+Drops the cell back to default — deletes the underlying sparse-map entry. Idempotent on already-default cells. Bounds-validated and integer-validated the same way as `setCell` / `setAt`.
 
 ### `getState()` / `Layer.fromState(state)`
 
@@ -3597,7 +3617,7 @@ Note on the fingerprint comparison: `jsonFingerprint` uses `JSON.stringify`, whi
 clone(): Layer<T>
 ```
 
-Returns an independent deep copy. Equivalent to `Layer.fromState(this.getState())`.
+Returns an independent deep copy. For object `T`, every stored entry is `structuredClone`d. For primitive `T`, entries are copied by value. The implementation iterates the sparse map directly (no intermediate `getState` round-trip).
 
 ### Example
 

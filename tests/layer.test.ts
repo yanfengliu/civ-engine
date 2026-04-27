@@ -495,6 +495,155 @@ describe('Layer<T>', () => {
     });
   });
 
+  describe('strip-at-write sparsity (H2)', () => {
+    it('setCell with defaultValue does not allocate a stored entry', () => {
+      const layer = new Layer<number>({
+        worldWidth: 4,
+        worldHeight: 4,
+        defaultValue: 0,
+      });
+      layer.setCell(1, 1, 5);
+      expect(layer.getState().cells).toHaveLength(1);
+      // Reverting cell back to default frees the entry.
+      layer.setCell(1, 1, 0);
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('setAt with defaultValue does not allocate a stored entry', () => {
+      const layer = new Layer<number>({
+        worldWidth: 8,
+        worldHeight: 8,
+        blockSize: 2,
+        defaultValue: -1,
+      });
+      layer.setAt(2, 2, 5);
+      expect(layer.getState().cells).toHaveLength(1);
+      layer.setAt(2, 2, -1);
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('fill(defaultValue) clears the sparse map entirely', () => {
+      const layer = new Layer<number>({
+        worldWidth: 4,
+        worldHeight: 4,
+        defaultValue: 0,
+      });
+      layer.fill(7);
+      expect(layer.getState().cells).toHaveLength(16);
+      layer.fill(0);
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('fill(non-default) populates every cell', () => {
+      const layer = new Layer<number>({
+        worldWidth: 3,
+        worldHeight: 3,
+        defaultValue: 0,
+      });
+      layer.fill(7);
+      expect(layer.getState().cells).toHaveLength(9);
+      expect(layer.getCell(0, 0)).toBe(7);
+      expect(layer.getCell(2, 2)).toBe(7);
+    });
+  });
+
+  describe('clear / clearAt (L5)', () => {
+    it('clear(cx, cy) drops the cell back to default', () => {
+      const layer = new Layer<number>({
+        worldWidth: 4,
+        worldHeight: 4,
+        defaultValue: -1,
+      });
+      layer.setCell(2, 3, 42);
+      expect(layer.getCell(2, 3)).toBe(42);
+      layer.clear(2, 3);
+      expect(layer.getCell(2, 3)).toBe(-1);
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('clearAt(wx, wy) drops the bucketed cell back to default', () => {
+      const layer = new Layer<number>({
+        worldWidth: 8,
+        worldHeight: 8,
+        blockSize: 2,
+        defaultValue: 0,
+      });
+      layer.setAt(4, 4, 99);
+      layer.clearAt(4, 4);
+      expect(layer.getAt(4, 4)).toBe(0);
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('clear() on an already-default cell is a no-op', () => {
+      const layer = new Layer<number>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: 0,
+      });
+      expect(() => layer.clear(0, 0)).not.toThrow();
+      expect(layer.getState().cells).toHaveLength(0);
+    });
+
+    it('clear() rejects out-of-bounds cell coordinates', () => {
+      const layer = new Layer<number>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: 0,
+      });
+      expect(() => layer.clear(5, 0)).toThrow();
+      expect(() => layer.clearAt(99, 0)).toThrow();
+    });
+  });
+
+  describe('primitive fast-path correctness (H4)', () => {
+    it('Layer<number> reads return correct value (no clone needed for primitive)', () => {
+      const layer = new Layer<number>({
+        worldWidth: 4,
+        worldHeight: 4,
+        defaultValue: 0,
+      });
+      layer.setCell(1, 1, 42);
+      expect(layer.getCell(1, 1)).toBe(42);
+      expect(layer.getCell(0, 0)).toBe(0);
+      let count = 0;
+      layer.forEach((v) => {
+        if (v === 42) count++;
+      });
+      expect(count).toBe(1);
+    });
+
+    it('Layer<boolean> reads return correct value', () => {
+      const layer = new Layer<boolean>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: false,
+      });
+      layer.setCell(0, 0, true);
+      expect(layer.getCell(0, 0)).toBe(true);
+      expect(layer.getCell(1, 1)).toBe(false);
+    });
+
+    it('forEachReadOnly returns live references for object T (caller must not mutate)', () => {
+      const layer = new Layer<{ n: number }>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: { n: 0 },
+      });
+      layer.setCell(0, 0, { n: 5 });
+      let observedRef: { n: number } | null = null;
+      layer.forEachReadOnly((value, cx, cy) => {
+        if (cx === 0 && cy === 0) observedRef = value;
+      });
+      expect(observedRef).not.toBeNull();
+      // Same object across iterations: live reference, no clone.
+      let again: { n: number } | null = null;
+      layer.forEachReadOnly((value, cx, cy) => {
+        if (cx === 0 && cy === 0) again = value;
+      });
+      expect(again).toBe(observedRef);
+    });
+  });
+
   describe('safe-integer validation', () => {
     it('rejects worldWidth above MAX_SAFE_INTEGER', () => {
       expect(

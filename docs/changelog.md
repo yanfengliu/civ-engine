@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.1 - 2026-04-26
+
+`Layer<T>` correctness + performance overhaul. Multi-CLI full-review iter-1 batch 2. Non-breaking — all changes are additive (`clear`, `clearAt`, `forEachReadOnly`) or internal optimization (strip-at-write, primitive fast-path, single-validate `fromState`, direct `clone`). 587 tests pass (up from 576).
+
+### Added
+
+- **`Layer.clear(cx, cy)` / `Layer.clearAt(wx, wy)`** — explicit "drop this cell back to default" methods. Both delete the underlying sparse-map entry; idempotent on already-default cells; bounds-validated.
+- **`Layer.forEachReadOnly(cb)`** — zero-allocation traversal. Yields the live stored reference for non-default cells (or the live `_defaultValue` for unset cells). Caller must not mutate the value — for object `T` the reference is shared with internal storage. Use `forEach` if you need a defensive copy.
+
+### Fixed
+
+- **H2 (Codex + Gemini High):** `setCell` / `setAt` / `fill` previously stored every value, including ones equal to `defaultValue`, into the underlying `Map<number, T>`. Although `getState()` filtered default-equal entries on serialization, the live in-memory map could grow up to `width × height` entries — `layer.fill(defaultValue)` on a 1000×1000 layer allocated 1,000,000 entries. The strip-at-write fix: writes that match `defaultValue` (by `===` for primitive `T`, or by JSON fingerprint for object `T`) now `delete` the entry instead of storing it. `fill(defaultValue)` short-circuits to `cells.clear()`. The in-memory and canonical-sparse representations now agree without a `getState` round-trip.
+- **H4 (Gemini High):** `Layer<T>` reads previously called `structuredClone` on every value, even for primitive `T` (`Layer<number>`, `Layer<boolean>`, `Layer<string>`, `Layer<null>`). The constructor now caches `_isPrimitive = isImmutablePrimitive(defaultValue)` and skips `structuredClone` on every read/write boundary when the value type is primitive. For object `T` the defensive-copy contract is unchanged. The new `forEachReadOnly` provides an explicit zero-allocation read path for object `T` consumers who own the no-mutate discipline.
+- **M4 (Opus Medium):** `Layer.fromState` previously called `assertJsonCompatible(value, ...)` then `jsonFingerprint(value)` per cell, and `jsonFingerprint`'s implementation also calls `assertJsonCompatible` — paying validation twice. The explicit call was removed; validation is handled inside `jsonFingerprint`.
+- **M5 (Gemini Medium):** `Layer.clone()` was implemented as `Layer.fromState(this.getState())`, paying two `structuredClone` passes per cell plus the intermediate `LayerState` object. Now implemented directly: instantiate a new layer, then iterate `this.cells` once with one clone per entry.
+
 ## 0.6.0 - 2026-04-26
 
 `CommandTransaction` correctness + ergonomics overhaul. Multi-CLI full-review (Codex / Opus; Gemini quota-degraded but produced output) flagged a Critical (mutable preconditions broke the "all-or-nothing" guarantee) plus a three-reviewer consensus High (the new transaction surface dropped the v0.5.2 typed-component generics) plus several smaller hits. Breaking — `TransactionPrecondition` signature changed; `emit()` now validates JSON-compat at buffer time; `CommandTransaction` is now generic over `<TEventMap, TCommandMap, TComponents, TState>`. 576 tests pass (up from 569).
