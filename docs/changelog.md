@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.0 - 2026-04-26
+
+Multi-CLI iter-2 review fix-up. Closes 1 iter-1 regression (R1: C1 was incomplete) + 2 new High + 2 new Medium + 4 new Low. Breaking — `CommandTransaction` preconditions now reject 9+ additional `World` methods at runtime that previously silently worked (most damaging: `random()`, which would have advanced the deterministic RNG even on `precondition_failed`). 600 tests pass (up from 592).
+
+### Breaking
+
+- **`CommandTransaction` preconditions now reject `random()`, `setResourceMax`, `setProduction`, `setConsumption`, `start`, `stop`, `pause`, `resume`, `setSpeed`, `onDestroy`/`offDestroy`, `onTickFailure`/`offTickFailure`, `onCommandResult`/`offCommandResult`, `onCommandExecution`/`offCommandExecution`.** Previously the v0.6.0 denylist was missing all of these. Code that called any of them from inside `tx.require((w) => ...)` will now throw `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. The most consequential gap was `random()` — it mutates `DeterministicRandom.state`, so a side-effecting predicate on the failure path was silently breaking the engine's determinism contract and snapshot-replay correctness.
+
+### Added
+
+- **`FORBIDDEN_PRECONDITION_METHODS` const array exported** from `src/command-transaction.ts`. Single source of truth for both the type-level `Omit` (deriving `ReadOnlyTransactionWorld`) and the runtime `FORBIDDEN_IN_PRECONDITION` set. Eliminates list-drift between compile-time and runtime by construction.
+- **api-reference.md** documents `World.warnIfPoisoned(api)` (was made public in v0.6.0 but undocumented).
+
+### Fixed
+
+- **R1 (3-reviewer consensus, iter-1 regression of C1):** the C1 `ReadOnlyTransactionWorld` denylist was incomplete. The new `FORBIDDEN_PRECONDITION_METHODS` array is exhaustive against `World`'s public mutating, lifecycle, listener, RNG, and sub-engine surface. 6 spurious entries (`registerComponentOptions`, `setTickFailureListener`, `setCommandResultListener`, `setCommandExecutionListener`, `setOnDestroy`, `rebuildSpatialIndex`) were dropped. New property-based regression test iterates the full list and asserts every method is blocked from inside a precondition; explicit tests pin `random()`, `setProduction`, and the lifecycle methods. Note: TypeScript `private` is type-only, so a determined caller can still cast to `any` and reach `gameLoop`/`rng` directly — the proxy doesn't block that escape and the doc explicitly notes this caveat.
+- **H_NEW1 (Gemini + Opus High):** `Layer.forEachReadOnly` used `??` for unset-cell fallback, treating `null` as nullish. `Layer<number | null>` with explicit `null` cells read back as `defaultValue`. Now uses `=== undefined` matching the `forEach` pattern.
+- **H_NEW2 (Codex High):** `Layer<T>` primitive fast-path was computed once from `defaultValue` and reused for every value, so `Layer<unknown>` with primitive default + later object write skipped the defensive clone. The fast-path now decides per-value via `isImmutablePrimitive(value)` rather than the cached `_defaultIsPrimitive`. The default-value primitivity check is still cached (it's used by `matchesDefault`), but value clone behavior is per-value.
+- **M_NEW1 (Opus Medium):** `Layer.setCell`/`setAt`/`fill` previously called `assertJsonCompatible` AND `jsonFingerprint` (which calls `assertJsonCompatible` internally) on every non-primitive write — paying validation twice. The explicit call now fires only on the primitive-default path where `matchesDefault` short-circuits to `===` without validating. Object-T writes pay one validation per write.
+- **M_NEW2 (Gemini Medium):** `Layer.fromState` previously stringified primitive values via `jsonFingerprint` to check default-equality; now uses direct `===` comparison for primitive-default layers, matching the writer fast path.
+- **L_NEW1 (Gemini Low):** `CommandTransaction.commit()` after `abort()` then double-`commit()` previously threw a hardcoded "already committed" message instead of using the `terminalReason` field. Now reads `terminalReason` and emits "already aborted" when appropriate, matching builder methods.
+- **L_NEW2 (Gemini Low):** `Layer.clone()` previously double-cloned `defaultValue` (once at the call site, once in the constructor). Pass-by-reference; the constructor handles the single clone.
+- **L_NEW3 (Opus Low):** `Layer.getState()` had a defensive `jsonFingerprint` filter that was dead code post-H2 strip-at-write. Removed; `getState` now trusts the writers.
+- **L_NEW5 (Opus Low):** stale test name `setCell with default value still stores the marker` referenced pre-H2 behavior; renamed to `setCell back to default value reads back as default (post-H2 strip-at-write)`.
+- **L_NEW7 (Codex Low):** added explicit `Number.MAX_SAFE_INTEGER + 1` regression test for `World.deserialize` tick validation. Behavior was already covered transitively by the existing safe-integer check; the explicit test pins it.
+
+### Acknowledged residual
+
+- **L_NEW6:** one `eslint-disable @typescript-eslint/no-explicit-any` survives in `CommandTransaction.commit()`'s `world.emit` dispatch because buffered events are stored as the loose `BufferedEvent = { type: string; data: unknown }` shape. Tightening this requires either a more invasive typed-event-store redesign or accepting the dispatch cast as the residual cost of buffering. The runtime is correct (`EventBus.emit` validates payloads). The L6 fix in v0.6.0 eliminated the `as unknown as` cast at `world.transaction()`, which was the headline; this lone `any` is colocated with the dispatch and not load-bearing.
+- **N1 (circular import smell):** `src/world-internal.ts` imports `SYSTEM_PHASES` from `world.js` while `world.ts` imports value functions from `world-internal.js`. Works today via ES module live bindings + use-inside-function-bodies. Cleanup queued for the deeper world.ts split.
+
 ## 0.6.4 - 2026-04-26
 
 Multi-CLI full-review iter-1 batch 5 (partial M3): standalone helper extraction. Non-breaking. 592 tests pass.

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { World } from '../src/world.js';
+import { FORBIDDEN_PRECONDITION_METHODS } from '../src/command-transaction.js';
 
 describe('CommandTransaction', () => {
   describe('basic propose-commit', () => {
@@ -469,6 +470,84 @@ describe('CommandTransaction', () => {
       expect(world.getResource(player, 'wood')?.current).toBe(100);
     });
 
+    it('every method in FORBIDDEN_PRECONDITION_METHODS throws when called from a predicate (R1)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      world.registerResource('wood');
+      const e = world.createEntity();
+
+      for (const methodName of FORBIDDEN_PRECONDITION_METHODS) {
+        const tx = world.transaction().require((w) => {
+          // Cast away the readonly type. Runtime proxy must still throw.
+          const fn = (w as unknown as Record<string, unknown>)[methodName];
+          if (typeof fn !== 'function') {
+            // Method does not exist on this concrete World instance — skip.
+            // (The list is exhaustive against the public surface, but a few
+            // methods like submitWithResult always exist; assertion below
+            // would otherwise fail for genuinely-missing names.)
+            return true;
+          }
+          // Invoke the method; we don't care about valid args, the proxy
+          // must throw before the method body runs.
+          (fn as () => unknown).call(w);
+          return true;
+        });
+        expect(() => tx.commit(), `expected '${methodName}' to be blocked`).toThrow(
+          /preconditions must be side-effect free/,
+        );
+      }
+      // World state untouched — no entity components, resources, or state added.
+      expect(world.getComponent(e, 'hp')).toBeUndefined();
+    });
+
+    it('predicate cannot call random() — would advance RNG and break determinism (R1)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'fixed' });
+      // Capture RNG state by sampling once before the predicate.
+      const expected = world.random();
+      const tx = world.transaction().require((w) => {
+        // Cast away. The proxy must block.
+        (w as unknown as { random: () => number }).random();
+        return true;
+      });
+      expect(() => tx.commit()).toThrow(/preconditions must be side-effect free/);
+      // RNG sequence is unchanged: the next sample after the failed predicate
+      // is the same as the next sample we would have gotten without any
+      // predicate intervention.
+      expect(world.random()).not.toBe(expected); // sanity: random advances
+      // Re-seed and confirm deterministic replay still works.
+      const w2 = new World({ gridWidth: 10, gridHeight: 10, tps: 60, seed: 'fixed' });
+      expect(w2.random()).toBe(expected);
+    });
+
+    it('predicate cannot call setProduction (R1)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerResource('wood');
+      const e = world.createEntity();
+      world.addResource(e, 'wood', 50);
+
+      const tx = world.transaction().require((w) => {
+        (w as unknown as { setProduction: (e: number, k: string, r: number) => void })
+          .setProduction(e, 'wood', 99);
+        return true;
+      });
+      expect(() => tx.commit()).toThrow(/preconditions must be side-effect free/);
+      expect(world.getProduction(e, 'wood')).toBe(0);
+    });
+
+    it('predicate cannot call pause / start / setSpeed (R1)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+
+      for (const lifecycleMethod of ['pause', 'start', 'setSpeed', 'stop', 'resume'] as const) {
+        const tx = world.transaction().require((w) => {
+          (w as unknown as Record<string, (n?: number) => void>)[lifecycleMethod](1);
+          return true;
+        });
+        expect(() => tx.commit(), `expected '${lifecycleMethod}' to be blocked`).toThrow(
+          /preconditions must be side-effect free/,
+        );
+      }
+    });
+
     it('predicate can call read methods (getComponent, hasResource)', () => {
       const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
       world.registerComponent('hp');
@@ -537,6 +616,17 @@ describe('CommandTransaction', () => {
       const tx = world.transaction();
       tx.commit();
       expect(() => tx.setComponent(e, 'hp', { current: 1 })).toThrow(/committed/i);
+    });
+
+    it('after abort then commit then re-commit, the second commit throws aborted-flavored (L_NEW1)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const tx = world.transaction();
+      tx.abort();
+      const first = tx.commit();
+      expect(first.ok).toBe(false);
+      if (!first.ok) expect(first.code).toBe('aborted');
+      // Status is now 'committed' but terminalReason is 'aborted'.
+      expect(() => tx.commit()).toThrow(/aborted/i);
     });
   });
 

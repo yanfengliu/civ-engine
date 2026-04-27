@@ -510,6 +510,15 @@ describe('Serialization', () => {
         /tick must be a non-negative safe integer/,
       );
     });
+
+    it('throws when tick is MAX_SAFE_INTEGER + 1 (L_NEW7)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const snapshot = world.serialize();
+      (snapshot as { tick: number }).tick = Number.MAX_SAFE_INTEGER + 1;
+      expect(() => World.deserialize(snapshot)).toThrow(
+        /tick must be a non-negative safe integer/,
+      );
+    });
   });
 
   describe('deserialize tolerates legacy snapshot fields', () => {

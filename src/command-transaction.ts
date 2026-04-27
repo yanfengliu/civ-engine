@@ -3,59 +3,62 @@ import type { EntityId, Position } from './types.js';
 import type { World } from './world.js';
 
 /**
+ * Single source of truth for methods a transaction precondition cannot call.
+ * Exhaustive against `World`'s public mutating, lifecycle, listener, RNG, and
+ * sub-engine surface. The type-level `Omit` and the runtime `Set` derive from
+ * this same array so the two stay in lockstep.
+ */
+export const FORBIDDEN_PRECONDITION_METHODS = [
+  // Component / position writes
+  'setComponent', 'addComponent', 'patchComponent', 'removeComponent', 'setPosition',
+  // Entity lifecycle
+  'createEntity', 'destroyEntity',
+  // Tags / metadata / world state
+  'addTag', 'removeTag', 'setMeta', 'deleteMeta', 'setState', 'deleteState',
+  // Resources (incl. flow / pool config)
+  'addResource', 'removeResource', 'addTransfer', 'removeTransfer',
+  'setResourceMax', 'setProduction', 'setConsumption',
+  // Events / commands
+  'emit', 'submit', 'submitWithResult',
+  // Tick / engine lifecycle
+  'step', 'stepWithResult', 'recover',
+  'start', 'stop', 'setSpeed', 'pause', 'resume',
+  // Registration (mutates engine config)
+  'registerSystem', 'registerValidator', 'registerHandler',
+  'registerComponent', 'registerResource',
+  // Listener subscriptions (mutate listener registries)
+  'on', 'off',
+  'onDestroy', 'offDestroy',
+  'onTickFailure', 'offTickFailure',
+  'onCommandResult', 'offCommandResult',
+  'onCommandExecution', 'offCommandExecution',
+  'onDiff', 'offDiff',
+  // Sub-engine entry points (transaction recursion + serialize is pseudo-read but warns and clones)
+  'transaction', 'serialize',
+  // RNG (mutates DeterministicRandom.state)
+  'random',
+] as const;
+
+type ForbiddenMethod = (typeof FORBIDDEN_PRECONDITION_METHODS)[number];
+
+/**
  * The subset of `World` that a transaction precondition is allowed to call.
- * Mutating methods (setComponent, removeResource, emit, etc.) are excluded both
- * at the type level and at runtime — preconditions must be side-effect free or
- * the transaction's "all-or-nothing" guarantee is meaningless.
+ * Mutating, lifecycle-changing, listener-subscribing, and RNG-advancing
+ * methods are excluded both at the type level (this `Omit`) and at runtime
+ * (the `FORBIDDEN_PRECONDITION_METHODS` set is checked by the proxy).
+ *
+ * Note: TypeScript `private` is type-only, so a determined caller can still
+ * cast to `any` and reach private fields like `gameLoop` or `rng`. The proxy
+ * does not block that escape; treat `as any` casts inside a precondition as a
+ * caller-side contract violation. The contract this proxy enforces is "no
+ * accidental writes via the public `World` surface."
  */
 export type ReadOnlyTransactionWorld<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   TComponents extends Record<keyof TComponents, unknown> = Record<string, unknown>,
   TState extends Record<keyof TState, unknown> = Record<string, unknown>,
-> = Omit<
-  World<TEventMap, TCommandMap, TComponents, TState>,
-  | 'setComponent'
-  | 'addComponent'
-  | 'patchComponent'
-  | 'removeComponent'
-  | 'setPosition'
-  | 'destroyEntity'
-  | 'createEntity'
-  | 'emit'
-  | 'submit'
-  | 'submitWithResult'
-  | 'addResource'
-  | 'removeResource'
-  | 'addTransfer'
-  | 'removeTransfer'
-  | 'setState'
-  | 'deleteState'
-  | 'setMeta'
-  | 'deleteMeta'
-  | 'addTag'
-  | 'removeTag'
-  | 'step'
-  | 'stepWithResult'
-  | 'recover'
-  | 'registerSystem'
-  | 'registerValidator'
-  | 'registerHandler'
-  | 'registerComponent'
-  | 'registerComponentOptions'
-  | 'registerResource'
-  | 'transaction'
-  | 'rebuildSpatialIndex'
-  | 'serialize'
-  | 'onDiff'
-  | 'offDiff'
-  | 'on'
-  | 'off'
-  | 'setTickFailureListener'
-  | 'setCommandResultListener'
-  | 'setCommandExecutionListener'
-  | 'setOnDestroy'
->;
+> = Omit<World<TEventMap, TCommandMap, TComponents, TState>, ForbiddenMethod>;
 
 export type TransactionPrecondition<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -66,48 +69,9 @@ export type TransactionPrecondition<
   world: ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>,
 ) => true | false | string;
 
-const FORBIDDEN_IN_PRECONDITION = new Set<string | symbol>([
-  'setComponent',
-  'addComponent',
-  'patchComponent',
-  'removeComponent',
-  'setPosition',
-  'destroyEntity',
-  'createEntity',
-  'emit',
-  'submit',
-  'submitWithResult',
-  'addResource',
-  'removeResource',
-  'addTransfer',
-  'removeTransfer',
-  'setState',
-  'deleteState',
-  'setMeta',
-  'deleteMeta',
-  'addTag',
-  'removeTag',
-  'step',
-  'stepWithResult',
-  'recover',
-  'registerSystem',
-  'registerValidator',
-  'registerHandler',
-  'registerComponent',
-  'registerComponentOptions',
-  'registerResource',
-  'transaction',
-  'rebuildSpatialIndex',
-  'serialize',
-  'onDiff',
-  'offDiff',
-  'on',
-  'off',
-  'setTickFailureListener',
-  'setCommandResultListener',
-  'setCommandExecutionListener',
-  'setOnDestroy',
-]);
+const FORBIDDEN_IN_PRECONDITION: ReadonlySet<string | symbol> = new Set<string | symbol>(
+  FORBIDDEN_PRECONDITION_METHODS,
+);
 
 function makeReadOnlyTransactionWorld<
   TEventMap extends Record<keyof TEventMap, unknown>,
@@ -262,7 +226,8 @@ export class CommandTransaction<
 
   commit(): TransactionResult {
     if (this.status === 'committed') {
-      throw new Error('CommandTransaction already committed');
+      const reason = this.terminalReason ?? 'committed';
+      throw new Error(`CommandTransaction already ${reason}`);
     }
     if (this.status === 'aborted') {
       // Mark as terminal so a subsequent commit() throws rather than silently

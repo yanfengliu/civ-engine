@@ -115,7 +115,7 @@ describe('Layer<T>', () => {
       expect(layer.getCell(0, 0)).toBe(0);
     });
 
-    it('setCell with default value still stores the marker (round-trips)', () => {
+    it('setCell back to default value reads back as default (post-H2 strip-at-write)', () => {
       const layer = new Layer<number>({
         worldWidth: 4,
         worldHeight: 4,
@@ -621,6 +621,41 @@ describe('Layer<T>', () => {
       layer.setCell(0, 0, true);
       expect(layer.getCell(0, 0)).toBe(true);
       expect(layer.getCell(1, 1)).toBe(false);
+    });
+
+    it('forEachReadOnly yields explicit null cells, not defaultValue (H_NEW1)', () => {
+      const layer = new Layer<number | null>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: 0,
+      });
+      layer.setCell(0, 0, null);
+      const observed: Array<[number, number, number | null]> = [];
+      layer.forEachReadOnly((value, cx, cy) => {
+        observed.push([cx, cy, value]);
+      });
+      // (0,0) was explicitly set to null — must yield null, not defaultValue (0).
+      expect(observed.find(([cx, cy]) => cx === 0 && cy === 0)?.[2]).toBe(null);
+      // (1,1) was never set — must yield defaultValue 0.
+      expect(observed.find(([cx, cy]) => cx === 1 && cy === 1)?.[2]).toBe(0);
+    });
+
+    it('object writes on a Layer<unknown> with primitive default still defensive-copy (H_NEW2)', () => {
+      const layer = new Layer<unknown>({
+        worldWidth: 2,
+        worldHeight: 2,
+        defaultValue: 0,
+      });
+      const input = { n: 5 };
+      layer.setCell(0, 0, input);
+      input.n = 999;
+      // Stored value should still be the original {n: 5}; the per-value
+      // primitive check should have triggered a defensive clone on write.
+      expect((layer.getCell(0, 0) as { n: number }).n).toBe(5);
+      // getCell defensive-copies the read too.
+      const got = layer.getCell(0, 0) as { n: number };
+      got.n = 12345;
+      expect((layer.getCell(0, 0) as { n: number }).n).toBe(5);
     });
 
     it('forEachReadOnly returns live references for object T (caller must not mutate)', () => {

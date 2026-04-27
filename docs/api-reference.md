@@ -1504,6 +1504,21 @@ try {
 world.step(); // safe again
 ```
 
+#### `warnIfPoisoned(api)`
+
+```typescript
+warnIfPoisoned(api: string): void
+```
+
+Emits a `console.warn` once per poison cycle if the world is poisoned (a prior tick failed and `recover()` has not been called). The warning identifies which API surface the caller routed through (`api='submit'`, `api='serialize'`, `api='transaction'`, etc.) so log readers can correlate the warning with the offending call site. Subsequent calls within the same poison cycle are silent; once `recover()` clears the poison, the next `warnIfPoisoned` call after a future failure will warn again.
+
+This is the integration point used by `submitWithResult`, `serialize`, and `CommandTransaction.commit` to surface "you forgot to recover" without blocking the call. Any new write surface should call this with its own `api` tag for consistency with the rest of the engine.
+
+```typescript
+world.warnIfPoisoned('myCustomCommand');
+// → "myCustomCommand called on a poisoned world (last failure: 'system_threw' at tick 5). Call world.recover() to clear the poison flag."
+```
+
 #### `start()`
 
 ```typescript

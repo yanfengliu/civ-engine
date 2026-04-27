@@ -21,6 +21,10 @@ function isImmutablePrimitive(value: unknown): boolean {
   return t === 'number' || t === 'string' || t === 'boolean';
 }
 
+function cloneIfNeeded<T>(value: T): T {
+  return isImmutablePrimitive(value) ? value : structuredClone(value);
+}
+
 export class Layer<T> {
   readonly worldWidth: number;
   readonly worldHeight: number;
@@ -29,7 +33,7 @@ export class Layer<T> {
   readonly height: number;
   private readonly _defaultValue: T;
   private readonly _defaultFingerprint: string;
-  private readonly _isPrimitive: boolean;
+  private readonly _defaultIsPrimitive: boolean;
   private cells = new Map<number, T>();
 
   constructor(options: LayerOptions<T>) {
@@ -49,35 +53,35 @@ export class Layer<T> {
         `Layer dimensions ${this.width} x ${this.height} exceed Number.MAX_SAFE_INTEGER`,
       );
     }
-    this._isPrimitive = isImmutablePrimitive(options.defaultValue);
-    this._defaultValue = this._isPrimitive
-      ? options.defaultValue
-      : structuredClone(options.defaultValue);
+    this._defaultIsPrimitive = isImmutablePrimitive(options.defaultValue);
+    this._defaultValue = cloneIfNeeded(options.defaultValue);
     this._defaultFingerprint = jsonFingerprint(this._defaultValue);
   }
 
   get defaultValue(): T {
-    return this._isPrimitive ? this._defaultValue : structuredClone(this._defaultValue);
+    return cloneIfNeeded(this._defaultValue);
   }
 
   getCell(cx: number, cy: number): T {
     this.assertCellInBounds(cx, cy);
     const stored = this.cells.get(this.cellIndex(cx, cy));
-    if (stored === undefined) {
-      return this._isPrimitive ? this._defaultValue : structuredClone(this._defaultValue);
-    }
-    return this._isPrimitive ? stored : structuredClone(stored);
+    return stored === undefined ? cloneIfNeeded(this._defaultValue) : cloneIfNeeded(stored);
   }
 
   setCell(cx: number, cy: number, value: T): void {
     this.assertCellInBounds(cx, cy);
-    assertJsonCompatible(value, 'Layer cell value');
     const idx = this.cellIndex(cx, cy);
     if (this.matchesDefault(value)) {
       this.cells.delete(idx);
       return;
     }
-    this.cells.set(idx, this._isPrimitive ? value : structuredClone(value));
+    // For object T, jsonFingerprint inside matchesDefault already validated
+    // via assertJsonCompatible (json.ts:60). For primitive T, matchesDefault
+    // short-circuited before validating, so validate explicitly here.
+    if (this._defaultIsPrimitive) {
+      assertJsonCompatible(value, 'Layer cell value');
+    }
+    this.cells.set(idx, cloneIfNeeded(value));
   }
 
   getAt(wx: number, wy: number): T {
@@ -85,15 +89,11 @@ export class Layer<T> {
     const cx = Math.floor(wx / this.blockSize);
     const cy = Math.floor(wy / this.blockSize);
     const stored = this.cells.get(this.cellIndex(cx, cy));
-    if (stored === undefined) {
-      return this._isPrimitive ? this._defaultValue : structuredClone(this._defaultValue);
-    }
-    return this._isPrimitive ? stored : structuredClone(stored);
+    return stored === undefined ? cloneIfNeeded(this._defaultValue) : cloneIfNeeded(stored);
   }
 
   setAt(wx: number, wy: number, value: T): void {
     this.assertWorldInBounds(wx, wy);
-    assertJsonCompatible(value, 'Layer cell value');
     const cx = Math.floor(wx / this.blockSize);
     const cy = Math.floor(wy / this.blockSize);
     const idx = this.cellIndex(cx, cy);
@@ -101,7 +101,10 @@ export class Layer<T> {
       this.cells.delete(idx);
       return;
     }
-    this.cells.set(idx, this._isPrimitive ? value : structuredClone(value));
+    if (this._defaultIsPrimitive) {
+      assertJsonCompatible(value, 'Layer cell value');
+    }
+    this.cells.set(idx, cloneIfNeeded(value));
   }
 
   clear(cx: number, cy: number): void {
@@ -117,17 +120,16 @@ export class Layer<T> {
   }
 
   fill(value: T): void {
-    assertJsonCompatible(value, 'Layer fill value');
     if (this.matchesDefault(value)) {
       this.cells.clear();
       return;
     }
+    if (this._defaultIsPrimitive) {
+      assertJsonCompatible(value, 'Layer fill value');
+    }
     for (let cy = 0; cy < this.height; cy++) {
       for (let cx = 0; cx < this.width; cx++) {
-        this.cells.set(
-          this.cellIndex(cx, cy),
-          this._isPrimitive ? value : structuredClone(value),
-        );
+        this.cells.set(this.cellIndex(cx, cy), cloneIfNeeded(value));
       }
     }
   }
@@ -137,13 +139,7 @@ export class Layer<T> {
       for (let cx = 0; cx < this.width; cx++) {
         const stored = this.cells.get(this.cellIndex(cx, cy));
         const out =
-          stored === undefined
-            ? this._isPrimitive
-              ? this._defaultValue
-              : structuredClone(this._defaultValue)
-            : this._isPrimitive
-              ? stored
-              : structuredClone(stored);
+          stored === undefined ? cloneIfNeeded(this._defaultValue) : cloneIfNeeded(stored);
         cb(out, cx, cy);
       }
     }
@@ -159,27 +155,25 @@ export class Layer<T> {
     for (let cy = 0; cy < this.height; cy++) {
       for (let cx = 0; cx < this.width; cx++) {
         const stored = this.cells.get(this.cellIndex(cx, cy));
-        cb(stored ?? this._defaultValue, cx, cy);
+        cb(stored === undefined ? this._defaultValue : stored, cx, cy);
       }
     }
   }
 
   getState(): LayerState<T> {
+    // Strip-at-write means stored entries are never default. `cells` is
+    // private and every public path that inserts strips defaults, so no
+    // post-hoc filter is needed here.
     const entries: Array<[number, T]> = [];
     for (const [index, value] of this.cells) {
-      // Strip-at-write means stored entries are never default — but stay
-      // belt-and-suspenders in case caller pushed cells via fromState bypass.
-      if (jsonFingerprint(value) === this._defaultFingerprint) continue;
-      entries.push([index, this._isPrimitive ? value : structuredClone(value)]);
+      entries.push([index, cloneIfNeeded(value)]);
     }
     entries.sort((a, b) => a[0] - b[0]);
     return {
       worldWidth: this.worldWidth,
       worldHeight: this.worldHeight,
       blockSize: this.blockSize,
-      defaultValue: this._isPrimitive
-        ? this._defaultValue
-        : structuredClone(this._defaultValue),
+      defaultValue: cloneIfNeeded(this._defaultValue),
       cells: entries,
     };
   }
@@ -227,11 +221,17 @@ export class Layer<T> {
         throw new Error(`Layer state contains duplicate cell index ${index}`);
       }
       seen.add(index);
-      // jsonFingerprint validates the value once via assertJsonCompatible
-      // internally, so no separate assertJsonCompatible call needed here.
-      const fingerprint = jsonFingerprint(value);
-      if (fingerprint === layer._defaultFingerprint) continue;
-      layer.cells.set(index, layer._isPrimitive ? value : structuredClone(value));
+      // Canonicalize: drop entries that already match the default. For
+      // primitive T use direct equality; for object T jsonFingerprint
+      // validates JSON-compat internally (json.ts:60). For primitive T
+      // validate explicitly since we skip the fingerprint walk.
+      if (layer._defaultIsPrimitive) {
+        assertJsonCompatible(value, 'Layer cell value');
+        if (value === layer._defaultValue) continue;
+      } else {
+        if (jsonFingerprint(value) === layer._defaultFingerprint) continue;
+      }
+      layer.cells.set(index, cloneIfNeeded(value));
     }
     return layer;
   }
@@ -241,18 +241,24 @@ export class Layer<T> {
       worldWidth: this.worldWidth,
       worldHeight: this.worldHeight,
       blockSize: this.blockSize,
-      defaultValue: this._isPrimitive
-        ? this._defaultValue
-        : structuredClone(this._defaultValue),
+      // Pass _defaultValue by reference; the constructor clones once.
+      defaultValue: this._defaultValue,
     });
     for (const [index, value] of this.cells) {
-      copy.cells.set(index, this._isPrimitive ? value : structuredClone(value));
+      copy.cells.set(index, cloneIfNeeded(value));
     }
     return copy;
   }
 
   private matchesDefault(value: T): boolean {
-    if (this._isPrimitive) return value === this._defaultValue;
+    if (this._defaultIsPrimitive) {
+      // Per-value primitive check is fine here too; if a Layer<unknown> with
+      // primitive default later receives an object that happens to fingerprint
+      // equal to the default, that's still meaningful — but we use === for
+      // primitive defaults so non-primitive values never match.
+      return value === this._defaultValue;
+    }
+    // jsonFingerprint validates JSON-compat internally.
     return jsonFingerprint(value) === this._defaultFingerprint;
   }
 
