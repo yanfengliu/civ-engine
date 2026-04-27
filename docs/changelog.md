@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.7.20 - 2026-04-27
+
+Synthetic Playtest T1: Policy interface + 3 built-in policies (Tier 1 of Spec 3 implementation, `docs/design/2026-04-27-synthetic-playtest-harness-design.md` v10).
+
+### New (additive)
+
+- **Policy types**: `Policy`, `PolicyContext`, `StopContext`, `PolicyCommand`, `RandomPolicyConfig`, `ScriptedPolicyEntry`. 4-generic shape matches `World<TEventMap, TCommandMap, TComponents, TState>`. `TComponents` and `TState` carry `World`-matching defaults; `TEventMap` and `TCommandMap` deliberately have no defaults (empty-record default would collapse `PolicyCommand` to `never`).
+- **`noopPolicy()`**: empty-emit baseline.
+- **`scriptedPolicy(sequence)`**: pre-grouped by tick at construction, O(1) per-tick lookup. `entry.tick` matches `PolicyContext.tick` (about-to-execute tick); bundle→script conversion requires `entry.tick = cmd.submissionTick + 1`.
+- **`randomPolicy(config)`**: deterministic catalog selection via `ctx.random()` (sub-RNG, NOT `world.random()`). Validates non-empty catalog, positive-integer `frequency` and `burst`, non-negative-integer `offset` < `frequency`.
+
+### Determinism contract
+
+Policies use `PolicyContext.random()`, a seeded sub-RNG independent of `world.rng` (ADR 19 in `docs/architecture/decisions.md`). Calling `world.random()` between ticks would advance world RNG state; replay (which doesn't re-invoke policies) would diverge at the next snapshot. Sub-RNG sandboxing eliminates this.
+
+### What's NOT here yet
+
+- The end-to-end harness `runSynthPlaytest` ships in v0.8.0 (T2). Policies are usable in tests with a manually-constructed `PolicyContext` (see `tests/synthetic-policies.test.ts`), but the autonomous-driver harness is the next task.
+- Determinism integration tests (selfCheck round-trip on synthetic bundles, production-determinism dual-run, sub-RNG negative-path, poisoned-bundle replay, bundle→script regression) ship in T3 (v0.8.1).
+
+### ADRs
+
+- ADR 17: Policy is a function, not a class hierarchy.
+- ADR 18: Policies receive read-only world; mutation via returned commands.
+- ADR 19: Policy randomness uses a separate seeded sub-RNG with literal seed expression.
+
+### Validation
+
+All four engine gates pass: `npm test` (772 passed + 2 todo, 13 new in `tests/synthetic-policies.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
 ## 0.7.19 - 2026-04-27
 
 Session-recording followup 4: additional determinism-contract paired tests for clauses 1, 2, 7.

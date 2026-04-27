@@ -1,0 +1,25 @@
+You are a senior code reviewer for civ-engine. Review the T1 (Synthetic Playtest Policies, v0.7.20) diff being supplied via stdin.
+
+Context: T1 implements the policy-side primitives from spec `docs/design/2026-04-27-synthetic-playtest-harness-design.md` (v10) per plan `docs/design/2026-04-27-synthetic-playtest-implementation-plan.md` (v7). Both spec and plan converged after multi-CLI iteration.
+
+Surface added:
+- src/synthetic-playtest.ts: Policy / PolicyContext / StopContext / PolicyCommand / RandomPolicyConfig / ScriptedPolicyEntry types + noopPolicy / randomPolicy / scriptedPolicy factories.
+- src/index.ts re-exports.
+- tests/synthetic-policies.test.ts: 13 unit tests.
+- docs: api-reference section, ADRs 17/18/19, changelog/devlog/version bumps.
+
+Engine facts: World<TEventMap, TCommandMap, TComponents, TState> at src/world.ts:233. ComponentRegistry per src/world.ts:229. DeterministicRandom in src/random.ts. SessionMetadata.sourceKind currently still 'session' | 'scenario' (T2 widens it).
+
+Aspects to review (per AGENTS.md):
+1. Design — clean abstractions, scales, debugs, lean.
+2. Test coverage — does the test file cover the cases it should? Acceptance criteria from design v10 §18 + plan v7 §T1 step 9?
+3. Correctness — do the implementations match design v10 §5/§6?
+4. Clean code — typing, no dead code, no over-validation, naming, file size, conventions.
+5. Doc accuracy — api-reference sections match the implementation? ADRs 17-19 match design v10 §15?
+
+Anti-regression checklist:
+- T2's runSynthPlaytest harness is NOT here yet (ships in v0.8.0). Don't expect it.
+- SessionRecorderConfig.sourceKind/policySeed are NOT extended yet (T2).
+- SessionMetadata.sourceKind is still 'session' | 'scenario' (T2 widens to 'synthetic').
+
+Bar: only flag REAL issues. If you'd accept the diff, say "ACCEPT". Otherwise list required changes with severity tags.

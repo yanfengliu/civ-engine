@@ -4984,3 +4984,80 @@ interface ScenarioResultToBundleOptions {
 ```
 
 Translates `runScenario` output to a `SessionBundle` with `sourceKind: 'scenario'`. One `kind: 'assertion'` marker per `result.checks` outcome with `provenance: 'engine'`. `metadata.startTick` from `result.history.initialSnapshot.tick` (NOT hardcoded 0). Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`. Replayable bundle requires `runScenario({ history: { captureCommandPayloads: true } })`; otherwise `bundle.commands` is empty and replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')`.
+
+## Synthetic Playtest — Policies (v0.7.20)
+
+The synthetic playtest harness drives a `World` via pluggable `Policy` functions for `N` ticks, producing a `SessionBundle` for AI-first feedback loops (Tier 1 of `docs/design/ai-first-dev-roadmap.md`). T1 ships the policy types and three built-in factories. The end-to-end harness `runSynthPlaytest` ships in v0.8.0 (T2).
+
+```typescript
+import type { World, ComponentRegistry } from 'civ-engine';
+
+interface PolicyContext<TEventMap, TCommandMap, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
+  readonly tick: number;       // The tick about to execute (commands submitted now run during this tick).
+  readonly random: () => number;  // Seeded sub-RNG independent of world.rng. Use this, NOT world.random().
+}
+
+interface StopContext<TEventMap, TCommandMap, TComponents, TState> {
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
+  readonly tick: number;       // The tick that just executed (post-step world.tick).
+  readonly random: () => number;
+}
+
+type PolicyCommand<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
+
+type Policy<TEventMap, TCommandMap, TComponents, TState> = (
+  context: PolicyContext<TEventMap, TCommandMap, TComponents, TState>,
+) => PolicyCommand<TCommandMap>[];
+```
+
+**Determinism contract:** Policies are external coordinators per spec §11.1 clause 2. They MUST be deterministic given their inputs (`world` state, `tick`, `random()`). Any randomness MUST flow through `ctx.random()` — `Math.random()`, `world.random()`, `Date.now()`, `process.env`, and other non-deterministic sources are forbidden. Policies MUST NOT mutate the world directly; mutation goes through the returned `PolicyCommand[]` which the harness submits via `world.submitWithResult`. `SessionReplayer.selfCheck` is the verification mechanism for non-poisoned bundles.
+
+### `noopPolicy()`
+
+```typescript
+function noopPolicy<TEventMap, TCommandMap, TComponents, TState>(): Policy<TEventMap, TCommandMap, TComponents, TState>;
+```
+
+Submits nothing. Useful for letting world systems advance without external input.
+
+### `randomPolicy(config)`
+
+```typescript
+interface RandomPolicyConfig<TEventMap, TCommandMap, TComponents, TState> {
+  catalog: Array<(ctx: PolicyContext<TEventMap, TCommandMap, TComponents, TState>) => PolicyCommand<TCommandMap>>;
+  frequency?: number;  // default 1
+  offset?: number;     // default 0; must be < frequency
+  burst?: number;      // default 1
+}
+
+function randomPolicy<TEventMap, TCommandMap, TComponents, TState>(
+  config: RandomPolicyConfig<TEventMap, TCommandMap, TComponents, TState>,
+): Policy<TEventMap, TCommandMap, TComponents, TState>;
+```
+
+Picks a random catalog entry per emit via `ctx.random()`. Emits on ticks where `tick % frequency === offset`. `burst` controls commands per fired tick. Catalog functions receive `PolicyContext` so they can reference live world state. Throws `RangeError` for empty catalog, non-positive-integer frequency/burst, or out-of-range offset.
+
+### `scriptedPolicy(sequence)`
+
+```typescript
+type ScriptedPolicyEntry<TCommandMap> = {
+  [K in keyof TCommandMap & string]: { tick: number; type: K; data: TCommandMap[K] };
+}[keyof TCommandMap & string];
+
+function scriptedPolicy<TEventMap, TCommandMap, TComponents, TState>(
+  sequence: ScriptedPolicyEntry<TCommandMap>[],
+): Policy<TEventMap, TCommandMap, TComponents, TState>;
+```
+
+Plays back a pre-recorded list of `{ tick, type, data }` entries. Pre-grouped by tick at construction (O(1) per-tick lookup). Ticks not in the sequence emit nothing. `entry.tick` is matched against `PolicyContext.tick` (the tick about to execute), NOT `world.tick` at submit time. **Bundle → script conversion** (e.g., for regression playback of a recorded bug): bundle `RecordedCommand.submissionTick` is one less than the executing tick, so:
+
+```typescript
+const sequence = bundle.commands.map((cmd) => ({
+  tick: cmd.submissionTick + 1,
+  type: cmd.type,
+  data: cmd.data,
+}));
+```
