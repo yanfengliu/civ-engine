@@ -1,6 +1,6 @@
 # Synthetic Playtest Harness — Design Spec
 
-**Status:** Draft v5 (2026-04-27). Awaiting iter-5 multi-CLI review. Iter-1..4 syntheses live under `docs/reviews/synthetic-playtest/2026-04-27/design-{1..4}/REVIEW.md`. v5 addresses iter-4's 3 MED (ticksRun docstring contradiction, sourceKind c-vs-b bump, vacuous selfCheck on no-segment configs) + 3 NIT (symbol order, generic names, scriptedPolicy default-collapse).
+**Status:** Draft v6 (2026-04-27). Awaiting iter-6 multi-CLI review. Iter-1..5 syntheses live under `docs/reviews/synthetic-playtest/2026-04-27/design-{1..5}/REVIEW.md`. v6 addresses iter-5's 3 MED (leftover c-bump paragraph, incomplete vacuous-selfCheck guard — fixed by removing `terminalSnapshot` from config; policy submission model contradiction in §7.2 partial-submit) + 4 NIT.
 
 **Scope:** Tier-1 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 3). Builds on the session-recording substrate (Spec 1, merged v0.7.6 → v0.7.19). Out of scope: bundle search / corpus index (Spec 7), behavioral metrics over corpus (Spec 8), LLM-driven AI playtester (Spec 9).
 
