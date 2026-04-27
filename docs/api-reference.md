@@ -4728,7 +4728,7 @@ interface Marker {
 }
 ```
 
-`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()` (T7); recorder-added markers always get `provenance: 'game'`.
+`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()`; recorder-added markers always get `provenance: 'game'`.
 
 ### `RecordedCommand`
 
@@ -4786,7 +4786,7 @@ Catch sites that care about cause use `instanceof <Subclass>`; catch sites that 
 const ENGINE_VERSION: string;  // matches package.json's `version` field
 ```
 
-Read by `SessionRecorder` (T5) and `scenarioResultToBundle()` (T7) for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
+Read by `SessionRecorder` and `scenarioResultToBundle()` for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
 
 ## Session Recording — Sinks (SessionSink, SessionSource, MemorySink)
 
@@ -4827,7 +4827,7 @@ interface SessionSource {
 }
 ```
 
-Read interface paired with `SessionSink`. `MemorySink` and (T3) `FileSink` both implement the union (`SessionSink & SessionSource`).
+Read interface paired with `SessionSink`. `MemorySink` and `FileSink` both implement the union (`SessionSink & SessionSource`).
 
 ### `MemorySink`
 
@@ -4918,7 +4918,7 @@ type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance' | 'tick'> & { ti
 
 `addMarker(input)` validates per spec §6.1: live-tick `EntityRef`s match via `world.isCurrent`; cells in-bounds; tickRange well-formed; attachment ids registered via `attach()` first. Retroactive markers (tick < world.tick) skip entity liveness and are stamped `validated: false`. All recorder-added markers get `provenance: 'game'`.
 
-`attach(blob, options)` defaults to sidecar storage; pass `{ sidecar: false }` to opt into manifest embedding (only useful for very small blobs).
+`attach(blob, options)` defaults to "no preference; each sink applies its own default policy" — `MemorySink` routes under-threshold attachments to `dataUrl` and oversize to sidecar (with `allowSidecar`); `FileSink` keeps every blob as a sidecar file. Pass `options.sidecar: true` to force sidecar regardless of sink, or `options.sidecar: false` to force `dataUrl` embedding.
 
 ## Session Recording — SessionReplayer
 

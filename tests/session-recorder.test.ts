@@ -183,7 +183,11 @@ describe('SessionRecorder', () => {
     const rec = new SessionRecorder({ world, sink: failingSink });
     rec.connect();  // initial-snapshot write throws → recorder enters _terminated
     expect(rec.lastError).not.toBeNull();
+    // All three user-facing methods share the _assertOperational guard;
+    // verify each independently to pin the call sites.
     expect(() => rec.addMarker({ kind: 'annotation' })).toThrow(/recorder_terminated|terminated/);
+    expect(() => rec.attach({ mime: 'image/png', data: new Uint8Array([1, 2, 3]) })).toThrow(/recorder_terminated|terminated/);
+    expect(() => rec.takeSnapshot()).toThrow(/recorder_terminated|terminated/);
     rec.disconnect();
   });
 

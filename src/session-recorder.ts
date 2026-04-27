@@ -344,14 +344,15 @@ export class SessionRecorder<
   attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string {
     this._assertOperational('attach');
     const id = randomUUID();
-    // Default ref selection: when caller hasn't explicitly specified, leave
-    // `ref` as `{ sidecar: true }` so each sink applies its own default.
-    // - `MemorySink`: routes under-threshold attachments to dataUrl, oversize
-    //   to sidecar (when allowSidecar) or throws.
-    // - `FileSink`: keeps blobs as files (sidecar) — disk-backed sink default.
-    // The recorder must NOT default to `{ dataUrl: '' }` because FileSink
-    // would force manifest embedding for every attachment, defeating its
-    // documented default-sidecar behavior. Iter-1 code review fix.
+    // Default ref selection: when caller hasn't explicitly specified
+    // `options.sidecar`, pass `{ auto: true }` so each sink applies its
+    // own default policy:
+    // - `MemorySink`: routes under-threshold attachments to dataUrl,
+    //   oversize to sidecar (when `allowSidecar`) or throws.
+    // - `FileSink`: keeps blobs as files (sidecar) — disk-backed sink
+    //   default.
+    // Caller can force a specific policy via `options.sidecar: true`
+    // (sidecar) or `options.sidecar: false` (dataUrl).
     let ref: AttachmentDescriptor['ref'];
     if (options?.sidecar === false) {
       ref = { dataUrl: '' };  // explicit opt-in to manifest embedding

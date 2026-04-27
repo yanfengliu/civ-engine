@@ -1169,11 +1169,16 @@ export class World<
     // --- System ordering — invalidate so next tick re-resolves ---
     this.resolvedSystemOrder = null;
     // --- NOT transferred (preserved): handlers, validators, systems,
-    //     diffListeners, commandResultListeners, commandExecutionListeners,
+    //     nextSystemOrder (paired with systems), diffListeners,
+    //     commandResultListeners, commandExecutionListeners,
     //     tickFailureListeners, eventBus, destroyCallbacks,
     //     __payloadCapturingRecorder slot, instrumentationProfile, seed,
     //     positionKey, gameLoop (caller updates tick separately), grid
-    //     delegate (reads through to this.spatialGrid). ---
+    //     delegate (reads through to this.spatialGrid),
+    //     nextCommandResultSequence (intentionally NOT carried in
+    //     WorldSnapshotV5; SessionReplayer.selfCheck strips
+    //     submissionSequence from execution comparison to compensate
+    //     until snapshot v6 lifts this caveat). ---
   }
 
   get tick(): number {

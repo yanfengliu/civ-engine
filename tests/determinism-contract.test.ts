@@ -279,7 +279,7 @@ describe('Determinism contract — paired tests per spec §11.1', () => {
     // the replayer feeds bundle.commands at each submissionTick, AND the
     // system runs again and submits its follow-up. Result: replay processes
     // the follow-up command twice; state and execution streams diverge.
-    // Note: setup registers `tick-counter` component and a system that
+    // Note: setup registers a `submit-counter` component and a system that
     // submits 'tick' mid-step on tick=1. recordWith's `tick` handler is a
     // no-op, so the bonus submission only inflates the command stream
     // count — the side effect is the doubled submission count itself.
