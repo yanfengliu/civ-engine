@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.14 - 2026-04-27
+
+Session-recording T8: integration + clause-paired determinism tests (CI gate).
+
+### Tests added
+
+- `tests/scenario-replay-integration.test.ts`: 3 integration tests demonstrating the substrate-↔-scenario round-trip:
+  - move scenario produces a replayable bundle whose `selfCheck` returns `ok: true`.
+  - multi-step scenario with multiple commands replays cleanly.
+  - handler-crash scenario records `failedTicks`; selfCheck either skips affected segments or runs cleanly on remaining ones (per spec §9.3).
+- `tests/determinism-contract.test.ts`: 6 paired (clean + violating) tests for §11.1 determinism contract clauses:
+  - Clause 3 (route randomness through `world.random`): clean uses `world.random()`; violation uses `Math.random()` → `stateDivergences > 0`.
+  - Clause 5 (no wall-clock time inside systems): clean uses `world.tick`; violation uses `Date.now()` → `stateDivergences > 0`.
+  - Clause 8 (registration order matches between record and replay): clean uses identical setup function; violation swaps two-system order so last-writer-wins differs → `stateDivergences > 0`.
+
+Per spec §13.5 CI gate: `npm test` exercises selfCheck on the new integration corpus; the engine's existing `tests/scenario-runner.test.ts` is unchanged (ScenarioRunner-execution tests, not replay tests). The reusable-setup pattern (`registerMoveBehavior(world)` extracted from scenario.setup, called by both setup and worldFactory) is documented inline.
+
+### Validation
+
+751 tests pass (was 742). Typecheck, lint, build clean.
+
 ## 0.7.13 - 2026-04-27
 
 Session-recording T7: `scenarioResultToBundle()` adapter — translates `ScenarioResult` to `SessionBundle`.
