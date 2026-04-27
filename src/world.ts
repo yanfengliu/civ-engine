@@ -300,16 +300,20 @@ export class World<
     validateWorldConfig(config);
     this.entityManager = new EntityManager();
     this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
-    const grid = this.spatialGrid;
+    // Grid view re-reads the world's current spatial grid on every call so
+    // it stays in sync with `applySnapshot()` (which replaces the underlying
+    // grid). Closes the post-applySnapshot stale-grid bug. The view itself
+    // is frozen (read-only-delegate promise from v0.7.3 / iter-6).
+    const getGrid = (): SpatialGrid => this.spatialGrid;
     const gridView: SpatialGridView = {
-      get width() { return grid.width; },
-      get height() { return grid.height; },
-      getAt: (x, y) => {
-        const cell = grid.getAt(x, y);
+      get width(): number { return getGrid().width; },
+      get height(): number { return getGrid().height; },
+      getAt: (x: number, y: number) => {
+        const cell = getGrid().getAt(x, y);
         return cell ? new Set(cell) : null;
       },
-      getNeighbors: (x, y, offsets) => grid.getNeighbors(x, y, offsets),
-      getInRadius: (cx, cy, radius, metric) => grid.getInRadius(cx, cy, radius, metric),
+      getNeighbors: (x, y, offsets) => getGrid().getNeighbors(x, y, offsets),
+      getInRadius: (cx, cy, radius, metric) => getGrid().getInRadius(cx, cy, radius, metric),
     };
     this.grid = Object.freeze(gridView);
     this.positionKey = config.positionKey ?? 'position';
@@ -1092,10 +1096,33 @@ export class World<
     // Transfer state-bearing fields from `fresh` into `this`. TypeScript's
     // `private` is compile-time only; same-class access is permitted.
     this.entityManager = fresh.entityManager;
-    this.componentStores = fresh.componentStores;
-    this.componentOptions = fresh.componentOptions;
-    this.componentBits = fresh.componentBits;
+    // MERGE component stores rather than wholesale-replace. For each component
+    // in the snapshot, take fresh's store. For each component pre-registered
+    // on `this` but NOT in the snapshot, preserve `this`'s (empty) store so
+    // user pre-registrations survive applySnapshot. Iter-1 code review fix.
+    const preservedComponentStores = new Map(this.componentStores);
+    const preservedComponentOptions = new Map(this.componentOptions);
+    const preservedComponentBits = new Map(this.componentBits);
+    this.componentStores = new Map(fresh.componentStores);
+    this.componentOptions = new Map(fresh.componentOptions);
+    for (const [key, store] of preservedComponentStores) {
+      if (!this.componentStores.has(key)) {
+        this.componentStores.set(key, store);
+        const opts = preservedComponentOptions.get(key);
+        if (opts) this.componentOptions.set(key, opts);
+      }
+    }
+    // Component bits: take fresh's, then add bits for any preserved-but-fresh-missing
+    // components. Reassigns bits for those, which is fine because no entity has
+    // them populated.
+    this.componentBits = new Map(fresh.componentBits);
     this.nextComponentBit = fresh.nextComponentBit;
+    for (const key of preservedComponentBits.keys()) {
+      if (!this.componentBits.has(key)) {
+        this.componentBits.set(key, 1n << BigInt(this.nextComponentBit));
+        this.nextComponentBit++;
+      }
+    }
     this.entitySignatures = fresh.entitySignatures;
     this.spatialGrid = fresh.spatialGrid;
     this.previousPositions = fresh.previousPositions;

@@ -1,4 +1,4 @@
-import { assertJsonCompatible } from './json.js';
+import { assertJsonCompatible, bytesToBase64 } from './json.js';
 import type { WorldSnapshot } from './serializer.js';
 import type {
   AttachmentDescriptor,
@@ -59,24 +59,6 @@ export interface SessionSource {
 }
 
 const DEFAULT_SIDECAR_THRESHOLD_BYTES = 64 * 1024;
-
-/**
- * Convert a `Uint8Array` to a base64 string. Uses the global `btoa`
- * available in Node 16+ and browsers; processes in 4 KiB chunks to avoid
- * a large intermediate string. Civ-engine doesn't depend on `@types/node`,
- * so `Buffer` is not in scope.
- */
-function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 4096;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    let s = '';
-    for (let j = 0; j < chunk.length; j++) s += String.fromCharCode(chunk[j]);
-    binary += s;
-  }
-  return btoa(binary);
-}
 
 export interface MemorySinkOptions {
   /**

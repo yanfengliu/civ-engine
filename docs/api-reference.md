@@ -41,6 +41,9 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Session Recording (T1: types + errors)](#session-recording-t1-types--errors)
 - [Session Recording (T2: sinks)](#session-recording-t2-sinks)
 - [Session Recording (T3: FileSink)](#session-recording-t3-filesink)
+- [Session Recording (T5: SessionRecorder)](#session-recording-t5-sessionrecorder)
+- [Session Recording (T6: SessionReplayer)](#session-recording-t6-sessionreplayer)
+- [Session Recording (T7: scenarioResultToBundle)](#session-recording-t7-scenarioresulttobundle)
 
 ---
 
@@ -4780,7 +4783,7 @@ Catch sites that care about cause use `instanceof <Subclass>`; catch sites that 
 ### `ENGINE_VERSION`
 
 ```typescript
-const ENGINE_VERSION: '0.7.7';
+const ENGINE_VERSION: string;  // matches package.json's `version` field
 ```
 
 Read by `SessionRecorder` (T5) and `scenarioResultToBundle()` (T7) for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
@@ -4878,3 +4881,106 @@ Manifest is rewritten on `open()`, on each `writeSnapshot()` (advancing `metadat
 - `readSidecar(id)`: reads from `attachments/<id>.<ext>`. Throws if the descriptor is `dataUrl`-mode rather than sidecar.
 - `ticks()`, `commands()`, `executions()`, `failures()`, `markers()`: lazy generators streaming the JSONL files. Tolerate a trailing partial line (e.g. a crash mid-write).
 - `toBundle()`: reads all snapshot files, sorts numerically, returns a `SessionBundle` whose `initialSnapshot` is the lowest-tick snapshot.
+
+## Session Recording (T5: SessionRecorder)
+
+```typescript
+class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
+  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug>);
+  readonly sessionId: string;
+  readonly tickCount: number;
+  readonly markerCount: number;
+  readonly snapshotCount: number;
+  readonly isConnected: boolean;
+  readonly isClosed: boolean;
+  readonly lastError: SessionRecordingError | null;
+  connect(): void;
+  disconnect(): void;
+  addMarker(marker: NewMarker): string;
+  attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string;
+  takeSnapshot(): SessionSnapshotEntry;
+  toBundle(): SessionBundle<TEventMap, TCommandMap, TDebug>;
+}
+
+interface SessionRecorderConfig {
+  world: World;
+  sink?: SessionSink & SessionSource;       // default: new MemorySink()
+  snapshotInterval?: number | null;          // default: 1000; null disables periodic
+  terminalSnapshot?: boolean;                // default: true
+  debug?: { capture(): TDebug | null };
+  sourceLabel?: string;
+}
+
+type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance' | 'tick'> & { tick?: number };
+```
+
+`connect()` rejects: poisoned world (`code: 'world_poisoned'`); already-attached payload-capturing recorder (`code: 'recorder_already_attached'`); post-disconnect (`code: 'already_closed'`).
+
+`addMarker(input)` validates per spec §6.1: live-tick `EntityRef`s match via `world.isCurrent`; cells in-bounds; tickRange well-formed; attachment ids registered via `attach()` first. Retroactive markers (tick < world.tick) skip entity liveness and are stamped `validated: false`. All recorder-added markers get `provenance: 'game'`.
+
+`attach(blob, options)` defaults to sidecar storage; pass `{ sidecar: false }` to opt into manifest embedding (only useful for very small blobs).
+
+## Session Recording (T6: SessionReplayer)
+
+```typescript
+class SessionReplayer<TEventMap, TCommandMap, TDebug> {
+  static fromBundle(bundle: SessionBundle, config: ReplayerConfig): SessionReplayer;
+  static fromSource(source: SessionSource, config: ReplayerConfig): SessionReplayer;
+  readonly metadata: SessionMetadata;
+  readonly markerCount: number;
+  markers(): Marker[];
+  markersAt(tick: number): Marker[];
+  markersOfKind(kind: MarkerKind): Marker[];
+  markersByEntity(ref: EntityRef): Marker[];   // exact id+generation match
+  markersByEntityId(id: number): Marker[];     // any generation
+  snapshotTicks(): number[];
+  ticks(): number[];
+  openAt(tick: number): World;
+  stateAtTick(tick: number): WorldSnapshot;
+  tickEntriesBetween(fromTick: number, toTick: number): SessionTickEntry[];  // inclusive both ends
+  selfCheck(options?: SelfCheckOptions): SelfCheckResult;
+  validateMarkers(): MarkerValidationResult;
+}
+
+interface ReplayerConfig {
+  worldFactory: (snapshot: WorldSnapshot) => World;  // part of determinism contract per ADR 4
+}
+
+interface SelfCheckOptions {
+  stopOnFirstDivergence?: boolean;   // default false
+  checkState?: boolean;              // default true
+  checkEvents?: boolean;             // default true
+  checkExecutions?: boolean;         // default true
+}
+
+interface SelfCheckResult {
+  ok: boolean;
+  checkedSegments: number;
+  stateDivergences: StateDivergence[];
+  eventDivergences: EventDivergence[];
+  executionDivergences: ExecutionDivergence[];
+  skippedSegments: SkippedSegment[];      // segments containing failedTicks
+}
+
+function deepEqualWithPath(a: unknown, b: unknown, path?: string): { equal: boolean; firstDifferingPath?: string };
+```
+
+Range checks per spec §9.1: `< startTick` or `> endTick` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. Missing handler in factory throws `ReplayHandlerMissingError`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
+
+`selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
+
+## Session Recording (T7: scenarioResultToBundle)
+
+```typescript
+function scenarioResultToBundle(
+  result: ScenarioResult,
+  options?: ScenarioResultToBundleOptions,
+): SessionBundle;
+
+interface ScenarioResultToBundleOptions {
+  sourceLabel?: string;       // default: result.name
+  nodeVersion?: string;        // default: process.version
+}
+```
+
+Translates `runScenario` output to a `SessionBundle` with `sourceKind: 'scenario'`. One `kind: 'assertion'` marker per `result.checks` outcome with `provenance: 'engine'`. `metadata.startTick` from `result.history.initialSnapshot.tick` (NOT hardcoded 0). Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`. Replayable bundle requires `runScenario({ history: { captureCommandPayloads: true } })`; otherwise `bundle.commands` is empty and replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')`.

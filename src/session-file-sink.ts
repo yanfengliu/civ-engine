@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertJsonCompatible } from './json.js';
+import { assertJsonCompatible, bytesToBase64 } from './json.js';
 import type { WorldSnapshot } from './serializer.js';
 import type {
   AttachmentDescriptor,
@@ -87,6 +87,25 @@ export class FileSink implements SessionSink, SessionSource {
 
   constructor(bundleDir: string) {
     this._dir = bundleDir;
+    // Cross-process reload: if the directory already contains a manifest,
+    // load metadata + attachments from it so the FileSink can be used as
+    // a SessionSource without going through `open()` first. The user can
+    // call `toBundle()` / `readSnapshot()` / `readSidecar()` directly.
+    // If they later call `open()` to start a new recording on the same dir,
+    // the manifest is rewritten. Iter-1 code review fix (Codex C1).
+    const manifestPath = join(this._dir, MANIFEST_FILE);
+    if (existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as FileManifest;
+        if (manifest.schemaVersion === SESSION_BUNDLE_SCHEMA_VERSION) {
+          this._metadata = { ...manifest.metadata };
+          this._attachments.push(...manifest.attachments);
+        }
+      } catch {
+        // Manifest unreadable — leave _metadata null; constructor doesn't throw.
+        // open() will rewrite if/when called.
+      }
+    }
   }
 
   get metadata(): SessionMetadata {
@@ -114,7 +133,11 @@ export class FileSink implements SessionSink, SessionSource {
       const p = join(this._dir, f);
       if (!existsSync(p)) writeFileSync(p, '');
     }
+    // open() resets in-memory state to match the new recording's metadata.
+    // (The constructor may have pre-loaded a previous bundle's manifest for
+    // cross-process read access.)
     this._metadata = { ...metadata };
+    this._attachments.length = 0;
     this._writeManifest();
   }
 
@@ -374,14 +397,3 @@ export class FileSink implements SessionSink, SessionSource {
   }
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 4096;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    let s = '';
-    for (let j = 0; j < chunk.length; j++) s += String.fromCharCode(chunk[j]);
-    binary += s;
-  }
-  return btoa(binary);
-}

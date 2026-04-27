@@ -75,6 +75,7 @@ export class SessionRecorder<
   private _markerCount = 0;
   private _snapshotCount = 0;
   private _lastError: SessionRecordingError | null = null;
+  private readonly _registeredAttachmentIds = new Set<string>();
 
   private _originalSubmitWithResult: SubmitWithResultFn<TCommandMap> | null = null;
   private _diffListener: ((d: TickDiff) => void) | null = null;
@@ -262,7 +263,38 @@ export class SessionRecorder<
         );
       }
     }
-    const marker: Marker = {
+    if (input.refs?.cells) {
+      // Validate cells against world bounds. Out-of-bounds cells are rejected
+      // per spec §6.1. Iter-1 code review fix.
+      const w = this._world.grid.width;
+      const h = this._world.grid.height;
+      for (const cell of input.refs.cells) {
+        if (cell.x < 0 || cell.x >= w || cell.y < 0 || cell.y >= h) {
+          throw new MarkerValidationError(
+            `marker.refs.cells contains out-of-bounds cell { x: ${cell.x}, y: ${cell.y} } (world is ${w}×${h})`,
+            { field: 'refs.cells', x: cell.x, y: cell.y, gridWidth: w, gridHeight: h },
+            '6.1.cell_bounds',
+          );
+        }
+      }
+    }
+    if (input.attachments) {
+      // Validate that each referenced attachment id was actually registered
+      // via attach(). Iter-1 code review fix.
+      for (const attId of input.attachments) {
+        if (!this._registeredAttachmentIds.has(attId)) {
+          throw new MarkerValidationError(
+            `marker.attachments references unknown attachment id "${attId}" — call recorder.attach() first`,
+            { field: 'attachments', id: attId },
+            '6.1.attachment_unknown',
+          );
+        }
+      }
+    }
+    // Clone refs/data/attachments arrays to detach from caller-owned references.
+    // Otherwise post-call mutation by user code would corrupt the recorded
+    // bundle. Iter-1 code review fix (Codex H3 / memory aliasing).
+    const marker: Marker = cloneJsonValue({
       id: randomUUID(),
       tick,
       kind: input.kind,
@@ -273,7 +305,7 @@ export class SessionRecorder<
       ...(input.data !== undefined ? { data: input.data } : {}),
       ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
       ...(isLive ? {} : { validated: false as const }),
-    };
+    } as Marker, 'session marker');
     try {
       this._sink.writeMarker(marker);
     } catch (e) {
@@ -289,12 +321,26 @@ export class SessionRecorder<
       throw new RecorderClosedError('cannot attach on disconnected recorder');
     }
     const id = randomUUID();
+    // Default ref selection: when caller hasn't explicitly specified, leave
+    // `ref` as `{ sidecar: true }` so each sink applies its own default.
+    // - `MemorySink`: routes under-threshold attachments to dataUrl, oversize
+    //   to sidecar (when allowSidecar) or throws.
+    // - `FileSink`: keeps blobs as files (sidecar) — disk-backed sink default.
+    // The recorder must NOT default to `{ dataUrl: '' }` because FileSink
+    // would force manifest embedding for every attachment, defeating its
+    // documented default-sidecar behavior. Iter-1 code review fix.
+    let ref: AttachmentDescriptor['ref'];
+    if (options?.sidecar === false) {
+      ref = { dataUrl: '' };  // explicit opt-in to manifest embedding
+    } else {
+      ref = { sidecar: true };  // default + explicit opt-in
+    }
     const desc: AttachmentDescriptor = {
-      id, mime: blob.mime, sizeBytes: blob.data.byteLength,
-      ref: options?.sidecar ? { sidecar: true } : { dataUrl: '' },
+      id, mime: blob.mime, sizeBytes: blob.data.byteLength, ref,
     };
     try {
       this._sink.writeAttachment(desc, blob.data);
+      this._registeredAttachmentIds.add(id);
     } catch (e) {
       this._handleSinkError(e);
       throw e;
@@ -378,13 +424,16 @@ export class SessionRecorder<
   ): void {
     if (this._terminated) return;
     try {
-      const record: RecordedCommand<TCommandMap> = {
+      // Clone via cloneJsonValue to detach from caller-owned references.
+      // Otherwise post-submit mutation by user code would corrupt the
+      // recorded bundle. Iter-1 code review fix (Codex H3).
+      const record = cloneJsonValue<RecordedCommand<TCommandMap>>({
         submissionTick: result.tick,
         sequence: result.sequence,
         type: type as keyof TCommandMap & string,
         data,
         result,
-      };
+      }, `recorded command ${result.sequence}`);
       this._sink.writeCommand(record as unknown as RecordedCommand);
     } catch (e) {
       this._handleSinkError(e);

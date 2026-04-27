@@ -1,0 +1,19 @@
+Brief summary: I found 6 material issues. The two blockers are that disk bundles are not actually reloadable in a fresh process, and `applySnapshot()` violates the replay contract by dropping empty component registrations and leaving `world.grid` pointed at the old grid. I did not elevate style-only concerns; the important AGENTS/boundary problems here are functional.
+
+**Critical**
+- `src/session-file-sink.ts:92-99,296-339` and `src/session-replayer.ts:125-133`: `FileSink` is not really a reusable `SessionSource`. `metadata`/`toBundle()` require `_metadata` to already be populated by `open()`, and `readSidecar()` only consults the in-memory `_attachments` array. A fresh `new FileSink(existingDir)` cannot read a bundle written by an earlier process. `SessionReplayer.fromSource()` then immediately calls `source.toBundle()`, so the advertised disk-backed/lazy source path does not exist in practice. This contradicts `docs/guides/session-recording.md:49-59` and `docs/api-reference.md:4827,4848`.
+- `src/world.ts:303-314,1087-1100`: `applySnapshot()` breaks the worldFactory contract in two ways. First, it swaps in `fresh.componentStores/componentOptions/componentBits/nextComponentBit`, so any component that was registered but has no entries in the snapshot disappears after `applySnapshot()`. Second, it swaps `this.spatialGrid`, but the public `world.grid` delegate closed over the original grid in the constructor, so `world.grid` reads stale occupancy after replay. That directly undermines the documented “register, then applySnapshot” flow in `docs/guides/session-recording.md:108-120`.
+
+**High**
+- `src/session-recorder.ts:287-297` and `src/session-file-sink.ts:241-262`: `SessionRecorder.attach()` hard-codes the default path to `{ dataUrl: '' }` whenever `options.sidecar` is omitted. For `FileSink`, that forces manifest embedding, because `writeAttachment()` treats any `{ dataUrl }` ref as dataUrl mode. So the public recorder API never exercises FileSink’s documented default-sidecar behavior; the guide says the opposite at `docs/guides/session-recording.md:59`.
+- `src/session-recorder.ts:226-275`: `addMarker()` only validates entity refs and `tickRange`. It never validates `refs.cells` against world bounds, and it never checks that `attachments` IDs were actually created via `attach()`. Those are both required by the spec/guides, so invalid markers can be recorded as if they were engine-validated.
+- `src/session-recorder.ts:374-388` and `src/session-sink.ts:151-154,181-184`: memory-backed recording aliases caller-owned objects. `_captureCommand()` passes the original command `data` through, `addMarker()` reuses `refs/data/attachments` by reference, and `MemorySink` just pushes those objects into arrays without cloning. If user code mutates a submitted command or marker payload after the call, the recorded bundle changes underneath the recorder. That breaks deterministic capture.
+
+**Medium**
+- `src/session-replayer.ts:111,385-411`: `SessionReplayer` never checks `bundle.schemaVersion`. The only compatibility gate is `_verifyVersionCompat()`, and it only inspects engine/node versions. An unsupported future or stale bundle schema will be accepted as long as `engineVersion` happens to match, even though the public error contract says this should throw `BundleVersionError`.
+
+**Low**
+- `docs/api-reference.md:4783`: pure doc drift. It still documents `const ENGINE_VERSION: '0.7.7'`, while `src/version.ts` and `package.json` are `0.7.15`.
+
+**Note**
+- The new tests are not trivial, but they are biased toward same-process happy paths. They miss exactly the bugs above: reopening a disk bundle in a fresh process, `applySnapshot()` with registered-but-empty components / public grid reads, marker cell/attachment validation, and post-call mutation of recorded payload objects.

@@ -71,3 +71,22 @@ export function cloneJsonValue<T>(value: T, label: string): T {
   assertJsonCompatible(value, label);
   return JSON.parse(JSON.stringify(value)) as T;
 }
+
+/**
+ * Convert a `Uint8Array` to a base64 string. Uses the global `btoa` (Node 16+
+ * / browser); processes in 4 KiB chunks to avoid a single huge intermediate
+ * string. civ-engine doesn't depend on `@types/node`'s `Buffer`, so we use
+ * the platform-native API. Used by session-recording sinks for `dataUrl`
+ * attachment encoding.
+ */
+export function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 4096;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    let s = '';
+    for (let j = 0; j < chunk.length; j++) s += String.fromCharCode(chunk[j]);
+    binary += s;
+  }
+  return btoa(binary);
+}

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.7.16 - 2026-04-27
+
+Session-recording iter-1 code review fix-pass. Closes 2 Critical, 4 High, 1 Medium, 4 Low / Note findings from the multi-CLI code review (Codex + Opus; Gemini quota-out).
+
+### Critical fixes
+
+- **`World.applySnapshot` no longer drops registered-but-empty components.** Previously the wholesale `componentStores` swap deleted user pre-registrations of components that weren't in the snapshot. Now merges: snapshot components replace `this`'s, and user's pre-registered components not in the snapshot are preserved. Component bits are unioned. *(Codex C2 part 1)*
+- **`world.grid` delegate now reads through to the current `spatialGrid`.** Previously the constructor closed over a local `grid` reference that became stale after `applySnapshot` swapped the underlying `SpatialGrid`. Replaced the closure with a `getGrid()` accessor that reads `this.spatialGrid` on every call. *(Codex C2 part 2)*
+- **`FileSink` is now reusable as a `SessionSource` cross-process.** Constructor pre-loads `manifest.json` (if present) so a fresh `new FileSink(existingDir)` can read snapshots / sidecars / metadata without going through `open()`. `open()` resets in-memory state to match the new recording. *(Codex C1)*
+
+### High fixes
+
+- **`SessionRecorder.attach()` defaults to `{ sidecar: true }`** so each sink can apply its own default policy. Previously defaulted to `{ dataUrl: '' }` which forced FileSink to always embed in the manifest, defeating its documented default-sidecar behavior. Pass `{ sidecar: false }` to opt into manifest embedding. *(Codex H1)*
+- **`SessionRecorder.addMarker()` validates `refs.cells` against world bounds and `attachments` ids against registered attachments.** Previously only entity refs and tickRange were validated. *(Codex H2)*
+- **`SessionRecorder` now `cloneJsonValue`s captured commands and markers** to detach from caller-owned references. Previously memory-aliased — user code mutating after the call corrupted the recorded bundle. *(Codex H3)*
+- **`SessionReplayer.selfCheck()` execution comparison ignores `submissionSequence`.** Multi-segment selfCheck previously false-positived `executionDivergences` because `WorldSnapshotV5` doesn't carry `nextCommandResultSequence`, so each segment's replay reset the counter to 0 while the recording's executions had monotonic-across-session sequences. v6 snapshot would lift this caveat; for v1 we strip sequence from comparison. *(Opus H1)*
+
+### Medium fixes
+
+- **`SessionReplayer` checks `bundle.schemaVersion`** at construction. Previously only engine/node versions were checked. Throws `BundleVersionError(code: 'schema_unsupported')`. *(Codex M1)*
+- **`SessionReplayer.tickEntriesBetween()` uses `persistedEndTick` for incomplete bundles.** Previously used `endTick` universally, allowing callers to silently get truncated sets on incomplete bundles. *(Opus M2)*
+
+### Low / cleanup
+
+- **Extracted `bytesToBase64()` to `src/json.ts`.** Previously duplicated identically in `session-sink.ts` and `session-file-sink.ts`. *(Opus L1)*
+- **Removed dead-code import-pinning block in `session-replayer.ts`.** *(Opus M4)*
+- **`docs/api-reference.md`:** added missing `T5: SessionRecorder`, `T6: SessionReplayer`, `T7: scenarioResultToBundle` sections (per AGENTS.md doc discipline). *(Opus H2)* Updated `ENGINE_VERSION` literal to read "matches package.json" instead of a stale `'0.7.7'`. *(Opus M3, Codex L1)*
+
+### Validation
+
+751 tests pass (unchanged from T8 — all fixes preserve behavior of existing tests; new tests pending iter-2 review). Typecheck, lint, build clean.
+
 ## 0.7.15 - 2026-04-27
 
 Session-recording T9: structural docs + final integration. Doc-only commit.

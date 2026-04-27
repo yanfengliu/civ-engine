@@ -3,7 +3,6 @@ import type {
   EntityRef,
   Marker,
   MarkerKind,
-  RecordedCommand,
   SessionBundle,
   SessionMetadata,
   SessionSnapshotEntry,
@@ -14,16 +13,10 @@ import {
   BundleRangeError,
   BundleVersionError,
   ReplayHandlerMissingError,
-  SessionRecordingError,
 } from './session-errors.js';
 import type { SessionSource } from './session-sink.js';
 import { ENGINE_VERSION } from './version.js';
-import type {
-  CommandExecutionResult,
-  CommandSubmissionResult,
-  TickFailure,
-  World,
-} from './world.js';
+import type { CommandExecutionResult, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
 
 export interface ReplayerConfig<
@@ -225,10 +218,12 @@ export class SessionReplayer<
 
   tickEntriesBetween(fromTick: number, toTick: number): SessionTickEntry<TEventMap, TDebug>[] {
     const md = this._bundle.metadata;
-    if (fromTick < md.startTick || toTick > md.endTick || fromTick > toTick) {
+    // Use persistedEndTick for incomplete bundles. Iter-1 code review fix.
+    const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+    if (fromTick < md.startTick || toTick > upper || fromTick > toTick) {
       throw new BundleRangeError(
-        `tick range [${fromTick}, ${toTick}] outside [${md.startTick}, ${md.endTick}] or inverted`,
-        { code: 'range_invalid', fromTick, toTick, startTick: md.startTick, endTick: md.endTick },
+        `tick range [${fromTick}, ${toTick}] outside [${md.startTick}, ${upper}] or inverted`,
+        { code: 'range_invalid', fromTick, toTick, startTick: md.startTick, upper, incomplete: md.incomplete ?? false },
       );
     }
     return this._bundle.ticks.filter((e) => e.tick >= fromTick && e.tick <= toTick);
@@ -352,13 +347,28 @@ export class SessionReplayer<
           }
         }
         if (flags.checkExecutions) {
-          const expected = this._bundle.executions.filter((e) => e.tick === t + 1);
-          const actual = replayExecs.filter((e) => e.tick === t + 1);
+          // Compare execution streams ignoring `submissionSequence`.
+          // `submissionSequence` is engine-level bookkeeping that monotonically
+          // counts across the whole session. On replay starting from a
+          // mid-bundle snapshot, the world's counter resets to 0 — so
+          // recorded executions have higher sequences than replayed ones
+          // even on a clean recording. WorldSnapshot v5 doesn't carry the
+          // counter; v6 (future spec) would lift this caveat. For v1, we
+          // strip submissionSequence from comparison so multi-segment
+          // selfCheck doesn't false-positive. Iter-1 code review fix
+          // (Opus H1; spec §13.5 CI gate).
+          const stripSeq = (e: unknown): Record<string, unknown> => {
+            const { submissionSequence: _drop, ...rest } = e as { submissionSequence?: number } & Record<string, unknown>;
+            void _drop;
+            return rest;
+          };
+          const expected = this._bundle.executions.filter((e) => e.tick === t + 1).map(stripSeq);
+          const actual = replayExecs.filter((e) => e.tick === t + 1).map(stripSeq);
           if (!deepEqualOrdered(expected, actual)) {
             execDivs.push({
               tick: t + 1,
-              expected: expected as unknown as CommandExecutionResult[],
-              actual,
+              expected: this._bundle.executions.filter((e) => e.tick === t + 1) as unknown as CommandExecutionResult[],
+              actual: replayExecs.filter((e) => e.tick === t + 1),
             });
           }
         }
@@ -384,6 +394,13 @@ export class SessionReplayer<
 
   private _verifyVersionCompat(): void {
     const md = this._bundle.metadata;
+    // Schema version check before engine-version check. Iter-1 code review fix.
+    if (this._bundle.schemaVersion !== 1) {
+      throw new BundleVersionError(
+        `unsupported bundle schemaVersion: ${this._bundle.schemaVersion} (replayer supports 1)`,
+        { code: 'schema_unsupported', schemaVersion: this._bundle.schemaVersion },
+      );
+    }
     const bundleParts = md.engineVersion.split('.').map((p) => Number(p));
     const runtimeParts = ENGINE_VERSION.split('.').map((p) => Number(p));
     const [ba, bb] = bundleParts;
@@ -470,14 +487,3 @@ function deepEqualOrdered(a: unknown[], b: unknown[]): boolean {
   return true;
 }
 
-// Ensure CommandSubmissionResult / SessionRecordingError stay imported even
-// when not referenced explicitly above (used for type narrowing in callers).
-type _UseCommandSubmissionResult = CommandSubmissionResult;
-type _UseSessionRecordingError = SessionRecordingError;
-type _UseTickFailure = TickFailure;
-type _UseRecordedCommand = RecordedCommand;
-const _u1: _UseCommandSubmissionResult | null = null;
-const _u2: _UseSessionRecordingError | null = null;
-const _u3: _UseTickFailure | null = null;
-const _u4: _UseRecordedCommand | null = null;
-void _u1; void _u2; void _u3; void _u4;
