@@ -1,0 +1,42 @@
+You are a senior software architect reviewing a design spec iter-3 (civ-engine Spec 8, Behavioral Metrics over Corpus). The diff piped via stdin is the v2→v3 changes to docs/design/2026-04-27-behavioral-metrics-design.md. The full v3 file is on disk at that path — read it directly to check unchanged sections for stale references that may have leaked through.
+
+# Iter-1 (addressed in v2)
+- Codex: 3 HIGH + 2 MED + 1 LOW
+- Opus: 4 HIGH + 6 MED + 4 LOW + 5 NIT
+
+# Iter-2 findings (this iter-3 review must verify v3 addresses them)
+
+## Opus iter-2
+- HIGH H-EXEC-SEMANTICS: §6.10 `commandAcceptanceRate` claimed `executed===false` captures validator rejections. False — world.ts:732-748 shows validator-rejected submissions never reach bundle.executions. v3 fix: rename to `commandValidationAcceptanceRate`, switch to `bundle.commands[].result.accepted`. Keep `executionFailureRate` reading `bundle.executions[].executed`, but rewrite docs to list the 3 actual causes (missing_handler / command_handler_threw / tick_aborted_before_handler).
+- MED M-FAILEDTICK-DIVZERO: §6.8 was `totalFailedTicks / totalDurationTicks` with only "Empty corpus → 0" guard. Zero-tick-corpus (e.g., all bundles aborted on tick 0) yields 0/0 = NaN. v3 fix: `totalDurationTicks > 0 ? rate : 0`.
+- 6 NITs: §8 wrong cross-ref (§6.10 → §6.12); §6.2 NaN-wording reversed ("losslessly" should be "lossy"); §10 example casts past `OnlyInComparison` silently; ADR 26 claims AsyncIterable widening is "non-breaking overload" (it isn't — return type would widen); §7.2 missing negative-baseline pctChange caveat; N-DUP-METRIC (commandAcceptanceRate + executionFailureRate sum to 1).
+
+## Codex iter-2
+- HIGH (same H-EXEC-SEMANTICS): preferred (a) rename approach. Engine-fact references: src/session-bundle.ts:41/109, src/session-recorder.ts:165/169, src/world.ts:732/1684.
+- MED M-DRIFT: §12 (Testing Strategy) and ADR 24 still contain pre-v2 wording — "empty corpus returns count: 0 + NaNs" (line ~454) and "9 built-ins" (lines ~461 and ~523). These are now algorithmically wrong (v2 specified `null` not NaN; v2 added 11 built-ins). v3 must update these — please verify.
+
+## v3 stated approach
+- Picked Opus's option (b): rename to `commandValidationAcceptanceRate` AND keep both metrics (now reading different sources, no longer 1-x).
+- Did NOT apply N-DUP-METRIC because after the rename the two metrics read different sources (bundle.commands vs bundle.executions); they are no longer algebraically inverse — verify this rationale holds.
+
+# Engine-fact context (re-verify if anything looks off)
+- `SessionBundle.commands: RecordedCommand[]` — every submitWithResult result, including validator rejections (`result.accepted === false`).
+- `SessionBundle.executions: CommandExecutionResult[]` — only commands that reached the queue/handler stage, with `executed: boolean`.
+- `bundle.metadata.failedTicks: number[]; durationTicks: number; incomplete?: true`.
+- Validator-rejected commands are dropped before queueing per world.ts:732-748 → never reach bundle.executions.
+
+# Review aspects
+1. Design — easily scales / generalizes / lean / debuggable.
+2. Correctness — formulas, edge cases, divide-by-zero, JSON round-trip, type signatures.
+3. Doc accuracy — flag any stale signatures, contradictions between §X and §Y, removed-API mentions, missing coverage of new APIs in canonical sections (especially §12 Testing Strategy, §13 Documentation Surface, §15 Architectural Decisions, §18 Acceptance Criteria — these were the surfaces with iter-2 drift).
+4. Engine-fact alignment — formulas/comments must match what bundle fields actually contain.
+5. Test coverage adequacy in §12.
+
+# Bar for ACCEPT
+No remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "iterate until reviewers nitpick instead of catching real bugs."
+
+# Rules
+- Do NOT modify files or propose patches.
+- Plain text findings only with severity tags [BLOCKER]/[HIGH]/[MED]/[LOW]/[NIT].
+- Only point out real, important issues. If there is none at a severity, say so instead of nit-picking.
+- End with a clear verdict line: "ACCEPT" or "REJECT — <one-line reason>".
