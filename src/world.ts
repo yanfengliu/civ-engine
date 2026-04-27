@@ -632,7 +632,7 @@ export class World<
     this.poisonedWarningEmitted = false;
   }
 
-  private warnIfPoisoned(api: string): void {
+  warnIfPoisoned(api: string): void {
     if (!this.poisoned || this.poisonedWarningEmitted) return;
     this.poisonedWarningEmitted = true;
     console.warn(
@@ -707,9 +707,8 @@ export class World<
     return this.submitWithResult(type, data).accepted;
   }
 
-  transaction(): CommandTransaction<TEventMap> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return new CommandTransaction<TEventMap>(this as unknown as World<TEventMap, any, any, any>);
+  transaction(): CommandTransaction<TEventMap, TCommandMap, TComponents, TState> {
+    return new CommandTransaction<TEventMap, TCommandMap, TComponents, TState>(this);
   }
 
   submitWithResult<K extends keyof TCommandMap>(

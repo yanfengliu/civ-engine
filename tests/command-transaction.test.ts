@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { World } from '../src/world.js';
 
 describe('CommandTransaction', () => {
@@ -426,11 +426,117 @@ describe('CommandTransaction', () => {
       ).toThrow(/function/);
     });
 
-    it('emit at commit-time validates JSON-compat (delegated to EventBus)', () => {
+    it('emit() validates JSON-compat at buffer time (M1) — throws before commit', () => {
       const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
-      // EventBus rejects non-JSON-compat payloads
-      const tx = world.transaction().emit('hit', { fn: () => 1 } as never);
-      expect(() => tx.commit()).toThrow();
+      world.registerComponent('hp');
+      const entity = world.createEntity();
+
+      const tx = world.transaction().setComponent(entity, 'hp', { current: 100 });
+      // Non-JSON payload is rejected at emit() call time, before any mutation runs.
+      expect(() => tx.emit('hit', { fn: () => 1 } as never)).toThrow();
+      // Mutations buffered before the bad emit() are NOT applied.
+      expect(world.getComponent(entity, 'hp')).toBeUndefined();
+    });
+  });
+
+  describe('precondition read-only enforcement (C1)', () => {
+    it('predicate cannot mutate world via setComponent', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      const e = world.createEntity();
+
+      const tx = world.transaction().require((w) => {
+        // Cast away the readonly type; runtime must still block the write.
+        (w as unknown as World).setComponent(e, 'hp', { current: 1 });
+        return true;
+      });
+      expect(() => tx.commit()).toThrow(/precondition/i);
+      expect(world.getComponent(e, 'hp')).toBeUndefined();
+    });
+
+    it('predicate cannot debit resources during evaluation', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerResource('wood');
+      const player = world.createEntity();
+      world.addResource(player, 'wood', 100);
+
+      const tx = world.transaction().require((w) => {
+        (w as unknown as World).removeResource(player, 'wood', 50);
+        return false;
+      });
+      expect(() => tx.commit()).toThrow(/precondition/i);
+      // Wood untouched: predicate's side-effect blocked.
+      expect(world.getResource(player, 'wood')?.current).toBe(100);
+    });
+
+    it('predicate can call read methods (getComponent, hasResource)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      world.registerResource('wood');
+      const e = world.createEntity();
+      world.setComponent(e, 'hp', { current: 50 });
+      world.addResource(e, 'wood', 10);
+
+      const result = world
+        .transaction()
+        .setComponent(e, 'hp', { current: 100 })
+        .require((w) => {
+          // Reads are allowed.
+          const hp = w.getComponent(e, 'hp') as { current: number } | undefined;
+          const wood = w.getResource(e, 'wood');
+          return hp?.current === 50 && (wood?.current ?? 0) >= 10;
+        })
+        .commit();
+
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('poisoned-world warning (H3)', () => {
+    it('commit() warns once when world is poisoned', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerSystem(() => {
+        throw new Error('boom');
+      });
+      world.stepWithResult();
+      expect(world.isPoisoned()).toBe(true);
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.transaction().commit();
+      world.transaction().commit();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const message = warnSpy.mock.calls[0][0] as string;
+      expect(message).toMatch(/transaction/);
+      expect(message).toMatch(/poisoned/);
+      warnSpy.mockRestore();
+    });
+
+    it('commit() does not warn on a healthy world', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      world.transaction().commit();
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('terminal status error messages (L2)', () => {
+    it('after abort, builder throws an aborted-flavored error', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      const e = world.createEntity();
+      const tx = world.transaction();
+      tx.abort();
+      expect(() => tx.setComponent(e, 'hp', { current: 1 })).toThrow(/aborted/i);
+    });
+
+    it('after successful commit, builder throws a committed-flavored error', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      world.registerComponent('hp');
+      const e = world.createEntity();
+      const tx = world.transaction();
+      tx.commit();
+      expect(() => tx.setComponent(e, 'hp', { current: 1 })).toThrow(/committed/i);
     });
   });
 

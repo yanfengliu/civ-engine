@@ -3384,10 +3384,10 @@ import { CommandTransaction, type TransactionResult } from 'civ-engine';
 ### `world.transaction()`
 
 ```typescript
-transaction(): CommandTransaction<TEventMap>
+transaction(): CommandTransaction<TEventMap, TCommandMap, TComponents, TState>
 ```
 
-Creates a fresh transaction bound to this world. The returned transaction inherits the world's `TEventMap` so `tx.emit(type, data)` is type-checked against the same event map as `world.emit`.
+Creates a fresh transaction bound to this world. The returned transaction inherits all four of the world's generics, so typed component / state / event access works inside the transaction the same way it works against `world.setComponent` / `world.emit` directly. `world.transaction().setComponent(e, 'hp', { wrong: 5 })` against `World<..., ..., { hp: { current: number } }, ...>` is a TypeScript error matching `world.setComponent`.
 
 ### Builder methods (chainable, return `this`)
 
@@ -3408,15 +3408,18 @@ All builder methods throw if the transaction has already been committed or abort
 ### Preconditions
 
 ```typescript
-type TransactionPrecondition<TEventMap> =
-  (world: World<TEventMap>) => true | false | string;
+type TransactionPrecondition<TEventMap, TCommandMap, TComponents, TState> =
+  (world: ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>)
+    => true | false | string;
 ```
 
-A predicate receives the live world and must return one of:
+A predicate receives a **read-only façade** of the world and must return one of:
 
 - `true` — pass
 - `false` — fail (rejection reason: `"precondition returned false"`)
 - a `string` — fail (rejection reason: the string)
+
+`ReadOnlyTransactionWorld` is `Omit<World, 'setComponent' | 'setState' | 'emit' | 'addResource' | 'removeResource' | 'destroyEntity' | ...>` — every public mutation method on `World` is excluded. Predicates may freely call read methods (`getComponent`, `hasResource`, `getState`, `getInRadius`, `findNearest`, `getByTag`, etc.). Calling a write method from inside a predicate fails to typecheck; if the type is cast away, the proxy throws at runtime: `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`.
 
 Preconditions run in registration order at the start of `commit()` and short-circuit on the first failure. Each predicate sees the **current live state** of the world, not the transaction's proposed mutations — preconditions are checked against the pre-commit baseline, not the post-commit projection.
 
@@ -3444,7 +3447,8 @@ Marks a pending transaction as aborted. A subsequent `commit()` returns `{ ok: f
 - **Unbuffered ops:** `createEntity`, `destroyEntity`, `addTag`, `removeTag`, `setMeta`, `deleteMeta`, `setState`, `deleteState`, and resource registration / `setResourceMax` are not buffered. v1 covers components (set / add / patch / remove), position, events, and resource add / remove.
 - **Aliasing window.** Buffered values (the `data` argument to `setComponent` / `addComponent` / `patchComponent`, the `position` argument to `setPosition`, and the `data` argument to `emit`) are stored by reference. Mutating a buffered object between the builder call and `commit()` is observable at apply time. Treat buffered values as owned by the transaction once handed over.
 - **Mid-commit throw → partial state, transaction consumed.** If a buffered mutation throws mid-commit (e.g., entity destroyed between buffering and commit, JSON-incompat caller-side mutation per the aliasing window above, etc.), the error propagates. Mutations 0..N-1 already applied stay applied. The transaction is still consumed (status flips to `committed` in a `finally` block), so calling `commit()` again throws — the caller cannot retry and silently double-apply earlier mutations (e.g., double-debit a resource). Best practice: validate entity liveness via `require((w) => w.isAlive(entity) || 'entity dead')` before mutating.
-- **Mid-emit throw → partial event delivery.** Events fire synchronously in registration order after all mutations apply. If event N's listeners throw or the JSON-compat check rejects payload N, mutations 0..M and events 0..N-1 are already applied / fired. The transaction-level "all-or-nothing" promise covers preconditions, not emit-time exceptions. Validate event payloads before buffering.
+- **Event payloads are validated at `emit()` buffer time, not at `commit()`.** Calling `emit(type, data)` with a non-JSON-cloneable payload throws immediately at the builder call, before any mutation runs. Listener exceptions during `commit()` still propagate after mutations have applied — the transaction-level "all-or-nothing" promise covers preconditions and JSON-compat validation, not arbitrary exceptions thrown by listener callbacks.
+- **Poisoned-world warning.** If `commit()` runs against a world that has not been recovered from a prior tick failure, it emits the standard `console.warn` once per poison cycle (`api='transaction'`). Call `world.recover()` before transacting against a previously-failed world.
 
 ### Example: cost-checked build action
 

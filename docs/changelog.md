@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0 - 2026-04-26
+
+`CommandTransaction` correctness + ergonomics overhaul. Multi-CLI full-review (Codex / Opus; Gemini quota-degraded but produced output) flagged a Critical (mutable preconditions broke the "all-or-nothing" guarantee) plus a three-reviewer consensus High (the new transaction surface dropped the v0.5.2 typed-component generics) plus several smaller hits. Breaking — `TransactionPrecondition` signature changed; `emit()` now validates JSON-compat at buffer time; `CommandTransaction` is now generic over `<TEventMap, TCommandMap, TComponents, TState>`. 576 tests pass (up from 569).
+
+### Breaking
+
+- **`TransactionPrecondition` receives a read-only world façade, not the live `World`.** The new `ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>` type is `Omit<World, ...write methods>`. Predicates that previously called `world.setComponent(...)` etc. inside the predicate now fail to typecheck, and (if the type is cast away) throw at runtime: `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. The contract docs already promised "world untouched on precondition failure"; the implementation now enforces it. Predicates may freely call read methods (`getComponent`, `hasResource`, `getState`, `getInRadius`, etc.).
+- **`CommandTransaction.emit(type, data)` validates JSON-compat at buffer time, not at `commit()`.** Calling `emit()` with a non-JSON-cloneable payload (e.g. `{ fn: () => 1 }`) throws immediately at the builder call. Previously the throw fired during `commit()` after all buffered mutations had already applied — partial-apply hazard. Buffer-time validation moves the failure to before any state change.
+- **`CommandTransaction` is now generic over four params:** `<TEventMap, TCommandMap, TComponents, TState>` (mirroring `World`'s generic order). `world.transaction()` returns `CommandTransaction<TEventMap, TCommandMap, TComponents, TState>` so typed component / state access works inside transactions. Callers using the inferred return type need no change. Callers that explicitly typed `CommandTransaction<TEventMap>` need to drop the explicit annotation or update to four generics.
+
+### Added
+
+- **`ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>` type export** (`src/command-transaction.ts`) — covers the read surface available inside a precondition.
+- **Typed builder overloads** on `CommandTransaction.setComponent` / `addComponent` / `patchComponent` / `removeComponent` matching `World`'s typed/loose pattern. `world.transaction().setComponent(e, 'hp', { wrong: 5 })` against a `World<..., ..., { hp: { current: number } }, ...>` now produces a TypeScript error matching `world.setComponent`.
+- **`World.warnIfPoisoned(api)` is now public** (was private). The `CommandTransaction.commit()` path calls it with `api='transaction'` so a poisoned world emits the standard "warn-once-per-poison-cycle" diagnostic before applying any buffered mutation.
+
+### Fixed
+
+- **C1 (Critical, single-reviewer):** mutable preconditions could violate the transaction's atomicity guarantee. A predicate could call `setComponent` / `removeResource` / `emit` etc. on the live world, then return `false`; `commit()` would report `precondition_failed` while the predicate's writes stayed applied. The new read-only façade enforces side-effect freedom both at the type level (`Omit` excludes write methods) and at runtime (Proxy throws on forbidden method names + property writes).
+- **H1 (High, three-reviewer consensus):** `CommandTransaction` previously had only `<TEventMap>`. Generic threading is restored.
+- **H3 (High):** `world.transaction()` skipped the v0.5.1 `warnIfPoisoned` policy. `commit()` now emits the warning once per poison cycle.
+- **M1 (Medium):** mid-emit JSON-compat failure used to leave mutations applied. Validation moved to buffer time.
+- **L2 (Low):** after `abort()`, builder methods now throw "already aborted" (not "already committed"). A separate `terminalReason` field tracks the original terminal state so error messages stay honest.
+- **L6 (Low):** the `as unknown as World<TEventMap, any, any, any>` cast and two `eslint-disable @typescript-eslint/no-explicit-any` comments at the `world.transaction()` site were obsoleted by H1 and removed.
+
+### Documented
+
+- **`docs/architecture/ARCHITECTURE.md`** — `CommandTransaction` Boundaries paragraph updated: predicates receive a read-only façade; `commit()` warns on poisoned world; `emit()` validates payloads at buffer time.
+- **`docs/api-reference.md`** — `## Command Transaction` section updated with the new generic signature, `ReadOnlyTransactionWorld` type, and the buffer-time-validation note.
+
 ## 0.5.11 - 2026-04-25
 
 `CommandTransaction` — atomic propose-validate-commit-or-abort builder over `World`. Inspired by MicropolisCore's `ToolEffects` (`MicropolisEngine/src/tool.h:171–305`), where a tool gathers a `WorldModificationsMap` of position-to-tile changes plus a cost, then `modifyIfEnoughFunding()` commits atomically or discards. For an AI-native engine this is the natural shape of "agent proposes an action, engine validates cost/preconditions, mutations + events apply or none do." 569 tests pass (up from 540).
