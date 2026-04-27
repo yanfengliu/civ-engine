@@ -140,49 +140,39 @@ declare module './world.js' {
 }
 ```
 
-### Step 0.4: Add two World API surfaces needed by T5/T6
+### Step 0.4: Add three World API surfaces needed by T5/T6/T8
 
-Marker validation in T5 (per spec §6.1) needs to verify that an `EntityRef` (id+generation) matches a live entity. Replay in T6 (per spec §9.1 step 3b) needs to detect missing handlers. Current `World.isAlive(id: EntityId)` (`src/world.ts:366`) takes only id; there is no `hasHandler(type)`. Add both as additive public methods:
+Three additive public methods needed downstream:
+
+1. **Marker validation** in T5 (per spec §6.1) needs to verify that an `EntityRef` (id+generation) matches a live entity. The engine already exposes `World.isCurrent(ref: EntityRef): boolean` at `src/world.ts:383` — verify and reuse this rather than adding a duplicate. The plan's earlier sketches calling `world.isAliveAtGeneration(id, generation)` should be rewritten to `world.isCurrent({ id, generation })`.
+2. **Replay handler-missing detection** in T6 (per spec §9.1 step 3b) needs `world.hasHandler(type)`. Not currently exposed. Add it.
+3. **Worldfactory replay** in T8 needs to apply a snapshot to a world that already has registrations (since `World.deserialize(snap)` returns a fresh world without user registrations, and `registerComponent` / `registerHandler` would conflict with state already deserialized). Add `World.applySnapshot(snapshot)` instance method that overwrites entity/component/resource state in-place WITHOUT clearing registrations.
 
 In `src/world.ts`:
 
 ```ts
-// Existing isAlive — keep:
-isAlive(id: EntityId): boolean { /* ... */ }
-
-// NEW: generation-aware check
-isAliveAtGeneration(id: EntityId, generation: number): boolean {
-  return this.isAlive(id) && this.entityManager.getGeneration(id) === generation;
-}
-
-// NEW: handler presence check
+// NEW: handler presence check (used by SessionReplayer.openAt)
 hasHandler<K extends keyof TCommandMap>(type: K): boolean {
   return this.commandQueue.hasHandler(type as string);
 }
+
+// NEW: in-place snapshot application (used by worldFactory in T8)
+// Overwrites entity/component/resource/state/RNG; preserves component/handler/validator/system registrations.
+applySnapshot(snapshot: WorldSnapshot): void {
+  // Reuse the existing deserialize logic against `this` rather than constructing a new World.
+  // Implementation may extract the reconstruct-from-snapshot logic from World.deserialize into
+  // a private helper that both call paths share; concrete approach decided during T0 implementation.
+}
 ```
 
-(`CommandQueue.hasHandler` may also need to be added — verify in `src/command-queue.ts` and add a one-line public check if missing.)
+In `src/command-queue.ts`, add a public `hasHandler(type: string): boolean` method that reads the internal handler map. ~3 lines.
+
+`World.isCurrent` already exists; do NOT add a duplicate `isAliveAtGeneration` method.
 
 Add tests for both:
 
 ```ts
 // in tests/world.test.ts (or a new tests/world-public-api.test.ts)
-describe('World.isAliveAtGeneration', () => {
-  it('returns true for a live entity matching its current generation', () => {
-    const world = mkWorld();
-    const id = world.createEntity();
-    expect(world.isAliveAtGeneration(id, 0)).toBe(true);
-  });
-  it('returns false for a recycled id with a stale generation', () => {
-    const world = mkWorld();
-    const id = world.createEntity();
-    world.destroyEntity(id);
-    const recycled = world.createEntity();  // same numeric id, generation 1
-    expect(world.isAliveAtGeneration(recycled, 0)).toBe(false);
-    expect(world.isAliveAtGeneration(recycled, 1)).toBe(true);
-  });
-});
-
 describe('World.hasHandler', () => {
   it('returns true for a registered handler', () => {
     const world = mkWorld();
@@ -192,6 +182,42 @@ describe('World.hasHandler', () => {
   it('returns false for an unregistered command type', () => {
     const world = mkWorld();
     expect(world.hasHandler('never-registered')).toBe(false);
+  });
+});
+
+describe('World.applySnapshot', () => {
+  it('overwrites entity/component state in-place; preserves registrations', () => {
+    const w1 = mkWorld();
+    w1.registerComponent('position');
+    w1.registerHandler('spawn', () => ({ ok: true }));
+    const id = w1.createEntity();
+    w1.setComponent(id, 'position', { x: 5, y: 5 });
+
+    const w2 = mkWorld();
+    w2.registerComponent('position');
+    w2.registerHandler('spawn', () => ({ ok: true }));
+    expect(w2.hasHandler('spawn')).toBe(true);
+    w2.applySnapshot(w1.serialize());
+    // State copied
+    expect(w2.getComponent(id, 'position')).toEqual({ x: 5, y: 5 });
+    // Registrations preserved
+    expect(w2.hasHandler('spawn')).toBe(true);
+  });
+});
+
+describe('World.isCurrent (existing) + EntityRef matching', () => {
+  it('returns true for a live entity matching its current generation', () => {
+    const world = mkWorld();
+    const id = world.createEntity();
+    expect(world.isCurrent({ id, generation: 0 })).toBe(true);
+  });
+  it('returns false for a recycled id with a stale generation', () => {
+    const world = mkWorld();
+    const id = world.createEntity();
+    world.destroyEntity(id);
+    const recycled = world.createEntity();  // same numeric id, generation 1
+    expect(world.isCurrent({ id: recycled, generation: 0 })).toBe(false);
+    expect(world.isCurrent({ id: recycled, generation: 1 })).toBe(true);
   });
 });
 ```
@@ -206,7 +232,7 @@ All four pass — `cloneJsonValue` extraction is a pure refactor; new World meth
 
 ### Step 0.6: Per-task review + commit (per the pattern above)
 
-`refactor(engine): extract cloneJsonValue + add ENGINE_VERSION + WorldInternals + isAliveAtGeneration/hasHandler (v0.7.7-pre)`
+`refactor(engine): extract cloneJsonValue + add ENGINE_VERSION + WorldInternals + hasHandler/applySnapshot (v0.7.7-pre)`
 
 (Note: this commit does NOT bump version since it's pure refactor + additive World methods that nothing else uses yet; T1 is the first version bump.)
 
@@ -1526,6 +1552,7 @@ export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
         { code: 'recorder_already_attached', existing: world.__payloadCapturingRecorder.sessionId });
     }
     world.__payloadCapturingRecorder = { sessionId: this.sessionId, lastError: null };
+    this._startTick = world.tick;       // captured here; used by _onDiff periodic-snapshot guard
 
     // Open sink + write initial snapshot
     const initialMetadata: SessionMetadata = {
@@ -1642,7 +1669,7 @@ export class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
 }
 ```
 
-`_validateMarker` enforces §6.1 — for live tick: every `EntityRef` matches a live entity via `world.isAliveAtGeneration(id, generation)` (added in T0 step 0.4), every `cell` is in-bounds, `tickRange` valid. Retroactive markers skip entity liveness.
+`_validateMarker` enforces §6.1 — for live tick: every `EntityRef` matches a live entity via `world.isCurrent({ id, generation })` (existing engine API at `src/world.ts:383`), every `cell` is in-bounds, `tickRange` valid. Retroactive markers skip entity liveness.
 
 ### Test coverage (~18 tests)
 
@@ -1966,12 +1993,14 @@ const result = runScenario({
 const bundle = scenarioResultToBundle(result);
 const replayer = SessionReplayer.fromBundle(bundle, {
   worldFactory: (snap) => {
-    // Per src/world.ts:921, World.deserialize(snapshot, systems?) returns a fresh World.
-    // It does NOT re-register handlers/validators (only systems). Component
-    // registrations + handlers must be applied manually before/after.
-    // Approach: use the deserialized world directly, then apply registrations.
-    const w = World.deserialize(snap);
-    setupMoveScenario(w);                    // re-registers components/handlers; idempotent
+    // Pattern: register first, then apply snapshot. registerComponent /
+    // registerHandler throw on duplicates, so the deserialize-then-register
+    // path is unsafe (deserialize already populates component stores).
+    // World.applySnapshot (added in T0 step 0.4) overwrites entity/component
+    // state in-place without clearing registrations.
+    const w = mkWorld();
+    setupMoveScenario(w);          // register components, handlers, validators
+    w.applySnapshot(snap);          // overwrite state without touching registrations
     return w;
   },
 });
@@ -1982,7 +2011,7 @@ expect(check.eventDivergences).toEqual([]);
 expect(check.executionDivergences).toEqual([]);
 ```
 
-**Note:** `World.deserialize` does NOT re-register handlers/validators (per `src/world.ts:921`); the factory must register them BEFORE deserializing snapshot state. The refactor pattern above captures this correctly.
+**Note:** `World.deserialize(snap)` returns a fresh `World` without user registrations and is unsuitable for the worldFactory because subsequent `setupMoveScenario` registrations would conflict with already-populated component stores. T0 step 0.4 adds `World.applySnapshot(snap)` (in-place state overwrite, registrations preserved) precisely for this path. The refactor pattern above uses it.
 
 Refactor each of the 4 scenarios in `tests/scenario-runner.test.ts`:
 - `setupMoveScenario(world)` — for the move test
