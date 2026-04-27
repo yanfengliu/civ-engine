@@ -111,6 +111,13 @@ export interface ScenarioConfig<
     capacity?: number;
     commandCapacity?: number;
     captureInitialSnapshot?: boolean;
+    /**
+     * When `true`, the underlying `WorldHistoryRecorder` wraps
+     * `submitWithResult` to capture full `RecordedCommand` payloads. Required
+     * for `scenarioResultToBundle(result)` (T7) to produce a replayable
+     * bundle. Default `false` preserves existing scenario semantics.
+     */
+    captureCommandPayloads?: boolean;
   };
   setup?(context: ScenarioContext<TEventMap, TCommandMap>): void;
   run?(
@@ -148,6 +155,7 @@ export function runScenario<
     capacity: config.history?.capacity,
     commandCapacity: config.history?.commandCapacity,
     captureInitialSnapshot: config.history?.captureInitialSnapshot,
+    captureCommandPayloads: config.history?.captureCommandPayloads,
     debug: debuggerView,
   });
 

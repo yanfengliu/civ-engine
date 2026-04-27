@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.10 - 2026-04-27
+
+Session-recording T4: `WorldHistoryRecorder.captureCommandPayloads` option + `ScenarioConfig.history` plumbing.
+
+### Added (additive, non-breaking)
+
+- `WorldHistoryRecorder` constructor option `captureCommandPayloads?: boolean` (default `false`). When `true`:
+  - The recorder wraps `world.submitWithResult` (single wrap; `submit` delegates through it per spec §7.3) on `connect()` and uninstalls on `disconnect()`.
+  - Captured payloads are stored as `RecordedCommand<TCommandMap>` entries in a NEW additive field `WorldHistoryState.recordedCommands?: RecordedCommand[]`. The existing `WorldHistoryState.commands: CommandSubmissionResult[]` field is unchanged.
+  - Mutex enforced via `world.__payloadCapturingRecorder` slot — second `connect()` (any payload-capturing recorder, including `SessionRecorder` once T5 lands) throws `RecorderClosedError(code: 'recorder_already_attached')`.
+  - Default-config recorders (no payload capture) remain unrestricted and freely compose with payload-capturing recorders.
+- `WorldHistoryRecorder.clear()` now also resets `recordedCommandEntries` so post-setup scenario rebases produce clean replayable bundles.
+- `ScenarioConfig.history.captureCommandPayloads?: boolean` threads through `runScenario` → `WorldHistoryRecorder` constructor.
+- `WorldHistoryState.recordedCommands?` is the new optional field on the state shape.
+
+### Validation
+
+691 tests pass (was 682). Typecheck, lint, build clean. Per spec §10.2.
+
 ## 0.7.9 - 2026-04-27
 
 Session-recording T3: `FileSink` reference implementation (disk-backed `SessionSink & SessionSource`).

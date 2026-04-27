@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Session-recording T4 (v0.7.10) — `WorldHistoryRecorder.captureCommandPayloads` opt-in (additive `recordedCommands?` field, mutex via `__payloadCapturingRecorder` slot, single submitWithResult wrap, clear() resets) + `ScenarioConfig.history.captureCommandPayloads` plumbing. 9 new tests, 691 total.
 - 2026-04-27: Session-recording T3 (v0.7.9) — FileSink (disk-backed SessionSink & SessionSource) in `src/session-file-sink.ts`. Manifest cadence (open/per-snapshot/close) atomic via .tmp.json rename. Added @types/node devDep. 15 new tests, 682 total.
 - 2026-04-27: Session-recording T2 (v0.7.8) — SessionSink/SessionSource interfaces + MemorySink in `src/session-sink.ts`. 15 new tests, 667 total. Sync sinks per spec §8.
 - 2026-04-27: Session-recording T1 (v0.7.7) — bundle/marker/error type definitions in `src/session-bundle.ts` + `src/session-errors.ts`; types only, no runtime behavior. 16 new tests, 652 total. Foundation for SessionRecorder / SessionReplayer.

@@ -1,5 +1,8 @@
 import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
 import type { TickDiff } from './diff.js';
+import type { RecordedCommand } from './session-bundle.js';
+import { RecorderClosedError } from './session-errors.js';
+import './session-internals.js';
 import type { WorldSnapshot } from './serializer.js';
 import type { EntityId } from './types.js';
 import type {
@@ -43,6 +46,14 @@ export interface WorldHistoryState<
   commands: Array<CommandSubmissionResult<keyof TCommandMap>>;
   executions: Array<CommandExecutionResult<keyof TCommandMap>>;
   failures: TickFailure[];
+  /**
+   * Populated only when the recorder was constructed with
+   * `captureCommandPayloads: true`. Each entry carries the full command
+   * `data` payload alongside the result, enabling deterministic replay
+   * via `SessionReplayer`. Mutually exclusive with another payload-capturing
+   * recorder on the same world (one wrap per world).
+   */
+  recordedCommands?: Array<RecordedCommand<TCommandMap>>;
 }
 
 export interface WorldHistoryIssueSummary {
@@ -84,6 +95,10 @@ export interface WorldHistoryRangeSummary {
   };
 }
 
+type SubmitWithResultFn<TCommandMap extends Record<keyof TCommandMap, unknown>> = <
+  K extends keyof TCommandMap,
+>(type: K, data: TCommandMap[K]) => CommandSubmissionResult<keyof TCommandMap>;
+
 export class WorldHistoryRecorder<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
@@ -94,6 +109,7 @@ export class WorldHistoryRecorder<
   private readonly commandCapacity: number;
   private readonly debugCapture?: () => TDebug | null;
   private readonly captureInitialSnapshot: boolean;
+  private readonly captureCommandPayloads: boolean;
   private readonly tickEntries: Array<WorldHistoryTick<TEventMap, TDebug>> = [];
   private readonly commandEntries: Array<
     CommandSubmissionResult<keyof TCommandMap>
@@ -102,6 +118,7 @@ export class WorldHistoryRecorder<
     CommandExecutionResult<keyof TCommandMap>
   > = [];
   private readonly failureEntries: TickFailure[] = [];
+  private readonly recordedCommandEntries: Array<RecordedCommand<TCommandMap>> = [];
   private initialSnapshot: WorldSnapshot | null = null;
   private connected = false;
   private readonly diffListener: (diff: TickDiff) => void;
@@ -112,6 +129,8 @@ export class WorldHistoryRecorder<
     result: CommandExecutionResult<keyof TCommandMap>,
   ) => void;
   private readonly failureListener: (failure: TickFailure) => void;
+  private readonly recorderId: string;
+  private originalSubmitWithResult: SubmitWithResultFn<TCommandMap> | null = null;
 
   constructor(config: {
     world: World<TEventMap, TCommandMap>;
@@ -119,12 +138,28 @@ export class WorldHistoryRecorder<
     commandCapacity?: number;
     debug?: { capture(): TDebug | null };
     captureInitialSnapshot?: boolean;
+    /**
+     * When `true`, the recorder wraps `submitWithResult` to capture full
+     * `RecordedCommand` payloads (including `data`) into the new
+     * `WorldHistoryState.recordedCommands` field. Required for replayable
+     * scenario bundles (see `scenarioResultToBundle()` in T7).
+     *
+     * Mutually exclusive with another payload-capturing recorder on the
+     * same world (any `SessionRecorder`, OR another
+     * `WorldHistoryRecorder({ captureCommandPayloads: true })`). Second
+     * `connect()` throws `RecorderClosedError(code: 'recorder_already_attached')`.
+     *
+     * Default `false` preserves existing rolling-buffer-debug semantics.
+     */
+    captureCommandPayloads?: boolean;
   }) {
     this.world = config.world;
     this.tickCapacity = config.capacity ?? 64;
     this.commandCapacity = config.commandCapacity ?? Math.max(this.tickCapacity * 4, 64);
     this.debugCapture = config.debug?.capture.bind(config.debug);
     this.captureInitialSnapshot = config.captureInitialSnapshot ?? true;
+    this.captureCommandPayloads = config.captureCommandPayloads ?? false;
+    this.recorderId = `history-${Math.random().toString(36).slice(2, 10)}`;
     this.diffListener = (diff) => this.recordTick(diff);
     this.commandListener = (result) => this.recordCommand(result);
     this.executionListener = (result) => this.recordExecution(result);
@@ -133,6 +168,32 @@ export class WorldHistoryRecorder<
 
   connect(): void {
     if (this.connected) return;
+
+    // Mutex: only one payload-capturing recorder per world. Default-config
+    // recorders (no payload capture) are unrestricted and freely compose.
+    if (this.captureCommandPayloads) {
+      const existing = this.world.__payloadCapturingRecorder;
+      if (existing) {
+        throw new RecorderClosedError(
+          `another payload-capturing recorder is already attached (sessionId=${existing.sessionId})`,
+          { code: 'recorder_already_attached', existing: existing.sessionId },
+        );
+      }
+      this.world.__payloadCapturingRecorder = { sessionId: this.recorderId, lastError: null };
+      // Install submitWithResult wrap (single wrap per spec §7.3).
+      const original = this.world.submitWithResult.bind(this.world) as SubmitWithResultFn<TCommandMap>;
+      this.originalSubmitWithResult = original;
+      const capture = this.recordCommandPayload.bind(this);
+      // Replace in-place. TypeScript: same-class generic-method override.
+      (this.world as { submitWithResult: SubmitWithResultFn<TCommandMap> }).submitWithResult = <
+        K extends keyof TCommandMap,
+      >(type: K, data: TCommandMap[K]): CommandSubmissionResult<keyof TCommandMap> => {
+        const result = original(type, data);
+        capture(type, data, result);
+        return result;
+      };
+    }
+
     this.connected = true;
 
     if (this.captureInitialSnapshot) {
@@ -152,6 +213,15 @@ export class WorldHistoryRecorder<
     this.world.offCommandResult(this.commandListener);
     this.world.offCommandExecution(this.executionListener);
     this.world.offTickFailure(this.failureListener);
+    if (this.captureCommandPayloads && this.originalSubmitWithResult) {
+      (this.world as { submitWithResult: SubmitWithResultFn<TCommandMap> }).submitWithResult =
+        this.originalSubmitWithResult;
+      this.originalSubmitWithResult = null;
+      // Only clear the slot if it's ours (defensive against caller corruption).
+      if (this.world.__payloadCapturingRecorder?.sessionId === this.recorderId) {
+        delete this.world.__payloadCapturingRecorder;
+      }
+    }
   }
 
   clear(): void {
@@ -159,6 +229,7 @@ export class WorldHistoryRecorder<
     this.commandEntries.length = 0;
     this.executionEntries.length = 0;
     this.failureEntries.length = 0;
+    this.recordedCommandEntries.length = 0;
     this.initialSnapshot = this.captureInitialSnapshot
       ? cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot')
       : null;
@@ -192,7 +263,7 @@ export class WorldHistoryRecorder<
   }
 
   getState(): WorldHistoryState<TEventMap, TCommandMap, TDebug> {
-    return {
+    const state: WorldHistoryState<TEventMap, TCommandMap, TDebug> = {
       schemaVersion: WORLD_HISTORY_SCHEMA_VERSION,
       initialSnapshot: this.initialSnapshot
         ? cloneJsonValue(this.initialSnapshot, 'history initial snapshot')
@@ -202,6 +273,31 @@ export class WorldHistoryRecorder<
       executions: this.getCommandExecutionHistory(),
       failures: this.getTickFailureHistory(),
     };
+    if (this.captureCommandPayloads) {
+      state.recordedCommands = this.recordedCommandEntries.map((entry) =>
+        cloneJsonValue(entry, 'history recorded command'),
+      );
+    }
+    return state;
+  }
+
+  private recordCommandPayload<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+    result: CommandSubmissionResult<keyof TCommandMap>,
+  ): void {
+    const record: RecordedCommand<TCommandMap> = {
+      submissionTick: result.tick,
+      sequence: result.sequence,
+      type: type as keyof TCommandMap & string,
+      data,
+      result,
+    };
+    pushBounded(
+      this.recordedCommandEntries,
+      cloneJsonValue(record, `history recorded command ${result.sequence}`),
+      this.commandCapacity,
+    );
   }
 
   private recordTick(diff: TickDiff): void {
