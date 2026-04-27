@@ -50,3 +50,10 @@ export {
 // Side-effect import: declaration-merge for hidden World.__payloadCapturingRecorder slot
 import './session-internals.js';
 export { ENGINE_VERSION } from './version.js';
+// T2: Session sinks
+export {
+  type SessionSink,
+  type SessionSource,
+  MemorySink,
+  type MemorySinkOptions,
+} from './session-sink.js';

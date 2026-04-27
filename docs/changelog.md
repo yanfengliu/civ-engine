@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.8 - 2026-04-27
+
+Session-recording T2: `SessionSink` / `SessionSource` interfaces + `MemorySink` reference implementation.
+
+### Added
+
+- `src/session-sink.ts`:
+  - `SessionSink` (write interface): `open` / `writeTick` / `writeCommand` / `writeCommandExecution` / `writeTickFailure` / `writeSnapshot` / `writeMarker` / `writeAttachment` / `close`. Synchronous throughout (per spec §8 — composes with `World`'s synchronous listener invariants; async sinks deferred).
+  - `SessionSource` (read interface): `metadata` / `readSnapshot` / `readSidecar` / `ticks()` / `commands()` / `executions()` / `failures()` / `markers()` / `attachments()` / `toBundle()`. All sync.
+  - `MemorySink` implementing both. Holds writes in arrays; sidecar attachments in a parallel `Map<string, Uint8Array>`. `MemorySinkOptions`: `allowSidecar` (default `false` — oversize attachments throw `SinkWriteError(code: 'oversize_attachment')` rather than silently using external state); `sidecarThresholdBytes` (default 64 KiB).
+  - `writeAttachment` returns the FINALIZED `AttachmentDescriptor` with `ref` resolved (sinks may rewrite a `dataUrl` placeholder to a populated data URL, or downgrade to sidecar). Recorders use the returned descriptor as the source of truth.
+  - Internal `bytesToBase64()` helper using the platform `btoa` global (Node 16+, browsers). Avoids the `@types/node` dependency `Buffer` would require.
+
+### Validation
+
+667 tests pass (was 652). Typecheck, lint, build clean. Per spec §8.
+
 ## 0.7.7 - 2026-04-27
 
 Session-recording T1 (bundle types + error hierarchy). Types only; no runtime behavior. Foundation for `SessionRecorder` / `SessionReplayer` (next commits).

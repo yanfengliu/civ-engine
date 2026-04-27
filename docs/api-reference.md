@@ -39,6 +39,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [World History Recorder](#world-history-recorder)
 - [World Debugger](#world-debugger)
 - [Session Recording (T1: types + errors)](#session-recording-t1-types--errors)
+- [Session Recording (T2: sinks)](#session-recording-t2-sinks)
 
 ---
 
@@ -4782,3 +4783,61 @@ const ENGINE_VERSION: '0.7.7';
 ```
 
 Read by `SessionRecorder` (T5) and `scenarioResultToBundle()` (T7) for `metadata.engineVersion`. Kept in sync with `package.json`'s `version` by the release process.
+
+## Session Recording (T2: sinks)
+
+T2 ships the `SessionSink` (write) / `SessionSource` (read) interfaces plus `MemorySink` reference implementation. T1's bundle types travel through these.
+
+### `SessionSink`
+
+```typescript
+interface SessionSink {
+  open(metadata: SessionMetadata): void;
+  writeTick(entry: SessionTickEntry): void;
+  writeCommand(record: RecordedCommand): void;
+  writeCommandExecution(result: CommandExecutionResult): void;
+  writeTickFailure(failure: TickFailure): void;
+  writeSnapshot(entry: SessionSnapshotEntry): void;
+  writeMarker(marker: Marker): void;
+  writeAttachment(descriptor: AttachmentDescriptor, data: Uint8Array): AttachmentDescriptor;
+  close(): void;
+}
+```
+
+All methods are synchronous (per spec §8 — composes with `World.onDiff`'s synchronous listener invariants). `writeAttachment` returns the finalized descriptor (sinks may rewrite `ref` from `{ dataUrl: '<placeholder>' }` to a populated data URL, or downgrade to sidecar).
+
+### `SessionSource`
+
+```typescript
+interface SessionSource {
+  readonly metadata: SessionMetadata;
+  readSnapshot(tick: number): WorldSnapshot;
+  readSidecar(id: string): Uint8Array;
+  ticks(): IterableIterator<SessionTickEntry>;
+  commands(): IterableIterator<RecordedCommand>;
+  executions(): IterableIterator<CommandExecutionResult>;
+  failures(): IterableIterator<TickFailure>;
+  markers(): IterableIterator<Marker>;
+  attachments(): IterableIterator<AttachmentDescriptor>;
+  toBundle(): SessionBundle;
+}
+```
+
+Read interface paired with `SessionSink`. `MemorySink` and (T3) `FileSink` both implement the union (`SessionSink & SessionSource`).
+
+### `MemorySink`
+
+```typescript
+new MemorySink(options?: MemorySinkOptions);
+
+interface MemorySinkOptions {
+  allowSidecar?: boolean;          // default false; oversize attachments throw without it
+  sidecarThresholdBytes?: number;  // default 65536 (64 KiB)
+}
+```
+
+Holds writes in in-memory arrays. Sidecar attachment bytes go in a parallel internal `Map<string, Uint8Array>` accessed via `readSidecar(id)`.
+
+Defaults: attachments under the threshold embed as `data:<mime>;base64,...` URLs in the manifest. Attachments over the threshold throw `SinkWriteError(code: 'oversize_attachment')` UNLESS `allowSidecar: true` is set, in which case they're stored as sidecars. Callers can also force sidecar storage explicitly by passing `ref: { sidecar: true }` to `writeAttachment`.
+
+`toBundle()` returns the canonical strict-JSON `SessionBundle`. The first written snapshot becomes `bundle.initialSnapshot`; subsequent snapshots populate `bundle.snapshots[]`. Throws `SinkWriteError(code: 'no_snapshots')` if no snapshots have been written.

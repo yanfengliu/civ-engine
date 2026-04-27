@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-27: Session-recording T2 (v0.7.8) — SessionSink/SessionSource interfaces + MemorySink in `src/session-sink.ts`. 15 new tests, 667 total. Sync sinks per spec §8.
 - 2026-04-27: Session-recording T1 (v0.7.7) — bundle/marker/error type definitions in `src/session-bundle.ts` + `src/session-errors.ts`; types only, no runtime behavior. 16 new tests, 652 total. Foundation for SessionRecorder / SessionReplayer.
 - 2026-04-27: Session-recording T0 setup (v0.7.7-pre, no version bump). Extracted `cloneJsonValue` to `src/json.ts`; added `src/version.ts` (`ENGINE_VERSION`), `src/session-internals.ts` (`World.__payloadCapturingRecorder` slot), `World.applySnapshot(snapshot)` instance method (added to `FORBIDDEN_PRECONDITION_METHODS`). 6 new tests; 636 total pass. Foundation for T1–T9 (see `docs/design/2026-04-27-session-recording-implementation-plan.md`).
 
