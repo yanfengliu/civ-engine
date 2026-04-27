@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.12 - 2026-04-27
+
+Session-recording T6: `SessionReplayer` + 3-stream `selfCheck`.
+
+### Added
+
+- `src/session-replayer.ts`:
+  - `SessionReplayer.fromBundle(bundle, config)` / `fromSource(source, config)` static factories.
+  - `metadata` getter, `markers()`, `markersAt(tick)`, `markersOfKind(kind)`, `markersByEntity(ref)`, `markersByEntityId(id)` query helpers.
+  - `snapshotTicks()`, `ticks()` introspection.
+  - `openAt(tick)`: range checks against `[startTick, endTick]` (or `persistedEndTick` for incomplete bundles), `BundleIntegrityError(code: 'replay_across_failure')` for tick at-or-after first `failedTicks` entry, `BundleIntegrityError(code: 'no_replay_payloads')` for replay-forward on empty `commands`. Replays via `submitWithResult` per spec §9.1; throws `ReplayHandlerMissingError` if a recorded command's handler isn't registered in the factory's world.
+  - `stateAtTick(tick)`: shortcut returning `world.serialize()` after `openAt`.
+  - `tickEntriesBetween(from, to)`: inclusive range filter on bundle ticks.
+  - `selfCheck(options)`: 3-stream comparison (state, events, executions) over snapshot pairs. Initial-to-first-snapshot segment included; segments containing recorded `TickFailure` skipped (`SkippedSegment[reason: 'failure_in_segment']`). Engine version compatibility per spec §11.1 clause 9: cross-`a` and cross-`b` throw `BundleVersionError`; within-`b` warns; cross-Node-major warns.
+  - `validateMarkers()`: re-validate retroactive (`validated: false`) markers against historical snapshots.
+  - `deepEqualWithPath(a, b)`: exported recursive deep-equal with best-effort `firstDifferingPath` for state-divergence triage. ~80 LOC, short-circuits, snapshot-key-order invariant.
+
+### Validation
+
+733 tests pass (was 711). Typecheck, lint, build clean. Per spec §9.
+
 ## 0.7.11 - 2026-04-27
 
 Session-recording T5: `SessionRecorder` lifecycle.

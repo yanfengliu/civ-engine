@@ -65,3 +65,16 @@ export {
   type SessionRecorderConfig,
   type NewMarker,
 } from './session-recorder.js';
+// T6: SessionReplayer + selfCheck
+export {
+  SessionReplayer,
+  type ReplayerConfig,
+  type SelfCheckOptions,
+  type SelfCheckResult,
+  type StateDivergence,
+  type EventDivergence,
+  type ExecutionDivergence,
+  type SkippedSegment,
+  type MarkerValidationResult,
+  deepEqualWithPath,
+} from './session-replayer.js';
