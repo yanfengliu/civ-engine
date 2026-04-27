@@ -1,0 +1,15 @@
+Reviewing plan iter-3 of docs/design/2026-04-27-synthetic-playtest-implementation-plan.md.
+
+Iter-2: Codex 2 HIGH + 1 MED; Opus 1 HIGH + 1 MED + 4 NIT. v3 (under review via stdin) addresses:
+- Codex HIGH-1: sub-RNG positive/negative tests in T3 emit at least one `spawn` command per tick (prevents SessionReplayer.selfCheck no-payload short-circuit at session-replayer.ts:270-276 from masking divergence).
+- Opus HIGH-1: T2 step 5 imports `type PolicyContext`; drops unused `SessionRecorder` / `SessionReplayer`; removes redundant bottom-of-file import.
+- Codex MED-1: per-task review uses `<prev-task-tip-or-main>..HEAD` instead of cumulative `main..HEAD`.
+- Codex HIGH-2 (bash on Windows): clarified — bash IS the project shell per CLAUDE.md; not a real issue.
+- T1 step 9 randomPolicy seed-determinism test rewritten to use shared sub-RNG.
+- Changelog "30+" → "20+".
+
+Engine facts: World 4-generic; SessionRecorder.connect doesn't throw on sink.open() failure; RecordedCommand.sequence at session-bundle.ts:43; world.tick advances on poison; SessionReplayer.selfCheck short-circuits when bundle.commands.length===0 && md.endTick > md.startTick (session-replayer.ts:270-276).
+
+Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "Continue iterating until reviewers nitpick instead of catching real bugs." If accept, say "ACCEPT".
+
+Return findings with severity tags. No patches.
