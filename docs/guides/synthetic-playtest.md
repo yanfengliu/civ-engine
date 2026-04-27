@@ -214,3 +214,26 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 - `docs/design/2026-04-27-synthetic-playtest-harness-design.md` (v10) for the full spec.
 - `docs/design/ai-first-dev-roadmap.md` for how Spec 3 fits into the broader roadmap.
 - `docs/guides/session-recording.md` for the underlying SessionRecorder/SessionReplayer machinery.
+
+## Computing metrics over bundles
+
+After producing a corpus of synthetic playtest bundles, `runMetrics` (Spec 8) reduces them to aggregate metrics for regression detection:
+
+```typescript
+import {
+  runSynthPlaytest, runMetrics,
+  bundleCount, sessionLengthStats,
+  type SessionBundle,
+} from 'civ-engine';
+
+const bundles: SessionBundle[] = [];
+for (let i = 0; i < 32; i++) {
+  const result = runSynthPlaytest({ world: setup(), policies: [/* ... */], maxTicks: 1000, policySeed: i });
+  if (result.ok) bundles.push(result.bundle);
+}
+
+const metrics = runMetrics(bundles, [bundleCount(), sessionLengthStats()]);
+console.log(metrics.bundleCount, metrics.sessionLengthStats);
+```
+
+See `docs/guides/behavioral-metrics.md` for the full metric catalog, `compareMetricsResults` regression-detection helper, and the accumulator-style contract for custom metrics.

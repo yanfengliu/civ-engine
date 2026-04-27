@@ -1,0 +1,27 @@
+You are a senior code reviewer for civ-engine. Review the Spec 8 (Behavioral Metrics over Corpus, v0.8.2) staged diff.
+
+Spec 8 is a single-commit ship per the converged plan v4 (collapsed from earlier T1+T2 split per AGENTS.md doc-with-code rule). Surface:
+
+- src/behavioral-metrics.ts (~330 LOC): Metric contract + 11 built-in factories + runMetrics + compareMetricsResults + Stats + delta types + computeStats internal helper.
+- src/index.ts: re-exports.
+- tests/behavioral-metrics.test.ts: 44 tests across all built-ins + runMetrics multiplexing + compareMetricsResults edge cases + cross-cutting (order-insensitivity, user-defined integration, volatile-metadata exclusion).
+- Docs: api-reference.md (Behavioral Metrics section), guides/behavioral-metrics.md (new), ARCHITECTURE Component Map row, drift-log entry, ai-first-dev-roadmap status, ai-integration Tier-2 ref, synthetic-playtest cross-ref, README Feature Overview + Public Surface, docs/README.md index, ADRs 23-27 in decisions.md.
+- Devlog rolled over: 2026-04-26_2026-04-27.md (841 lines, past 500 cap) → fresh 2026-04-27_2026-04-27.md.
+- Version: 0.8.1 → 0.8.2 (c-bump, additive).
+
+Engine facts to verify against:
+- RecordedCommand at session-bundle.ts:41-47 has `result.accepted: boolean`.
+- CommandExecutionResult at world.ts:145-156 has `executed: boolean`, `tick`, `submissionSequence`. NO `sequence` field.
+- Validator-rejected commands appear in bundle.commands but NOT in bundle.executions (world.ts:732-748 short-circuits before queue).
+- SessionMetadata.failedTicks?: number[]; metadata.incomplete?: true.
+- bundle.ticks[].events[].type is `keyof TEventMap` (not constrained to string — implementation uses `String(ev.type)`).
+
+Aspects to review (per AGENTS.md):
+1. Design: clean abstractions, scales, lean.
+2. Test coverage: covers each built-in's empty/single/multi-bundle cases? compareMetricsResults numeric/null/opaque/only-in-side/nested? user-defined integration? order-insensitivity?
+3. Correctness: implementation matches design v4? NumPy linear percentile formula correct? null-vs-NaN JSON handling? validator-vs-execution semantics correct?
+4. Clean code: typing, no dead code, no over-validation, naming, file size.
+5. Doc accuracy: api-reference matches impl? changelog flagged correctly? ADRs 23-27 verbatim from design? guide examples valid TS?
+6. Anti-regression: existing surface untouched? T1+T2+T3 of Spec 3 still works (842 = 798 + 44 confirms)?
+
+Bar: only flag REAL issues. If you'd accept, say "ACCEPT". Otherwise list required changes with severity tags [BLOCKER/HIGH/MED/LOW/NIT].

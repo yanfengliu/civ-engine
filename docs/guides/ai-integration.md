@@ -272,3 +272,29 @@ const result = runSynthPlaytest({
 ```
 
 See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
+
+## Behavioral Metrics over Corpus (Tier 2)
+
+`runMetrics(bundles, metrics)` is the Tier-2 corpus reducer (Spec 8 of `docs/design/ai-first-dev-roadmap.md`). It computes engine-generic + user-defined metrics over an `Iterable<SessionBundle>` — typically the corpus produced by N runs of `runSynthPlaytest`. Pair with `compareMetricsResults(baseline, current)` to detect emergent-behavior regressions.
+
+```typescript
+import * as fs from 'node:fs';
+import {
+  runMetrics, compareMetricsResults,
+  bundleCount, sessionLengthStats, commandRateStats,
+  commandValidationAcceptanceRate, executionFailureRate,
+} from 'civ-engine';
+
+const current = runMetrics(bundles, [
+  bundleCount(),
+  sessionLengthStats(),
+  commandRateStats(),
+  commandValidationAcceptanceRate(),
+  executionFailureRate(),
+]);
+const baseline = JSON.parse(fs.readFileSync('baseline-metrics.json', 'utf-8'));
+const cmp = compareMetricsResults(baseline, current);
+// Caller decides what's a regression — pctChange/delta/equal leaves are pure data.
+```
+
+See `docs/guides/behavioral-metrics.md` for the policy-authoring guide, custom-metric pattern, JSON-stable null semantics for empty-corpus `Stats`, and the submission-stage vs execution-stage acceptance/failure split.

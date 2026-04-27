@@ -5140,3 +5140,81 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 - `SessionMetadata.policySeed?: number` added. Populated when `sourceKind === 'synthetic'`.
 - `SessionRecorderConfig.sourceKind?: 'session' | 'scenario' | 'synthetic'` added (default `'session'`).
 - `SessionRecorderConfig.policySeed?: number` added.
+
+## Behavioral Metrics (v0.8.2)
+
+A pure-function corpus reducer over `Iterable<SessionBundle>`. Computes built-in + user-defined metrics; compares baseline vs. current. Tier-2 of the AI-first feedback loop (Spec 8).
+
+### `Metric<TState, TResult>`
+
+```typescript
+interface Metric<TState, TResult> {
+  readonly name: string;             // unique within a runMetrics call
+  create(): TState;                  // initial accumulator state
+  observe(state: TState, bundle: SessionBundle): TState;  // pure (output depends only on inputs); in-place mutation OK
+  finalize(state: TState): TResult;
+  merge?(a: TState, b: TState): TState;  // optional; reserved for v2 parallel processing
+  readonly orderSensitive?: boolean; // doc-only; runMetrics does NOT auto-detect
+}
+```
+
+### `Stats`
+
+```typescript
+interface Stats {
+  count: number;
+  min: number | null;   // null when count === 0 (JSON-stable; NaN would not be)
+  max: number | null;
+  mean: number | null;
+  p50: number | null;
+  p95: number | null;
+  p99: number | null;
+}
+```
+
+Percentile method: NumPy linear (R-quantile type 7). For `count === 1`, all percentiles equal the single value. For `count === 0`, all numeric fields are `null`.
+
+### `runMetrics(bundles, metrics)`
+
+```typescript
+function runMetrics<TEventMap, TCommandMap, TDebug = JsonValue>(
+  bundles: Iterable<SessionBundle<TEventMap, TCommandMap, TDebug>>,
+  metrics: Metric<unknown, unknown>[],
+): MetricsResult;
+```
+
+Single-pass-multiplexed reducer. Iterates `bundles` once; for each bundle, calls every metric's `observe`. Throws `RangeError` on duplicate metric names. The iterable is consumed once — generators get exhausted. `MetricsResult` is `Record<string, unknown>`; per-metric narrowing happens at the consumption site via type assertion.
+
+### Built-in metrics
+
+11 engine-generic metric factories that read only fields the engine guarantees on `SessionBundle`:
+
+| Factory | Reads | Result | Notes |
+|---|---|---|---|
+| `bundleCount()` | (counter) | `number` | total bundles |
+| `sessionLengthStats()` | `metadata.durationTicks` | `Stats` | per-bundle session lengths |
+| `commandRateStats()` | `commands.length / durationTicks` | `Stats` | counts SUBMISSIONS (rejected included) |
+| `eventRateStats()` | `sum(ticks[].events.length) / durationTicks` | `Stats` | |
+| `commandTypeCounts()` | `commands[].type` | `Record<string, number>` | counts SUBMISSIONS by type |
+| `eventTypeCounts()` | `ticks[].events[].type` | `Record<string, number>` | |
+| `failureBundleRate()` | `metadata.failedTicks?.length > 0` | `number` (ratio) | bundles with any tick failure |
+| `failedTickRate()` | `sum(failedTicks) / sum(durationTicks)` | `number` (ratio) | |
+| `incompleteBundleRate()` | `metadata.incomplete === true` | `number` (ratio) | recorder-terminated bundles |
+| `commandValidationAcceptanceRate()` | `commands[].result.accepted` | `number` (ratio) | submission-stage validator-gate signal |
+| `executionFailureRate()` | `executions[].executed === false` | `number` (ratio) | execution-stage handler-failure signal |
+
+`commandValidationAcceptanceRate` and `executionFailureRate` read different bundle sources by design: validator-rejected commands appear in `bundle.commands[].result.accepted=false` but NEVER in `bundle.executions` (validators short-circuit before queueing). The two metrics together cover both regression types.
+
+### `compareMetricsResults(baseline, current)`
+
+```typescript
+type NumericDelta = { baseline: number | null; current: number | null; delta: number | null; pctChange: number | null };
+type OpaqueDelta = { baseline: unknown; current: unknown; equal: boolean };
+type OnlyInComparison = { baseline?: unknown; current?: unknown; onlyIn: 'baseline' | 'current' };
+type MetricDelta = NumericDelta | OpaqueDelta | { [key: string]: MetricDelta | OnlyInComparison };
+type MetricsComparison = Record<string, MetricDelta | OnlyInComparison>;
+
+function compareMetricsResults(baseline: MetricsResult, current: MetricsResult): MetricsComparison;
+```
+
+Pure delta computation, no regression judgment. Numeric leaves get `delta` and `pctChange`; non-numeric leaves get `equal: deepEqual(a, b)`. Recurses through nested records (e.g., `commandTypeCounts: Record<string, number>` reports per-key only-in-side at the inner level too). `pctChange` conventions: `0/0 → 0`, `nonzero/0 → ±Infinity`, `null` inputs propagate to `null` deltas. Arrays are opaque (no per-element diff in v1).

@@ -32,6 +32,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Debugging](guides/debugging.md)
 - [Session Recording & Replay](guides/session-recording.md)
 - [Synthetic Playtest Harness](guides/synthetic-playtest.md) — Tier-1 autonomous-driver primitive with sub-RNG-isolated policy randomness
+- [Behavioral Metrics over Corpus](guides/behavioral-metrics.md) — Tier-2 corpus reducer with 11 engine-generic built-in metrics + comparison helper
 - [Renderer Integration](guides/rendering.md)
 - [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)

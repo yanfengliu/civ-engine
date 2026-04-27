@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.8.2 - 2026-04-27
+
+Spec 8 — Behavioral Metrics over Corpus. Tier-2 of the AI-first dev roadmap; pairs with Spec 3 (synthetic playtest) to define regressions for emergent behavior.
+
+### New (additive)
+
+- **`runMetrics(bundles, metrics)`**: pure-function corpus reducer over `Iterable<SessionBundle>`. Single-pass, multiplexed across all metrics. Throws `RangeError` on duplicate metric names. Iterates the iterable once.
+- **`compareMetricsResults(baseline, current)`**: thin delta helper. Returns deltas + percent changes + only-in-side variants; no regression judgment. Recurses through nested records (e.g., `commandTypeCounts`). Numeric leaves get `{ baseline, current, delta, pctChange }`; opaque (arrays, type mismatches) get `{ baseline, current, equal }`; `null` inputs propagate to `null` deltas.
+- **`Metric<TState, TResult>`**: accumulator-style contract — `create()`, `observe(state, bundle)`, `finalize(state)`, optional `merge`, optional `orderSensitive`. In-place mutation OK; functional purity (output depends only on inputs) is the contract.
+- **`Stats` shape**: `{ count; min; max; mean; p50; p95; p99 }` with `number | null` numeric fields. Empty corpus → `null` (JSON-stable; `NaN` would not be). NumPy linear (R type 7) percentiles, exact, deterministic.
+- **11 engine-generic built-in metric factories**:
+  - `bundleCount` — total bundles in corpus.
+  - `sessionLengthStats` — Stats over `metadata.durationTicks`.
+  - `commandRateStats` — Stats over per-bundle `commands.length / durationTicks` (0 for zero-duration).
+  - `eventRateStats` — Stats over per-bundle `sum(ticks[].events.length) / durationTicks`.
+  - `commandTypeCounts` — `Record<string, number>` over `bundle.commands[].type` (counts SUBMISSIONS).
+  - `eventTypeCounts` — `Record<string, number>` over `bundle.ticks[].events[].type`.
+  - `failureBundleRate` — ratio of bundles with non-empty `metadata.failedTicks`.
+  - `failedTickRate` — ratio of total failed ticks to total duration ticks (zero-tick corpus → 0).
+  - `incompleteBundleRate` — ratio of bundles with `metadata.incomplete === true`.
+  - `commandValidationAcceptanceRate` — ratio of `bundle.commands[].result.accepted === true` (submission-stage validator-gate signal).
+  - `executionFailureRate` — ratio of `bundle.executions[].executed === false` (execution-stage handler-failure signal).
+
+### Submission-stage vs execution-stage semantics
+
+`commandValidationAcceptanceRate` and `executionFailureRate` read different bundle sources by design. Validator-rejected commands appear in `bundle.commands[].result.accepted=false` but NEVER in `bundle.executions` (validators short-circuit before queueing per `world.ts:732-748`). Pair the two metrics to detect both regression types.
+
+### ADRs
+
+- ADR 23: Accumulator-style metric contract over reducer or per-bundle-map+combine.
+- ADR 24: Engine-generic built-ins only; game-semantic metrics are user-defined.
+- ADR 25: `compareMetricsResults` returns deltas, not regression judgments.
+- ADR 26: `Iterable<SessionBundle>` only in v1; `AsyncIterable` deferred to a separate `runMetricsAsync`.
+- ADR 27: Do NOT aggregate `stopReason` in v1.
+
+### Validation
+
+All four engine gates pass: `npm test` (842 passed + 2 todo, +44 new in `tests/behavioral-metrics.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
+### What's next on the AI-first roadmap
+
+Tier-1 (Specs 1, 3) and Tier-2 (Spec 8) implemented. Remaining: Spec 2 (Annotation UI), Spec 4 (Bundle Viewer), Spec 5 (Counterfactual Replay), Spec 6 (Strict-Mode Determinism), Spec 7 (Bundle Search / Corpus Index), Spec 9 (AI Playtester Agent).
+
 ## 0.8.1 - 2026-04-27
 
 Synthetic Playtest T3: cross-cutting determinism integration tests + structural docs (closes Spec 3 implementation).

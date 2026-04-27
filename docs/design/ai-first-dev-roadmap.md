@@ -164,7 +164,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |
 | 7    | Bundle Search / Corpus Index         | Proposed   | not yet drafted                                           |
-| 8    | Behavioral Metrics over Corpus       | Proposed   | not yet drafted                                           |
+| 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `2026-04-27-behavioral-metrics-design.md` (v4) + `2026-04-27-behavioral-metrics-implementation-plan.md` (v4) |
 | 9    | AI Playtester Agent                  | Proposed   | not yet drafted                                           |
 
 Update this row as specs are drafted, accepted, implemented, and merged.

@@ -83,6 +83,33 @@ export {
   scenarioResultToBundle,
   type ScenarioResultToBundleOptions,
 } from './session-scenario-bundle.js';
+// Behavioral Metrics over Corpus — Spec 8 (v0.8.2+): pure-function corpus reducer
+// over Iterable<SessionBundle>. 11 engine-generic built-in metrics + accumulator-style
+// Metric contract + thin compareMetricsResults delta helper.
+export {
+  type Metric,
+  type MetricsResult,
+  type MetricsComparison,
+  type MetricDelta,
+  type NumericDelta,
+  type OpaqueDelta,
+  type OnlyInComparison,
+  type Stats,
+  runMetrics,
+  compareMetricsResults,
+  bundleCount,
+  sessionLengthStats,
+  commandRateStats,
+  eventRateStats,
+  commandTypeCounts,
+  eventTypeCounts,
+  failureBundleRate,
+  failedTickRate,
+  incompleteBundleRate,
+  commandValidationAcceptanceRate,
+  executionFailureRate,
+} from './behavioral-metrics.js';
+
 // Synthetic Playtest — Spec 3 T1+T2 (v0.7.20+): Policy types, 3 built-in policies, runSynthPlaytest harness.
 export {
   type Policy,
