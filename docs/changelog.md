@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.17 - 2026-04-27
+
+Session-recording followup 1: pre-grouped per-tick lookup indices in `SessionReplayer`.
+
+### Performance
+
+- `SessionReplayer` constructor builds `Map<tick, RecordedCommand[]>`, `Map<tick, events>`, `Map<tick, CommandExecutionResult[]>` once at construction. Replaces O(N) filter/find per replayed tick with O(1) lookup. Closes iter-2 code review M1; lifts the §13.2 throughput target gate on long captures (~10k-tick × 50-command smoke). No behavioral change — same data, same ordering (commands sorted by sequence within a tick to preserve replay semantics).
+
+### Validation
+
+752 tests pass (unchanged). Typecheck, lint, build clean.
+
 ## 0.7.16 - 2026-04-27
 
 Session-recording iter-1 code review fix-pass. Closes 2 Critical, 4 High, 1 Medium, 4 Low / Note findings from the multi-CLI code review (Codex + Opus; Gemini quota-out).

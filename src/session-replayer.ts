@@ -94,6 +94,13 @@ export class SessionReplayer<
 > {
   private readonly _bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
   private readonly _config: ReplayerConfig<TEventMap, TCommandMap>;
+  // Pre-grouped per-tick indices for O(1) lookup during replay/selfCheck.
+  // Iter-2 code review M1: previously filter/find over the full bundle once
+  // per replayed tick → O(N·T) per segment, blocking spec §13.2 throughput
+  // target on long captures.
+  private readonly _commandsByTick: Map<number, Array<typeof this._bundle.commands[number]>>;
+  private readonly _eventsByTick: Map<number, typeof this._bundle.ticks[number]['events']>;
+  private readonly _executionsByTick: Map<number, typeof this._bundle.executions>;
 
   private constructor(
     bundle: SessionBundle<TEventMap, TCommandMap, TDebug>,
@@ -102,6 +109,28 @@ export class SessionReplayer<
     this._bundle = bundle;
     this._config = config;
     this._verifyVersionCompat();
+    // Build per-tick indices once at construction. Commands are sorted by
+    // sequence within a tick to preserve ordering for replay; events and
+    // executions retain bundle order (already monotonic per tick).
+    this._commandsByTick = new Map();
+    for (const cmd of bundle.commands) {
+      const list = this._commandsByTick.get(cmd.submissionTick);
+      if (list) list.push(cmd);
+      else this._commandsByTick.set(cmd.submissionTick, [cmd]);
+    }
+    for (const list of this._commandsByTick.values()) {
+      list.sort((a, b) => a.sequence - b.sequence);
+    }
+    this._eventsByTick = new Map();
+    for (const tickEntry of bundle.ticks) {
+      this._eventsByTick.set(tickEntry.tick, tickEntry.events);
+    }
+    this._executionsByTick = new Map();
+    for (const exec of bundle.executions) {
+      const list = this._executionsByTick.get(exec.tick);
+      if (list) list.push(exec);
+      else this._executionsByTick.set(exec.tick, [exec]);
+    }
   }
 
   static fromBundle<
@@ -195,9 +224,7 @@ export class SessionReplayer<
     const world = this._config.worldFactory(start.snapshot);
 
     for (let t = start.tick; t < targetTick; t++) {
-      const tickCommands = this._bundle.commands
-        .filter((c) => c.submissionTick === t)
-        .sort((a, b) => a.sequence - b.sequence);
+      const tickCommands = this._commandsByTick.get(t) ?? [];
       for (const rc of tickCommands) {
         if (!world.hasCommandHandler(rc.type as keyof TCommandMap)) {
           throw new ReplayHandlerMissingError(
@@ -326,9 +353,7 @@ export class SessionReplayer<
 
     try {
       for (let t = a.tick; t < b.tick; t++) {
-        const tickCommands = this._bundle.commands
-          .filter((c) => c.submissionTick === t)
-          .sort((x, y) => x.sequence - y.sequence);
+        const tickCommands = this._commandsByTick.get(t) ?? [];
         for (const rc of tickCommands) {
           if (!world.hasCommandHandler(rc.type as keyof TCommandMap)) {
             throw new ReplayHandlerMissingError(
@@ -340,7 +365,7 @@ export class SessionReplayer<
         }
         world.step();
         if (flags.checkEvents) {
-          const expected = this._bundle.ticks.find((te) => te.tick === t + 1)?.events ?? [];
+          const expected = this._eventsByTick.get(t + 1) ?? [];
           const actual = [...world.getEvents()] as Array<{ type: PropertyKey; data: unknown }>;
           if (!deepEqualOrdered(expected, actual)) {
             eventDivs.push({ tick: t + 1, expected: expected as Array<{ type: PropertyKey; data: unknown }>, actual });
@@ -362,13 +387,15 @@ export class SessionReplayer<
             void _drop;
             return rest;
           };
-          const expected = this._bundle.executions.filter((e) => e.tick === t + 1).map(stripSeq);
-          const actual = replayExecs.filter((e) => e.tick === t + 1).map(stripSeq);
+          const expectedRaw = this._executionsByTick.get(t + 1) ?? [];
+          const actualRaw = replayExecs.filter((e) => e.tick === t + 1);
+          const expected = expectedRaw.map(stripSeq);
+          const actual = actualRaw.map(stripSeq);
           if (!deepEqualOrdered(expected, actual)) {
             execDivs.push({
               tick: t + 1,
-              expected: this._bundle.executions.filter((e) => e.tick === t + 1) as unknown as CommandExecutionResult[],
-              actual: replayExecs.filter((e) => e.tick === t + 1),
+              expected: expectedRaw as unknown as CommandExecutionResult[],
+              actual: actualRaw,
             });
           }
         }
