@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.3 - 2026-04-26
+
+Multi-CLI iter-6 verification caught one new High (Codex) plus one cleanup note (Opus). Both fixed. Non-breaking. 608 tests pass (up from 607).
+
+### Fixed
+
+- **High (Codex iter-6):** `world.grid` is a public field returning a plain object delegate, not a method on the prototype. The iter-5 precondition proxy intercepted method calls but did not protect the `grid` sub-object — a predicate could do `(w.grid as any).getAt = () => null;` to monkey-patch the engine-wide grid delegate, then return `false`. The mutation persisted on `world.grid` after the "failed" precondition. Fixed by `Object.freeze`ing `world.grid` in the constructor — the read-only-delegate promise from v0.5.0 is now structurally enforced. Predicates (and any other code) attempting to write to `world.grid` properties throw `TypeError` in strict mode.
+- **Cleanup (Opus iter-6 Note):** removed two ghost entries from `READ_METHODS_RETURNING_REFS` — `getResources` and `getPosition` were listed but neither method exists on `World`. The proxy `get` trap only fires on actual property access, so the ghost entries were runtime-harmless dead code. Cleaned up to keep the wrap set honest.
+
 ## 0.7.2 - 2026-04-26
 
 Multi-CLI iter-5 verification caught one new Critical (Codex; Opus reported clean — split decision, Codex's was the right call). Closes the in-place-mutation hole that the C1/R1 denylist couldn't catch. Non-breaking. 607 tests pass (up from 604).

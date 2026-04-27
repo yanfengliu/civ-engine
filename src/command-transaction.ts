@@ -89,8 +89,6 @@ const READ_METHODS_RETURNING_REFS: ReadonlySet<string | symbol> = new Set<string
   'getComponents',
   'getState',
   'getResource',
-  'getResources',
-  'getPosition',
   'getTags',
   'getByTag',
   'getEvents',

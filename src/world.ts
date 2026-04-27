@@ -306,7 +306,7 @@ export class World<
     this.entityManager = new EntityManager();
     this.spatialGrid = new SpatialGrid(config.gridWidth, config.gridHeight);
     const grid = this.spatialGrid;
-    this.grid = {
+    const gridView: SpatialGridView = {
       get width() { return grid.width; },
       get height() { return grid.height; },
       getAt: (x, y) => {
@@ -316,6 +316,7 @@ export class World<
       getNeighbors: (x, y, offsets) => grid.getNeighbors(x, y, offsets),
       getInRadius: (cx, cy, radius, metric) => grid.getInRadius(cx, cy, radius, metric),
     };
+    this.grid = Object.freeze(gridView);
     this.positionKey = config.positionKey ?? 'position';
     this.seed = config.seed;
     this.instrumentationProfile = config.instrumentationProfile ?? 'full';

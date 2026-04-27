@@ -650,6 +650,28 @@ describe('CommandTransaction', () => {
       expect(world.getResource(e, 'wood')?.current).toBe(100);
     });
 
+    it('predicate cannot monkey-patch world.grid methods (Codex iter-6 High)', () => {
+      const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+      const e = world.createEntity();
+      world.registerComponent('position');
+      world.setComponent(e, 'position', { x: 3, y: 3 });
+
+      const originalGetAt = world.grid.getAt;
+      const tx = world.transaction().require((w) => {
+        // world.grid is frozen — assignment must throw in strict mode.
+        expect(() => {
+          (w.grid as unknown as { getAt: () => null }).getAt = () => null;
+        }).toThrow();
+        return true;
+      });
+      tx.commit();
+      // grid.getAt is unchanged.
+      expect(world.grid.getAt).toBe(originalGetAt);
+      // Sanity: the original getAt still works.
+      const cell = world.grid.getAt(3, 3);
+      expect(cell?.has(e)).toBe(true);
+    });
+
     it('predicate cannot call warnIfPoisoned (proxy blocks the call) — R1 hole', () => {
       const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
       // Use a healthy world so the outer commit's own warnIfPoisoned is a no-op,
