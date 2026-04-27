@@ -169,8 +169,12 @@ export class MemorySink implements SessionSink, SessionSource {
   writeAttachment(descriptor: AttachmentDescriptor, data: Uint8Array): AttachmentDescriptor {
     this._assertOpen();
     const oversized = data.byteLength > this._threshold;
-    const wantsSidecar = 'sidecar' in descriptor.ref;
-    if (oversized && !wantsSidecar && !this._allowSidecar) {
+    const explicitSidecar = 'sidecar' in descriptor.ref;
+    const explicitDataUrl = 'dataUrl' in descriptor.ref;
+    // 'auto' is the default ref shape from SessionRecorder.attach() when caller
+    // didn't specify a policy. MemorySink's default is dataUrl for under-cap,
+    // sidecar for over-cap (with allowSidecar), throw otherwise.
+    if (oversized && !explicitSidecar && !this._allowSidecar) {
       throw new SinkWriteError(
         `attachment ${descriptor.id} (${data.byteLength} bytes) exceeds threshold ` +
           `${this._threshold} and sidecar is not enabled (pass MemorySinkOptions.allowSidecar: true)`,
@@ -178,7 +182,10 @@ export class MemorySink implements SessionSink, SessionSource {
       );
     }
     let final: AttachmentDescriptor;
-    if (wantsSidecar || (oversized && this._allowSidecar)) {
+    // Explicit sidecar always honored. For 'auto', use sidecar when oversized
+    // (allowSidecar is true) and dataUrl otherwise. For explicit 'dataUrl',
+    // use dataUrl regardless of size — caller asked for it.
+    if (explicitSidecar || (!explicitDataUrl && oversized && this._allowSidecar)) {
       this._sidecars.set(descriptor.id, new Uint8Array(data));
       final = { id: descriptor.id, mime: descriptor.mime, sizeBytes: descriptor.sizeBytes, ref: { sidecar: true } };
     } else {

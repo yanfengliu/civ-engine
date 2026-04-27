@@ -332,8 +332,10 @@ export class SessionRecorder<
     let ref: AttachmentDescriptor['ref'];
     if (options?.sidecar === false) {
       ref = { dataUrl: '' };  // explicit opt-in to manifest embedding
+    } else if (options?.sidecar === true) {
+      ref = { sidecar: true };  // explicit opt-in to sidecar storage
     } else {
-      ref = { sidecar: true };  // default + explicit opt-in
+      ref = { auto: true };    // no preference; each sink applies its own default
     }
     const desc: AttachmentDescriptor = {
       id, mime: blob.mime, sizeBytes: blob.data.byteLength, ref,

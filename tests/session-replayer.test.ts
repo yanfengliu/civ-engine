@@ -263,6 +263,38 @@ describe('SessionReplayer', () => {
     expect(result.skippedSegments[0].reason).toBe('failure_in_segment');
   });
 
+  it('multi-segment selfCheck on a clean recording — regression for submissionSequence false-positive (iter-1 review H1)', () => {
+    // Records ticks with snapshotInterval:2 → snapshots at 0, 2, 4, 6 → ≥3 segments.
+    // Pre-fix replayer reset nextCommandResultSequence per segment and false-positively
+    // reported executionDivergences. This test pins the H1 fix.
+    const world = new World<Record<string, never>, Cmds>(mkConfig());
+    setupWorld(world);
+    const sink = new MemorySink();
+    const rec = new SessionRecorder({ world, sink, snapshotInterval: 2 });
+    rec.connect();
+    for (let i = 0; i < 6; i++) {
+      world.submit('spawn', { x: i, y: i });
+      world.step();
+    }
+    rec.disconnect();
+    const bundle = rec.toBundle() as unknown as SessionBundle<Record<string, never>, Cmds>;
+    expect(bundle.snapshots.length).toBeGreaterThanOrEqual(2);
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => {
+        const w = new World<Record<string, never>, Cmds>(mkConfig());
+        setupWorld(w);
+        w.applySnapshot(snap);
+        return w;
+      },
+    });
+    const result = replayer.selfCheck();
+    expect(result.checkedSegments).toBeGreaterThanOrEqual(3);
+    expect(result.ok).toBe(true);
+    expect(result.executionDivergences).toEqual([]);
+    expect(result.stateDivergences).toEqual([]);
+    expect(result.eventDivergences).toEqual([]);
+  });
+
   it('selfCheck covers initial-to-first-snapshot segment', () => {
     const { bundle } = recordSession(3);
     const replayer = SessionReplayer.fromBundle(bundle, {

@@ -66,7 +66,18 @@ export interface AttachmentDescriptor {
   id: string;
   mime: string;
   sizeBytes: number;
-  ref: { dataUrl: string } | { sidecar: true };
+  /**
+   * Storage policy for the attachment. Sinks finalize this on `writeAttachment`:
+   * - `{ dataUrl: '...' }`: bytes embedded in the manifest as `data:<mime>;base64,...`.
+   *   Caller passing `{ dataUrl: '' }` opts into manifest embedding; sink populates the URL.
+   * - `{ sidecar: true }`: bytes stored externally (FileSink: `attachments/<id>.<ext>`;
+   *   MemorySink: parallel internal Map accessed via `source.readSidecar(id)`).
+   * - `{ auto: true }`: caller has no preference; each sink applies its own default
+   *   (FileSink → sidecar; MemorySink → dataUrl under threshold, sidecar over with
+   *   `allowSidecar: true`, otherwise throw). The `SessionRecorder.attach()` API
+   *   uses `auto` when caller didn't pass `options.sidecar`.
+   */
+  ref: { dataUrl: string } | { sidecar: true } | { auto: true };
 }
 
 export interface SessionMetadata {

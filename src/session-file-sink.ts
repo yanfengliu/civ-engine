@@ -260,11 +260,12 @@ export class FileSink implements SessionSink, SessionSource {
 
   writeAttachment(descriptor: AttachmentDescriptor, data: Uint8Array): AttachmentDescriptor {
     this._assertOpen();
-    // FileSink default: sidecar. Caller opts into dataUrl by passing
-    // ref: { dataUrl: <any-string> }; sink populates the data URL.
-    const wantsDataUrl = 'dataUrl' in descriptor.ref;
+    // FileSink default for 'auto' (no caller preference): sidecar — disk-backed
+    // sink keeps blobs as files. Caller opts into manifest embedding via
+    // explicit ref: { dataUrl: <any-string> }.
+    const explicitDataUrl = 'dataUrl' in descriptor.ref;
     let final: AttachmentDescriptor;
-    if (wantsDataUrl) {
+    if (explicitDataUrl) {
       const b64 = bytesToBase64(data);
       final = {
         id: descriptor.id, mime: descriptor.mime, sizeBytes: descriptor.sizeBytes,
