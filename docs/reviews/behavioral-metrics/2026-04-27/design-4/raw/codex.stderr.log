@@ -1279,3 +1279,479 @@ At line:1 char:1
     + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
  
 
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'design-\\{'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '§6\\.12|A.6.12|A\\u00126.12'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'overload of "'`runMetrics`|AsyncIterable overload'"'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 388ms:
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 472ms:
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 384ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:537:**Rationale:** Spec 3's harness is synchronous; the natural 
+composition is synchronous corpus reduction. `AsyncIterable` is worth the complexity when corpus loading involves I/O 
+- Spec 7's bundle index, network-backed corpora - none of which exist yet. Adding async now is 
+abstraction-before-pressure. The future-compat path is a separate `runMetricsAsync` function (returns 
+`Promise<MetricsResult>`), not an overload of `runMetrics` - overloading would force the return type to widen to 
+`MetricsResult | Promise<MetricsResult>`, which IS breaking for existing callers that assume sync. Two named functions 
+keeps the v1 surface stable.
+docs\design\2026-04-27-behavioral-metrics-design.md:561:| Future: Async corpus reducer (v2)    | Separate 
+`runMetricsAsync(bundles: AsyncIterable<...>, metrics): Promise<MetricsResult>` for I/O-backed sources. Distinct 
+function (not an overload of `runMetrics`) per ADR 26. |
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/session-bundle.ts' | Select-Object -Skip 104 -First 46" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 366ms:
+   */
+  policySeed?: number;
+}
+
+export interface SessionBundle<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+  metadata: SessionMetadata;
+  initialSnapshot: WorldSnapshot;
+  ticks: SessionTickEntry<TEventMap, TDebug>[];
+  commands: RecordedCommand<TCommandMap>[];
+  executions: CommandExecutionResult<keyof TCommandMap>[];
+  failures: TickFailure[];
+  snapshots: SessionSnapshotEntry[];
+  markers: Marker[];
+  attachments: AttachmentDescriptor[];
+}
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src\\*.ts' -Pattern 'interface RecordedCommand|type RecordedCommand|export interface RecordedCommand'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src\\*.ts' -Pattern 'interface CommandExecutionResult|type CommandExecutionResult|export interface CommandExecutionResult'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src\\*.ts' -Pattern 'result: CommandSubmissionResult|accepted: boolean|executed: boolean'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 431ms:
+
+src\index.ts:33:  type RecordedCommand,
+src\session-bundle.ts:41:export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 506ms:
+
+src\world.ts:145:export interface CommandExecutionResult<
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 456ms:
+
+src\history-recorder.ts:126:    result: CommandSubmissionResult<keyof TCommandMap>,
+src\history-recorder.ts:287:    result: CommandSubmissionResult<keyof TCommandMap>,
+src\history-recorder.ts:319:    result: CommandSubmissionResult<keyof TCommandMap>,
+src\session-bundle.ts:46:  result: CommandSubmissionResult<keyof TCommandMap>;
+src\session-recorder.ts:462:    result: CommandSubmissionResult<keyof TCommandMap>,
+src\world.ts:135:  accepted: boolean;
+src\world.ts:150:  executed: boolean;
+src\world.ts:279:    (result: CommandSubmissionResult<keyof TCommandMap>) => void
+src\world.ts:785:    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+src\world.ts:791:    listener: (result: CommandSubmissionResult<keyof TCommandMap>) => void,
+src\world.ts:1786:      accepted: boolean;
+src\world.ts:1813:      executed: boolean;
+src\world.ts:1839:    result: CommandSubmissionResult<K>,
+src\world.ts:2070:      executed: boolean;
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/session-bundle.ts' | Select-Object -Skip 36 -First 18" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/world.ts' | Select-Object -Skip 130 -First 28" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/history-recorder.ts' | Select-Object -Skip 436 -First 34" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 418ms:
+  createdAt?: string;
+  validated?: false;
+}
+
+export interface RecordedCommand<TCommandMap = Record<string, unknown>> {
+  submissionTick: number;
+  sequence: number;
+  type: keyof TCommandMap & string;
+  data: TCommandMap[keyof TCommandMap];
+  result: CommandSubmissionResult<keyof TCommandMap>;
+}
+
+export interface SessionTickEntry<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  tick: number;
+  diff: TickDiff;
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 522ms:
+export interface CommandSubmissionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  schemaVersion: typeof COMMAND_RESULT_SCHEMA_VERSION;
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  sequence: number;
+  validatorIndex: number | null;
+}
+
+export interface CommandExecutionResult<
+  TCommandType extends PropertyKey = string,
+> {
+  schemaVersion: typeof COMMAND_EXECUTION_SCHEMA_VERSION;
+  submissionSequence: number | null;
+  executed: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+}
+
+export type TickFailurePhase =
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 448ms:
+      }
+    }
+  }
+
+  const commands = state.commands.filter(
+    (entry) => entry.tick >= Math.max(0, startTick - 1) && entry.tick <= endTick,
+  );
+  let accepted = 0;
+  let rejected = 0;
+  for (const command of commands) {
+    if (command.accepted) {
+      accepted++;
+    } else {
+      rejected++;
+    }
+    increment(commandCodes, command.code, 1);
+  }
+
+  const executions = state.executions.filter(
+    (entry) => entry.tick >= startTick && entry.tick <= endTick,
+  );
+  const executionCodes = new Map<string, number>();
+  let executed = 0;
+  let failed = 0;
+  for (const execution of executions) {
+    if (execution.executed) {
+      executed++;
+    } else {
+      failed++;
+    }
+    increment(executionCodes, execution.code, 1);
+  }
+
+  const failures = state.failures.filter(
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'commands\\[\\]\\.accepted|commands\\[\\]\\.result\\.accepted|executions\\[\\]\\.executed|metadata\\.failedTicks|metadata\\.incomplete|bundle\\.commands|bundle\\.executions'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 418ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:177:// Per-bundle rate: durationTicks > 0 ? bundle.commands.length 
+/ durationTicks : 0.
+docs\design\2026-04-27-behavioral-metrics-design.md:180:// see commandValidationAcceptanceRate (6.10) and use 
+bundle.executions in user-defined
+docs\design\2026-04-27-behavioral-metrics-design.md:197:// Note: counts ALL submissions including rejected ones 
+(bundle.commands is
+docs\design\2026-04-27-behavioral-metrics-design.md:200:// type counts, define a user metric reading 
+bundle.executions[].commandType.
+docs\design\2026-04-27-behavioral-metrics-design.md:214:// Counts bundles where metadata.failedTicks?.length > 0.
+docs\design\2026-04-27-behavioral-metrics-design.md:236:// Counts bundles where metadata.incomplete === true.
+docs\design\2026-04-27-behavioral-metrics-design.md:245:// Numerator: count of bundle.commands[] where result.accepted 
+=== true.
+docs\design\2026-04-27-behavioral-metrics-design.md:246:// Denominator: total bundle.commands[] across all bundles 
+(every submitWithResult call).
+docs\design\2026-04-27-behavioral-metrics-design.md:250:// commands appear in bundle.commands with result.accepted === 
+false but
+docs\design\2026-04-27-behavioral-metrics-design.md:251:// NEVER reach bundle.executions - they're dropped before 
+queueing per
+docs\design\2026-04-27-behavioral-metrics-design.md:260:// Numerator: count of bundle.executions[] where executed === 
+false.
+docs\design\2026-04-27-behavioral-metrics-design.md:261:// Denominator: total bundle.executions[] across all bundles.
+docs\design\2026-04-27-behavioral-metrics-design.md:265:// NOT validator rejections (those don't reach 
+bundle.executions). Per
+docs\design\2026-04-27-behavioral-metrics-design.md:279:- Per-phase failure metrics ("what fraction of failures are in 
+`phase: 'systems'`") - `bundle.failures: TickFailure[]` carries the phase + error info. v1 only reads 
+`metadata.failedTicks` (just the tick numbers). User-defined for now; ship a built-in if a clear engine-generic shape 
+emerges.
+docs\design\2026-04-27-behavioral-metrics-design.md:280:- Executed-only command/event type histograms - see notes in 
+6.5/6.6. User-defined via `bundle.executions[].commandType`.
+docs\design\2026-04-27-behavioral-metrics-design.md:390:- **`SessionBundle` shape**: all fields read by built-ins 
+(`metadata.durationTicks`, `metadata.failedTicks`, `metadata.incomplete`, `commands[].type`, `ticks[].events[].type`) 
+are present in v0.8.0+ bundles. Older bundles (v0.7.x) work but lack `metadata.policySeed` (which v1 metrics don't 
+read anyway).
+docs\design\2026-04-27-behavioral-metrics-design.md:523:**Decision:** v1 ships 11 built-in metrics that read only 
+`SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, 
+`commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`, etc.). 
+Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in - they require standard 
+event/marker contracts that the engine doesn't define.
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+I found another likely drift point outside the touched lines: the compatibility note around `SessionBundle` field usage still appears to enumerate only the pre-v3 built-in field set. I’m checking that section in context before deciding severity.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 384 -First 14" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 419ms:
+
+## 9. Integration with Existing Primitives
+
+- **`runSynthPlaytest`**: produces bundles that are the natural input to `runMetrics`. CI pattern: run N synthetic playtests in parallel ƒ+' collect bundles ƒ+' `runMetrics(bundles, metrics)` ƒ+' compare against baseline.
+- **`SessionRecorder` / `SessionReplayer`**: bundles produced by either (live recordings, scenario adapters, synthetic playtests) are accepted by `runMetrics` uniformly.
+- **`SessionBundle` shape**: all fields read by built-ins (`metadata.durationTicks`, `metadata.failedTicks`, `metadata.incomplete`, `commands[].type`, `ticks[].events[].type`) are present in v0.8.0+ bundles. Older bundles (v0.7.x) work but lack `metadata.policySeed` (which v1 metrics don't read anyway).
+
+## 10. CI Pattern
+
+```ts
+import { runSynthPlaytest, runMetrics, compareMetricsResults,
+         bundleCount, sessionLengthStats, commandRateStats,
+         commandTypeCounts, failureBundleRate } from 'civ-engine';
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 564 -First 18" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 419ms:
+## 18. Acceptance Criteria
+
+- All new symbols (`Metric`, `MetricsResult`, `MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, `compareMetricsResults`, plus 11 built-in factories: `bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) exported from `src/index.ts` with TypeScript types.
+- Test coverage: each built-in tested for empty / single / multi-bundle inputs; `runMetrics` multiplexing test; `compareMetricsResults` numeric + null + opaque + only-in-side + nested-record cases; user-defined-metric round-trip; order-insensitivity verification (apply-twice-with-different-orders).
+- All four engine gates pass.
+- A13 doc updates land in the same commits as the code that introduces each surface.
+- Multi-CLI design review and code review reach convergence ƒ?" reviewers nitpick rather than catching real issues, per AGENTS.md.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+I found a second place worth checking carefully: §12 now says “11 built-ins” for multiplexing, but the explicit built-in test bullets still only enumerate the original pre-v3 metric families. I’m verifying whether the two validator/execution metrics get any direct semantic test coverage elsewhere in the doc.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'commandValidationAcceptanceRate|executionFailureRate'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 435ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:50:| Built-in metrics           | new (functions)   | 
+`bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, 
+`failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, 
+`executionFailureRate`. |
+docs\design\2026-04-27-behavioral-metrics-design.md:180:// see commandValidationAcceptanceRate (6.10) and use 
+bundle.executions in user-defined
+docs\design\2026-04-27-behavioral-metrics-design.md:241:### 6.10 `commandValidationAcceptanceRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:244:function commandValidationAcceptanceRate(name?: string): 
+Metric<{ accepted: number; total: number }, number>;
+docs\design\2026-04-27-behavioral-metrics-design.md:256:### 6.11 `executionFailureRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:259:function executionFailureRate(name?: string): Metric<{ failed: 
+number; total: number }, number>;
+docs\design\2026-04-27-behavioral-metrics-design.md:269:// Pair with commandValidationAcceptanceRate to get the full 
+picture:
+docs\design\2026-04-27-behavioral-metrics-design.md:270:// - commandValidationAcceptanceRate dropping  validator 
+regression.
+docs\design\2026-04-27-behavioral-metrics-design.md:271:// - executionFailureRate rising  handler/tick-pipeline 
+regression.
+docs\design\2026-04-27-behavioral-metrics-design.md:567:- All new symbols (`Metric`, `MetricsResult`, 
+`MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, 
+`compareMetricsResults`, plus 11 built-in factories: `bundleCount`, `sessionLengthStats`, `commandRateStats`, 
+`eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, 
+`incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) exported from `src/index.ts` with 
+TypeScript types.
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '\\*\\*Built-in metrics:\\*\\*|commandValidationAcceptanceRate|executionFailureRate|SessionBundle shape|all fields read by built-ins'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src/session-bundle.ts' -Pattern 'commands: RecordedCommand|executions: CommandExecutionResult|result: CommandSubmissionResult|accepted: boolean|executed: boolean|failedTicks\\?: number\\[\\]|incomplete\\?: true;'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src/world.ts' -Pattern 'accepted: false|accepted: true|executed: false|executed: true'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 440ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:50:| Built-in metrics           | new (functions)   | 
+`bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, 
+`failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, 
+`executionFailureRate`. |
+docs\design\2026-04-27-behavioral-metrics-design.md:180:// see commandValidationAcceptanceRate (6.10) and use 
+bundle.executions in user-defined
+docs\design\2026-04-27-behavioral-metrics-design.md:241:### 6.10 `commandValidationAcceptanceRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:244:function commandValidationAcceptanceRate(name?: string): 
+Metric<{ accepted: number; total: number }, number>;
+docs\design\2026-04-27-behavioral-metrics-design.md:256:### 6.11 `executionFailureRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:259:function executionFailureRate(name?: string): Metric<{ failed: 
+number; total: number }, number>;
+docs\design\2026-04-27-behavioral-metrics-design.md:269:// Pair with commandValidationAcceptanceRate to get the full 
+picture:
+docs\design\2026-04-27-behavioral-metrics-design.md:270:// - commandValidationAcceptanceRate dropping  validator 
+regression.
+docs\design\2026-04-27-behavioral-metrics-design.md:271:// - executionFailureRate rising  handler/tick-pipeline 
+regression.
+docs\design\2026-04-27-behavioral-metrics-design.md:390:- **`SessionBundle` shape**: all fields read by built-ins 
+(`metadata.durationTicks`, `metadata.failedTicks`, `metadata.incomplete`, `commands[].type`, `ticks[].events[].type`) 
+are present in v0.8.0+ bundles. Older bundles (v0.7.x) work but lack `metadata.policySeed` (which v1 metrics don't 
+read anyway).
+docs\design\2026-04-27-behavioral-metrics-design.md:452:- **Built-in metrics:**
+docs\design\2026-04-27-behavioral-metrics-design.md:567:- All new symbols (`Metric`, `MetricsResult`, 
+`MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, 
+`compareMetricsResults`, plus 11 built-in factories: `bundleCount`, `sessionLengthStats`, `commandRateStats`, 
+`eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, 
+`incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) exported from `src/index.ts` with 
+TypeScript types.
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 416ms:
+
+src\world.ts:740:        accepted: false,
+src\world.ts:751:      accepted: true,
+src\world.ts:1686:          executed: false,
+src\world.ts:1711:          executed: true,
+src\world.ts:1721:          executed: false,
+src\world.ts:1769:        executed: false,
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 516ms:
+
+src\session-bundle.ts:46:  result: CommandSubmissionResult<keyof TCommandMap>;
+src\session-bundle.ts:99:  incomplete?: true;
+src\session-bundle.ts:100:  failedTicks?: number[];
+src\session-bundle.ts:118:  commands: RecordedCommand<TCommandMap>[];
+src\session-bundle.ts:119:  executions: CommandExecutionResult<keyof TCommandMap>[];
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+**Findings**
+- `LOW` [behavioral-metrics design](</C:/Users/38909/Documents/github/civ-engine/docs/design/2026-04-27-behavioral-metrics-design.md:452>): §12’s concrete built-in test list still stops at the original metric set. `commandValidationAcceptanceRate` and `executionFailureRate` are defined in §6.10/§6.11 and counted everywhere else as built-ins, but the test-target bullets never give them direct semantic cases; only the multiplexing bullet was updated to 11. §18’s generic “each built-in tested” clause keeps this below the reject bar, but the detailed test plan no longer fully round-trips the newest semantics fix.
+- `LOW` [behavioral-metrics design](</C:/Users/38909/Documents/github/civ-engine/docs/design/2026-04-27-behavioral-metrics-design.md:390>): the `SessionBundle` compatibility note still enumerates the pre-v3 field set as “all fields read by built-ins.” v4’s built-ins also rely on `commands[].result.accepted` and `executions[].executed` per [§6.10](</C:/Users/38909/Documents/github/civ-engine/docs/design/2026-04-27-behavioral-metrics-design.md:241>) and [§6.11](</C:/Users/38909/Documents/github/civ-engine/docs/design/2026-04-27-behavioral-metrics-design.md:256>), and those fields are on the current bundle surface in [session-bundle.ts](</C:/Users/38909/Documents/github/civ-engine/src/session-bundle.ts:46>) and [session-bundle.ts](</C:/Users/38909/Documents/github/civ-engine/src/session-bundle.ts:118>).
+
+`ACCEPT.` The iter-3 reject items are fixed: `null` replaces `NaN` in the test plan, the 11-built-in count is consistent in the touched sections, ADR 24’s field list is updated, the brace-expansion path is gone, the §8 volatile-metadata sentence no longer mispoints at §6.12, and the future async row now matches ADR 26. The engine-fact references behind the validator/execution split also still match current code in [world.ts](</C:/Users/38909/Documents/github/civ-engine/src/world.ts:740>), [world.ts](</C:/Users/38909/Documents/github/civ-engine/src/world.ts:1686>), [world.ts](</C:/Users/38909/Documents/github/civ-engine/src/world.ts:1721>), [world.ts](</C:/Users/38909/Documents/github/civ-engine/src/world.ts:1769>), and [session-recorder.ts](</C:/Users/38909/Documents/github/civ-engine/src/session-recorder.ts:163>).
+tokens used
+111,371

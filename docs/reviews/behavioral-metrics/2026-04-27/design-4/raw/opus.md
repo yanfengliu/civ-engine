@@ -1,15 +1,13 @@
-All field references verified. Now I have enough to finalize the review.
+ACCEPT.
 
-# Review — Spec 8 Behavioral Metrics, design v4
+Both Codex and Opus iter-4 reviews independently converged on ACCEPT. All three iter-3 M-DRIFT sites (§12 NaN, §12 9-built-ins, ADR 24 9-built-ins+field list) + 3 NITs (N-100PCT, N-BRACE, N-§8-XREF) + the §17/ADR 26 contradiction byproduct landed cleanly. Sub-bar findings:
 
-## Iter-3 findings — all fixes verified landed
+- **Convergent NIT/LOW** — §9 line 390 field-list enumeration omits `commands[].result.accepted` and `executions[].executed` (parallels iter-3's ADR 24 fix; §9 isn't normative).
+- **Codex LOW** — §12 detailed test bullets don't include dedicated semantic-case lines for `commandValidationAcceptanceRate` / `executionFailureRate` (multiplexing bullet + §18 generic clause cover them).
+- **Opus NIT** — line 3 says "+ 2 NITs" but iter-3 had 3.
 
-| Iter-3 finding | Location | Verified in v4 |
-|---|---|---|
-| M-DRIFT #1: `*Stats` empty corpus says `NaN` | §12 line 454 | ✅ Now `null` numeric fields, with §6.2 cross-ref + JSON-stable rationale + NumPy/R type 7 percentile note |
-| M-DRIFT #2: multiplexing test "9 built-ins" | §12 line 461 | ✅ Now "11 built-ins…all 11 results" |
-| M-DRIFT #3: ADR 24 "9 built-ins" + stale field list | §15 line 523 | ✅ Now "11"; field list includes `commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete` |
-| N-100PCT: "100% of new code covered" | §12 line 475 | ✅ Replaced with case-enumeration acceptance: "every case enumerated above has at least one test" |
+None blocking. Synthesis at `docs/reviews/behavioral-metrics/2026-04-27/design-4/REVIEW.md`. Spec is ready for T1 implementation per §14.
+t" |
 | N-BRACE: shell `design-{1,2}` brace expansion | line 3 | ✅ Expanded to three explicit `design-{1,2,3}/REVIEW.md` paths |
 | N-§8-XREF: bad §6.12 cross-ref | §8 line 382 | ✅ §6.12 ref dropped; replaced with direct "flaky deltas in `compareMetricsResults` because every run produces a fresh UUID and timestamp" |
 | §17 row "AsyncIterable overload" silently contradicting ADR 26 | §17 line 561 | ✅ Now reads "Separate `runMetricsAsync(...): Promise<MetricsResult>` for I/O-backed sources. Distinct function (not an overload of `runMetrics`) per ADR 26." |
