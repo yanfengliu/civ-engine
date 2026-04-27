@@ -1,0 +1,21 @@
+Warning: True color (24-bit) support not detected. Using a terminal with true color enabled will result in a better visual experience.
+Error when talking to Gemini API Full report available at: C:\Users\38909\AppData\Local\Temp\gemini-client-error-Turn.run-sendMessageStream-2026-04-27T04-07-02-731Z.json TerminalQuotaError: You have exhausted your capacity on this model. Your quota will reset after 16h58m25s.
+    at classifyGoogleError (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:274720:18)
+    at retryWithBackoff (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:275324:31)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async GeminiChat.makeApiCallAndProcessStream (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:312614:28)
+    at async GeminiChat.streamWithRetries (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:312452:29)
+    at async Turn.run (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:312945:24)
+    at async GeminiClient.processTurn (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:323362:22)
+    at async GeminiClient.sendMessageStream (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/chunk-UIBQS45C.js:323475:14)
+    at async file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/gemini-JN2NUSDI.js:10213:26
+    at async main (file:///C:/Users/38909/AppData/Roaming/npm/node_modules/@google/gemini-cli/bundle/gemini-JN2NUSDI.js:15258:5) {
+  cause: {
+    code: 429,
+    message: 'You have exhausted your capacity on this model. Your quota will reset after 16h58m25s.',
+    details: [ [Object], [Object] ]
+  },
+  retryDelayMs: 61105283.44227,
+  reason: 'QUOTA_EXHAUSTED'
+}
+An unexpected critical error occurred:[object Object]
