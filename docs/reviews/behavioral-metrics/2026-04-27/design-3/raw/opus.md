@@ -1,21 +1,20 @@
-I have everything I need to produce the review.
+## Iter-3 Verdict: REJECT — 1 convergent MED above ACCEPT bar
 
----
+Both reviewers re-flagged iter-2 Codex's **M-DRIFT** (silently omitted from v3's status line):
+- §12 line 454: `count: 0 + NaN`s → should be `null` (contradicts v2's H-JSON-NAN fix)
+- §12 line 461: "9 built-ins" → should be 11
+- §15 ADR 24 line 523: "9 built-in metrics" → should be 11 + expanded field list
 
-# Iter-3 Review — Behavioral Metrics Design v3
+**What landed cleanly in v3:** H-EXEC-SEMANTICS rename + bundle.commands switch (engine-verified by Opus against world.ts:732-748 / 1686 / 1721 / 1769); M-FAILEDTICK-DIVZERO zero-tick-corpus guard; N-DUP-METRIC rationale (holds — different sources, no longer 1-x); 5 of 6 iter-2 NITs.
 
-## Verification of iter-2 fixes
+**Iter-3-only NITs:**
+- Codex: §12 line 475 still has "100% of new code"; line 3 brace expansion
+- Opus: §8 cross-ref to §6.12 doesn't fit (§6.12 catalogs excluded metrics, not volatile-metadata exclusion)
 
-**Engine-fact references verified:**
-- `world.ts:732-748` — validator rejection path returns before `commandQueue.push`, so rejected submissions never reach `bundle.executions`. Matches §6.10's claim. ✓
-- `world.ts:1686 / 1721 / 1769` — three `executed: false` paths with codes `missing_handler` / `command_handler_threw` / `tick_aborted_before_handler`. Matches §6.11 verbatim. ✓
-- `session-recorder.ts:163-172` — capture wrapper invokes after `original(type, data)` unconditionally, so every `submitWithResult` (accepted + rejected) lands in `bundle.commands`. Matches §6.10 numerator/denominator. ✓
+**v4 in flight.** The on-disk file already has uncommitted edits applying all 3 M-DRIFT fixes + N-100PCT + N-BRACE + the §17/ADR 26 contradiction (which neither reviewer flagged but is a free byproduct). Remaining gap: N-§8-XREF.
 
-**Iter-2 H-EXEC-SEMANTICS (HIGH):** Addressed. Rename to `commandValidationAcceptanceRate`, source switched to `bundle.commands[].result.accepted`, §6.11 rewritten to enumerate the three real `executed: false` causes. §4 table, §6.3 cross-ref, and §18 list all updated.
-
-**Iter-2 M-FAILEDTICK-DIVZERO (MED):** Addressed. §6.8 now reads `totalDurationTicks > 0 ? totalFailedTicks / totalDurationTicks : 0` and explicitly calls out the zero-tick-corpus case.
-
-**N-DUP-METRIC rationale check:** Holds. After the rename, denominators are different — `commandValidationAcceptanceRate` divides by `bundle.commands.length`, `executionFailureRate` divides by `bundle.executions.length`. Validator-rejected commands inflate the former's denominator without contributing to the latter's, so the two no longer sum to 1. The §6.11 "Pair with…" block correctly explains this.
+Synthesis written to `docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. Expect ACCEPT on iter-4 once N-§8-XREF is folded.
+Holds. After the rename, denominators are different — `commandValidationAcceptanceRate` divides by `bundle.commands.length`, `executionFailureRate` divides by `bundle.executions.length`. Validator-rejected commands inflate the former's denominator without contributing to the latter's, so the two no longer sum to 1. The §6.11 "Pair with…" block correctly explains this.
 
 **5 of 6 iter-2 NITs:** Addressed (§6.2 NaN wording flipped to "lossy"; §10 example now does `'onlyIn' in val` runtime check before the `as` cast; ADR 26 now proposes `runMetricsAsync` separate function rather than overload, with correct rationale that overloading would widen the return type; §7.2 negative-baseline `pctChange` caveat added).
 

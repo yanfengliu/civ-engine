@@ -1,0 +1,1281 @@
+Reading additional input from stdin...
+OpenAI Codex v0.121.0 (research preview)
+--------
+workdir: C:\Users\38909\Documents\github\civ-engine
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019dd0f6-616b-72d1-b471-6a0829982935
+--------
+user
+You are a senior reviewer auditing iter-4 of a design spec. The full v4 design is at `docs/design/2026-04-27-behavioral-metrics-design.md`. The iter-3 review verdict is at `docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. The v3→v4 diff is piped via stdin.
+
+Iter-3 (REJECT verdict) flagged one convergent MED: M-DRIFT-PERSISTS — three stale references in normative sections:
+1. §12 line 454: empty-corpus *Stats said "NaN" but §6.2 / §7.3 specify `null` (JSON round-trip stability).
+2. §12 line 461: multiplexing test said "9 built-ins" but actual count is 11.
+3. §15 ADR 24 line 523: "9 built-in metrics" + stale field list missing `commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`.
+
+Plus 3 NITs:
+- N-100PCT: §12 line 475 "100% of new code covered" — drop or replace with case-enumeration language.
+- N-BRACE: line 3 status header used `design-{1,2}/REVIEW.md` (shell brace expansion, not markdown) — expand to explicit paths.
+- N-§8-XREF: §8 cross-reference to §6.12 didn't fit (§6.12 catalogs excluded *metrics*, not non-reading of volatile metadata).
+
+Plus a §17 row stating "AsyncIterable overload" silently contradicting v3's just-fixed ADR 26 ("not an overload, separate runMetricsAsync").
+
+Verify iter-4 lands all these fixes. Look for any new regressions or oversights.
+
+Bar: ACCEPT if no remaining BLOCKER/HIGH/MED issues. NITs allowed. Be precise: tag findings BLOCKER / HIGH / MED / LOW / NIT. If no real issues, say so plainly and conclude ACCEPT. Do not nit-pick. Do not modify files.
+
+Aspects to review:
+1. Design — clarity, scales, generalizes, debuggable.
+2. Test coverage adequacy in §12.
+3. Correctness — semantics, factual claims about referenced files.
+4. Doc consistency — no internal contradictions, all field references valid against the existing engine code.
+
+Note: this is a doc-only spec change (no production code). The diff is small. Verify the design is internally consistent and doesn't drift from existing engine surface (referenced as `world.ts:732-748`, `world.ts:1686/1721/1769`, `session-recorder.ts:163-172`).
+
+<stdin>
+diff --git a/docs/design/2026-04-27-behavioral-metrics-design.md b/docs/design/2026-04-27-behavioral-metrics-design.md
+index 2102c40..9662cf5 100644
+--- a/docs/design/2026-04-27-behavioral-metrics-design.md
++++ b/docs/design/2026-04-27-behavioral-metrics-design.md
+@@ -1,6 +1,6 @@
+ # Behavioral Metrics over Corpus — Design Spec
+ 
+-**Status:** Draft v3 (2026-04-27). Awaiting iter-3 multi-CLI review. Iter-1, 2 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-{1,2}/REVIEW.md`. v3 addresses iter-2's H-EXEC-SEMANTICS (`commandValidationAcceptanceRate` read from wrong source — validator rejections don't reach `bundle.executions`) + M-FAILEDTICK-DIVZERO (§6.8 zero-tick-corpus guard) + 6 NITs. Iter-1 already addressed 7 HIGH + 6 MED + 4 LOW.
++**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, `docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and `docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale §12 `NaN`s + 9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; iter-2 fixed 1 HIGH + 1 MED.
+ 
+ **Scope:** Tier-2 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 8). Builds on the Synthetic Playtest Harness (Spec 3, merged v0.7.20 → v0.8.1). Out of scope: persistent corpus storage / indexing (Spec 7), bundle search (Spec 7), AI playtester agent (Spec 9), counterfactual replay (Spec 5), annotation UI (Spec 2), bundle viewer (Spec 4).
+ 
+@@ -379,7 +379,7 @@ Game-specific judgment ("18% shift in p95 duration is bad") is up to the caller
+ 
+ Two `runMetrics(bundles, metrics)` calls with the same bundles (deep-equal, in any order if all metrics are order-insensitive) produce structurally-equal results. v1 built-ins are all order-insensitive. Order-sensitive user metrics declare via `orderSensitive: true` and the caller is responsible for stable iteration.
+ 
+-Volatile bundle metadata (`sessionId`, `recordedAt`) is NOT used by any built-in metric. User-defined metrics that read these get fragile results — §6.12 documents the deliberate exclusion.
++Volatile bundle metadata (`sessionId`, `recordedAt`) is NOT used by any built-in metric. User-defined metrics that read these get fragile results — flaky deltas in `compareMetricsResults` because every run produces a fresh UUID and timestamp.
+ 
+ `Stats` percentile calc uses linear interpolation between sorted samples (the standard method). Implementation: sort numeric buffer on `finalize`, then index. Exact, deterministic, O(n log n) per metric.
+ 
+@@ -451,14 +451,14 @@ Unit / integration tests target:
+ 
+ - **Built-in metrics:**
+     - `bundleCount` over empty / single / many bundles.
+-    - `*Stats` — empty corpus returns `count: 0` + `NaN`s; 1-bundle corpus has `count: 1` + degenerate `min === max === mean === p50 === ...`; multi-bundle corpus matches hand-computed percentiles.
++    - `*Stats` — empty corpus returns `count: 0` + `null` numeric fields (per §6.2 — JSON-stable); 1-bundle corpus has `count: 1` + degenerate `min === max === mean === p50 === ...`; multi-bundle corpus matches hand-computed percentiles (NumPy linear / R type 7).
+     - `commandTypeCounts` aggregates across multiple bundles; respects discriminated-union `type` field on `RecordedCommand`.
+     - `eventTypeCounts` similarly.
+     - `failureBundleRate` over corpus with mix of failed/clean bundles.
+     - `failedTickRate` over corpus with various failedTicks counts; clean corpus → 0.
+     - `incompleteBundleRate` similarly.
+ - **`runMetrics`:**
+-    - Multiplexing: 9 built-ins in one pass produces all 9 results.
++    - Multiplexing: 11 built-ins in one pass produces all 11 results.
+     - Empty corpus: each metric produces its zero-state result.
+     - Duplicate metric names: throws `RangeError`.
+     - User-defined metric: implements the contract, observes correctly, finalizes correctly.
+@@ -472,7 +472,7 @@ Unit / integration tests target:
+     - Two `runMetrics` calls on structurally-equal corpora produce deep-equal `MetricsResult`.
+     - Sub-tests for each built-in's result stability.
+ 
+-Acceptance criterion: 100% of new code covered by tests.
++Acceptance criterion: every case enumerated above has at least one test. (No coverage-percent target — concrete case enumeration is the actionable bar.)
+ 
+ ## 13. Documentation Surface
+ 
+@@ -520,7 +520,7 @@ Plan structure (estimated 2 commits):
+ 
+ ### ADR 24: Engine-generic built-ins only; game-semantic metrics are user-defined
+ 
+-**Decision:** v1 ships 9 built-in metrics that read only `SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, etc.). Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in — they require standard event/marker contracts that the engine doesn't define.
++**Decision:** v1 ships 11 built-in metrics that read only `SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, `commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`, etc.). Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in — they require standard event/marker contracts that the engine doesn't define.
+ 
+ **Rationale:** civ-engine is a general-purpose engine; metrics shipped in the engine package must work for any consuming game. Game-semantic metrics need game-specific event names, component shapes, and marker conventions. Game projects implement those as user-defined `Metric<TState, TResult>` instances and compose them into their own `runMetrics(bundles, [...builtins, ...gameMetrics])` calls.
+ 
+@@ -558,7 +558,7 @@ Plan structure (estimated 2 commits):
+ | ------------------------------------ | --------------------------------------------------------------------------- |
+ | #7 Bundle Search / Corpus Index      | Persistent corpus → wraps as `Iterable<SessionBundle>` for `runMetrics`.    |
+ | #9 AI Playtester Agent               | LLM-driven Policy + LLM-interpretable `MetricsResult` for analysis.         |
+-| Future: Async corpus reducer (v2)    | `AsyncIterable` overload for I/O-backed sources.                            |
++| Future: Async corpus reducer (v2)    | Separate `runMetricsAsync(bundles: AsyncIterable<...>, metrics): Promise<MetricsResult>` for I/O-backed sources. Distinct function (not an overload of `runMetrics`) per ADR 26. |
+ | Future: Parallel corpus reducer       | Worker-distributed `runMetricsParallel` with accumulator `merge`.           |
+ | Future: stopReason persistence        | Spec 3 follow-up to put `stopReason` in `metadata`; trivializes histogram.  |
+ 
+</stdin>
+codex
+Reviewing iter-4 against the iter-3 verdict and the referenced engine surface. I’m pulling the relevant spec, prior review, and code references first so I can verify whether the flagged drift is actually gone and whether the new wording stays consistent with the existing API.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Raw 'C:\\Users\\38909\\.codex\\skills\\programming-best-practices\\SKILL.md'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Raw 'C:\\Users\\38909\\.codex\\plugins\\cache\\openai-curated\\superpowers\\b066e4a0\\skills\\using-superpowers\\SKILL.md'" in C:\Users\38909\Documents\github\civ-engine
+2026-04-27T22:02:00.744306Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|behavioral-metrics|metrics design|civ-engine' -CaseSensitive:"'$false | Select-Object -First 40 | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|behavioral-metrics|metrics design|civ-engine' -CaseSensitive:"'$false | Select-Object -First 40 | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }' in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'C:\\Users\\38909\\.codex\\memories\\MEMORY.md' -Pattern 'behavioral metrics|behavioral-metrics|metrics design|civ-engine' -CaseSensitive:"'$false | Select-Object -First 40 | ForEach-Object { "{0}:{1}: {2}" -f $_.Path, $_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+ succeeded in 364ms:
+---
+name: programming-best-practices
+description: General coding workflow and engineering guardrails for planning, implementing, debugging, refactoring, reviewing, and validating code changes. Use when Codex is asked to write, edit, review, or test code in any repository, especially when correctness, maintainability, small diffs, and safe verification matter.
+---
+
+# Programming Best Practices
+
+## Operate
+
+- Read the relevant code path before editing.
+- Trace data flow end to end before deciding on a fix.
+- Prefer the smallest change that solves the actual problem.
+- Match the existing architecture and conventions unless they are the source of the defect.
+- Preserve backward compatibility unless the task explicitly requires a breaking change.
+
+## Change Safely
+
+- Do not overwrite unrelated user changes.
+- Treat the worktree as potentially dirty and isolate your diff.
+- Make state transitions explicit, especially around async flows and persistence.
+- If concurrent results can race, decide which result wins and enforce it in code.
+- Handle empty states, errors, cleanup, and cancellation paths deliberately.
+- Avoid speculative abstractions until duplication or complexity actually justifies them.
+
+## Validate
+
+- Add or update targeted tests when behavior changes or a bug is fixed.
+- Run the smallest meaningful verification first, then widen coverage if needed.
+- Verify user-visible behavior, not only internal implementation details.
+- If validation cannot run, state exactly what was blocked and what remains unverified.
+
+## Review
+
+- Prioritize bugs, regressions, broken assumptions, and missing tests.
+- Present findings before summaries.
+- Order findings by severity and include concrete file references.
+
+## Communicate
+
+- State assumptions when they affect implementation choices.
+- Call out tradeoffs plainly.
+- Explain non-obvious changes at a high level.
+- Close with outcome, verification, and remaining risk.
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 456ms:
+---
+name: using-superpowers
+description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+---
+
+<SUBAGENT-STOP>
+If you were dispatched as a subagent to execute a specific task, skip this skill.
+</SUBAGENT-STOP>
+
+<EXTREMELY-IMPORTANT>
+If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
+
+IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
+
+This is not negotiable. This is not optional. You cannot rationalize your way out of this.
+</EXTREMELY-IMPORTANT>
+
+## Instruction Priority
+
+Superpowers skills override default system prompt behavior, but **user instructions always take precedence**:
+
+1. **User's explicit instructions** (CLAUDE.md, GEMINI.md, AGENTS.md, direct requests) ƒ?" highest priority
+2. **Superpowers skills** ƒ?" override default system behavior where they conflict
+3. **Default system prompt** ƒ?" lowest priority
+
+If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "always use TDD," follow the user's instructions. The user is in control.
+
+## How to Access Skills
+
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to youƒ?"follow it directly. Never use the Read tool on skill files.
+
+**In Copilot CLI:** Use the `skill` tool. Skills are auto-discovered from installed plugins. The `skill` tool works the same as Claude Code's `Skill` tool.
+
+**In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
+
+**In other environments:** Check your platform's documentation for how skills are loaded.
+
+## Platform Adaptation
+
+Skills use Claude Code tool names. Non-CC platforms: see `references/copilot-tools.md` (Copilot CLI), `references/codex-tools.md` (Codex) for tool equivalents. Gemini CLI users get the tool mapping loaded automatically via GEMINI.md.
+
+# Using Skills
+
+## The Rule
+
+**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+
+```dot
+digraph skill_flow {
+    "User message received" [shape=doublecircle];
+    "About to EnterPlanMode?" [shape=doublecircle];
+    "Already brainstormed?" [shape=diamond];
+    "Invoke brainstorming skill" [shape=box];
+    "Might any skill apply?" [shape=diamond];
+    "Invoke Skill tool" [shape=box];
+    "Announce: 'Using [skill] to [purpose]'" [shape=box];
+    "Has checklist?" [shape=diamond];
+    "Create TodoWrite todo per item" [shape=box];
+    "Follow skill exactly" [shape=box];
+    "Respond (including clarifications)" [shape=doublecircle];
+
+    "About to EnterPlanMode?" -> "Already brainstormed?";
+    "Already brainstormed?" -> "Invoke brainstorming skill" [label="no"];
+    "Already brainstormed?" -> "Might any skill apply?" [label="yes"];
+    "Invoke brainstorming skill" -> "Might any skill apply?";
+
+    "User message received" -> "Might any skill apply?";
+    "Might any skill apply?" -> "Invoke Skill tool" [label="yes, even 1%"];
+    "Might any skill apply?" -> "Respond (including clarifications)" [label="definitely not"];
+    "Invoke Skill tool" -> "Announce: 'Using [skill] to [purpose]'";
+    "Announce: 'Using [skill] to [purpose]'" -> "Has checklist?";
+    "Has checklist?" -> "Create TodoWrite todo per item" [label="yes"];
+    "Has checklist?" -> "Follow skill exactly" [label="no"];
+    "Create TodoWrite todo per item" -> "Follow skill exactly";
+}
+```
+
+## Red Flags
+
+These thoughts mean STOPƒ?"you're rationalizing:
+
+| Thought | Reality |
+|---------|---------|
+| "This is just a simple question" | Questions are tasks. Check for skills. |
+| "I need more context first" | Skill check comes BEFORE clarifying questions. |
+| "Let me explore the codebase first" | Skills tell you HOW to explore. Check first. |
+| "I can check git/files quickly" | Files lack conversation context. Check for skills. |
+| "Let me gather information first" | Skills tell you HOW to gather information. |
+| "This doesn't need a formal skill" | If a skill exists, use it. |
+| "I remember this skill" | Skills evolve. Read current version. |
+| "This doesn't count as a task" | Action = task. Check for skills. |
+| "The skill is overkill" | Simple things become complex. Use it. |
+| "I'll just do this one thing first" | Check BEFORE doing anything. |
+| "This feels productive" | Undisciplined action wastes time. Skills prevent this. |
+| "I know what that means" | Knowing the concept ƒ%ÿ using the skill. Invoke it. |
+
+## Skill Priority
+
+When multiple skills could apply, use this order:
+
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
+
+"Let's build X" ƒ+' brainstorming first, then implementation skills.
+"Fix this bug" ƒ+' debugging first, then domain-specific skills.
+
+## Skill Types
+
+**Rigid** (TDD, debugging): Follow exactly. Don't adapt away discipline.
+
+**Flexible** (patterns): Adapt principles to context.
+
+The skill itself tells you which.
+
+## User Instructions
+
+Instructions say WHAT, not HOW. "Add X" or "Fix Y" doesn't mean skip workflows.
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+Using `using-superpowers` and `programming-best-practices` as the process guardrails for this review. Next I’m checking the exact spec sections and the referenced engine fields so the verdict is tied to the current document and code, not just the diff text.
+2026-04-27T22:02:21.268410Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'NaN|11 built|9 built|AsyncIterable|runMetricsAsync|sessionId|recordedAt|100%|§6.12|commands\\[\\]\\.result\\.accepted|executions\\[\\]\\.executed|metadata\\.failedTicks|metadata\\.incomplete' -CaseSensitive:"'$false | ForEach-Object { "docs/design/2026-04-27-behavioral-metrics-design.md:{0}: {1}" -f $_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'NaN|11 built|9 built|AsyncIterable|runMetricsAsync|sessionId|recordedAt|100%|§6.12|commands\\[\\]\\.result\\.accepted|executions\\[\\]\\.executed|metadata\\.failedTicks|metadata\\.incomplete' -CaseSensitive:"'$false | ForEach-Object { "docs/design/2026-04-27-behavioral-metrics-design.md:{0}: {1}" -f $_.LineNumber, $_.Line.Trim() }' in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'NaN|11 built|9 built|AsyncIterable|runMetricsAsync|sessionId|recordedAt|100%|§6.12|commands\\[\\]\\.result\\.accepted|executions\\[\\]\\.executed|metadata\\.failedTicks|metadata\\.incomplete' -CaseSensitive:"'$false | ForEach-Object { "docs/design/2026-04-27-behavioral-metrics-design.md:{0}: {1}" -f $_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+2026-04-27T22:02:21.425074Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$i=0; Get-Content '"'docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md' | ForEach-Object { "'$i++; if($i -ge 1 -and $i -le 220){ '"'{0}: {1}' -f "'$i, $_ } }'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$i=0; Get-Content '"'docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md' | ForEach-Object { "'$i++; if($i -ge 1 -and $i -le 220){ '"'{0}: {1}' -f "'$i, $_ } }' in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$patterns = '"'durationTicks','failedTicks','incomplete','recordedAt','sessionId','accepted','executed'; Select-String -Path 'src\\**\\*.ts' -Pattern "'$patterns -CaseSensitive:$false | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Replace((Get-Location).Path + '"'\\\\',''), "'$_.LineNumber, $_.Line.Trim() }' in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$i=0; Get-Content '"'docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md' | ForEach-Object { "'$i++; if($i -ge 1 -and $i -le 220){ '"'{0}: {1}' -f "'$i, $_ } }'` rejected: blocked by policy
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$patterns = '"'durationTicks','failedTicks','incomplete','recordedAt','sessionId','accepted','executed'; Select-String -Path 'src\\**\\*.ts' -Pattern "'$patterns -CaseSensitive:$false | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Replace((Get-Location).Path + '"'\\\\',''), "'$_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+2026-04-27T22:02:21.425651Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$patterns = '"'durationTicks','failedTicks','incomplete','recordedAt','sessionId','accepted','executed'; Select-String -Path 'src\\**\\*.ts' -Pattern "'$patterns -CaseSensitive:$false | ForEach-Object { "{0}:{1}: {2}" -f $_.Path.Replace((Get-Location).Path + '"'\\\\',''), "'$_.LineNumber, $_.Line.Trim() }'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content -Raw 'docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 343ms:
+# Spec 8 (Behavioral Metrics) ƒ?" Design iter-3 Review Synthesis
+
+**Iteration:** 3. **Subject:** v3 (commit 79db0a4). **Reviewers:** Codex 1 MED + 2 NIT; Opus 1 MED + 1 NIT.
+
+**Verdict:** REJECT ƒ?" re-spin to v4 required. The HIGH (H-EXEC-SEMANTICS) and MED (M-FAILEDTICK-DIVZERO) from iter-2 land cleanly in v3, and 5 of 6 iter-2 NITs are addressed. But iter-2 Codex's MED M-DRIFT (stale A12 / ADR 24 references) was silently omitted from v3's status line ƒ?" both iter-3 reviewers re-flag it. One convergent MED above the ACCEPT bar; not at convergence yet.
+
+## Convergent MEDs
+
+### M-DRIFT-PERSISTS ƒ?" three stale references in normative sections
+
+Codex iter-3 [MED] + Opus iter-3 [MED]. Both reviewers verified the same three locations contradict v2's already-landed semantics:
+
+1. **A12 line 454 ƒ?" empty-corpus `*Stats`.** v3 says "empty corpus returns `count: 0` + `NaN`s." This contradicts A6.2 (line 171) and A7.3, both of which specify `null` numeric fields with the explicit JSON-round-trip rationale (`JSON.stringify(NaN) === 'null'`, `JSON.parse('null') !== NaN`). An implementer writing tests from A12 would assert `Number.isNaN(stats.min)` and fail the spec.
+
+2. **A12 line 461 ƒ?" multiplexing test count.** v3 says "Multiplexing: 9 built-ins in one pass produces all 9 results." Actual count is 11 per A4 table, A13 docs, A14 plan, A18 acceptance criteria. The test as written omits coverage of `commandValidationAcceptanceRate` and `executionFailureRate` ƒ?" the two new built-ins from v2 onwards.
+
+3. **A15 ADR 24 line 523 ƒ?" built-in count + field list.** v3 says "v1 ships 9 built-in metrics that read only `SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, etc.)." Two drifts: (a) "9" should be "11"; (b) the example field list omits the now-load-bearing `commands[].result.accepted` (A6.10) and `executions[].executed` (A6.11). ADR 24 is a permanent decision record ƒ?" the count contradicting four other sections is more material than a A12 testing-list typo.
+
+**Why this is MED, not NIT.** A12 is the implementation/test plan and ADR 24 is a permanent decision record. Both directly steer downstream code: an implementer writing tests against A12's "9 built-ins / NaN" wording would produce wrong tests; a future architect reading ADR 24's "9 built-in metrics" would build on a stale anchor. iter-2 Codex flagged this exact MED ("not cosmetic drift, because A12 is the implementation/test plan and can directly recreate the fixed empty-corpus bug or send TDD against the wrong surface") and v3's status line silently omitted it.
+
+**Fix (v4):** `null` not `NaN` in A12 line 454; `11` not `9` in A12 line 461 and ADR 24; expand ADR 24's example field list to include `commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`. The on-disk file at review time already has these edits as uncommitted v4 work.
+
+## Codex iter-3 unique NITs
+
+### N-100PCT ƒ?" A12 line 475 still claims "100% of new code covered by tests"
+
+Codex iter-3 [NIT]. iter-1 already flagged this as performative. The concrete case list above it is the real acceptance surface. Drop the line or replace with case-enumeration language.
+
+### N-BRACE ƒ?" line 3 status header uses shell-style brace expansion
+
+Codex iter-3 [NIT]. v3 line 3 reads `` `docs/reviews/behavioral-metrics/2026-04-27/design-{1,2}/REVIEW.md` `` ƒ?" brace expansion is shell syntax, not a markdown path. Should expand to two explicit paths.
+
+## Opus iter-3 unique NIT
+
+### N-A8-XREF ƒ?" A8 cross-reference to A6.12 doesn't fit
+
+Opus iter-3 [NIT]. iter-2 NIT was "A8 wrong cross-ref (A6.10 ƒ+' A6.12)." v3 changed the target to A6.12, but A6.12 ("What's deliberately NOT built in") catalogs deliberately excluded *metrics* (stopReasonHistogram, sourceKindHistogram, etc.) ƒ?" it does NOT document the deliberate non-reading of `sessionId`/`recordedAt` by built-ins. The A8 sentence is self-explanatory without a cross-reference; the A6.12 pointer adds noise. Either drop the cross-reference or add a A6.12 bullet covering the volatile-metadata exclusion.
+
+## What landed cleanly
+
+- **H-EXEC-SEMANTICS** (iter-2 HIGH, both reviewers): rename to `commandValidationAcceptanceRate`; numerator/denominator switched to `bundle.commands[].result.accepted` / total bundle.commands; `executionFailureRate` rewritten to enumerate the three real `executed: false` causes (`missing_handler`, `command_handler_threw`, `tick_aborted_before_handler`); A4 table, A6.3 cross-ref, A18 list all updated. Engine references verified by Opus against `world.ts:732-748` (validator early-return), `world.ts:1686/1721/1769` (executed=false codes), `session-recorder.ts:163-172` (capture wrapper).
+- **M-FAILEDTICK-DIVZERO** (iter-2 MED): A6.8 now reads `totalDurationTicks > 0 ? totalFailedTicks / totalDurationTicks : 0`; explicit zero-tick-corpus call-out matches A6.10/A6.11 shape.
+- **N-DUP-METRIC rationale** (iter-2 NIT, deliberately not applied): holds. After H-EXEC-SEMANTICS, the two metrics read different sources ƒ?" `commandValidationAcceptanceRate` divides by `bundle.commands.length`, `executionFailureRate` divides by `bundle.executions.length`. Validator-rejected commands inflate the former's denominator without contributing to the latter's, so they no longer sum to 1. The A6.11 "Pair withƒ?İ" block explains this correctly.
+- **5 of 6 iter-2 NITs**: A6.2 NaN-wording flipped from "losslessly" to "lossy" with explicit save/reload illustration; A10 example does `'onlyIn' in val` runtime check before the `as` cast; ADR 26 proposes separate `runMetricsAsync` with correct rationale that overload would widen the return type to `MetricsResult | Promise<MetricsResult>`; A7.2 negative-baseline `pctChange` caveat added.
+
+## What v4 should bundle in one revision
+
+- 3A- M-DRIFT-PERSISTS fixes (A12 line 454 NaNƒ+'null; A12 line 461 9ƒ+'11; ADR 24 line 523 9ƒ+'11 + field list).
+- N-100PCT (A12 line 475 drop/replace).
+- N-BRACE (line 3 expand brace).
+- N-A8-XREF (drop A6.12 reference or add a A6.12 bullet for sessionId/recordedAt non-reading).
+
+The A17 row "Async corpus reducer (v2) ƒ?" `AsyncIterable` overload" silently contradicts v3's just-fixed ADR 26 ("not an overload, separate `runMetricsAsync`"). Bundle this one-line fix into v4 too ƒ?" neither reviewer flagged it, but it's a free byproduct of the ADR 26 update that should round-trip.
+
+The on-disk file at review time already has uncommitted v4 edits applying all three M-DRIFT fixes, the N-100PCT replacement, the N-BRACE expansion, and the A17 contradiction fix. The remaining gap is N-A8-XREF ƒ?" minor, fold or drop.
+
+## Verdict
+
+**REJECT for v3.** 1 convergent MED (M-DRIFT-PERSISTS, three stale references in A12 + ADR 24) above the ACCEPT bar. NITs cheap to fold into v4. Architecture, semantics, and engine-fact alignment are all converged ƒ?" this is purely doc-drift cleanup. Expect convergence (ACCEPT) on iter-4.
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+2026-04-27T22:02:35.356446Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}
+'"'@ | powershell -NoProfile -"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}
+'"'@ | powershell -NoProfile -" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "@'
+"'$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}
+'"'@ | powershell -NoProfile -"` rejected: blocked by policy
+codex
+I’ve got the iter-3 synthesis. Now I’m checking the actual line ranges in iter-4 and the cited engine fields to see whether the stale references are fully cleaned up or if one of the contradictions survived elsewhere in the document.
+2026-04-27T22:02:42.318391Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}' in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command '$path = '"'docs/design/2026-04-27-behavioral-metrics-design.md'
+"'$lines = Get-Content $path
+for($i=1; $i -le $lines.Length; $i++) {
+  if(($i -ge 1 -and $i -le 20) -or ($i -ge 150 -and $i -le 210) -or ($i -ge 370 -and $i -le 485) -or ($i -ge 515 -and $i -le 565)) {
+    '"'{0}: {1}' -f "'$i, $lines[$i-1]
+  }
+}'` rejected: blocked by policy
+2026-04-27T22:02:49.466889Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "cmd /c findstr /n \".*\" docs\\design\\2026-04-27-behavioral-metrics-design.md"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "cmd /c findstr /n \".*\" docs\\design\\2026-04-27-behavioral-metrics-design.md" in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "cmd /c findstr /n \".*\" docs\\design\\2026-04-27-behavioral-metrics-design.md"` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -First 20" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 397ms:
+# Behavioral Metrics over Corpus ƒ?" Design Spec
+
+**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, `docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and `docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale A12 `NaN`s + 9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; iter-2 fixed 1 HIGH + 1 MED.
+
+**Scope:** Tier-2 spec from `docs/design/ai-first-dev-roadmap.md` (Spec 8). Builds on the Synthetic Playtest Harness (Spec 3, merged v0.7.20 ƒ+' v0.8.1). Out of scope: persistent corpus storage / indexing (Spec 7), bundle search (Spec 7), AI playtester agent (Spec 9), counterfactual replay (Spec 5), annotation UI (Spec 2), bundle viewer (Spec 4).
+
+**Author:** civ-engine team
+
+**Related primitives:** `SessionBundle`, `runSynthPlaytest`, `SessionMetadata`, `RecordedCommand`, `SessionTickEntry`.
+
+## 1. Goals
+
+This spec defines an engine-level **corpus-reducer** that:
+
+- Computes aggregate **behavioral metrics** over an `Iterable<SessionBundle>` (which arrays, generators, and future filesystem readers all satisfy).
+- Ships a small set of **engine-generic built-in metrics** derivable from bundle data alone (no game semantics).
+- Exposes an **accumulator contract** for user-defined metrics that stays streaming-friendly and one-pass-multiplex-able.
+- Provides a **thin comparison helper** for baseline vs. current ƒ?" returning deltas, not regression judgments.
+- Is deterministic given the same bundle set, regardless of bundle iteration order (where order-insensitive metrics are the default).
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern 'NaN'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 410ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:3:**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI 
+review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, 
+`docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and 
+`docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale 12 `NaN`s + 
+9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; 
+iter-2 fixed 1 HIGH + 1 MED.
+docs\design\2026-04-27-behavioral-metrics-design.md:27:- **Game-semantic metrics.** "Resource Gini coefficient", 
+"time-to-first-conflict", "dominant strategy distribution", "decision points per minute" - these need standard 
+event/marker contracts that the engine doesn't define. Game projects implement these as user-defined metrics.
+docs\design\2026-04-27-behavioral-metrics-design.md:171:The numeric fields are `number | null` - `null` represents "no 
+data" and is JSON-stable. `NaN` is NOT used because `JSON.stringify(NaN) === 'null'` and `JSON.parse('null')` produces 
+`null` (not `NaN`) - so a `NaN`-using baseline saved to disk and reloaded would silently change shape (lossy 
+round-trip). For `count === 1`, `min === max === mean === p50 === p95 === p99 === <the single value>`. For `count === 
+0`, all are `null`.
+docs\design\2026-04-27-behavioral-metrics-design.md:229:// all-policyError)  0. Avoids 0/0 NaN when bundles exist but 
+no ticks ran.
+docs\design\2026-04-27-behavioral-metrics-design.md:373:- **Empty corpus.** `runMetrics([], metrics)` runs `create()` 
+then `finalize()` for each metric - no `observe` calls. Built-ins handle this gracefully: `bundleCount` returns `0`; 
+`*Rate` metrics return `0` (defined via `total === 0  0`); `*Stats` return `{ count: 0, min: null, max: null, mean: 
+null, p50: null, p95: null, p99: null }`. The `null` fields flag "no data" without throwing AND survive JSON 
+round-trip (`NaN` would not - `JSON.stringify(NaN) === 'null'`, but `JSON.parse('null') !== NaN`, so a baseline saved 
+to disk and reloaded would silently change shape).
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 448 -First 32" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 518 -First 16" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 554 -First 10" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 420ms:
+
+Unit / integration tests target:
+
+- **Built-in metrics:**
+    - `bundleCount` over empty / single / many bundles.
+    - `*Stats` ƒ?" empty corpus returns `count: 0` + `null` numeric fields (per A6.2 ƒ?" JSON-stable); 1-bundle corpus has `count: 1` + degenerate `min === max === mean === p50 === ...`; multi-bundle corpus matches hand-computed percentiles (NumPy linear / R type 7).
+    - `commandTypeCounts` aggregates across multiple bundles; respects discriminated-union `type` field on `RecordedCommand`.
+    - `eventTypeCounts` similarly.
+    - `failureBundleRate` over corpus with mix of failed/clean bundles.
+    - `failedTickRate` over corpus with various failedTicks counts; clean corpus ƒ+' 0.
+    - `incompleteBundleRate` similarly.
+- **`runMetrics`:**
+    - Multiplexing: 11 built-ins in one pass produces all 11 results.
+    - Empty corpus: each metric produces its zero-state result.
+    - Duplicate metric names: throws `RangeError`.
+    - User-defined metric: implements the contract, observes correctly, finalizes correctly.
+    - Order-insensitivity: same bundles in different order ƒ+' same result for built-ins.
+- **`compareMetricsResults`:**
+    - Numeric deltas + pctChange computed correctly.
+    - 0/0 ƒ+' 0; nonzero/0 ƒ+' `+Infinity` (or `-Infinity`).
+    - Non-numeric leaves report `equal: boolean`.
+    - Keys-only-in-one-side reported correctly.
+- **Determinism:**
+    - Two `runMetrics` calls on structurally-equal corpora produce deep-equal `MetricsResult`.
+    - Sub-tests for each built-in's result stability.
+
+Acceptance criterion: every case enumerated above has at least one test. (No coverage-percent target ƒ?" concrete case enumeration is the actionable bar.)
+
+## 13. Documentation Surface
+
+Per AGENTS.md:
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 490ms:
+**Rationale:** A `(bundle) => T` + `combine(T[])` shape forces materializing one T per bundle and prevents per-metric representation choice (Stats wants a sorted buffer, counts wants an integer). A `(bundles) => TAgg` shape forces per-metric corpus walks (N scans for N metrics). Accumulator-style is one scan total, each metric picks its own state shape, and `merge` is a future-compat hook for parallel/distributed corpus processing without breaking the v1 contract.
+
+### ADR 24: Engine-generic built-ins only; game-semantic metrics are user-defined
+
+**Decision:** v1 ships 11 built-in metrics that read only `SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, `commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`, etc.). Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in ƒ?" they require standard event/marker contracts that the engine doesn't define.
+
+**Rationale:** civ-engine is a general-purpose engine; metrics shipped in the engine package must work for any consuming game. Game-semantic metrics need game-specific event names, component shapes, and marker conventions. Game projects implement those as user-defined `Metric<TState, TResult>` instances and compose them into their own `runMetrics(bundles, [...builtins, ...gameMetrics])` calls.
+
+### ADR 25: `compareMetricsResults` returns deltas, not regression judgments
+
+**Decision:** The helper returns numeric deltas and percent changes; it does NOT classify changes as regressions, improvements, or noise.
+
+**Rationale:** "Is an 18% shift in p95 session length a regression?" is game- and policy-specific. Some games consider longer sessions a feature; others a bug. Some metrics are noisy (small corpus, high variance); others stable. Encoding judgment thresholds into the engine would either bake the wrong defaults for half the consumers or require a config surface that's its own complexity tax. Caller-side judgment is the right boundary.
+
+### ADR 26: `Iterable<SessionBundle>` only in v1; `AsyncIterable` deferred
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 580ms:
+## 17. Future Specs (this surface unlocks)
+
+| Future Spec                          | What it adds                                                                |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| #7 Bundle Search / Corpus Index      | Persistent corpus ƒ+' wraps as `Iterable<SessionBundle>` for `runMetrics`.    |
+| #9 AI Playtester Agent               | LLM-driven Policy + LLM-interpretable `MetricsResult` for analysis.         |
+| Future: Async corpus reducer (v2)    | Separate `runMetricsAsync(bundles: AsyncIterable<...>, metrics): Promise<MetricsResult>` for I/O-backed sources. Distinct function (not an overload of `runMetrics`) per ADR 26. |
+| Future: Parallel corpus reducer       | Worker-distributed `runMetricsParallel` with accumulator `merge`.           |
+| Future: stopReason persistence        | Spec 3 follow-up to put `stopReason` in `metadata`; trivializes histogram.  |
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 366 -First 18" in C:\Users\38909\Documents\github\civ-engine
+2026-04-27T22:03:18.532827Z ERROR codex_core::tools::router: error=`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '6\\.12|volatile bundle metadata|sessionId|recordedAt|AsyncIterable overload|100% of new code covered|design-\\{1,2\\}' -CaseSensitive:"'$false'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '6\\.12|volatile bundle metadata|sessionId|recordedAt|AsyncIterable overload|100% of new code covered|design-\\{1,2\\}' -CaseSensitive:"'$false' in C:\Users\38909\Documents\github\civ-engine
+ declined in 0ms:
+`"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '6\\.12|volatile bundle metadata|sessionId|recordedAt|AsyncIterable overload|100% of new code covered|design-\\{1,2\\}' -CaseSensitive:"'$false'` rejected: blocked by policy
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 250 -First 40" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 412ms:
+**Caveat for negative-baseline values.** `pctChange = (current - baseline) / baseline` is unintuitive when `baseline < 0` ƒ?" e.g., `-5 ƒ+' 5` yields `pctChange = -2` (not `+200%` as users might expect from "percent change"). All v1 built-in metrics return non-negative values (counts, rates in `[0, 1]`, `Stats` over non-negative domains), so this doesn't affect built-ins. User-defined metrics that can return negative values should compute their own pctChange via `Math.abs` or a domain-aware formula if "percent change" semantics matter.
+
+Game-specific judgment ("18% shift in p95 duration is bad") is up to the caller ƒ?" see A10.
+
+### 7.3 Failure modes
+
+- **Empty corpus.** `runMetrics([], metrics)` runs `create()` then `finalize()` for each metric ƒ?" no `observe` calls. Built-ins handle this gracefully: `bundleCount` returns `0`; `*Rate` metrics return `0` (defined via `total === 0 ƒ+' 0`); `*Stats` return `{ count: 0, min: null, max: null, mean: null, p50: null, p95: null, p99: null }`. The `null` fields flag "no data" without throwing AND survive JSON round-trip (`NaN` would not ƒ?" `JSON.stringify(NaN) === 'null'`, but `JSON.parse('null') !== NaN`, so a baseline saved to disk and reloaded would silently change shape).
+- **Duplicate metric names.** Throws `RangeError('duplicate metric name: <name>')`.
+- **Metric throws inside `observe`.** Propagates ƒ?" the corpus pass is a pure user-controlled function; the harness doesn't catch.
+- **Bundle with `failedTicks` populated.** Built-ins handle ƒ?" `failureBundleRate` and `failedTickRate` are designed for this case. Other metrics aggregate the bundle's data normally.
+
+## 8. Determinism
+
+Two `runMetrics(bundles, metrics)` calls with the same bundles (deep-equal, in any order if all metrics are order-insensitive) produce structurally-equal results. v1 built-ins are all order-insensitive. Order-sensitive user metrics declare via `orderSensitive: true` and the caller is responsible for stable iteration.
+
+Volatile bundle metadata (`sessionId`, `recordedAt`) is NOT used by any built-in metric. User-defined metrics that read these get fragile results ƒ?" flaky deltas in `compareMetricsResults` because every run produces a fresh UUID and timestamp.
+
+`Stats` percentile calc uses linear interpolation between sorted samples (the standard method). Implementation: sort numeric buffer on `finalize`, then index. Exact, deterministic, O(n log n) per metric.
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 500ms:
+// NEVER reach bundle.executions ƒ?" they're dropped before queueing per
+// world.ts:732-748. So this metric is the only way to detect a regression
+// where validators start rejecting more (or fewer) commands.
+```
+
+### 6.11 `executionFailureRate(name?)`
+
+```ts
+function executionFailureRate(name?: string): Metric<{ failed: number; total: number }, number>;
+// Numerator: count of bundle.executions[] where executed === false.
+// Denominator: total bundle.executions[] across all bundles.
+// Result: failed / total in [0, 1]. Empty corpus or zero-execution corpus ƒ+' 0.
+//
+// This is the EXECUTION-stage metric. Captures handler-side failures only,
+// NOT validator rejections (those don't reach bundle.executions). Per
+// world.ts:1686/1721/1769, executed === false comes from one of: missing
+// handler, command_handler_threw, or tick_aborted_before_handler.
+//
+// Pair with commandValidationAcceptanceRate to get the full picture:
+// - commandValidationAcceptanceRate dropping ƒ+' validator regression.
+// - executionFailureRate rising ƒ+' handler/tick-pipeline regression.
+```
+
+### 6.12 What's deliberately NOT built in
+
+- `stopReasonHistogram` ƒ?" `stopReason` is `SynthPlaytestResult.stopReason`, NOT in `bundle.metadata`. Aggregating it would require a Spec 3 follow-up to persist it. Deferred.
+- `sourceKindHistogram` ƒ?" possible from `bundle.metadata.sourceKind`, but every bundle in a synth-corpus is `'synthetic'` by construction. Trivial counter; user-defined.
+- `durationMsStats` ƒ?" `WorldMetrics.durationMs` is runtime instrumentation (`performance.now()`-backed), not behavior data. Out of scope per A2.
+- Per-phase failure metrics ("what fraction of failures are in `phase: 'systems'`") ƒ?" `bundle.failures: TickFailure[]` carries the phase + error info. v1 only reads `metadata.failedTicks` (just the tick numbers). User-defined for now; ship a built-in if a clear engine-generic shape emerges.
+- Executed-only command/event type histograms ƒ?" see notes in A6.5/A6.6. User-defined via `bundle.executions[].commandType`.
+- Game-semantic metrics ƒ?" out of scope per A2.
+
+## 7. Harness API
+
+### 7.1 `runMetrics`
+
+```ts
+export interface MetricsResult {
+  [name: string]: unknown;  // each metric's finalize() output, keyed by metric.name
+}
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/world.ts' | Select-Object -Skip 728 -First 24" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/world.ts' | Select-Object -Skip 1681 -First 50" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/session-recorder.ts' | Select-Object -Skip 158 -First 18" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 419ms:
+    return new CommandTransaction<TEventMap, TCommandMap, TComponents, TState>(this);
+  }
+
+  submitWithResult<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+  ): CommandSubmissionResult<K> {
+    this.warnIfPoisoned('submit');
+    const rejection = this.validateCommand(type, data);
+    if (rejection) {
+      const result = this.createCommandSubmissionResult(type, {
+        accepted: false,
+        code: rejection.code,
+        message: rejection.message,
+        details: rejection.details,
+        validatorIndex: rejection.validatorIndex,
+      });
+      this.emitCommandResult(result);
+      return result;
+    }
+
+    const result = this.createCommandSubmissionResult(type, {
+      accepted: true,
+      code: 'accepted',
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 513ms:
+      if (!handler) {
+        const failureMessage = `No handler registered for command '${String(command.type)}'`;
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: false,
+          code: 'missing_handler',
+          message: failureMessage,
+          details: null,
+          tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+        const failure = this.createTickFailure({
+          tick,
+          phase: 'commands',
+          code: 'missing_handler',
+          message: failureMessage,
+          subsystem: 'commands',
+          commandType: command.type,
+          submissionSequence: command.submissionSequence,
+          details: dropped.length > 0 ? { droppedCommands: dropped } : null,
+        });
+        return { processed, failure };
+      }
+
+      try {
+        handler(command.data as never, this);
+        processed++;
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: true,
+          code: 'executed',
+          message: 'Command handler completed',
+          details: null,
+          tick,
+        });
+      } catch (error) {
+        const details = createErrorDetails(error);
+        this.emitCommandExecution(command.type, {
+          submissionSequence: command.submissionSequence,
+          executed: false,
+          code: 'command_handler_threw',
+          message: errorMessage(error),
+          details: {
+            error: details,
+          },
+          tick,
+        });
+        const dropped = this.dropPendingCommands(commands, i + 1, tick);
+        const failure = this.createTickFailure({
+          tick,
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 566ms:
+      return;
+    }
+
+    // Install single submitWithResult wrap (per spec A7.3).
+    const original = this._world.submitWithResult.bind(this._world) as SubmitWithResultFn<TCommandMap>;
+    this._originalSubmitWithResult = original;
+    const capture = this._captureCommand.bind(this);
+    (this._world as { submitWithResult: SubmitWithResultFn<TCommandMap> }).submitWithResult = <
+      K extends keyof TCommandMap,
+    >(type: K, data: TCommandMap[K]): CommandSubmissionResult<keyof TCommandMap> => {
+      const result = original(type, data);
+      capture(type, data, result);
+      return result;
+    };
+
+    this._diffListener = (diff: TickDiff): void => this._onDiff(diff);
+    this._executionListener = (r: CommandExecutionResult<keyof TCommandMap>): void => this._onExecution(r);
+    this._failureListener = (f: TickFailure): void => this._onFailure(f);
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/world.ts' | Select-Object -Skip 1758 -First 18" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 419ms:
+    tick: number,
+  ): Array<{ commandType: string; submissionSequence: number | null }> {
+    const dropped: Array<{
+      commandType: string;
+      submissionSequence: number | null;
+    }> = [];
+    for (let i = startIndex; i < commands.length; i++) {
+      const cmd = commands[i];
+      this.emitCommandExecution(cmd.type, {
+        submissionSequence: cmd.submissionSequence,
+        executed: false,
+        code: 'tick_aborted_before_handler',
+        message: 'Command was queued for this tick but the tick aborted before its handler ran',
+        details: null,
+        tick,
+      });
+      dropped.push({
+        commandType: String(cmd.type),
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src\\*.ts' -Pattern 'interface SessionBundle|type SessionBundle|export interface SessionBundle'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'src\\*.ts' -Pattern 'failedTicks|incomplete|recordedAt|sessionId|accepted|executed'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '11 built-in|9 built-in|AsyncIterable|runMetricsAsync|100% of new code covered|design-1|design-2|design-3|v4 addresses iter-3|§6\\.12'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 434ms:
+
+src\index.ts:28:  type SessionBundle,
+src\session-bundle.ts:109:export interface SessionBundle<
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 563ms:
+
+src\client-adapter.ts:29:      type: 'commandAccepted';
+src\client-adapter.ts:33:        code: 'accepted';
+src\client-adapter.ts:51:      type: 'commandExecuted';
+src\client-adapter.ts:151:        type: result.executed ? 'commandExecuted' : 'commandFailed',
+src\client-adapter.ts:239:        if (!result.accepted) {
+src\client-adapter.ts:254:        const accepted = this.safeSend({
+src\client-adapter.ts:256:          type: 'commandAccepted',
+src\client-adapter.ts:260:            code: 'accepted',
+src\client-adapter.ts:266:        // surface commandExecuted/commandFailed against an unknown sequence
+src\client-adapter.ts:268:        if (accepted) {
+src\history-recorder.ts:74:    accepted: number;
+src\history-recorder.ts:80:    executed: number;
+src\history-recorder.ts:178:          `another payload-capturing recorder is already attached 
+(sessionId=${existing.sessionId})`,
+src\history-recorder.ts:179:          { code: 'recorder_already_attached', existing: existing.sessionId },
+src\history-recorder.ts:182:      this.world.__payloadCapturingRecorder = { sessionId: this.recorderId, lastError: 
+null };
+src\history-recorder.ts:221:      if (this.world.__payloadCapturingRecorder?.sessionId === this.recorderId) {
+src\history-recorder.ts:444:  let accepted = 0;
+src\history-recorder.ts:447:    if (command.accepted) {
+src\history-recorder.ts:448:      accepted++;
+src\history-recorder.ts:459:  let executed = 0;
+src\history-recorder.ts:462:    if (execution.executed) {
+src\history-recorder.ts:463:      executed++;
+src\history-recorder.ts:487:      accepted,
+src\history-recorder.ts:493:      executed,
+src\session-bundle.ts:84:  sessionId: string;
+src\session-bundle.ts:87:  recordedAt: string;
+src\session-bundle.ts:99:  incomplete?: true;
+src\session-bundle.ts:100:  failedTicks?: number[];
+src\session-errors.ts:48: * catches this, sets `metadata.incomplete = true` and `recorder.lastError`,
+src\session-errors.ts:64: * Complete bundles use `[metadata.startTick, metadata.endTick]`; incomplete
+src\session-file-sink.ts:234:      this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
+src\session-internals.ts:25:      sessionId: string;
+src\session-recorder.ts:72:  readonly sessionId: string;
+src\session-recorder.ts:98:    this.sessionId = randomUUID();
+src\session-recorder.ts:128:        `another payload-capturing recorder is attached 
+(sessionId=${this._world.__payloadCapturingRecorder.sessionId})`,
+src\session-recorder.ts:129:        { code: 'recorder_already_attached', existing: 
+this._world.__payloadCapturingRecorder.sessionId },
+src\session-recorder.ts:133:    this._world.__payloadCapturingRecorder = { sessionId: this.sessionId, lastError: null 
+};
+src\session-recorder.ts:137:      sessionId: this.sessionId,
+src\session-recorder.ts:140:      recordedAt: new Date().toISOString(),
+src\session-recorder.ts:211:    if (this._world.__payloadCapturingRecorder?.sessionId === this.sessionId) {
+src\session-recorder.ts:222:    // (failedTicks, persistedEndTick).
+src\session-recorder.ts:229:      finalMetadata.incomplete = true;
+src\session-replayer.ts:188:    const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+src\session-replayer.ts:198:          (md.incomplete ? ' (incomplete bundle uses persistedEndTick)' : ''),
+src\session-replayer.ts:199:        { code: 'too_high', requested: targetTick, upper, incomplete: md.incomplete ?? 
+false },
+src\session-replayer.ts:202:    if (md.failedTicks?.some((ft) => targetTick >= ft)) {
+src\session-replayer.ts:205:        { code: 'replay_across_failure', failedTicks: md.failedTicks, requested: 
+targetTick },
+src\session-replayer.ts:248:    // Use persistedEndTick for incomplete bundles. Iter-1 code review fix.
+src\session-replayer.ts:249:    const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+src\session-replayer.ts:253:        { code: 'range_invalid', fromTick, toTick, startTick: md.startTick, upper, 
+incomplete: md.incomplete ?? false },
+src\session-replayer.ts:273:        `[SessionReplayer] selfCheck on bundle without command payloads is a no-op 
+(${md.sessionId})`,
+src\session-replayer.ts:286:      if (md.failedTicks?.some((ft) => ft >= a.tick && ft < b.tick)) {
+src\session-scenario-bundle.ts:63:    sessionId: randomUUID(),
+src\session-scenario-bundle.ts:66:    recordedAt: new Date().toISOString(),
+src\session-sink.ts:150:      this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
+src\world.ts:135:  accepted: boolean;
+src\world.ts:150:  executed: boolean;
+src\world.ts:725:    return this.submitWithResult(type, data).accepted;
+src\world.ts:740:        accepted: false,
+src\world.ts:751:      accepted: true,
+src\world.ts:752:      code: 'accepted',
+src\world.ts:1686:          executed: false,
+src\world.ts:1711:          executed: true,
+src\world.ts:1712:          code: 'executed',
+src\world.ts:1721:          executed: false,
+src\world.ts:1769:        executed: false,
+src\world.ts:1786:      accepted: boolean;
+src\world.ts:1798:      accepted: config.accepted,
+src\world.ts:1813:      executed: boolean;
+src\world.ts:1829:      executed: config.executed,
+src\world.ts:2070:      executed: boolean;
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 459ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:3:**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI 
+review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, 
+`docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and 
+`docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale 12 `NaN`s + 
+9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; 
+iter-2 fixed 1 HIGH + 1 MED.
+docs\design\2026-04-27-behavioral-metrics-design.md:26:- **Async/streaming ingestion.** v1 accepts 
+`Iterable<SessionBundle>` only. `AsyncIterable` defers to when Spec 7 lands or when corpus loading stops being 
+trivially local.
+docs\design\2026-04-27-behavioral-metrics-design.md:316:No `AsyncIterable` in v1 (deferred to Spec 7's corpus-loading 
+or v2).
+docs\design\2026-04-27-behavioral-metrics-design.md:461:    - Multiplexing: 11 built-ins in one pass produces all 11 
+results.
+docs\design\2026-04-27-behavioral-metrics-design.md:481:- `docs/api-reference.md` - new section `## Behavioral Metrics 
+(v0.8.2)` for `Metric`, `MetricsResult`, `MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, 
+`OnlyInComparison`, `Stats`, `runMetrics`, `compareMetricsResults`, plus subsections for each of the 11 built-in 
+metric factories.
+docs\design\2026-04-27-behavioral-metrics-design.md:501:  - `Metric` interface, `runMetrics`, all 11 built-in metric 
+factories, `compareMetricsResults`, `Stats` + delta types.
+docs\design\2026-04-27-behavioral-metrics-design.md:523:**Decision:** v1 ships 11 built-in metrics that read only 
+`SessionBundle` fields the engine guarantees (`metadata.durationTicks`, `commands[].type`, 
+`commands[].result.accepted`, `executions[].executed`, `metadata.failedTicks`, `metadata.incomplete`, etc.). 
+Game-semantic metrics like "resource Gini" or "time-to-first-conflict" are NOT built in - they require standard 
+event/marker contracts that the engine doesn't define.
+docs\design\2026-04-27-behavioral-metrics-design.md:533:### ADR 26: `Iterable<SessionBundle>` only in v1; 
+`AsyncIterable` deferred
+docs\design\2026-04-27-behavioral-metrics-design.md:535:**Decision:** v1 accepts only synchronous 
+`Iterable<SessionBundle>`. Arrays, generators, sets, and any custom synchronous iterable work. `AsyncIterable` is NOT 
+supported.
+docs\design\2026-04-27-behavioral-metrics-design.md:537:**Rationale:** Spec 3's harness is synchronous; the natural 
+composition is synchronous corpus reduction. `AsyncIterable` is worth the complexity when corpus loading involves I/O 
+- Spec 7's bundle index, network-backed corpora - none of which exist yet. Adding async now is 
+abstraction-before-pressure. The future-compat path is a separate `runMetricsAsync` function (returns 
+`Promise<MetricsResult>`), not an overload of `runMetrics` - overloading would force the return type to widen to 
+`MetricsResult | Promise<MetricsResult>`, which IS breaking for existing callers that assume sync. Two named functions 
+keeps the v1 surface stable.
+docs\design\2026-04-27-behavioral-metrics-design.md:561:| Future: Async corpus reducer (v2)    | Separate 
+`runMetricsAsync(bundles: AsyncIterable<...>, metrics): Promise<MetricsResult>` for I/O-backed sources. Distinct 
+function (not an overload of `runMetrics`) per ADR 26. |
+docs\design\2026-04-27-behavioral-metrics-design.md:567:- All new symbols (`Metric`, `MetricsResult`, 
+`MetricsComparison`, `MetricDelta`, `NumericDelta`, `OpaqueDelta`, `OnlyInComparison`, `Stats`, `runMetrics`, 
+`compareMetricsResults`, plus 11 built-in factories: `bundleCount`, `sessionLengthStats`, `commandRateStats`, 
+`eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, 
+`incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) exported from `src/index.ts` with 
+TypeScript types.
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+codex
+The explicit iter-3 items look mostly cleaned up in the touched sections. I’m doing one more pass over the rest of the spec for silent drift: built-in count, volatile-metadata wording, and any remaining references that still describe the pre-v3 surface.
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '"'^### 6'"\\.'" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'src/session-bundle.ts' | Select-Object -Skip 78 -First 36" in C:\Users\38909\Documents\github\civ-engine
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 90 -First 64" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 425ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:145:### 6.1 `bundleCount()`
+docs\design\2026-04-27-behavioral-metrics-design.md:152:### 6.2 `sessionLengthStats(name?)` and the `Stats` shape
+docs\design\2026-04-27-behavioral-metrics-design.md:173:### 6.3 `commandRateStats(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:184:### 6.4 `eventRateStats(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:191:### 6.5 `commandTypeCounts(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:203:### 6.6 `eventTypeCounts(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:210:### 6.7 `failureBundleRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:222:### 6.8 `failedTickRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:232:### 6.9 `incompleteBundleRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:241:### 6.10 `commandValidationAcceptanceRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:256:### 6.11 `executionFailureRate(name?)`
+docs\design\2026-04-27-behavioral-metrics-design.md:274:### 6.12 What's deliberately NOT built in
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 376ms:
+   */
+  ref: { dataUrl: string } | { sidecar: true } | { auto: true };
+}
+
+export interface SessionMetadata {
+  sessionId: string;
+  engineVersion: string;
+  nodeVersion: string;
+  recordedAt: string;
+  startTick: number;
+  endTick: number;
+  persistedEndTick: number;
+  durationTicks: number;
+  /**
+   * 'synthetic' added in v0.8.0 (Spec 3 T2). Widening from 'session' | 'scenario'
+   * is a breaking change for downstream `assertNever`-style exhaustive switches;
+   * b-bump per AGENTS.md. See ADR 20 in docs/architecture/decisions.md.
+   */
+  sourceKind: 'session' | 'scenario' | 'synthetic';
+  sourceLabel?: string;
+  incomplete?: true;
+  failedTicks?: number[];
+  /**
+   * Populated only when sourceKind === 'synthetic'. The seed used for the
+   * harness's policy sub-RNG; preserved for future replay-via-policy work.
+   * Spec 3 A5.4.
+   */
+  policySeed?: number;
+}
+
+export interface SessionBundle<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+ succeeded in 482ms:
+```ts
+export interface Metric<TState, TResult> {
+  /** Human-readable name; used as the key in MetricsResult. Must be unique within a runMetrics call. */
+  readonly name: string;
+  /** Initial accumulator state. Called once at start of run. */
+  create(): TState;
+  /**
+   * Update the accumulator with a single bundle. Returns the updated state,
+   * which MAY be the same reference as the input state (in-place mutation
+   * is permitted for performance) or a new value. The contract is functional
+   * purity: output depends only on (state, bundle) and produces no global
+   * side effects. Concurrent calls observe()-ing the same state reference
+   * are NOT safe; v1's runMetrics is single-threaded so this is moot, but
+   * future parallel-merge implementations must give each worker its own
+   * accumulator state.
+   */
+  observe(state: TState, bundle: SessionBundle): TState;
+  /** Convert final accumulator state to the metric's result type. */
+  finalize(state: TState): TResult;
+  /**
+   * Optional: merge two accumulator states. If provided, marks the metric as
+   * suitable for future parallel-corpus processing. Not called by v1's
+   * synchronous runMetrics. Implied invariant: metrics that declare `merge`
+   * MUST be order-insensitive (you cannot meaningfully combine two partial
+   * accumulators if order matters across the boundary).
+   */
+  merge?(a: TState, b: TState): TState;
+  /**
+   * Optional: declare order-sensitivity. Default: false (order-insensitive).
+   * This is a doc-only declaration ƒ?" runMetrics does NOT auto-detect or warn
+   * on non-deterministic iteration sources. When `orderSensitive: true` is
+   * set, the caller is responsible for materializing bundles in stable
+   * order before passing them to runMetrics.
+   */
+  readonly orderSensitive?: boolean;
+}
+```
+
+### 5.2 Why accumulator-style and not `(bundle) => T` + `combine`
+
+A `(bundle) => T` + `combine(values)` shape forces the caller to materialize one `T` per bundle, which is fine for cheap metrics (counts) but expensive for ones that buffer raw values for percentile calc. The accumulator contract lets each metric pick its own representation: `bundleCount` keeps a single integer; `sessionLengthStats` keeps a sorted-array-on-finalize buffer; `commandTypeCounts` keeps a `Map<string, number>`. One-pass through the corpus, multiplexed across all metrics.
+
+The alternative `(bundles) => TAgg` shape forces every metric to re-walk the corpus. For N metrics, that's N scans. The accumulator contract is one scan total.
+
+### 5.3 Determinism
+
+A metric is **order-insensitive** if `metric(observe(observe(s, a), b)) === metric(observe(observe(s, b), a))` for any state `s` and bundles `a`, `b`. v1's built-ins are all order-insensitive (counts, sums, sorted-on-finalize percentiles). Order-sensitive user metrics declare `orderSensitive: true` as a doc-only marker; `runMetrics` does NOT auto-detect or warn on iteration source ƒ?" the caller is responsible for stable order when an `orderSensitive` metric is in the list.
+
+For the percentile metrics (`Stats` type), the implementation buffers all values and sorts on `finalize` ƒ?" exact percentiles, deterministic regardless of bundle iteration order. Percentile method: NumPy `linear` (R-quantile type 7). Formula: `index = (count - 1) * p; lo = floor(index); hi = ceil(index); v = sorted[lo] + (sorted[hi] - sorted[lo]) * (index - lo)`. For `count === 1`, all percentiles equal that single value. For `count === 0`, all numeric fields are `null` (see A6.2).
+
+## 6. Built-in Metrics
+
+All built-ins return their `Metric<TState, TResult>` value from a factory function, mirroring Spec 3's `noopPolicy()` / `randomPolicy(config)` pattern.
+
+### 6.1 `bundleCount()`
+
+```ts
+function bundleCount(): Metric<{ count: number }, number>;
+// Result: total number of bundles in the corpus.
+```
+
+### 6.2 `sessionLengthStats(name?)` and the `Stats` shape
+
+```ts
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 58 -First 40" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 399ms:
+              ƒ",      runMetrics(bundles, metrics)       ƒ",
+              ƒ",                                         ƒ",
+              ƒ",  ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?   ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?  ƒ",
+              ƒ",  ƒ", for each bundle  ƒ",   ƒ", for each   ƒ",  ƒ",
+              ƒ",  ƒ",   for each metricƒ", ƒ"?ƒ-ƒ", metric:    ƒ",  ƒ",
+              ƒ",  ƒ",     observe()    ƒ",   ƒ", finalize() ƒ",  ƒ",
+              ƒ",  ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~   ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~  ƒ",
+              ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~
+                              ƒ",
+                              ƒ-¬
+                     ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?
+                     ƒ", MetricsResult   ƒ",
+                     ƒ", {[name]: result}ƒ",
+                     ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~
+                              ƒ",
+                              ƒ-¬
+                  ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?
+                  ƒ", compareMetricsResults    ƒ",
+                  ƒ",   (baseline, current)    ƒ",
+                  ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~
+                              ƒ",
+                              ƒ-¬
+                     ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?
+                     ƒ", MetricsDelta   ƒ",
+                     ƒ", {[name]: delta}ƒ",
+                     ƒ""ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"~
+```
+
+## 5. Metric Contract
+
+### 5.1 The `Metric` interface
+
+```ts
+export interface Metric<TState, TResult> {
+  /** Human-readable name; used as the key in MetricsResult. Must be unique within a runMetrics call. */
+  readonly name: string;
+  /** Initial accumulator state. Called once at start of run. */
+  create(): TState;
+  /**
+   * Update the accumulator with a single bundle. Returns the updated state,
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Get-Content 'docs/design/2026-04-27-behavioral-metrics-design.md' | Select-Object -Skip 30 -First 28" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 420ms:
+- **`stopReason` aggregation.** `SynthPlaytestResult.stopReason` is returned by the harness but NOT persisted in the bundle (per Spec 3 v10 A8). Aggregating it would require a Spec 3 follow-up to persist it; deferred.
+- **Approximate sketches.** v1 metrics are exact. HyperLogLog / t-digest / etc. land if/when corpora exceed memory.
+
+## 3. Background
+
+Spec 3 produces `SessionBundle`s via `runSynthPlaytest`. A typical workflow generates many bundles in CI: random-policy variations, scripted regression replays, scheduled overnight runs. Today the only way to spot trends across this corpus is reading individual bundles, which doesn't scale.
+
+Spec 8 fills the gap with a pure-function reducer: feed in bundles, get out structured metrics. CI compares `metrics(today's bundles)` against `metrics(yesterday's bundles)` to detect emergent-behavior regressions before they reach players.
+
+The reducer is intentionally divorced from corpus storage. Bundles arrive as `Iterable<SessionBundle>` ƒ?" callers materialize from arrays, filesystem readers, or future Spec 7 indexes. Spec 8 doesn't care.
+
+## 4. Architecture Overview
+
+Three new symbols in `src/behavioral-metrics.ts`:
+
+| Component                  | Status            | Responsibility                                                                |
+| -------------------------- | ----------------- | ----------------------------------------------------------------------------- |
+| `Metric<TState, TResult>`  | new (interface)   | Accumulator contract: `create()`, `observe(state, bundle)`, `finalize(state)`, optional `merge`. |
+| `runMetrics(bundles, metrics)` | new (function) | One-pass-per-bundle reducer. Returns `MetricsResult` (Record<string, unknown>) keyed by metric name. |
+| Built-in metrics           | new (functions)   | `bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`. |
+
+Plus two helpers:
+
+- `compareMetricsResults(baseline, current)` ƒ?" pure delta computation.
+- `Stats` type ƒ?" `{ count; min; max; mean; p50; p95; p99 }` for built-in stats metrics.
+
+```
+              ƒ"Oƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?ƒ"?
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '9 built'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 402ms:
+
+docs\design\2026-04-27-behavioral-metrics-design.md:3:**Status:** Draft v4 (2026-04-27). Awaiting iter-4 multi-CLI 
+review. Iter-1, 2, 3 syntheses at `docs/reviews/behavioral-metrics/2026-04-27/design-1/REVIEW.md`, 
+`docs/reviews/behavioral-metrics/2026-04-27/design-2/REVIEW.md`, and 
+`docs/reviews/behavioral-metrics/2026-04-27/design-3/REVIEW.md`. v4 addresses iter-3's MED (stale 12 `NaN`s + 
+9-built-in count + ADR 24's "9 built-ins" not updated to v3's 11) + 2 NITs. Iter-1 fixed 7 HIGH + 6 MED + 4 LOW; 
+iter-2 fixed 1 HIGH + 1 MED.
+
+
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
+exec
+"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -Command "Select-String -Path 'docs/design/2026-04-27-behavioral-metrics-design.md' -Pattern '100%'" in C:\Users\38909\Documents\github\civ-engine
+ succeeded in 376ms:
+Cannot set property. Property setting is supported only on core types in this language mode.
+At line:1 char:1
++ [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+    + FullyQualifiedErrorId : PropertySetterNotSupportedInConstrainedLanguage
+ 
+
