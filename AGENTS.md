@@ -2,7 +2,7 @@
 
 - Use test-driven development for behavior changes: write or update tests first, then make them pass. Test the contract, not the code: tests should focus primarily on app experience and mechanisms.
 - For each desired change, make the change easy, then make the easy change.
-- Before implementing a change, write a plan.
+- Before implementing a change, write a plan and ask Codex and Claude to brainstorm with you and double check. Iterate until opinions converge on approval, just like code review.
 - Verify every change against this project's gates: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. All four must pass before declaring a task done.
 - **Multi-CLI code review is mandatory for every behavior or code change before declaring the task done.** Run Codex + Gemini + Claude per the Code review section, synthesize their findings into `docs/reviews/<scope>/<date>/<iteration_number>/REVIEW.md`, address every real finding, and re-review until reviewers nitpick instead of catching real bugs. This applies to all changes — single-file fixes, doc-only edits with code implications, refactors, and big features alike. Do not rationalize your way out of review with phrases like "single-file behavior fix," "trivial change," "TDD coverage is sufficient," "subagent dispatch is a tool not a mandate," or any equivalent. The Code review section is non-negotiable; the Team-of-subagents flexibility clause does NOT cover the multi-CLI review step. Skipping review is a process regression and must be corrected by running the review post-hoc on the same branch before merge.
 - When the change is visual:
