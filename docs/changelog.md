@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.4 - 2026-04-26
+
+Multi-CLI full-review iter-1 batch 5 (partial M3): standalone helper extraction. Non-breaking. 592 tests pass.
+
+### Refactored
+
+- **M3 (Opus Medium, partial):** extracted ~265 LOC of standalone helper functions (`createMetrics`, `getImplicitMetricsProfile`, `normalizeCommandValidationResult`, `cloneMetrics`, `cloneTickFailure`, `cloneTickDiff`, `createErrorDetails`, `errorMessage`, `now`, `phaseIndex`, `isSystemPhase`, `describeIntervalValue`, `validateSystemInterval`, `validateSystemIntervalOffset`, `insertSorted`, `validateWorldConfig`, `asPosition`) from `src/world.ts` into `src/world-internal.ts`. `src/world.ts` is now 2232 LOC (down from 2481). The deeper architectural split (serialize, system scheduling, tick pipeline, tags/state) into separate files is **deferred** to a follow-up task — those subsystems use private World methods/fields whose extraction requires a deliberate composition redesign rather than a mechanical move. AGENTS.md's 500 LOC cap is still violated by `world.ts` (2232), `occupancy-grid.ts` (1602), and marginally by `world-debugger.ts` (509); these will be re-flagged by iter-2 reviewers and addressed in a dedicated refactor branch.
+- `TickMetricsProfile` is now exported (was internal) so the helper module can reference it.
+
 ## 0.6.3 - 2026-04-26
 
 Multi-CLI full-review iter-1 batch 4: polish + doc fixes. Non-breaking. 592 tests pass (up from 591).
