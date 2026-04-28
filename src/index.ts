@@ -59,6 +59,23 @@ export {
 } from './session-sink.js';
 // T3: FileSink
 export { FileSink } from './session-file-sink.js';
+// Bundle Corpus Index - Spec 7 (v0.8.3+): manifest-first query/index layer
+// over closed FileSink bundle directories, with lazy SessionBundle loading.
+export {
+  BundleCorpus,
+  CorpusIndexError,
+  type BundleCorpusScanDepth,
+  type BundleCorpusOptions,
+  type BundleCorpusEntry,
+  type BundleCorpusMetadata,
+  type BundleQuery,
+  type OneOrMany,
+  type NumberRange,
+  type IsoTimeRange,
+  type CorpusIndexErrorCode,
+  type CorpusIndexErrorDetails,
+  type InvalidCorpusEntry,
+} from './bundle-corpus.js';
 // T5: SessionRecorder
 export {
   SessionRecorder,

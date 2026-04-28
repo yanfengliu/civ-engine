@@ -1,8 +1,8 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-0.8.2-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
+![version](https://img.shields.io/badge/version-0.8.3-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
 
-> ⚠️ **Pre-release alpha — unverified.** This engine is under active development. The public API surface is still shifting (see `docs/changelog.md` for the recent breaking-change cadence — `0.5.0`, `0.6.0`, `0.7.0`), invariants are still being hardened (current sweep: iter-7 of the multi-CLI review chain), and no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — do **not** depend on it for shipped products yet.
+> **Pre-release alpha - unverified.** This engine is under active development. The public API surface is still shifting (see `docs/changelog.md` for the recent breaking-change cadence - `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`), invariants are still being hardened through mandatory multi-CLI reviews, and no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - do **not** depend on it for shipped products yet.
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
@@ -92,7 +92,8 @@ world.step();
 | **State Diffs**             | Per-tick change sets: entities, components, resources, state, tags, and metadata changes                              |
 | **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` plus `commandExecuted`/`commandFailed`/`tickFailed` outcomes |
 | **Session Recording & Replay** | `SessionRecorder` + `SessionReplayer` — capture deterministic, replayable bundles of any World run. `MemorySink` / `FileSink` for in-memory or disk persistence. Marker API for human-authored annotations + engine-emitted assertions (from `scenarioResultToBundle` adapter). `selfCheck` 3-stream comparison verifies determinism. `World.applySnapshot` for in-place state replacement. See `docs/guides/session-recording.md`. |
-| **Synthetic Playtest Harness** | `runSynthPlaytest` drives a `World` via pluggable `Policy` functions for `N` ticks → `SessionBundle`. Built-in policies: `noopPolicy`, `randomPolicy`, `scriptedPolicy`. Sub-RNG sandboxed from `world.rng` via `PolicyContext.random()`. Tier-1 of the AI-first feedback loop; sets up the corpus for future Tier-2 (corpus indexing, behavioral metrics, AI playtester). See `docs/guides/synthetic-playtest.md`. |
+| **Synthetic Playtest Harness** | `runSynthPlaytest` drives a `World` via pluggable `Policy` functions for `N` ticks → `SessionBundle`. Built-in policies: `noopPolicy`, `randomPolicy`, `scriptedPolicy`. Sub-RNG sandboxed from `world.rng` via `PolicyContext.random()`. Tier-1 of the AI-first feedback loop; produces FileSink/SessionBundle corpora that can be indexed by BundleCorpus and reduced by behavioral metrics. See `docs/guides/synthetic-playtest.md`. |
+| **Bundle Corpus Index** | `BundleCorpus` scans closed FileSink bundle directories, lists metadata-only entries, filters by manifest-derived fields, and lazily loads matching `SessionBundle`s for replay or metrics. Tier-2 of the AI-first feedback loop; turns disk corpora into a deterministic query surface. See `docs/guides/bundle-corpus-index.md`. |
 | **Behavioral Metrics over Corpus** | `runMetrics(bundles, metrics)` over `Iterable<SessionBundle>` + 11 engine-generic built-ins (`bundleCount`, `sessionLengthStats`, `commandRateStats`, `commandTypeCounts`, `failureBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`, etc.) + `compareMetricsResults` delta helper. Tier-2 of the AI-first feedback loop; pairs with synthetic playtests to define regressions for emergent behavior. See `docs/guides/behavioral-metrics.md`. |
 
 ## Architecture
@@ -143,6 +144,7 @@ The root package centers on a few primary entry points:
 - `WorldDebugger`, `WorldHistoryRecorder`, and `runScenario()` for AI/debug workflows
 - `SessionRecorder`, `SessionReplayer`, `SessionBundle`, `MemorySink`/`FileSink`, `Marker`, `RecordedCommand`, `scenarioResultToBundle()` for session capture/replay (`docs/guides/session-recording.md`)
 - `runSynthPlaytest`, `noopPolicy`, `randomPolicy`, `scriptedPolicy` for the synthetic playtest harness (Tier-1 of the AI-first feedback loop; `docs/guides/synthetic-playtest.md`)
+- `BundleCorpus`, `BundleQuery`, `BundleCorpusEntry`, `BundleCorpusMetadata`, `CorpusIndexError`, `CorpusIndexErrorCode`, and `InvalidCorpusEntry` for manifest-first disk corpus listing, filtering, and lazy FileSink-backed bundle loading (Tier-2 of the AI-first feedback loop; `docs/guides/bundle-corpus-index.md`)
 - `runMetrics`, `compareMetricsResults`, plus 11 metric factories (`bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) for behavioral metrics over a corpus (Tier-2 of the AI-first feedback loop; `docs/guides/behavioral-metrics.md`)
 - standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, behavior trees, and typed overlay layers (`Layer<T>`)
 

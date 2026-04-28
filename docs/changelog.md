@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.8.3 - 2026-04-27
+
+Spec 7 - Bundle Search / Corpus Index. Tier-2 of the AI-first dev roadmap; turns closed FileSink bundle directories into a deterministic metadata query surface and lazy bundle iterable.
+
+### New (additive)
+
+- **`BundleCorpus(rootDir, options?)`**: scans closed FileSink bundle directories, validates manifest metadata, accepts an explicit symlink/junction root, skips symlinked descendants and symlinked manifests during traversal, and exposes deterministic sorted entries.
+- **`BundleCorpus.entries(query?)`**: metadata-only listing/filtering over manifest-derived fields. Does not read JSONL streams, snapshots, or sidecar bytes.
+- **`BundleCorpus.bundles(query?)`** and **`[Symbol.iterator]()`**: lazy full-bundle iteration through `FileSink.toBundle()`, directly composable with `runMetrics`.
+- **`BundleCorpusEntry`** and **`BundleCorpusMetadata`**: frozen metadata view with `key`, `dir`, readonly nested `metadata.failedTicks`, attachment summary fields, failure summary fields, `materializedEndTick`, `openSource()`, and `loadBundle()`.
+- **`BundleQuery`** plus helper types `OneOrMany`, `NumberRange`, and `IsoTimeRange`: filters by key, manifest metadata, duration/tick ranges, failure count, policy seed, recordedAt range, incomplete status, and attachment MIME.
+- **`CorpusIndexError`** and `CorpusIndexErrorCode`: JSON-safe machine-readable failures for missing roots, manifest parse/validation errors, unsupported schema, duplicate keys, invalid queries, and missing entries.
+
+### Behavior callouts
+
+- Corpus listing is manifest-first and for closed/frozen FileSink directories. Active-writer detection and persisted `corpus-index.json` files are not part of v1.
+- Query order is deterministic: `recordedAt`, then `sessionId`, then slash-normalized key, using JavaScript code-unit ordering.
+- Query validation rejects malformed JavaScript caller shapes with `CorpusIndexError` code `query_invalid` instead of silently widening filters.
+- `materializedEndTick` is a persisted-content horizon, not a replay guarantee. Replay integrity still belongs to `SessionReplayer`.
+- Sidecar bytes are not read during listing or `loadBundle()`; callers fetch them explicitly through `SessionSource.readSidecar(id)`.
+- Explicit `dataUrl` attachment bytes live in `manifest.json`, so they are part of manifest parse cost.
+
+### ADRs
+
+- ADR 28: Manifest-first over closed FileSink directories.
+- ADR 29: Corpus composes with `runMetrics` via `Iterable<SessionBundle>`.
+- ADR 30: Canonical corpus order is `recordedAt`, `sessionId`, `key`.
+- ADR 31: v1 query scope is manifest-derived only.
+
+### Validation
+
+All four engine gates pass: `npm test` (865 passed + 2 todo, +20 new in `tests/bundle-corpus.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 0.8.2 - 2026-04-27
 
 Spec 8 — Behavioral Metrics over Corpus. Tier-2 of the AI-first dev roadmap; pairs with Spec 3 (synthetic playtest) to define regressions for emergent behavior.

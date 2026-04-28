@@ -1,32 +1,22 @@
 # Behavioral Metrics over Corpus
 
-Tier-2 of the AI-first feedback loop (Spec 8). A pure-function corpus reducer over `Iterable<SessionBundle>` — typically the bundles produced by `runSynthPlaytest` (Spec 3). Computes engine-generic + user-defined metrics; compares baseline vs. current to detect emergent-behavior regressions.
+Tier-2 of the AI-first feedback loop (Spec 8). A pure-function corpus reducer over `Iterable<SessionBundle>`, commonly fed by a `BundleCorpus` over closed `FileSink` bundles from synthetic playtests. Computes engine-generic + user-defined metrics; compares baseline vs. current to detect emergent-behavior regressions.
 
 ## Quickstart
 
 ```typescript
 import {
-  runSynthPlaytest, randomPolicy,
-  runMetrics, compareMetricsResults,
+  BundleCorpus,
+  runMetrics,
   bundleCount, sessionLengthStats, commandRateStats,
   commandValidationAcceptanceRate, executionFailureRate,
-  type SessionBundle,
 } from 'civ-engine';
 
-// 1. Generate a corpus via Spec 3.
-const bundles: SessionBundle[] = [];
-for (let i = 0; i < 64; i++) {
-  const result = runSynthPlaytest({
-    world: setup(),
-    policies: [/* ... */],
-    maxTicks: 1000,
-    policySeed: i,
-  });
-  if (result.ok) bundles.push(result.bundle);
-}
+// 1. Open a closed FileSink corpus produced by synthetic playtests.
+const corpus = new BundleCorpus('artifacts/playtests', { scanDepth: 'all' });
 
-// 2. Compute metrics in one pass.
-const current = runMetrics(bundles, [
+// 2. Compute metrics in one pass over lazily loaded bundles.
+const current = runMetrics(corpus.bundles({ sourceKind: 'synthetic' }), [
   bundleCount(),
   sessionLengthStats(),
   commandRateStats(),
@@ -36,6 +26,12 @@ const current = runMetrics(bundles, [
 
 console.log(current);
 // { bundleCount: 64, sessionLengthStats: { count: 64, min: ..., p95: ..., ... }, ... }
+```
+
+For small tests, arrays are still fine because `runMetrics` accepts any synchronous iterable:
+
+```typescript
+const current = runMetrics([bundleA, bundleB], [bundleCount()]);
 ```
 
 ## Authoring a custom metric
@@ -149,4 +145,5 @@ Pair them to detect both regression types:
 - `docs/design/2026-04-27-behavioral-metrics-design.md` — full spec (v4, converged).
 - `docs/architecture/decisions.md` — ADRs 23-27.
 - `docs/guides/synthetic-playtest.md` — Spec 3 harness that produces the corpus.
+- `docs/guides/bundle-corpus-index.md` - Spec 7 disk-backed corpus listing and lazy bundle loading.
 - `docs/guides/ai-integration.md` — Tier-2 of the AI feedback loop.

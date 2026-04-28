@@ -12,7 +12,7 @@ Without these, "AI-first" is aspirational. They are the irreducible substrate fo
 
 ### Spec 1: Session Recording & Replay (engine primitives)
 
-Status: **Drafted 2026-04-26.** See `2026-04-26-session-recording-and-replay-design.md`.
+Status: **Implemented** (v0.7.7-pre -> v0.7.19). See `2026-04-26-session-recording-and-replay-design.md`.
 
 What it delivers: deterministic capture of any World run as a portable `SessionBundle`; replay engine that opens a paused World at any tick; marker API for human and programmatic annotations; sink interface for memory and disk persistence; unification with `ScenarioRunner` so test runs and live captures share the same bundle format and replayer.
 
@@ -20,9 +20,9 @@ What it unlocks: every other spec in this roadmap.
 
 ### Spec 3: Synthetic Playtest Harness
 
-Status: **Proposed.**
+Status: **Implemented** (v0.7.20 + v0.8.0 + v0.8.1). See `2026-04-27-synthetic-playtest-harness-design.md` and `2026-04-27-synthetic-playtest-implementation-plan.md`.
 
-What it delivers: a harness that constructs a `World`, attaches a `SessionRecorder`, drives `world.submit()` from a pluggable policy (random / scripted / LLM-driven / heuristic agents), runs for N ticks, and saves the bundle. Trivially parallelizable across cores or machines. Produces a corpus of bundles per commit.
+What it delivers: `runSynthPlaytest` drives a supplied `World` with pluggable synchronous policies, records through `SessionRecorder`, and returns a replayable `SessionBundle`. Built-ins cover no-op, random catalog, and scripted policies; LLM-driven policies remain future Spec 9 work.
 
 What it unlocks: the actual feedback loop. Without synthetic playtest, recording just makes human bug reports nicer; with it, every commit gets autonomous exploration. Agents review the corpus and self-file regressions before any human plays the game.
 
@@ -30,9 +30,9 @@ Why it depends on Spec 1: synthetic playtest is just "policy → submit() → Se
 
 ### Spec 8: Behavioral Metrics over Corpus
 
-Status: **Proposed.**
+Status: **Implemented** (v0.8.2). See `2026-04-27-behavioral-metrics-design.md` and `2026-04-27-behavioral-metrics-implementation-plan.md`.
 
-What it delivers: a metrics layer that ingests bundles from the synthetic playtest corpus, computes design-relevant statistics (median session length, decision points per minute, resource Gini, time-to-first-conflict, dominant strategy distribution, etc.), and tracks these across commits. Regression detection: "the median session length dropped 30% after this commit" gets surfaced automatically.
+What it delivers: `runMetrics(bundles, metrics)` reduces any `Iterable<SessionBundle>` with engine-generic built-ins (bundle count, session length, command/event rates, failure rates, command validation acceptance, execution failure) plus user-defined metrics, and `compareMetricsResults` computes deltas across commits. Game-semantic metrics such as resource Gini or time-to-first-conflict remain user-defined because the engine does not own game event contracts.
 
 What it unlocks: a meaningful definition of "regression" for emergent behavior, which unit tests can't capture. Designers and agents share a common quantitative vocabulary for "is the game still doing what we want."
 
@@ -56,13 +56,13 @@ Why it depends on Spec 3: the playtester is just a specific class of policy plug
 
 ### Spec 7: Bundle Search / Corpus Index
 
-Status: **Proposed.**
+Status: **Implemented** (v0.8.3). See `2026-04-27-bundle-corpus-index-design.md` and `2026-04-27-bundle-corpus-index-implementation-plan.md`.
 
-What it delivers: an index over the bundle corpus with structured query: "show me all sessions where pathfinding flagged stuck units in the first 1000 ticks," "find sessions with high decision-point variance," "find sessions where the player's resource balance crashed below threshold X." Bundle metadata is indexed; bundle content is queryable on demand via the replayer.
+What it delivers: `BundleCorpus` indexes closed `FileSink` bundle directories by `manifest.json`, provides metadata-only listing/filtering over manifest-derived fields, exposes deterministic entry order, and lazily opens matching bundles through `FileSink` for `SessionReplayer` or `runMetrics`. Content-derived command/event/marker predicates are deferred to a future summary index.
 
 What it unlocks: the corpus stops being a folder of files and becomes a query surface for both agents and humans.
 
-Why it depends on Specs 3 and 4: the corpus needs to exist (3) and be navigable (4) before indexing it earns its keep.
+Why it depends on Specs 1, 3, and 8: FileSink from Spec 1 defines the disk format, Spec 3 creates synthetic corpora, and Spec 8 already accepts `Iterable<SessionBundle>` so the corpus can feed disk-backed metrics immediately. Spec 4 becomes a future consumer rather than a prerequisite.
 
 ### Anomaly detection over the corpus (continuous, no spec)
 
@@ -146,9 +146,9 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 1. Spec 1 (recording & replay) — substrate for everything.
 2. Spec 3 (synthetic playtest) — turns recording from "improve human bug reports" into "infinite autonomous bug discovery." Highest leverage.
 3. Spec 8 (behavioral metrics) — pairs with Spec 3 to define regressions for emergent behavior.
-4. Spec 2 (game-side annotation UI) — humans plug into the same system; game-specific work that can ship in parallel with Spec 4.
-5. Spec 4 (standalone viewer) — productivity multiplier for both agents and humans.
-6. Spec 7 (corpus index) — once corpus is large enough that browsing it linearly hurts.
+4. Spec 7 (corpus index) — disk-backed corpora become queryable and feed Spec 8 without in-memory arrays.
+5. Spec 2 (game-side annotation UI) — humans plug into the same system; game-specific work that can ship in parallel with Spec 4.
+6. Spec 4 (standalone viewer) — productivity multiplier for both agents and humans.
 7. Spec 9 (AI playtester) — once Specs 3 and 8 are mature enough to drive qualitative feedback usefully.
 8. Spec 5 (counterfactual) — once concrete counterfactual queries emerge from agent workflows.
 9. Spec 6 (strict-mode) — independent, can ship at any point. Schedule based on determinism-bug pain.
@@ -163,7 +163,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 4    | Standalone Bundle Viewer             | Proposed   | not yet drafted                                           |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |
-| 7    | Bundle Search / Corpus Index         | Proposed   | not yet drafted                                           |
+| 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `2026-04-27-bundle-corpus-index-design.md` (v4 + plan-review correction) + `2026-04-27-bundle-corpus-index-implementation-plan.md` (v6) |
 | 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `2026-04-27-behavioral-metrics-design.md` (v4) + `2026-04-27-behavioral-metrics-implementation-plan.md` (v4) |
 | 9    | AI Playtester Agent                  | Proposed   | not yet drafted                                           |
 

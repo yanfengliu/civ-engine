@@ -217,23 +217,35 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 
 ## Computing metrics over bundles
 
-After producing a corpus of synthetic playtest bundles, `runMetrics` (Spec 8) reduces them to aggregate metrics for regression detection:
+After producing a corpus of synthetic playtest bundles, persist them with `FileSink`, open the closed directory tree with `BundleCorpus` (Spec 7), and reduce matching bundles with `runMetrics` (Spec 8). Use a fresh output root or clear the previous one first because `FileSink` preserves existing bundle files:
 
 ```typescript
+import { rmSync } from 'node:fs';
 import {
+  BundleCorpus, FileSink,
   runSynthPlaytest, runMetrics,
   bundleCount, sessionLengthStats,
-  type SessionBundle,
 } from 'civ-engine';
 
-const bundles: SessionBundle[] = [];
+const outputRoot = 'artifacts/playtests/latest';
+rmSync(outputRoot, { recursive: true, force: true });
+
 for (let i = 0; i < 32; i++) {
-  const result = runSynthPlaytest({ world: setup(), policies: [/* ... */], maxTicks: 1000, policySeed: i });
-  if (result.ok) bundles.push(result.bundle);
+  runSynthPlaytest({
+    world: setup(),
+    policies: [/* ... */],
+    maxTicks: 1000,
+    policySeed: i,
+    sink: new FileSink(`${outputRoot}/${i}`),
+  });
 }
 
-const metrics = runMetrics(bundles, [bundleCount(), sessionLengthStats()]);
+const corpus = new BundleCorpus(outputRoot);
+const metrics = runMetrics(corpus.bundles({ sourceKind: 'synthetic' }), [
+  bundleCount(),
+  sessionLengthStats(),
+]);
 console.log(metrics.bundleCount, metrics.sessionLengthStats);
 ```
 
-See `docs/guides/behavioral-metrics.md` for the full metric catalog, `compareMetricsResults` regression-detection helper, and the accumulator-style contract for custom metrics.
+See `docs/guides/bundle-corpus-index.md` for disk-corpus listing/query, and `docs/guides/behavioral-metrics.md` for the full metric catalog, `compareMetricsResults` regression-detection helper, and the accumulator-style contract for custom metrics.

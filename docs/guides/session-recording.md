@@ -60,6 +60,27 @@ const file = new FileSink('/path/to/bundle-dir');
 
 `MemorySink` defaults to **dataUrl** for under-threshold attachments (default 64 KiB). Oversize attachments throw `SinkWriteError(code: 'oversize_attachment')` unless constructed with `MemorySinkOptions.allowSidecar: true`.
 
+## Indexing FileSink Bundles
+
+Use `BundleCorpus` after FileSink writers have closed to list, filter, and lazily reload disk-backed bundles:
+
+```ts
+import { BundleCorpus } from 'civ-engine';
+
+const corpus = new BundleCorpus('/path/to/corpus', { scanDepth: 'all' });
+const failedSynthetic = corpus.entries({
+  sourceKind: 'synthetic',
+  failedTickCount: { min: 1 },
+});
+
+for (const entry of failedSynthetic) {
+  const source = entry.openSource();
+  console.log(entry.key, source.readSnapshot(entry.metadata.startTick));
+}
+```
+
+`BundleCorpus.entries()` reads only `manifest.json` metadata and manifest attachment descriptors. It does not read JSONL streams, snapshots, or sidecar bytes until you call `entry.openSource()`, `entry.loadBundle()`, or `corpus.bundles()`. See `docs/guides/bundle-corpus-index.md` for the full query surface.
+
 ## Markers
 
 Three kinds:

@@ -254,7 +254,7 @@ See `docs/guides/session-recording.md` for the canonical reference.
 
 ## Synthetic Playtest Harness (Tier 1)
 
-`runSynthPlaytest` is the Tier-1 piece of the AI-first feedback loop (Spec 3 of `docs/design/ai-first-dev-roadmap.md`). It drives a `World` autonomously via pluggable `Policy` functions for N ticks and produces a replayable `SessionBundle`. Tier-2 specs (corpus indexing, behavioral metrics, AI playtester agent) build on the synthetic-bundle corpus this harness generates.
+`runSynthPlaytest` is the Tier-1 piece of the AI-first feedback loop (Spec 3 of `docs/design/ai-first-dev-roadmap.md`). It drives a `World` autonomously via pluggable `Policy` functions for N ticks and produces a replayable `SessionBundle`. `BundleCorpus` and behavioral metrics build on the synthetic-bundle corpus this harness generates; the AI playtester agent remains a future policy/reporting layer.
 
 ```typescript
 import { runSynthPlaytest, randomPolicy } from 'civ-engine';
@@ -273,19 +273,41 @@ const result = runSynthPlaytest({
 
 See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
 
+## Bundle Corpus Index (Tier 2)
+
+`BundleCorpus` is the Tier-2 disk-corpus query surface (Spec 7). It scans closed `FileSink` bundle directories, lists metadata without reading streams or sidecar bytes, filters by manifest-derived fields, and lazily opens matching bundles for replay or metrics.
+
+```typescript
+import { BundleCorpus, runMetrics, bundleCount } from 'civ-engine';
+
+const corpus = new BundleCorpus('artifacts/playtests');
+const failed = corpus.entries({
+  sourceKind: 'synthetic',
+  failedTickCount: { min: 1 },
+});
+
+const current = runMetrics(corpus.bundles({ sourceKind: 'synthetic' }), [
+  bundleCount(),
+]);
+```
+
+Use `entry.openSource()` for replay investigation through `SessionReplayer.fromSource()`, and `corpus.bundles(query)` when a reducer should stream full bundles lazily. See `docs/guides/bundle-corpus-index.md` for scan-depth, invalid-manifest, incomplete-bundle, and sidecar-boundary contracts.
+
 ## Behavioral Metrics over Corpus (Tier 2)
 
-`runMetrics(bundles, metrics)` is the Tier-2 corpus reducer (Spec 8 of `docs/design/ai-first-dev-roadmap.md`). It computes engine-generic + user-defined metrics over an `Iterable<SessionBundle>` — typically the corpus produced by N runs of `runSynthPlaytest`. Pair with `compareMetricsResults(baseline, current)` to detect emergent-behavior regressions.
+`runMetrics(bundles, metrics)` is the Tier-2 corpus reducer (Spec 8 of `docs/design/ai-first-dev-roadmap.md`). It computes engine-generic + user-defined metrics over an `Iterable<SessionBundle>`; for disk-resident corpora, pass `new BundleCorpus(root).bundles(query)`. Pair with `compareMetricsResults(baseline, current)` to detect emergent-behavior regressions.
 
 ```typescript
 import * as fs from 'node:fs';
 import {
+  BundleCorpus,
   runMetrics, compareMetricsResults,
   bundleCount, sessionLengthStats, commandRateStats,
   commandValidationAcceptanceRate, executionFailureRate,
 } from 'civ-engine';
 
-const current = runMetrics(bundles, [
+const corpus = new BundleCorpus('artifacts/playtests');
+const current = runMetrics(corpus.bundles({ sourceKind: 'synthetic' }), [
   bundleCount(),
   sessionLengthStats(),
   commandRateStats(),

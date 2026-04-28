@@ -44,6 +44,8 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Session Recording — SessionRecorder](#session-recording--sessionrecorder)
 - [Session Recording — SessionReplayer](#session-recording--sessionreplayer)
 - [Session Recording — scenarioResultToBundle](#session-recording--scenarioresulttobundle)
+- [Bundle Corpus Index](#bundle-corpus-index-v083)
+- [Behavioral Metrics](#behavioral-metrics-v082)
 
 ---
 
@@ -5140,6 +5142,169 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 - `SessionMetadata.policySeed?: number` added. Populated when `sourceKind === 'synthetic'`.
 - `SessionRecorderConfig.sourceKind?: 'session' | 'scenario' | 'synthetic'` added (default `'session'`).
 - `SessionRecorderConfig.policySeed?: number` added.
+
+## Bundle Corpus Index (v0.8.3)
+
+Manifest-first corpus index over closed `FileSink` bundle directories. `BundleCorpus` lists and filters bundle metadata without reading JSONL streams, snapshots, or sidecar bytes, then lazily opens `FileSink` sources or full `SessionBundle`s when a caller asks for one.
+
+### `BundleCorpus`
+
+```typescript
+class BundleCorpus implements Iterable<SessionBundle> {
+  constructor(rootDir: string, options?: BundleCorpusOptions);
+  readonly rootDir: string;
+  readonly invalidEntries: readonly InvalidCorpusEntry[];
+  entries(query?: BundleQuery): readonly BundleCorpusEntry[];
+  bundles(query?: BundleQuery): IterableIterator<SessionBundle>;
+  get(key: string): BundleCorpusEntry | undefined;
+  openSource(key: string): SessionSource;
+  loadBundle<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TDebug = JsonValue,
+  >(key: string): SessionBundle<TEventMap, TCommandMap, TDebug>;
+  [Symbol.iterator](): IterableIterator<SessionBundle>;
+}
+```
+
+`entries()` returns a frozen array of frozen entry objects. `bundles()` and `[Symbol.iterator]()` are lazy: each iterator step loads exactly one full bundle through `FileSink.toBundle()`. This composes directly with `runMetrics(corpus.bundles(query), metrics)` because Spec 8 accepts any synchronous `Iterable<SessionBundle>`.
+
+Corpus order is deterministic: entries sort by `metadata.recordedAt`, then `metadata.sessionId`, then `key`, using JavaScript code-unit string ordering. The root bundle key is `'.'`; child bundles use slash-separated relative paths, regardless of host path separator.
+
+`get(key)` returns `undefined` for a missing key. `openSource(key)` and `loadBundle(key)` throw `CorpusIndexError` with `details.code === 'entry_missing'`.
+
+### `BundleCorpusScanDepth`
+
+```typescript
+type BundleCorpusScanDepth = 'root' | 'children' | 'all';
+```
+
+`'root'` indexes only `rootDir` when it is itself a bundle directory. `'children'` checks `rootDir` and one directory level below it. `'all'` recursively scans descendants and is the default. An explicit symlink or junction supplied as `rootDir` is accepted and `rootDir`/`entry.dir` preserve the caller-supplied path. During traversal, discovered symlinked directories and symlinked `manifest.json` files are skipped. Discovery stops once a directory contains a direct regular-file `manifest.json`, so a root bundle is the corpus boundary for child/all scans.
+
+### `BundleCorpusOptions`
+
+```typescript
+interface BundleCorpusOptions {
+  scanDepth?: BundleCorpusScanDepth; // default 'all'
+  skipInvalid?: boolean;             // default false
+}
+```
+
+Strict mode (`skipInvalid !== true`) throws on the first invalid manifest. Diagnostic mode (`skipInvalid: true`) skips invalid manifest entries and exposes them through `invalidEntries`. Duplicate keys and a missing/non-directory root always throw.
+
+### `BundleCorpusEntry`
+
+```typescript
+interface BundleCorpusEntry {
+  readonly key: string;
+  readonly dir: string;
+  readonly schemaVersion: typeof SESSION_BUNDLE_SCHEMA_VERSION;
+  readonly metadata: BundleCorpusMetadata;
+  readonly attachmentCount: number;
+  readonly attachmentBytes: number;
+  readonly attachmentMimes: readonly string[];
+  readonly hasFailures: boolean;
+  readonly failedTickCount: number;
+  readonly materializedEndTick: number;
+  openSource(): SessionSource;
+  loadBundle<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TDebug = JsonValue,
+  >(): SessionBundle<TEventMap, TCommandMap, TDebug>;
+}
+```
+
+### `BundleCorpusMetadata`
+
+```typescript
+type BundleCorpusMetadata = Readonly<Omit<SessionMetadata, 'failedTicks'>> & {
+  readonly failedTicks?: readonly number[];
+};
+```
+
+`BundleCorpusEntry.metadata` is frozen at runtime and models `failedTicks` as a readonly nested array at the type level.
+
+`materializedEndTick` is a persisted-content horizon, not a replay guarantee. Complete bundles use `metadata.endTick`; incomplete bundles use `metadata.persistedEndTick`. Replay rules still belong to `SessionReplayer`, including failure-bounded replay refusal.
+
+`attachmentBytes` and `attachmentMimes` are derived from manifest descriptors. Sidecar bytes are not read or validated during listing or `loadBundle()`; call `entry.openSource().readSidecar(id)` when you need the actual bytes. Attachments explicitly embedded as `dataUrl` live inside `manifest.json`, so their bytes are part of manifest parse cost and are not a separate content index.
+
+### `BundleQuery`
+
+```typescript
+interface BundleQuery {
+  key?: string | RegExp;
+  sessionId?: OneOrMany<string>;
+  sourceKind?: OneOrMany<SessionMetadata['sourceKind']>;
+  sourceLabel?: OneOrMany<string>;
+  engineVersion?: OneOrMany<string>;
+  nodeVersion?: OneOrMany<string>;
+  incomplete?: boolean;
+  durationTicks?: NumberRange;
+  startTick?: NumberRange;
+  endTick?: NumberRange;
+  persistedEndTick?: NumberRange;
+  materializedEndTick?: NumberRange;
+  failedTickCount?: NumberRange;
+  policySeed?: number | NumberRange;
+  recordedAt?: IsoTimeRange;
+  attachmentMime?: OneOrMany<string>;
+}
+```
+
+All query fields are ANDed. `OneOrMany<T>` fields match any requested value. Missing optional manifest fields do not match a concrete requested value: for example, `sourceLabel: 'random'` excludes entries without `metadata.sourceLabel`. `incomplete: false` matches entries where `metadata.incomplete !== true`.
+
+`key` as a string matches exact corpus key. `key` as a `RegExp` is tested against each key and has `lastIndex` reset before and after each test so stateful regexes are deterministic. `attachmentMime` is any-match: an entry matches if any indexed MIME equals any requested MIME.
+
+Numeric ranges are inclusive and require finite integers. `recordedAt.from` and `recordedAt.to` must be normalized UTC strings that round-trip through `Date.toISOString()`, and `from <= to`. Malformed JavaScript caller shapes, such as unknown query/range keys, non-plain-object ranges, non-boolean `incomplete`, non-string scalar fields, or non-string/non-`RegExp` keys, throw `CorpusIndexError` with code `query_invalid`.
+
+### Query helper types
+
+```typescript
+type OneOrMany<T> = T | readonly T[];
+
+interface NumberRange {
+  min?: number;
+  max?: number;
+}
+
+interface IsoTimeRange {
+  from?: string;
+  to?: string;
+}
+```
+
+### Errors and invalid entries
+
+```typescript
+type CorpusIndexErrorCode =
+  | 'root_missing'
+  | 'manifest_parse'
+  | 'manifest_invalid'
+  | 'schema_unsupported'
+  | 'duplicate_key'
+  | 'query_invalid'
+  | 'entry_missing';
+
+interface CorpusIndexErrorDetails {
+  readonly [key: string]: JsonValue;
+  readonly code: CorpusIndexErrorCode;
+  readonly path: string | null;
+  readonly key: string | null;
+  readonly message: string | null;
+}
+
+class CorpusIndexError extends SessionRecordingError {
+  readonly details: CorpusIndexErrorDetails;
+}
+
+interface InvalidCorpusEntry {
+  readonly path: string;
+  readonly error: CorpusIndexError;
+}
+```
+
+The error class extends `SessionRecordingError` so corpus failures compose with existing session-recording error handling. `details` is JSON-safe for logging and machine triage.
 
 ## Behavioral Metrics (v0.8.2)
 
