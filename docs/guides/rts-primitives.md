@@ -221,7 +221,7 @@ The benchmark emits deterministic scenarios and reports:
 
 - Tick duration
 - Query cache hits and misses
-- Spatial sync scan counts
+- Spatial explicit-sync counts (`spatial.explicitSyncs`)
 - Diff size
 - Path request cost
 - Occupancy benchmark counts for buildings, resources, and units

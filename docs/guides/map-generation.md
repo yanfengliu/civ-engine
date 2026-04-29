@@ -463,4 +463,4 @@ When to use which:
 | Per-player visibility / explored cells | `VisibilityMap` |
 | Blocked / occupied / reservation tracking | `OccupancyGrid` / `OccupancyBinding` |
 
-`Layer<T>` is JSON-serializable via `getState()` / `Layer.fromState()`, value writes are JSON-compat-validated, and reads / writes go through `structuredClone` defensive copies on every boundary so caller mutation cannot corrupt stored state. See [API Reference → Layer](../api-reference.md#layer) for the full surface.
+`Layer<T>` is JSON-serializable via `getState()` / `Layer.fromState()`, value writes are JSON-compat-validated, and object-valued reads / writes go through `structuredClone` defensive copies on every boundary so caller mutation cannot corrupt stored state. Primitive `T` (`number`, `string`, `boolean`, `null`) skips clones because primitives are immutable, making `Layer<number>` etc. zero-allocation. See [API Reference → Layer](../api-reference.md#layer) for the full surface.

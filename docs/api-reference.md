@@ -2290,6 +2290,24 @@ restored.registerValidator('moveUnit', validator);
 restored.registerHandler('moveUnit', handler);
 ```
 
+#### `applySnapshot(snapshot)`
+
+```typescript
+applySnapshot(snapshot: WorldSnapshot): void
+```
+
+Replaces this world's entity / component / resource / state / tag / metadata / RNG state from `snapshot`, in place, while preserving user-registered handlers, validators, systems, and event/diff listeners. Used by the `SessionReplayer` `worldFactory` pattern: register first on a fresh `World`, then call `applySnapshot(snap)` to load state without re-registration conflicts.
+
+Component stores are merged so user pre-registrations of components not in the snapshot survive. The world's tick is set to `snapshot.tick`. If the world is poisoned, `applySnapshot` clears the poison/last-tick-failure state before applying.
+
+Replay across a recorded `TickFailure` is out of scope for v1; `WorldSnapshotV5` does not carry poison state. See `docs/guides/session-recording.md` for the full replay contract.
+
+```typescript
+const w = new World(config);
+setupBehavior(w);            // re-register handlers/validators/systems first
+w.applySnapshot(snapshot);   // then load state in-place
+```
+
 ### State Diffs
 
 #### `getDiff()`

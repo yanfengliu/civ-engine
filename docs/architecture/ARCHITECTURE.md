@@ -125,3 +125,10 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 
 For architectural decisions, see `docs/architecture/decisions.md`.
 For architecture drift history, see `docs/architecture/drift-log.md`.
+
+## Drift Log
+
+Structural mismatches detected by audits and intentionally deferred (not fixed in this pass). For chronological architecture-change history, see `docs/architecture/drift-log.md`.
+
+- 2026-04-29: `scripts/rts-benchmark.mjs` markdown renderer reads `scenario.spatialFullScans` / `scenario.spatialScannedEntities`, but the benchmark only collects `spatialExplicitSyncs` after v0.5.0; deferred (code change, not doc change).
+- 2026-04-29: `src/world.ts` remains at ~2379 LOC, above the 500-LOC review cap. Deeper class-method extraction (serialize, system scheduling, tick pipeline) was deferred at v0.6.4 and remains so until a dedicated refactor branch lands.
