@@ -374,3 +374,8 @@ const td = diffSnapshots(snapA, snapB, { tick: 42 });
 For full-snapshot comparison (audit, version migration, etc.), serialize both worlds and compare via JSON-deep-equal or a dedicated tool.
 
 The viewer uses `diffSnapshots` internally for `frame.diffSince`'s snapshot fallback path; see `docs/guides/bundle-viewer.md`.
+
+
+## Strict Mode and serialization (v0.8.8+)
+
+When `WorldConfig.strict === true`, the snapshot's `config` includes `strict: true` so that `World.deserialize(snap)` reconstructs a strict world (preserves the flag through round-trips). Bundles produced by a strict world are byte-identical to a non-strict world's for the same seed/inputs **modulo `config.strict`** — the gate is enforcement-only and does not affect tick-content determinism. `applySnapshot(snap)` works at any phase regardless of strict mode (it increments `_maintenanceDepth` internally for forward-compat). See `docs/guides/strict-mode.md` for the full surface.

@@ -111,3 +111,10 @@ const adapter = new ClientAdapter({
   onError: (error) => console.error('client transport failed', error),
 });
 ```
+
+
+## Strict Mode (v0.8.8+)
+
+`WorldConfig.strict?: boolean` (default `false`) is an opt-in invariant. When `true`, 22 mutation methods on `World` (createEntity, destroyEntity, setComponent et al., setPosition, all resource methods, setState/deleteState, addTag/removeTag, setMeta/deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a system phase / setup window / `runMaintenance(fn)` callback. Registration calls (`registerComponent`/`registerSystem`/etc.), `submit`/`submitWithResult`, `step`/`stepWithResult`, listener add/remove, and read methods are NOT gated.
+
+`applySnapshot` and `deserialize` work at any phase regardless of strict mode. See `docs/guides/strict-mode.md` for escape hatches (`endSetup`, `runMaintenance`), the depth-counted reentrant maintenance contract, and the submit-time callback caller-phase semantics.

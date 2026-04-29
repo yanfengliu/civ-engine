@@ -4,9 +4,9 @@
 // `bundleSummary` helper for feeding bundle facts to an LLM. Game projects (or
 // downstream tooling) wire their own LLM clients via `AgentDriver.decide`.
 
-import type { JsonValue } from './json.js';
 import { MemorySink } from './session-sink.js';
 import { SessionRecorder } from './session-recorder.js';
+import { RecorderClosedError } from './session-errors.js';
 import type { SessionBundle } from './session-bundle.js';
 import type { SessionSink, SessionSource } from './session-sink.js';
 import type { ComponentRegistry } from './world.js';
@@ -114,7 +114,13 @@ export async function runAgentPlaytest<
     throw new RangeError(`maxTicks must be a positive integer (got ${config.maxTicks})`);
   }
   if (config.world.isPoisoned()) {
-    throw new Error('cannot run agent playtest on a poisoned world; call world.recover() first');
+    // Match SessionRecorder.connect()'s and runSynthPlaytest's poisoned-world
+    // guards exactly so callers get a consistent error shape regardless of
+    // which check fires first.
+    throw new RecorderClosedError(
+      'cannot run agent playtest on a poisoned world; call world.recover() first',
+      { code: 'world_poisoned' },
+    );
   }
 
   const { world, agent, maxTicks, sourceLabel } = config;
@@ -132,6 +138,14 @@ export async function runAgentPlaytest<
     snapshotInterval,
   });
   recorder.connect();
+  // Connect-time sink failures are swallowed by SessionRecorder.connect into
+  // _lastError + _terminated. Surface them as a thrown error before any
+  // agent.decide() runs (which could be an LLM call burning budget).
+  if (recorder.lastError) {
+    const err = recorder.lastError;
+    try { recorder.disconnect(); } catch { /* best-effort */ }
+    throw err;
+  }
 
   const startTick = world.tick;
   let ticksRun = 0;
@@ -156,8 +170,17 @@ export async function runAgentPlaytest<
         break;
       }
 
-      for (const cmd of commands) {
-        world.submit(cmd.type, cmd.data);
+      // Submit can throw when a user-validator throws (world.ts:2151-2157).
+      // Classify those as agentError, not sinkError — sinkError is reserved
+      // for recorder.lastError mid-run.
+      try {
+        for (const cmd of commands) {
+          world.submit(cmd.type, cmd.data);
+        }
+      } catch (e) {
+        stopReason = 'agentError';
+        agentError = { tick: ctx.tick, error: errorShape(e) };
+        break;
       }
 
       try {
@@ -166,22 +189,25 @@ export async function runAgentPlaytest<
         stopReason = 'poisoned';
         break;
       }
-      ticksRun++;
 
-      // Detect sink failure between ticks. If the sink errored mid-run
-      // (e.g., FileSink disk-full), the recorder enters _terminated state
-      // and silently drops further writes; stopping early avoids burning
-      // LLM budget on a broken recording.
+      // Detect sink failure between ticks BEFORE incrementing ticksRun, so
+      // ticksRun reflects the count of ticks the recorder accepted (matches
+      // runSynthPlaytest's increment ordering).
       if (recorder.lastError) {
         stopReason = 'sinkError';
         agentError = { tick: world.tick, error: errorShape(recorder.lastError) };
         break;
       }
+      ticksRun++;
 
       if (config.stopWhen) {
+        // Post-step ctx semantics match runSynthPlaytest (tick === just-completed
+        // tick = world.tick after advance). A predicate `ctx.tick === N` stops
+        // after tick N completes, matching the synth-playtest sibling. ADR 41
+        // siblings produce consistent stopWhen semantics.
         const ctxAfter: AgentDriverContext<TEventMap, TCommandMap> = {
           ...ctx,
-          tick: world.tick + 1,
+          tick: world.tick,
           tickIndex: tickIndex + 1,
         };
         let stop: boolean;
@@ -198,9 +224,6 @@ export async function runAgentPlaytest<
         }
       }
     }
-  } catch (e) {
-    stopReason = 'sinkError';
-    agentError = { tick: world.tick, error: errorShape(e) };
   } finally {
     try {
       recorder.disconnect();
@@ -224,7 +247,14 @@ export async function runAgentPlaytest<
     bundle,
     ticksRun,
     stopReason,
-    ok: stopReason !== 'poisoned' && stopReason !== 'agentError' && stopReason !== 'sinkError',
+    // Tighten ok per runSynthPlaytest: also check recorder.lastError, so a
+    // FileSink failure during the terminal-snapshot write inside disconnect()
+    // is reflected as ok: false even if stopReason already locked in 'maxTicks'.
+    ok:
+      stopReason !== 'poisoned' &&
+      stopReason !== 'agentError' &&
+      stopReason !== 'sinkError' &&
+      recorder.lastError === null,
     ...(agentError ? { agentError } : {}),
     ...(report !== undefined ? { report } : {}),
   };
@@ -327,7 +357,3 @@ function errorShape(e: unknown): { name: string; message: string; stack: string 
   }
   return { name: 'NonError', message: String(e), stack: null };
 }
-
-// JsonValue used by the BundleSummary type implicitly (Records of strings/numbers).
-// Re-exported import to keep TS happy if consumers need the alias here.
-export type { JsonValue };

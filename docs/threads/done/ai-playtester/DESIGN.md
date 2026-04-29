@@ -35,7 +35,7 @@ New module: `src/ai-playtester.ts` (~150 LOC).
 | Component | Responsibility |
 | --- | --- |
 | `AgentDriver<TEventMap, TCommandMap>` | User-implemented interface. Engine calls `decide(ctx)` once per tick, optionally `report(bundle)` once post-run. |
-| `AgentPlaytestConfig<...>` | Config type — world, agent, maxTicks, optional stop predicate, optional `recorderConfig` passthrough. |
+| `AgentPlaytestConfig<...>` | Config type — world, agent, maxTicks, optional `stopWhen` predicate, optional `sink`, `sourceLabel`, `snapshotInterval` passthroughs. |
 | `AgentPlaytestResult<...>` | Wraps `SessionBundle` plus `report` (whatever the agent returned from its post-run callback) and `stopReason`. |
 | `runAgentPlaytest(config)` | Async runner. Loops up to `maxTicks`, calls `agent.decide(ctx)` per tick (await-able), submits commands via `world.submit()`, calls `world.step()`. Records through `SessionRecorder` (set `sourceKind: 'synthetic'`). On stop, calls `agent.report(bundle)` if defined and includes the result. |
 | `bundleSummary(bundle)` | Pure helper. Returns `BundleSummary` — structured data designed to fit a small LLM context window. |
@@ -93,10 +93,12 @@ export interface AgentPlaytestConfig<
   maxTicks: number;
   /**
    * Optional early-stop predicate. Called after each tick. If returns truthy,
-   * playtest stops with `stopReason: 'predicate_stopped'`.
+   * playtest stops with `stopReason: 'stopWhen'`.
    */
-  stop?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
-  recorderConfig?: { sourceLabel?: string; snapshotInterval?: number };
+  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
+  sink?: SessionSink & SessionSource;
+  sourceLabel?: string;
+  snapshotInterval?: number | null;
 }
 
 export interface AgentPlaytestResult<
@@ -154,15 +156,15 @@ export function bundleSummary(bundle: SessionBundle): BundleSummary;
    a. Build `AgentDriverContext { world, tick: world.tick + 1, startTick, tickIndex }`.
    b. `await agent.decide(ctx)` → array of commands.
    c. For each command, `world.submit(cmd.type, cmd.data)`.
-   d. `world.step()`. Catch `WorldTickFailureError` → set `stopReason: 'world_poisoned'`, break.
-   e. If `config.stop` provided and `await config.stop(ctx)` returns truthy → `stopReason: 'predicate_stopped'`, break.
-   f. If `agent.decide` throws → set `stopReason: 'agent_threw'`, break (recorder still finalizes).
+   d. `world.step()`. Catch `WorldTickFailureError` → set `stopReason: 'poisoned'`, break.
+   e. If `config.stopWhen` provided and `await config.stopWhen(ctx)` returns truthy → `stopReason: 'stopWhen'`, break.
+   f. If `agent.decide` throws → set `stopReason: 'agentError'`, break (recorder still finalizes).
 4. `recorder.disconnect()`.
 5. `bundle = recorder.toBundle()`.
 6. If `agent.report` defined, `report = await agent.report(bundle)`. If it throws, captured as `report = { error: <message> }` (don't re-throw — the bundle is already valid).
 7. Return `{ bundle, ticksRun, stopReason, report }`.
 
-If natural termination at `maxTicks`, `stopReason: 'max_ticks'`.
+If natural termination at `maxTicks`, `stopReason: 'maxTicks'`.
 
 `bundleSummary` is a pure function with no I/O. Can be called on any complete or incomplete bundle.
 
@@ -171,10 +173,10 @@ If natural termination at `maxTicks`, `stopReason: 'max_ticks'`.
 - **Construction:** `runAgentPlaytest` validates `maxTicks > 0`.
 - **Sync agent:** an `AgentDriver.decide` returning a plain array works; bundle records the commands.
 - **Async agent:** an `AgentDriver.decide` returning a Promise works; runner awaits each tick.
-- **maxTicks termination:** returns `stopReason: 'max_ticks'` with `ticksRun === maxTicks`.
-- **Stop predicate:** truthy `stop()` halts early with `stopReason: 'predicate_stopped'`.
-- **World poisoned:** a system that throws causes `stopReason: 'world_poisoned'`; bundle is incomplete.
-- **Agent throws:** `decide` rejecting / throwing surfaces as `stopReason: 'agent_threw'`; bundle still valid.
+- **maxTicks termination:** returns `stopReason: 'maxTicks'` with `ticksRun === maxTicks`.
+- **Stop predicate:** truthy `stop()` halts early with `stopReason: 'stopWhen'`.
+- **World poisoned:** a system that throws causes `stopReason: 'poisoned'`; bundle is incomplete.
+- **Agent throws:** `decide` rejecting / throwing surfaces as `stopReason: 'agentError'`; bundle still valid.
 - **`report()` callback:** result included in `AgentPlaytestResult.report`.
 - **`report()` throws:** captured in `report = { error: '...' }` rather than rejecting the outer promise.
 - **`bundleSummary`:** counts match underlying bundle arrays; typed eventCounts/commandCounts.
@@ -209,7 +211,7 @@ Current base v0.8.8 (post Spec 6 commit). Spec 9 is additive and non-breaking. S
 - `AgentDriver`, `AgentDriverContext`, `AgentPlaytestConfig`, `AgentPlaytestResult`, `runAgentPlaytest`, `BundleSummary`, `bundleSummary` are exported from `src/index.ts`.
 - `runAgentPlaytest` returns a `SessionBundle` with `sourceKind: 'synthetic'`.
 - Sync and async agent drivers both work.
-- All four `stopReason` values are reachable.
+- All five `stopReason` values are reachable.
 - `bundleSummary` is pure and JSON-serializable.
 - All four engine gates pass.
 - Multi-CLI review converges.

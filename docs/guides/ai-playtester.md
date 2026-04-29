@@ -102,6 +102,8 @@ Use `runSynthPlaytest` when the agent is a pure function. Use `runAgentPlaytest`
 
 ## Determinism
 
-`runAgentPlaytest` records via `SessionRecorder`, so all submitted commands enter the bundle's command stream. Replay reproduces the bundle byte-for-byte if and only if the agent's `decide` is reproducible (same prompt / same model / same temperature / same seed for sampling). The engine guarantees nothing about LLM determinism — that's the agent's responsibility.
+`runAgentPlaytest` records via `SessionRecorder`, so all submitted commands enter the bundle's command stream. The bundle's **deterministic content** (commands, executions, events, snapshots, diffs) is reproducible across runs if and only if the agent's `decide` is reproducible (same prompt / same model / same temperature / same seed for sampling). Per-tick `metrics.durationMs` fields are timing observability and naturally vary between runs — they are not part of the deterministic recording surface. The engine guarantees nothing about LLM determinism — that's the agent's responsibility.
+
+For replay, use `SessionReplayer.fromBundle(bundle, { worldFactory })` — it consumes the bundle's recorded commands and reproduces the world state at any tick deterministically, regardless of whether the agent is rerun.
 
 For deterministic test scenarios, prefer `runSynthPlaytest` with `scriptedPolicy` (Spec 3).

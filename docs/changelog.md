@@ -23,7 +23,16 @@ Spec 9 - AI Playtester Agent. Tier-2 of the AI-first dev roadmap; engine-side su
 
 ### Validation
 
-All four engine gates pass: `npm test` (981 passed + 2 todo, +11 new in `tests/ai-playtester.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Codex CLI was unreachable for the design review (sandbox-blocked PowerShell call); proceeded with Claude per AGENTS.md fallback rule.
+All four engine gates pass: `npm test` (989 passed + 2 todo, +19 new in `tests/ai-playtester.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Codex CLI was unreachable for the design review (sandbox-blocked PowerShell call); proceeded with Claude per AGENTS.md fallback rule.
+
+### Post-hoc code-review fixes (same v0.8.9)
+
+The original Spec 9 commit `3746a95` shipped without a multi-CLI code review — a process regression per AGENTS.md. The review ran post-commit (Codex + Claude on the staged HEAD; both reviewers landed substantive findings) and fixes were folded back into v0.8.9:
+
+- **Correctness:** `world.submit()` throws (e.g., user-validator throws) now classify as `agentError` rather than `sinkError`. `stopWhen` post-step ctx now passes `tick: world.tick` (just-completed tick) matching `runSynthPlaytest`'s sibling semantics; previously off-by-one. Connect-time `recorder.lastError` is now checked and thrown immediately, mirroring `runSynthPlaytest`; previously a connect-time sink failure burned the first agent decision before stopping. `ticksRun` increments after the per-tick `recorder.lastError` check (mirrors `runSynthPlaytest`). `ok` now also checks `recorder.lastError === null` so a finalize-time sink failure surfaces as `ok: false`. Poisoned-world rejection now throws `RecorderClosedError({ code: 'world_poisoned' })` for symmetry with `runSynthPlaytest` and `SessionRecorder.connect()`.
+- **Tests:** added 8 new tests covering sinkError per-tick path, connect-time rejection, validator-throws-as-agentError, async decide rejection, throwing stopWhen, post-step ctx tick semantics, deterministic content equality across runs, and SessionReplayer round-trip.
+- **Docs:** README Public Surface bullet now includes the Spec 9 exports; `docs/guides/ai-integration.md` no longer says AI playtester is future work; the `docs/threads/done/ai-playtester/DESIGN.md` §5 lifecycle text uses the camelCase taxonomy rather than the v1 strings; `docs/guides/ai-playtester.md` softens the "byte-for-byte" determinism claim to "deterministic content reproducible across runs"; `docs/guides/serialization-and-diffs.md` and `docs/guides/public-api-and-invariants.md` get strict-mode cross-references that were deferred during the v0.8.8 ship.
+- **Cleanup:** removed unused `JsonValue` import + misleading re-export comment from `src/ai-playtester.ts`.
 
 ## 0.8.8 - 2026-04-29
 
