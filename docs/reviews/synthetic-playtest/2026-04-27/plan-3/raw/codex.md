@@ -1,7 +1,0 @@
-[HIGH] [docs/design/2026-04-27-synthetic-playtest-implementation-plan.md] T2 Step 4 / T2 Step 9 / T3 Step 1 still contain test snippets that will not clear the mandatory `typecheck`/`lint` gates as written. Concrete mismatches:
-- T2’s composition test filters `result.bundle.executions` by `executionTick`, but `CommandExecutionResult` only exposes `tick` in [src/world.ts](/C:/Users/38909/Documents/github/civ-engine/src/world.ts).
-- T2’s production-determinism block uses `RandomPolicyConfig` without importing it into `tests/synthetic-playtest.test.ts`.
-- T2’s FileSink round-trip snippet uses `fs.mkdirSync`, `path.join`, and `os.tmpdir()` even though [tests/file-sink.test.ts](/C:/Users/38909/Documents/github/civ-engine/tests/file-sink.test.ts) currently uses named imports (`mkdtempSync`, `join`, `tmpdir`) rather than those namespaces.
-- T3’s starter import list includes `DeterministicRandom`, which the appended tests never use, so lint will fail on the unused import.
-
-[MED] [docs/design/2026-04-27-synthetic-playtest-implementation-plan.md] T2 Step 9 and T3 Step 2 overclaim the production-determinism proof. Both sections say they verify “structurally identical bundles” / production-determinism, but the proposed assertions only compare command streams and `metadata.endTick`. They do not compare tick entries, snapshots, executions, failures, or normalized metadata, so a recorder/state regression could still pass these tests while violating the contract the plan’s changelog/guide text promises.

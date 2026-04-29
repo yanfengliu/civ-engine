@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan revision:** v6 (2026-04-27) - fixes plan-review iteration 5 findings from `docs/reviews/bundle-corpus-index/2026-04-27/plan-5/`: code-review re-review prompts must include all prior task `REVIEW.md` files, not only the immediately previous iteration.
+**Plan revision:** v6 (2026-04-27) - fixes plan-review iteration 5 findings from `docs/threads/done/bundle-corpus-index/2026-04-27/plan-5/`: code-review re-review prompts must include all prior task `REVIEW.md` files, not only the immediately previous iteration.
 
 **Goal:** Implement Spec 7: Bundle Search / Corpus Index as a disk-backed manifest-first `BundleCorpus` that indexes closed FileSink bundle directories, filters metadata without loading content streams, and yields `SessionBundle`s lazily for `runMetrics`.
 
@@ -38,7 +38,7 @@
 - Modify `docs/changelog.md`: add v0.8.3 entry.
 - Modify `docs/devlog/summary.md`: add one newest-first Spec 7 line and keep the summary compact.
 - Modify `docs/devlog/detailed/2026-04-27_2026-04-27.md`: append the final task entry after code review artifacts exist.
-- Create `docs/reviews/bundle-corpus-index-T1/2026-04-27/<iteration>/`: staged-diff code-review artifacts.
+- Create `docs/threads/current/bundle-corpus-index-task-1/2026-04-27/<iteration>/REVIEW.md`: staged-diff code-review synthesis, moved to `docs/threads/done/bundle-corpus-index-task-1/` after closure.
 
 ## Single Task: Spec 7 - Full Surface, Tests, Docs, Review, Commit
 
@@ -986,66 +986,29 @@ Select-String -Path $docFiles -Pattern "BundleCorpus|BundleCorpusScanDepth|Bundl
 
 ### Step 7: Stage the coherent change and run multi-CLI code review
 
-- [ ] Stage only the Spec 7 implementation, tests, docs, design/review artifacts, and version files:
+- [ ] Stage only the Spec 7 implementation, tests, docs, design/thread artifacts, and version files:
 
 ```powershell
-git add src\bundle-corpus.ts src\bundle-corpus-types.ts src\bundle-corpus-manifest.ts src\index.ts tests\bundle-corpus.test.ts package.json package-lock.json src\version.ts README.md docs\api-reference.md docs\guides\bundle-corpus-index.md docs\guides\behavioral-metrics.md docs\guides\session-recording.md docs\guides\ai-integration.md docs\guides\concepts.md docs\README.md docs\architecture\ARCHITECTURE.md docs\architecture\drift-log.md docs\architecture\decisions.md docs\design\ai-first-dev-roadmap.md docs\design\2026-04-27-bundle-corpus-index-design.md docs\design\2026-04-27-bundle-corpus-index-implementation-plan.md docs\changelog.md docs\devlog\summary.md docs\devlog\detailed\2026-04-27_2026-04-27.md docs\reviews\bundle-corpus-index docs\reviews\bundle-corpus-index-T1
+git add src\bundle-corpus.ts src\bundle-corpus-types.ts src\bundle-corpus-manifest.ts src\index.ts tests\bundle-corpus.test.ts package.json package-lock.json src\version.ts README.md docs\api-reference.md docs\guides\bundle-corpus-index.md docs\guides\behavioral-metrics.md docs\guides\session-recording.md docs\guides\ai-integration.md docs\guides\concepts.md docs\README.md docs\architecture\ARCHITECTURE.md docs\architecture\drift-log.md docs\architecture\decisions.md docs\design\ai-first-dev-roadmap.md docs\design\2026-04-27-bundle-corpus-index-design.md docs\design\2026-04-27-bundle-corpus-index-implementation-plan.md docs\changelog.md docs\devlog\summary.md docs\devlog\detailed\2026-04-27_2026-04-27.md docs\threads\current\bundle-corpus-index-task-1
 ```
 
-- [ ] Create code-review iteration 1 folders:
-
-```powershell
-New-Item -ItemType Directory -Force docs\reviews\bundle-corpus-index-T1\2026-04-27\1\raw
-git diff --staged | Set-Content -Encoding UTF8 docs\reviews\bundle-corpus-index-T1\2026-04-27\1\diff.md
-```
-
-- [ ] Run two independent Codex reviewers and Claude when available. Save raw outputs as `raw/codex.md`, `raw/codex-2.md`, and `raw/opus.md`. The second Codex pass follows the current handoff for this roadmap loop because Claude quota may be limited; when Claude is reachable, keep all three outputs.
-
-```powershell
-$prompt = @'
-You are a senior code reviewer for civ-engine Spec 7: Bundle Search / Corpus Index. Review the staged diff only. The intent is an additive v0.8.3 API that adds BundleCorpus over closed FileSink bundle directories. Verify correctness, design, deterministic ordering, manifest validation, query validation, FileSink/runMetrics integration, tests, public exports, docs, version bump, and AGENTS.md doc discipline. Verify docs in the diff match implementation; flag stale signatures, removed APIs still mentioned, or missing coverage of new APIs in canonical guides. Do NOT modify files. Only return real findings with severity, explanation, and suggested fix. If there are no real issues, say ACCEPT.
-'@
-$jobs = @()
-$jobs += Start-Job -ScriptBlock { param($prompt) git diff --staged | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh -c approval_policy=never --sandbox read-only --ephemeral $prompt 2>&1 | Set-Content -Encoding UTF8 docs\reviews\bundle-corpus-index-T1\2026-04-27\1\raw\codex.md } -ArgumentList $prompt
-$jobs += Start-Job -ScriptBlock { param($prompt) git diff --staged | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh -c approval_policy=never --sandbox read-only --ephemeral $prompt 2>&1 | Set-Content -Encoding UTF8 docs\reviews\bundle-corpus-index-T1\2026-04-27\1\raw\codex-2.md } -ArgumentList $prompt
-$jobs += Start-Job -ScriptBlock { param($prompt) git diff --staged | claude -p --model opus --effort xhigh --append-system-prompt $prompt --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" 2>&1 | Set-Content -Encoding UTF8 docs\reviews\bundle-corpus-index-T1\2026-04-27\1\raw\opus.md } -ArgumentList $prompt
-Wait-Job -Job $jobs
-$jobs | Receive-Job
-```
-
-- [ ] Synthesize `docs/reviews/bundle-corpus-index-T1/2026-04-27/1/REVIEW.md` with provider-by-provider findings, severity, accepted/nitpick verdicts, and follow-up actions.
-- [ ] Stage the generated code-review artifacts after each review iteration:
-
-```powershell
-git add docs\reviews\bundle-corpus-index-T1
-```
-
-- [ ] If a reviewer reports a real issue, fix it, rerun affected tests, rerun full gates if behavior or public docs changed, stage the updated diff plus `docs\reviews\bundle-corpus-index-T1`, and create iteration `2` with the same raw/diff/REVIEW layout. Stop when reviewers accept or only nitpick.
-- [ ] For code-review iteration `2` or later, enrich the reviewer prompt with the previous iteration's `REVIEW.md` files and `docs/learning/lessons.md`. Use this prompt header before the task-specific review text:
+- [ ] Run the current AGENTS.md multi-CLI workflow on the staged diff. While active, synthesize iteration results into `docs/threads/current/bundle-corpus-index-task-1/2026-04-27/<iteration>/REVIEW.md`; when the task closes, move the objective folder to `docs/threads/done/bundle-corpus-index-task-1/`. Each iteration directory contains only `REVIEW.md`.
+- [ ] If temporary command captures are useful for synthesis, keep them outside the thread tree under `tmp/review-runs/bundle-corpus-index-task-1/2026-04-27/<iteration>/` and do not stage them.
+- [ ] Use a concise but effective reviewer prompt: include the intent, staged-diff scope, files to focus, docs/version expectations, and anti-regression checklist; ask reviewers to return only real findings with enough file/line evidence and impact to act.
+- [ ] If a reviewer reports a real issue, fix it, rerun affected tests, rerun full gates if behavior or public docs changed, stage the updated diff plus the summary-only thread artifact, and create iteration `2`. Stop when reviewers accept or only nitpick.
+- [ ] For code-review iteration `2` or later, enrich the reviewer prompt with all previous iteration `REVIEW.md` files and `docs/learning/lessons.md`. Use this prompt header before the task-specific review text:
 
 ```text
 This is Spec 7 code-review iteration <N>. Before reviewing the new staged diff, read every prior review synthesis for this task:
-- docs/reviews/bundle-corpus-index-T1/2026-04-27/1/REVIEW.md through docs/reviews/bundle-corpus-index-T1/2026-04-27/<N-1>/REVIEW.md
+- docs/threads/current/bundle-corpus-index-task-1/2026-04-27/1/REVIEW.md through docs/threads/current/bundle-corpus-index-task-1/2026-04-27/<N-1>/REVIEW.md
 - docs/learning/lessons.md
 
 Verify every real finding from all previous iterations was addressed. Do not re-flag resolved findings unless the new diff reintroduced the bug. Review the new staged diff for remaining real issues only.
 ```
 
-- [ ] If code-review consensus does not converge after 3 iterations, run the Opus tie-breaker and save its output before proceeding:
-
-```powershell
-New-Item -ItemType Directory -Force docs\reviews\bundle-corpus-index-T1\2026-04-27\tie-breaker\raw
-$tieBreakerPrompt = @'
-You are the final tie-breaker for civ-engine Spec 7 Bundle Corpus Index after 3 unresolved code-review iterations. Read the staged diff, docs/reviews/bundle-corpus-index-T1/2026-04-27/1/REVIEW.md, docs/reviews/bundle-corpus-index-T1/2026-04-27/2/REVIEW.md, docs/reviews/bundle-corpus-index-T1/2026-04-27/3/REVIEW.md, and docs/learning/lessons.md. You must choose exactly one verdict:
-ACCEPT - the current staged diff is safe to commit and remaining reviewer objections are overridden.
-REJECT - the diff must not commit; include the mandatory prescriptive patch or exact file edits required.
-'@
-git diff --staged | claude -p --model opus --effort xhigh --append-system-prompt $tieBreakerPrompt --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" 2>&1 | Set-Content -Encoding UTF8 docs\reviews\bundle-corpus-index-T1\2026-04-27\tie-breaker\raw\opus.md
-git add docs\reviews\bundle-corpus-index-T1\2026-04-27\tie-breaker
-```
-
-- [ ] If the tie-breaker returns `REJECT`, apply the prescribed patch, rerun affected tests and full gates, stage the updated diff, and run one final verification review that references the tie-breaker output. If it returns `ACCEPT`, record the override in `docs/reviews/bundle-corpus-index-T1/2026-04-27/tie-breaker/REVIEW.md` and the detailed devlog entry.
-- [ ] If Claude is unreachable because of quota or model access, keep `raw/opus.md` with the error text and proceed with the two Codex outputs, documenting the unreachable Claude reviewer in `REVIEW.md` and the devlog.
+- [ ] If code-review consensus does not converge after 3 iterations, run the Opus tie-breaker and summarize the final decision in `docs/threads/current/bundle-corpus-index-task-1/2026-04-27/tie-breaker/REVIEW.md`.
+- [ ] If the tie-breaker returns `REJECT`, apply the prescribed patch, rerun affected tests and full gates, stage the updated diff, and run one final verification review that references the tie-breaker summary. If it returns `ACCEPT`, record the override in the tie-breaker `REVIEW.md` and the detailed devlog entry.
+- [ ] If Claude is unreachable because of quota or model access, proceed with the remaining reviewer and document the unreachable Claude reviewer in `REVIEW.md` and the devlog.
 
 ### Step 8: Write final devlog entries after code review convergence
 
@@ -1103,4 +1066,4 @@ git commit -m "feat: add bundle corpus index"
 - [ ] `runMetrics(corpus.bundles(query), metrics)` is covered by tests.
 - [ ] Docs, ADRs, roadmap, changelog, devlog, API reference, README badge, and version bump ship in the same commit.
 - [ ] `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build` pass before commit.
-- [ ] Multi-CLI code review artifacts exist and converge under `docs/reviews/bundle-corpus-index-T1/2026-04-27/`.
+- [ ] Multi-CLI code review syntheses exist and converge under `docs/threads/done/bundle-corpus-index-task-1/2026-04-27/`.

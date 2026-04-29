@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Plan revision:** v7 (2026-04-27) — addresses iter-6 multi-CLI plan review. Both reviewers (Codex + Opus) converged on the same HIGH: v6 claimed the metrics-stripping fix landed at both T2 step 9 + T3 step 2 sites, but only T2 was actually patched (the v6 `replace_all` matched a string that only existed at the T2 site). T3 step 2 still had `expect(r1.bundle.ticks).toEqual(r2.bundle.ticks)` and would fail intermittently on `durationMs` timing noise. Iter-1..6 syntheses at `docs/reviews/synthetic-playtest/2026-04-27/plan-{1..6}/REVIEW.md`. v7 fixes:
+**Plan revision:** v7 (2026-04-27) — addresses iter-6 multi-CLI plan review. Both reviewers (Codex + Opus) converged on the same HIGH: v6 claimed the metrics-stripping fix landed at both T2 step 9 + T3 step 2 sites, but only T2 was actually patched (the v6 `replace_all` matched a string that only existed at the T2 site). T3 step 2 still had `expect(r1.bundle.ticks).toEqual(r2.bundle.ticks)` and would fail intermittently on `durationMs` timing noise. Iter-1 through iter-6 syntheses live under `docs/threads/done/synthetic-playtest/2026-04-27/` as `plan-1/REVIEW.md` through `plan-6/REVIEW.md`. v7 fixes:
 - (Both HIGH) Patches T3 step 2 with the same `stripTickMetrics` helper now in T2 step 9 (line 1220-1223). Verified via `grep -n "bundle\.ticks).toEqual"` returning zero matches and `grep -n "bundle\.ticks\.map.*stripTickMetrics"` returning two (T2 + T3 sites).
 
 **Goal:** Implement the engine-level Synthetic Playtest Harness defined in `docs/design/2026-04-27-synthetic-playtest-harness-design.md` (v10, converged after 10 multi-CLI review iterations).
@@ -47,39 +47,7 @@ After all 4 engine gates pass + impl + tests + docs are in place, but before the
 
 Per-task review attribution is cleaner this way; cumulative diffs muddle finding ownership across tasks.
 
-```bash
-# 1. Generate WIP diff (use the previous task's tip as base; main only for T1).
-git diff <prev-task-tip-or-main>..HEAD > /tmp/task-diff.patch
-
-# 2. Create review folder.
-mkdir -p docs/reviews/synthetic-playtest-T<N>/$(date +%Y-%m-%d)/1/raw
-
-# 3. Build prompt with task-specific context (intent, files-to-focus, anti-regression).
-cat > /tmp/review-prompt.txt <<'EOF'
-[task-specific code-review prompt per AGENTS.md baseline + task slice]
-EOF
-PROMPT=$(cat /tmp/review-prompt.txt)
-
-# 4. Run Codex + Opus in parallel (background; ~5-10 min each).
-git diff <prev-task-tip-or-main>..HEAD | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
-  -c approval_policy=never --sandbox read-only --ephemeral "$PROMPT" \
-  > docs/reviews/synthetic-playtest-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md 2>&1 &
-git diff <prev-task-tip-or-main>..HEAD | claude -p --model opus --effort xhigh \
-  --append-system-prompt "$PROMPT" \
-  --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" \
-  > docs/reviews/synthetic-playtest-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md 2>&1 &
-
-# 5. Wait via background poller (avoid harness sleep limits).
-until [ -s docs/reviews/synthetic-playtest-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md ] && \
-      [ -s docs/reviews/synthetic-playtest-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md ]; do
-  sleep 8;
-done
-echo done
-
-# 6. Synthesize REVIEW.md (severity-tagged findings in plain text). Address findings.
-# 7. If review iter > 1, update REVIEW.md with iter-N synthesis. Iterate to convergence.
-# 8. Bump version, finalize doc surface, commit.
-```
+Follow the current AGENTS.md thread workflow for each task. Use `docs/threads/current/synthetic-playtest-task-<n>/<date>/<iter>/REVIEW.md` while active, move the objective folder to `docs/threads/done/synthetic-playtest-task-<n>/` when closed, and keep each iteration directory summary-only. Temporary reviewer captures and local prompt text belong under `tmp/review-runs/synthetic-playtest-task-<n>/<date>/<iter>/` and are not staged. If review iter > 1, include all prior `REVIEW.md` files in the next prompt so reviewers verify fixes instead of re-flagging closed issues.
 
 If a CLI is unreachable (Gemini quota-out is the running condition during this work), proceed with the remaining reviewer and note in the devlog (per AGENTS.md "If a CLI is unreachable").
 
@@ -1726,7 +1694,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 After T1, T2, T3 are committed:
 
 - [ ] All 4 engine gates pass on the branch tip.
-- [ ] Reviews under `docs/reviews/synthetic-playtest-T{1,2,3}/...` show convergence (REVIEW.md per task).
+- [ ] Reviews under `docs/threads/done/synthetic-playtest-task-1/`, `docs/threads/done/synthetic-playtest-task-2/`, and `docs/threads/done/synthetic-playtest-task-3/` show convergence (REVIEW.md per task).
 - [ ] `docs/changelog.md` has three new version entries.
 - [ ] `docs/devlog/detailed/<latest>.md` has three new task entries.
 - [ ] `docs/api-reference.md` has the Synthetic Playtest sections; no stale signatures.

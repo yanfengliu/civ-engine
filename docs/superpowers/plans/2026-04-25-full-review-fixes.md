@@ -1,6 +1,6 @@
 # Full-Review Fix Plan — 2026-04-25
 
-**Source review:** `docs/reviews/2026-04-25_full-review/REVIEW.md`
+**Source review:** `docs/threads/done/full/2026-04-25/1/REVIEW.md`
 **Branch:** `agent/fix-full-review-2026-04-25`
 **Approach:** TDD, batch-by-batch. Each batch is a self-contained commit. Run tests after every batch; full gate (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) at the end. Final multi-CLI code review on the full diff before merge.
 

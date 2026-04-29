@@ -36,29 +36,7 @@ For every task T1–T8 that adds public surface, the same commit also updates:
 
 ### B. Per-task multi-CLI review (before commit)
 
-After tests + impl + all four engine gates pass, but before the commit:
-
-```bash
-# 1. Generate the WIP diff against main.
-git diff main..HEAD <files staged for this task> > /tmp/task-diff.patch
-
-# 2. Create review folder.
-mkdir -p docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw
-
-# 3. Run Codex + Opus + Gemini in parallel (background; ~5 min each).
-git diff main..HEAD | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
-  -c approval_policy=never --sandbox read-only --ephemeral '<task-specific prompt>' \
-  > docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw/codex.md &
-git diff main..HEAD | claude -p --model opus --effort xhigh \
-  --append-system-prompt '<task-specific prompt>' \
-  --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" \
-  > docs/reviews/session-recording-T<N>/$(date +%Y-%m-%d)/1/raw/opus.md &
-# Gemini: skip with note if quota-out.
-
-# 4. Wait for both to land via background polling pattern.
-# 5. Synthesize into REVIEW.md, address findings, iterate to convergence.
-# 6. THEN bump version, finalize changelog/devlog, commit.
-```
+After tests + impl + all four engine gates pass, but before the commit, follow the current AGENTS.md thread workflow. Use `docs/threads/current/session-recording-task-<n>/<date>/<iter>/REVIEW.md` while active, move the objective folder to `docs/threads/done/session-recording-task-<n>/` when closed, and keep each iteration directory summary-only. Temporary reviewer captures belong under `tmp/review-runs/session-recording-task-<n>/<date>/<iter>/` and are not staged. If a reviewer is unreachable, note it in the summary and devlog.
 
 Task-specific prompts focus reviewers on the new slice (e.g., for T2: "Review the new `MemorySink` implementation and tests against the spec §5 + §8 contracts").
 
@@ -2116,15 +2094,7 @@ New canonical guide. Sections:
 
 ### Step 9.4: Run full multi-CLI code review on the chained branch
 
-Per AGENTS.md mandatory multi-CLI review, run on the full diff `main..agent/session-recording`:
-
-```bash
-git diff main..HEAD | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh -c approval_policy=never --sandbox read-only --ephemeral '...'   # save to docs/reviews/session-recording/2026-04-27/1/raw/codex.md
-git diff main..HEAD | claude -p --model opus --effort xhigh --append-system-prompt '...' --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)"   # save to .../opus.md
-git diff main..HEAD | gemini -p '...' --model gemini-3.1-pro-preview   # save to .../gemini.md (if quota)
-```
-
-Synthesize into `REVIEW.md`; iterate until convergent.
+Per AGENTS.md mandatory multi-CLI review, run on the full diff and synthesize the result into `docs/threads/current/session-recording/<date>/<iter>/REVIEW.md`. Keep only `REVIEW.md` in the committed thread; any local command captures belong under `tmp/review-runs/session-recording/<date>/<iter>/` and are not staged. Iterate until convergent, then move the thread to `docs/threads/done/session-recording/`.
 
 ### Step 9.5: Bump + commit
 

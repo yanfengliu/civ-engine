@@ -4,7 +4,7 @@
 - For each desired change, make the change easy, then make the easy change.
 - CRITICAL: Before implementing a change, write a plan and ask Codex and Claude to brainstorm with you and double check. Iterate until opinions converge on approval, just like code review.
 - Verify every change against this project's gates: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. All four must pass before declaring a task done.
-- **Multi-CLI code review is mandatory for every behavior or code change before declaring the task done.** Run Codex + Claude per the Code review section, synthesize their findings into `docs/reviews/<scope>/<date>/<iteration_number>/REVIEW.md`, address every real finding, and re-review until reviewers nitpick instead of catching real bugs. This applies to all changes — single-file fixes, doc-only edits with code implications, refactors, and big features alike. Do not rationalize your way out of review with phrases like "single-file behavior fix," "trivial change," "TDD coverage is sufficient," "subagent dispatch is a tool not a mandate," or any equivalent. The Code review section is non-negotiable; the Team-of-subagents flexibility clause does NOT cover the multi-CLI review step. Skipping review is a process regression and must be corrected by running the review post-hoc on the same branch before merge.
+- **Multi-CLI code review is mandatory for every behavior or code change before declaring the task done.** Run Codex + Claude per the Code review section, synthesize their findings into `docs/threads/current/<objective>/<date>/<iteration_number>/REVIEW.md`, address every real finding, and re-review until reviewers nitpick instead of catching real bugs. Move the thread to `docs/threads/done/<objective>/` when the task is closed. This applies to all changes — single-file fixes, doc-only edits with code implications, refactors, and big features alike. Do not rationalize your way out of review with phrases like "single-file behavior fix," "trivial change," "TDD coverage is sufficient," "subagent dispatch is a tool not a mandate," or any equivalent. The Code review section is non-negotiable; the Team-of-subagents flexibility clause does NOT cover the multi-CLI review step. Skipping review is a process regression and must be corrected by running the review post-hoc on the same branch before merge.
 - When the change is visual:
   - Capture a before screenshot.
   - Apply the change.
@@ -33,12 +33,11 @@ When you do dispatch, the team roles below describe how to brief them. The Team 
   - Iterate with reviewers — diff reviews take ~5 minutes per CLI; use `run_in_background: true` and an `until [ -s <output-file> ]; do sleep 8; done` poller to wait without burning context or hitting harness sleep limits.
   - After addressing review comments, ask the reviewer to verify the fix.
   - If engineer + reviewer cannot reach consensus after 3 iterations, escalate to the Tie-Breaker.
-  - Save reviewer feedback under `docs/reviews/<scope>/<date>/<iteration_number>/`, mirroring the full-codebase review convention (see `docs/reviews/full/<date>/<iteration_number>/` for the existing precedent). For per-task diff reviews, `<scope>` is a kebab-case task slug (e.g., `synthetic-playtest-T2`, `behavioral-metrics-T1`); for full-codebase reviews `<scope>` is `full`. Each iteration directory contains:
-    - `raw/codex.md`, `raw/opus.md` — per-CLI raw outputs (Claude's file is `opus.md` to match the existing convention; optional `*.stdout.log` / `*.stderr.log` companions for raw command output)
-    - `diff.md` — the diff being reviewed
-    - `REVIEW.md` — your synthesized summary of the raw outputs with severity-tagged findings
+  - Save reviewer synthesis under `docs/threads/current/<objective>/<date>/<iteration_number>/`, mirroring the full-codebase review convention (see `docs/threads/done/full/<date>/<iteration_number>/` for historical precedent). The `<objective>` folder is a concise kebab-case phrase naming the work, such as `synthetic-playtest-task-2`, `behavioral-metrics-task-1`, or `thread-archive-migration`; for full-codebase reviews, use `full`.
+  - Each iteration directory contains only `REVIEW.md`, the concise synthesized summary with severity-tagged findings and the final disposition. Do not commit raw CLI output, stderr/stdout logs, prompts, or diff snapshots inside `docs/threads`.
+  - If temporary capture files are useful while synthesizing a review, write them outside the thread tree under `tmp/review-runs/<objective>/<date>/<iteration_number>/` and do not stage them. The committed thread artifact is the summary only.
   - `<iteration_number>` starts at 1 and increments for each re-review. Re-reviewers should consider previous iterations' `REVIEW.md` + `docs/learning/lessons.md` + the new diff so they verify earlier fixes landed and don't re-flag old issues.
-  - After folding the final iteration's `REVIEW.md` into the devlog entry for the task, the review directory stays in `docs/reviews/<scope>/<date>/` as a historical artifact (do not delete — these are valuable audit trails alongside the full-review history).
+  - After folding the final iteration's `REVIEW.md` into the devlog entry for the task, move the objective folder from `docs/threads/current/` to `docs/threads/done/`. The done thread stays as a historical artifact (do not delete — these are valuable audit trails alongside the full-review history).
   - Continue iterating until reviewers nitpick instead of catching real bugs / giving substantial feedback. Do not get stuck in an infinite loop.
 - **Code reviewer**: Follow the Code review section.
 - **Tie breaker**: Use `claude --model opus`. Its prompt dictates that it must definitively choose to either ACCEPT the current diff (overriding the reviewer) or REJECT it with a mandatory, prescriptive patch. The Tie-Breaker's decision is final.
@@ -57,7 +56,7 @@ This section is the operational implementation of the Core-rules "Multi-CLI code
 
 - A baseline prompt is below; **enrich it with task-specific context** for real reviews — the change's intent, prior-iteration findings to verify, files to focus on, and an anti-regression checklist. The bare baseline returns generic feedback; useful reviews need the specifics.
 
-  > "You are a senior code reviewer. Flag bugs, security issues, and performance concerns. Do NOT modify files or propose patches. Only return findings, explanations, and suggestions in plain text. Only point out an issue if it is real and important. If there is no issue, say so instead of nit-picking."
+  > "You are a senior code reviewer. Flag bugs, security issues, and performance concerns. Do NOT modify files or propose patches. Only return findings, explanations, and suggestions in plain text. Be concise but effective: keep the reasoning, impact, and file/line evidence needed to act without preserving transcripts, command chatter, or repetitive detail. Only point out an issue if it is real and important. If there is no issue, say so instead of nit-picking."
 
 - Codex:
   - `git diff [branch] | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh -c approval_policy=never --sandbox read-only --ephemeral <prompt>`
@@ -67,7 +66,7 @@ This section is the operational implementation of the Core-rules "Multi-CLI code
   - For full-codebase (no diff): pass the prompt as the positional argument: `claude -p "<full prompt>" --model opus --effort xhigh --allowedTools "Read,Glob,Grep,Bash(git diff *),Bash(git log *),Bash(git show *),Bash(wc *),Bash(ls *),Bash(find *)"`. `--append-system-prompt` is unnecessary and the long-prompt-as-stdin form is not needed.
 - For full-codebase reviews (no diff), drop the `git diff` pipe and let each CLI agentically explore the workspace from its CWD; keep the same model/effort flags.
 - **Diff reviews take ~5 minutes per CLI on a multi-hundred-line diff.** Run them in parallel with `run_in_background: true`. Wait via a single background `until` poller (`until [ -s codex.txt ] && [ -s claude.txt ]; do sleep 8; done`) so the harness's no-long-sleeps guard doesn't fire and you don't poll repeatedly.
-- **If a CLI is unreachable** (quota exhaustion, model name rejected by harness), proceed with the remaining reviewer and note the unreachable CLI in the devlog.
+- **If a CLI is unreachable** (quota exhaustion, model name rejected by harness), proceed with the remaining reviewer and note the unreachable CLI in `REVIEW.md` and the devlog.
 
 ## Git
 
@@ -83,7 +82,7 @@ This section is the operational implementation of the Core-rules "Multi-CLI code
 Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` at session start. Key directories:
 
 - `src`: app code.
-- `docs`: architecture, devlogs, reviews, API, tutorials, guides.
+- `docs`: architecture, devlogs, threads, API, tutorials, guides.
 - `design`: app and mechanism notes.
 
 ### Discipline (mandatory; not optional)

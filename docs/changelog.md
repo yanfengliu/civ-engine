@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.4 - 2026-04-28
+
+Process and documentation archive cleanup for review/thread artifacts.
+
+### Changed
+
+- Renamed the committed review archive from `docs/reviews/` to `docs/threads/`.
+- Added the canonical thread split: `docs/threads/current/` for active objectives and `docs/threads/done/` for closed objectives.
+- Normalized thread objective folders to concise kebab-case names, preserving the date/iteration structure inside each objective.
+- Retired committed raw reviewer output, stderr/stdout logs, prompt files, and diff snapshots from thread iteration folders. Each committed iteration now keeps only the synthesized `REVIEW.md`.
+- Updated AGENTS.md review guidance so reviewers return concise but effective findings with enough evidence and impact to act, without preserving command chatter or repetitive transcript detail.
+
+### Validation
+
+- `npm test -- tests/docs-threads.test.ts`
+- `npm test` (866 passed + 2 todo)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+
 ## 0.8.3 - 2026-04-27
 
 Spec 7 - Bundle Search / Corpus Index. Tier-2 of the AI-first dev roadmap; turns closed FileSink bundle directories into a deterministic metadata query surface and lazy bundle iterable.
@@ -902,7 +922,7 @@ Most consumers should be unaffected — `setPosition`, `setComponent`, and `addC
 
 ## 0.4.1 - 2026-04-25
 
-Iter-2 critical fixes from the same-day full-codebase review (`docs/reviews/full/2026-04-25/2/`). Two correctness/isolation bugs the iter-1 fixes left open. 450 tests pass (up from 446 in 0.4.0).
+Iter-2 critical fixes from the same-day full-codebase review (`docs/threads/done/full/2026-04-25/2/`). Two correctness/isolation bugs the iter-1 fixes left open. 450 tests pass (up from 446 in 0.4.0).
 
 ### Fixed
 
@@ -964,7 +984,7 @@ This release is the result of a multi-CLI full-codebase review (Codex `gpt-5.4`,
 
 - New `docs/devlog/detailed/2026-04-25_2026-04-25.md` with the full per-batch breakdown.
 - New `docs/superpowers/plans/2026-04-25-full-review-fixes.md` plan file used to drive the implementation.
-- New `docs/reviews/full/2026-04-25/1/` review artifacts (`PROMPT.md`, `REVIEW.md`, `raw/codex.md`, `raw/gemini.md`, `raw/opus.md`).
+- New `docs/threads/done/full/2026-04-25/1/` review artifacts (`review prompt (not retained)`, `REVIEW.md`, Codex summary, Gemini summary, Opus summary).
 - 5 new rows in `docs/architecture/drift-log.md` covering fail-fast semantics, `TState` generic, snapshot v5, `detectInPlaceMutations`, and the GameLoop tick-advance change.
 - ARCHITECTURE.md updated for snapshot v5, the new tick-failure section, the `TState` generic, and the `setMeta` uniqueness throw.
 - Updated the README, architecture notes, API reference, RTS primitives guide, and sub-grid movement guide to document the higher-level occupancy binding and the new occupancy benchmark metrics.
@@ -1047,17 +1067,17 @@ This release hardens the engine API and package boundary while adding RTS-scale 
 ### Documentation
 
 - Added `docs/README.md`.
-- Added `docs/reviews/done/ENGINE_HARDENING_PLAN.md`.
+- Added `docs/threads/done/engine-hardening/2026-04-10/1/REVIEW.md`.
 - Added `docs/guides/public-api-and-invariants.md`.
 - Added `docs/guides/ai-integration.md`.
 - Added `docs/guides/scenario-runner.md`.
 - Added `docs/guides/rendering.md`.
 - Added `docs/guides/rts-primitives.md`.
 - Added `docs/guides/debugging.md`.
-- Added `docs/reviews/done/AI_FIRST_ENGINE_PLAN.md`.
-- Added `docs/reviews/done/AI_FINAL_FORM_PLAN.md`.
-- Added `docs/reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md`.
-- Renamed the completed render/debugger review doc to `docs/reviews/done/RENDER_CONTRACT_AND_DEBUGGER_PLAN.md` and trimmed the root README back to an overview so `docs/api-reference.md` remains the single authoritative API surface.
+- Added `docs/threads/done/ai-first-engine/2026-04-11/1/REVIEW.md`.
+- Added `docs/threads/done/ai-final-form/2026-04-11/1/REVIEW.md`.
+- Added `docs/threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md`.
+- Renamed the completed render/debugger review doc to `docs/threads/done/render-contract-debugger/2026-04-10/1/REVIEW.md` and trimmed the root README back to an overview so `docs/api-reference.md` remains the single authoritative API surface.
 - Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
 - Reorganized documentation entry points around the docs hub and focused plan/review docs.
 - Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command submission and execution outcomes, structured tick failures, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.

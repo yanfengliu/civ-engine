@@ -47,40 +47,9 @@ Per AGENTS.md doc-discipline: structural docs land in the same commit as the cod
 
 ### B. Per-task multi-CLI review (before commit)
 
-After all four engine gates pass (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) but before the commit. Review-folder layout is `docs/reviews/behavioral-metrics-T1/<date>/<iter>/raw/{codex,opus}.md` (kebab-case scope + date + iteration, matching AGENTS.md and Spec 3 / Spec 8 design-review precedent). Single task → scope is `behavioral-metrics-T1`; iteration starts at `1` and increments if reviewers' findings need a second pass.
+After all four engine gates pass (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) but before the commit, follow the current AGENTS.md thread workflow. Use `docs/threads/current/behavioral-metrics-task-1/<date>/<iter>/REVIEW.md` while active, move the objective folder to `docs/threads/done/behavioral-metrics-task-1/` when closed, and keep each iteration directory summary-only. Temporary reviewer captures belong under `tmp/review-runs/behavioral-metrics-task-1/<date>/<iter>/` and are not staged.
 
-```bash
-DATE=$(date +%Y-%m-%d)
-ITER=1
-mkdir -p docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw
-
-cat > /tmp/review-prompt.txt <<'EOF'
-[task-specific code-review prompt — see Spec 8 design + per-task scope]
-EOF
-
-PROMPT=$(cat /tmp/review-prompt.txt)
-
-# Review the staged diff before committing (pre-commit review pattern).
-git diff --staged | codex exec --model gpt-5.4 -c model_reasoning_effort=xhigh \
-  -c approval_policy=never --sandbox read-only --ephemeral "$PROMPT" \
-  > docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/codex.md 2>&1 &
-
-git diff --staged | claude -p --model opus --effort xhigh \
-  --append-system-prompt "$PROMPT" \
-  --allowedTools "Read,Bash(git diff *),Bash(git log *),Bash(git show *)" \
-  > docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/opus.md 2>&1 &
-
-# Wait via background poller.
-until [ -s docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/codex.md ] && \
-      [ -s docs/reviews/behavioral-metrics-T1/$DATE/$ITER/raw/opus.md ]; do
-  sleep 8;
-done
-
-# Synthesize REVIEW.md (in the same iteration directory), address findings,
-# iterate if needed (bump ITER and re-run), then commit.
-```
-
-If a reviewer is unreachable (Gemini quota-out has been the running condition), proceed with the remaining reviewer per AGENTS.md.
+If a reviewer is unreachable, proceed with the remaining reviewer per AGENTS.md and note it in `REVIEW.md` plus the devlog.
 
 ### C. Convergence rule
 
@@ -1263,7 +1232,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 After the single Spec 8 commit (Step 20) lands:
 
 - [ ] All four engine gates pass at the tip.
-- [ ] Reviews under `docs/reviews/behavioral-metrics-T1/<date>/<iter>/...` show convergence (single task → single scope folder; iteration directories under it).
+- [ ] Reviews under `docs/threads/done/behavioral-metrics-task-1/<date>/<iter>/...` show convergence (single task → single scope folder; iteration directories under it).
 - [ ] `docs/changelog.md` has one new version entry (0.8.2).
 - [ ] `docs/devlog/detailed/<latest>.md` has one new task entry.
 - [ ] `docs/api-reference.md` has the Behavioral Metrics section.

@@ -40,25 +40,25 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Pathfinding](guides/pathfinding.md)
 - [Behavior Trees](guides/behavior-trees.md)
 
-## Plans and Reviews
+## Plans and Threads
 
-Active future work lives in focused plan and review documents rather than a generic roadmap page.
+Active work and review syntheses live under `threads/current/`; closed objectives live under `threads/done/`. Each objective folder is a concise kebab-case thread name, then date, then iteration, with `REVIEW.md` as the committed summary.
 
 ### Active
 
-- No active review TODOs at the moment. Re-open a focused plan only when benchmark data or a concrete game workload justifies it.
+- No active threads at the moment. Re-open a focused plan only when benchmark data or a concrete game workload justifies it.
 
 ### Implemented
 
-- [AI Runtime Feedback Plan](reviews/done/AI_RUNTIME_FEEDBACK_PLAN.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
-- [AI Final Form Plan](reviews/done/AI_FINAL_FORM_PLAN.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
-- [AI-First Engine Plan](reviews/done/AI_FIRST_ENGINE_PLAN.md) - Machine-facing command/debug/history improvements that have already landed
-- [Render Contract and Debugger Plan](reviews/done/RENDER_CONTRACT_AND_DEBUGGER_PLAN.md) - Render-facing projection and debugger support work that has already landed
-- [RTS Engine Scale Plan](reviews/done/RTS_ENGINE_SCALE_PLAN.md) - RTS-scale support work that has already landed
-- [Expert Review Remaining Candidates](reviews/done/EXPERT_REVIEW_REMAINING.md) - Archived on 2026-04-11; remaining SoA and dependency-graph ideas stay deferred until measured workloads justify them
-- [Expert Review](reviews/done/EXPERT_REVIEW.md) - Review findings already addressed
-- [Engine Design Review](reviews/done/ENGINE_DESIGN_REVIEW.md) - Broader engine assessment
-- [Engine Hardening Plan](reviews/done/ENGINE_HARDENING_PLAN.md) - Hardening work that has already landed
+- [AI Runtime Feedback Plan](threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
+- [AI Final Form Plan](threads/done/ai-final-form/2026-04-11/1/REVIEW.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
+- [AI-First Engine Plan](threads/done/ai-first-engine/2026-04-11/1/REVIEW.md) - Machine-facing command/debug/history improvements that have already landed
+- [Render Contract and Debugger Plan](threads/done/render-contract-debugger/2026-04-10/1/REVIEW.md) - Render-facing projection and debugger support work that has already landed
+- [RTS Engine Scale Plan](threads/done/rts-engine-scale/2026-04-10/1/REVIEW.md) - RTS-scale support work that has already landed
+- [Expert Review Remaining Candidates](threads/done/expert-review-remaining/2026-04-11/1/REVIEW.md) - Archived on 2026-04-11; remaining SoA and dependency-graph ideas stay deferred until measured workloads justify them
+- [Expert Review](threads/done/expert-review/2026-04-10/1/REVIEW.md) - Review findings already addressed
+- [Engine Design Review](threads/done/engine-design-review/2026-04-10/1/REVIEW.md) - Broader engine assessment
+- [Engine Hardening Plan](threads/done/engine-hardening/2026-04-10/1/REVIEW.md) - Hardening work that has already landed
 
 ## History and Internal Process
 

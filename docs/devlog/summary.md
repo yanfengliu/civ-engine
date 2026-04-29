@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-28: Thread archive migration (v0.8.4) - Renamed `docs/reviews` to `docs/threads`, split active vs closed objectives into `current` and `done`, preserved date/iteration folders, and made committed thread iterations `REVIEW.md`-only with a regression test.
 - 2026-04-27: Spec 7 - Bundle Search / Corpus Index (v0.8.3) - `BundleCorpus` indexes closed FileSink bundle directories, exposes manifest-only `entries(query?)`, lazy `bundles(query?)`, deterministic ordering, metadata/failure/attachment summaries, and `CorpusIndexError` diagnostics. Adds ADRs 28-31 and the bundle corpus guide. 20 new tests; review-fix gates: 865 passed + 2 todo.
 - 2026-04-27: Spec 8 - Behavioral Metrics over Corpus (v0.8.2) - `runMetrics(bundles, metrics)` reducer over `Iterable<SessionBundle>`, 11 engine-generic metrics, accumulator-style `Metric`, and `compareMetricsResults`. ADRs 23-27. 44 new tests; 842 passed + 2 todo at ship.
 - 2026-04-27: Spec 3 T3 (v0.8.1) - Determinism integration tests and structural docs completed the synthetic playtest chain. 7 new tests; 798 passed + 2 todo at ship.

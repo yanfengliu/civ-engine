@@ -1,9 +1,0 @@
-Reviewing plan iter-6 of docs/design/2026-04-27-synthetic-playtest-implementation-plan.md.
-
-Iter-5: Opus ACCEPT, Codex 1 HIGH (`bundle.ticks` deep-equal compares timing-noisy `metrics.durationMs`). v6 (under review) strips metrics before comparing tick entries — compares `{ tick, diff, events, debug }`. Both sites (T2 step 9 + T3 step 2) updated via replace_all.
-
-Engine facts: SessionTickEntry has metrics: WorldMetrics|null at session-bundle.ts:56; WorldMetrics.durationMs is performance.now()-backed at world-internal.ts:171.
-
-Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. Per AGENTS.md "Continue iterating until reviewers nitpick instead of catching real bugs."
-
-Return findings with severity tags. If accept, say "ACCEPT".

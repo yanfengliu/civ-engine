@@ -1,7 +1,0 @@
-Reviewing plan iter-5 of docs/design/2026-04-27-synthetic-playtest-implementation-plan.md.
-
-Iter-4: Opus ACCEPT, Codex 1 HIGH + 1 MED (CommandExecutionResult.sequence doesn't exist; dual-run partial coverage). v5 (under review) replaces field-by-field comparison with whole-array `expect(...).toEqual(...)` deep-equality for commands/executions/ticks/snapshots/failures, plus destructure-rest stripping of sessionId+recordedAt for metadata comparison. Same fix in T2 step 9 + T3 step 2.
-
-Engine facts: CommandExecutionResult has submissionSequence + tick (no `sequence`) at world.ts:145-156. RecordedCommand has sequence at session-bundle.ts:43.
-
-Bar for ACCEPT: no remaining BLOCKER/HIGH/MED. NITs allowed. If accept, say "ACCEPT".

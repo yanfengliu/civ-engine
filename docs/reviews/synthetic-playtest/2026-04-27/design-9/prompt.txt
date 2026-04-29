@@ -1,7 +1,0 @@
-Reviewing iter-9 of docs/design/2026-04-27-synthetic-playtest-harness-design.md.
-
-Iter-8: Opus ACCEPT, Codex 1 MED (`bundle.commands[].submissionSequence` doesn't exist on RecordedCommand). v9 fixes by using `bundle.commands[].sequence` (the actual property name on RecordedCommand per src/session-bundle.ts:43). 4 sites updated.
-
-Engine facts: RecordedCommand has `sequence: number` (session-bundle.ts:43); CommandExecutionResult has `submissionSequence: number` (world.ts:145-153). World<TEventMap, TCommandMap, TComponents, TState> at world.ts:233. SessionReplayer.selfCheck skips failed segments only when failedTick<segmentEnd (session-replayer.ts:286). World.step advances world.tick on poison.
-
-Bar: no remaining BLOCKER/HIGH/MED. Convergence = nitpicks only. If accept, say "ACCEPT".
