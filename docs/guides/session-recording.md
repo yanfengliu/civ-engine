@@ -214,3 +214,19 @@ Replay treats synthetic bundles like organic recordings: `SessionReplayer.fromBu
 - **Replay across recorded `TickFailure` is out of scope.** `WorldSnapshotV5` doesn't carry poison state; future spec extends to v6.
 - **Sinks are synchronous.** Composes with `World.onDiff`'s synchronous listener invariant. Async/streaming sinks revisit when synthetic playtest needs them.
 - **Counterfactual replay (input substitution + divergence tracking) is a future spec.** v1 replays the recording verbatim.
+
+
+## Inspecting bundles (v0.8.7+)
+
+For programmatic navigation of a recorded bundle — marker-anchored frames, per-tick events/commands/markers/diff views, two-path state diffs — wrap the bundle in a `BundleViewer`:
+
+```ts
+import { BundleViewer } from 'civ-engine';
+const viewer = new BundleViewer(bundle, { worldFactory });
+const frame = viewer.atMarker('failure-checkpoint');
+console.log(frame.events, frame.commands);
+const world = frame.state();           // paused World at that tick
+const delta = frame.diffSince(0);      // BundleStateDiff over [0, frame.tick]
+```
+
+`viewer.replayer()` returns the lazily-constructed memoized `SessionReplayer` if you need direct `selfCheck()` or `openAt()` access. See `docs/guides/bundle-viewer.md` for the full surface (sparse-tick semantics, content-bounded `recordedRange` for incomplete bundles, layered freezing model, and BundleCorpus integration).

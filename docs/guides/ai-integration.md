@@ -320,3 +320,26 @@ const cmp = compareMetricsResults(baseline, current);
 ```
 
 See `docs/guides/behavioral-metrics.md` for the policy-authoring guide, custom-metric pattern, JSON-stable null semantics for empty-corpus `Stats`, and the submission-stage vs execution-stage acceptance/failure split.
+
+
+## Tier-3: Bundle Viewer (Spec 4)
+
+`BundleViewer` is the agent-facing inspection layer over a `SessionBundle`. Where `SessionReplayer` answers "give me a paused World at tick T," `BundleViewer` answers "what happened at marker X, what changed between ticks A and B, and what commands/events/markers exist in this range." The fluent surface mirrors the kind of investigation an agent runs after a failure or anomaly:
+
+```typescript
+import { BundleViewer, BundleCorpus } from 'civ-engine';
+
+const corpus = new BundleCorpus('artifacts/playtests');
+const failed = corpus.entries({ failedTickCount: { min: 1 } });
+for (const entry of failed) {
+  const viewer = entry.openViewer({ worldFactory });
+  const failureTick = viewer.bundle.metadata.failedTicks![0];
+  const before = viewer.atTick(failureTick - 1);
+  const events = [...viewer.events({ from: failureTick - 5, to: failureTick - 1 })];
+  console.log(entry.key, before.state().getResources('gold', /* entity */ 1), events.length);
+}
+```
+
+Selective runtime freezing means agents can pass frames around without defensive copies. `frame.diffSince(otherTick)` returns either a folded TickDiff (cheap, common case) or a snapshot-derived diff (correct across sparse intermediates and entity recycling) and exposes the source via `BundleStateDiff.source` so the agent can reason about confidence.
+
+See `docs/guides/bundle-viewer.md` for the full surface, including the `worldFactory` requirements and the failure-in-range error semantics.

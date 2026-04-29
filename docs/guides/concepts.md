@@ -223,6 +223,7 @@ The engine ships several standalone data structures that game code instantiates 
 - **`createBehaviorTree` / `BTState`** — behavior-tree framework
 - **`SessionRecorder` / `SessionReplayer` / `SessionBundle` / `SessionSink` / `SessionSource` / `MemorySink` / `FileSink` / `Marker` / `RecordedCommand`** — capture deterministic, replayable bundles of any World run; load + replay + selfCheck; companion adapter `scenarioResultToBundle()`. See `docs/guides/session-recording.md`.
 - **`BundleCorpus`** - manifest-first listing, filtering, and lazy loading over closed `FileSink` bundle directories. See `docs/guides/bundle-corpus-index.md`.
+- **`BundleViewer` / `diffSnapshots`** — programmatic agent-driver API over a `SessionBundle`: marker-anchored navigation, per-tick frames with selective runtime freezing, lazy memoized `SessionReplayer`, two-path `frame.diffSince` (folded TickDiffs vs snapshot-via-`diffSnapshots`), `BundleCorpusEntry.openViewer()` integration. See `docs/guides/bundle-viewer.md`.
 
 `SpatialGrid` answers proximity questions (which entities are near point P) and is owned by `World`. The standalone utilities answer different questions and let game code mix them as needed without paying for what it doesn't use.
 

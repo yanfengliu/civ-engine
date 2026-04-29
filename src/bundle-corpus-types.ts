@@ -95,6 +95,13 @@ export interface BundleCorpusEntry {
     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
     TDebug = JsonValue,
   >(): SessionBundle<TEventMap, TCommandMap, TDebug>;
+  openViewer<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TDebug = JsonValue,
+  >(
+    options?: import('./bundle-viewer.js').BundleViewerOptions<TEventMap, TCommandMap>,
+  ): import('./bundle-viewer.js').BundleViewer<TEventMap, TCommandMap, TDebug>;
 }
 
 interface CorpusIndexErrorDetailsInput {

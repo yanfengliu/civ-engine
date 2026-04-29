@@ -349,3 +349,28 @@ it('creates an entity in the diff', () => {
   expect(diff.entities.created).toContain(0);
 });
 ```
+
+
+## `diffSnapshots(a, b, opts?)` — snapshot-pair diff helper (v0.8.7)
+
+The `diffSnapshots` helper computes a `TickDiff`-shaped delta between any two `WorldSnapshot`s. It is part of the Bundle Viewer surface (Spec 4) and re-exported from `civ-engine` for live-world snapshot comparison in tests and tools:
+
+```ts
+import { diffSnapshots } from 'civ-engine';
+const td = diffSnapshots(snapA, snapB, { tick: 42 });
+// td.entities.created / .destroyed
+// td.components / .resources / .state / .tags / .metadata
+// td.tick === opts.tick ?? b.tick ?? 0
+```
+
+**Scope is intentionally narrow.** `diffSnapshots` only surfaces fields that have a `TickDiff` slot. Snapshot-only fields are excluded:
+
+- `WorldSnapshot.config` and any nested config field — registration invariant.
+- `WorldSnapshot.rng` — divergences here are determinism violations; selfCheck's domain.
+- `WorldSnapshot.componentOptions` — registration invariant.
+- `WorldSnapshot.entities.{generations,alive,freeList}` directly — alive transitions surface as `TickDiff.entities.created/destroyed`.
+- `WorldSnapshot.version` — must agree by construction within one bundle.
+
+For full-snapshot comparison (audit, version migration, etc.), serialize both worlds and compare via JSON-deep-equal or a dedicated tool.
+
+The viewer uses `diffSnapshots` internally for `frame.diffSince`'s snapshot fallback path; see `docs/guides/bundle-viewer.md`.

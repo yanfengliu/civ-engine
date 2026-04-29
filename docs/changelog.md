@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.8.7 - 2026-04-28
+
+Spec 4 - Standalone Bundle Viewer. Tier-3 of the AI-first dev roadmap; programmatic agent-driver API for navigating, slicing, and diffing a `SessionBundle`. Composes with `BundleCorpus` and `SessionReplayer`.
+
+### New (additive)
+
+- **`BundleViewer<TEventMap, TCommandMap, TDebug>`**: wraps a `SessionBundle`; exposes navigation by tick (`atTick`) / marker (`atMarker`) / timeline; iterators for events / commands / executions / markers / failures with eager bound validation; lazy memoized `SessionReplayer` constructed from supplied `worldFactory`.
+- **`BundleViewer.fromSource(source, options?)`**: materializes through `SessionSource.toBundle()` and constructs a viewer.
+- **`TickFrame`**: per-tick view with `events`, `commands`, `executions`, `markers`, `diff`, `metrics`, `debug`, plus `state()`, `snapshot()`, `diffSince(otherTick, options?)`. Selective runtime freezing — outer frame + per-tick arrays frozen one-time; array elements not individually frozen (documented bypass).
+- **`RecordedTickFrameEvent`** (frame-anchored, no per-event tick) and **`RecordedTickEvent`** (iterator-yielded, with tick).
+- **`BundleStateDiff`** with `fromTick`, `toTick`, `source: 'tick-diffs' | 'snapshot'`, and a `TickDiff`-shaped `diff`. `frame.diffSince` folds recorded `TickDiff`s by default, falls back to snapshot path under `options.fromSnapshot`, sparse `SessionTickEntry` in range, or entity-ID recycling.
+- **`diffSnapshots(a, b, opts?)`**: standalone snapshot-pair helper exported from `src/snapshot-diff.ts` and re-exported via `bundle-viewer.ts`. Returns a `TickDiff`-shaped object covering entity / component / resource / state / tags / metadata changes; intentionally excludes `WorldSnapshot.config`, `rng`, `componentOptions`, `entities.{generations,alive,freeList}` directly, and `version` (those are registration / determinism invariants).
+- **`BundleViewerError`** (codes: `marker_missing`, `tick_out_of_range`, `world_factory_required`, `query_invalid`) with JSON-shaped `details`.
+- **`BundleCorpusEntry.openViewer<TEventMap, TCommandMap, TDebug>(options?)`**: one-line corpus-to-viewer composition. Attached before `Object.freeze` in `makeEntry()`; entries remain frozen.
+- New query types: `MarkerQuery`, `EventQuery`, `CommandQuery`, `ExecutionQuery`, `TickRange`, `DiffOptions`.
+
+### Behavior callouts
+
+- **Content-bounded `recordedRange`**: for incomplete/terminated bundles where `metadata.endTick` overstates actual recorded content (recorder sets `endTick = world.tick` at disconnect even when `_terminated` short-circuits later writes), the viewer clamps `recordedRange.end = min(metadata.endTick, max stream tick)`. `replayableRange` matches `SessionReplayer.openAt`'s upper bound.
+- **Failure-in-range** for `frame.diffSince`: if any recorded `ft` satisfies `fromTick < ft <= toTick`, the viewer constructs `BundleIntegrityError({ code: 'replay_across_failure', failedTicks, fromTick, toTick })` at the call site. The class and `details.code` match what `openAt` throws so `instanceof` checks work uniformly; the details payload is enriched for the range.
+- **`SessionReplayer` is unchanged.** v1 considered (and dropped) a `bundle` getter and a BYO replayer option per ADR 35; the viewer constructs the replayer lazily and memoizes it.
+- **Eager query validation**: invalid `from`/`to`/`otherTick` (NaN, non-finite, non-integer) throws synchronously at the call site; iteration body is lazy.
+
+### ADRs
+
+- ADR 32: Viewer is a thin wrapper over `SessionReplayer` + bundle indices.
+- ADR 33: `TickFrame` is a value, not a reactive object; selective runtime freezing.
+- ADR 34: `diffSince` has two paths and the source is observable; failure-in-range constructs an enriched `BundleIntegrityError`.
+- ADR 35: No BYO `SessionReplayer` in v1.
+
+### Validation
+
+All four engine gates pass: `npm test` (936 passed + 2 todo, +69 new across `tests/snapshot-diff.test.ts`, `tests/bundle-viewer.test.ts`, `tests/bundle-corpus-viewer.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 0.8.6 - 2026-04-28
 
 Process documentation: bump code-reviewer CLI commands to the most-capable, largest-context models reachable under the project's standard auth (Claude account + Codex ChatGPT login).

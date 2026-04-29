@@ -74,9 +74,9 @@ Tier 3 is leverage on top of an already-working autonomous loop. Defer until Tie
 
 ### Spec 4: Standalone Bundle Viewer
 
-Status: **Proposed.**
+Status: **Implemented** (v0.8.7). See `docs/threads/done/bundle-viewer/DESIGN.md` and `docs/threads/done/bundle-viewer/PLAN.md`.
 
-What it delivers: a separate package (in this repo, sibling to engine sources) that loads bundles, scrubs a timeline, jumps to markers, diffs state between any two ticks, and replays into a paused World. Includes a programmatic agent-driver API: `bundle.atMarker(id).state(...).events(...).diffSince(...)`. UI optional in v1; CLI / library is sufficient.
+What it delivers: `BundleViewer` wraps a `SessionBundle` and exposes navigation by tick number, by marker ID, and by linear timeline iteration. Returns `TickFrame` views with selective runtime freezing (outer frame + per-tick arrays frozen one-time; elements not). Lazily opens a paused World at any reachable tick via `frame.state()` / `viewer.replayer()`. `frame.diffSince(otherTick)` chooses between folded recorded `TickDiff`s and a snapshot-via-`diffSnapshots` fallback, and explicitly throws when a recorded `TickFailure` falls in the range. Composes with `BundleCorpus` via `BundleCorpusEntry.openViewer()`. UI is intentionally out of scope for v1.
 
 What it unlocks: human productivity. Agents can drive the bundle programmatically without it; humans benefit from the GUI scrubber.
 
@@ -160,7 +160,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `docs/threads/done/session-recording/DESIGN.md` (v5) + `docs/threads/done/session-recording/PLAN.md` |
 | 2    | Game-Side Annotation UI              | Proposed   | not yet drafted                                           |
 | 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
-| 4    | Standalone Bundle Viewer             | Proposed   | not yet drafted                                           |
+| 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/threads/done/bundle-viewer/PLAN.md` (v2) |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |
 | 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |

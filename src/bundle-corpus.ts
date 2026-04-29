@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import type { JsonValue } from './json.js';
+import { BundleViewer, type BundleViewerOptions } from './bundle-viewer.js';
 import type { SessionBundle, SessionMetadata } from './session-bundle.js';
 import { FileSink } from './session-file-sink.js';
 import type { SessionSource } from './session-sink.js';
@@ -221,6 +222,14 @@ function makeEntry(dir: string, key: string, manifest: FileManifest): BundleCorp
       TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
       TDebug = JsonValue,
     >() => new FileSink(dir).toBundle() as unknown as SessionBundle<TEventMap, TCommandMap, TDebug>,
+    openViewer: <
+      TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+      TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+      TDebug = JsonValue,
+    >(options?: BundleViewerOptions<TEventMap, TCommandMap>) => {
+      const bundle = new FileSink(dir).toBundle() as unknown as SessionBundle<TEventMap, TCommandMap, TDebug>;
+      return new BundleViewer<TEventMap, TCommandMap, TDebug>(bundle, options);
+    },
   };
 
   return Object.freeze(entry);

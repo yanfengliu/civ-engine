@@ -142,3 +142,25 @@ export {
   scriptedPolicy,
   runSynthPlaytest,
 } from './synthetic-playtest.js';
+
+// Bundle Viewer — Spec 4 (v0.8.7+): Programmatic agent-driver API for navigating,
+// slicing, and diffing a SessionBundle. Composes with BundleCorpus and SessionReplayer.
+// See docs/threads/done/bundle-viewer/DESIGN.md.
+export {
+  BundleViewer,
+  BundleViewerError,
+  diffSnapshots,
+  type BundleViewerOptions,
+  type BundleViewerErrorCode,
+  type BundleViewerErrorDetails,
+  type TickFrame,
+  type RecordedTickFrameEvent,
+  type RecordedTickEvent,
+  type BundleStateDiff,
+  type DiffOptions,
+  type TickRange,
+  type MarkerQuery,
+  type EventQuery,
+  type CommandQuery,
+  type ExecutionQuery,
+} from './bundle-viewer.js';

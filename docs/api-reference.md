@@ -5383,3 +5383,164 @@ function compareMetricsResults(baseline: MetricsResult, current: MetricsResult):
 ```
 
 Pure delta computation, no regression judgment. Numeric leaves get `delta` and `pctChange`; non-numeric leaves get `equal: deepEqual(a, b)`. Recurses through nested records (e.g., `commandTypeCounts: Record<string, number>` reports per-key only-in-side at the inner level too). `pctChange` conventions: `0/0 → 0`, `nonzero/0 → ±Infinity`, `null` inputs propagate to `null` deltas. Arrays are opaque (no per-element diff in v1).
+
+
+## Bundle Viewer (v0.8.7)
+
+`BundleViewer` is a programmatic agent-driver API over a `SessionBundle`. See `docs/guides/bundle-viewer.md` for the full guide.
+
+### `BundleViewer<TEventMap, TCommandMap, TDebug>`
+
+```ts
+class BundleViewer<
+  TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+  TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TDebug = JsonValue,
+> {
+  constructor(
+    bundle: SessionBundle<TEventMap, TCommandMap, TDebug>,
+    options?: BundleViewerOptions<TEventMap, TCommandMap>,
+  );
+
+  static fromSource<TEventMap, TCommandMap, TDebug>(
+    source: SessionSource,
+    options?: BundleViewerOptions<TEventMap, TCommandMap>,
+  ): BundleViewer<TEventMap, TCommandMap, TDebug>;
+
+  readonly bundle: Readonly<SessionBundle<TEventMap, TCommandMap, TDebug>>;
+  readonly metadata: Readonly<SessionMetadata>;
+  readonly recordedRange: { readonly start: number; readonly end: number };
+  readonly replayableRange: { readonly start: number; readonly end: number };
+  readonly markerIndex: ReadonlyMap<string, Marker>;
+
+  ticks(): readonly number[];
+  atTick(tick: number): TickFrame<TEventMap, TCommandMap, TDebug>;
+  atMarker(id: string): TickFrame<TEventMap, TCommandMap, TDebug>;
+  timeline(): IterableIterator<TickFrame<TEventMap, TCommandMap, TDebug>>;
+
+  markers(query?: MarkerQuery): IterableIterator<Marker>;
+  events(query?: EventQuery<TEventMap>): IterableIterator<RecordedTickEvent<TEventMap>>;
+  commands(query?: CommandQuery<TCommandMap>): IterableIterator<RecordedCommand<TCommandMap>>;
+  executions(query?: ExecutionQuery<TCommandMap>): IterableIterator<CommandExecutionResult<keyof TCommandMap>>;
+  failures(query?: TickRange): IterableIterator<TickFailure>;
+
+  replayer(): SessionReplayer<TEventMap, TCommandMap, TDebug>;
+}
+```
+
+`recordedRange.end = min(metadata.endTick, max stream tick)` is content-bounded. `replayableRange.end = metadata.incomplete ? metadata.persistedEndTick : metadata.endTick`. `atTick(t)` accepts `t in recordedRange`; `frame.state()` enforces `replayableRange` via `openAt`.
+
+### `BundleViewerOptions`
+
+```ts
+interface BundleViewerOptions<TEventMap, TCommandMap> {
+  worldFactory?: ReplayerConfig<TEventMap, TCommandMap>['worldFactory'];
+}
+```
+
+Required for `frame.state()`, `frame.snapshot()`, snapshot-fallback `frame.diffSince()`, and `viewer.replayer()`. Pure-metadata navigation works without it.
+
+### `TickFrame`
+
+```ts
+interface TickFrame<TEventMap, TCommandMap, TDebug> {
+  readonly tick: number;
+  readonly events: readonly RecordedTickFrameEvent<TEventMap>[];
+  readonly commands: readonly RecordedCommand<TCommandMap>[];
+  readonly executions: readonly CommandExecutionResult<keyof TCommandMap>[];
+  readonly markers: readonly Marker[];
+  readonly diff: Readonly<TickDiff> | null;
+  readonly debug: Readonly<TDebug> | null;
+  readonly metrics: Readonly<WorldMetrics> | null;
+  state(): World<TEventMap, TCommandMap>;
+  snapshot(): WorldSnapshot;
+  diffSince(otherTick: number, options?: DiffOptions): BundleStateDiff;
+}
+```
+
+Selective runtime freezing: outer frame `Object.freeze`d at construction, per-tick arrays frozen once at viewer construction, elements not individually frozen.
+
+Sparse ticks (in `recordedRange` but no `SessionTickEntry`): `events: []`, `diff: null`, `metrics: null`, `debug: null`. Independent streams (`commands`, `executions`, `markers`, `failures`) still surface from per-tick indices when present.
+
+### `RecordedTickFrameEvent` / `RecordedTickEvent`
+
+```ts
+interface RecordedTickFrameEvent<TEventMap> { type: keyof TEventMap & string; data: TEventMap[keyof TEventMap]; }
+interface RecordedTickEvent<TEventMap> { tick: number; type: keyof TEventMap & string; data: TEventMap[keyof TEventMap]; }
+```
+
+Frame-anchored events omit `tick` (use `frame.tick`); iterator-yielded events carry `tick` because iteration spans ticks.
+
+### `BundleStateDiff` and `DiffOptions`
+
+```ts
+interface BundleStateDiff {
+  fromTick: number;       // = min(thisTick, otherTick)
+  toTick: number;         // = max(thisTick, otherTick)
+  source: 'tick-diffs' | 'snapshot';
+  diff: TickDiff;
+}
+
+interface DiffOptions { fromSnapshot?: boolean; }
+```
+
+`frame.diffSince(otherTick)` folds recorded `TickDiff`s by default. Falls back to snapshot path (via `diffSnapshots`) when `options.fromSnapshot === true`, or any tick in `(fromTick, toTick]` lacks a `SessionTickEntry`, or any entity ID is recycled in the range. Failure-in-range throws `BundleIntegrityError({ code: 'replay_across_failure', failedTicks, fromTick, toTick })`.
+
+### Query types
+
+```ts
+interface TickRange { from?: number; to?: number; }
+interface MarkerQuery extends TickRange { kind?: OneOrMany<MarkerKind>; provenance?: OneOrMany<MarkerProvenance>; id?: string | RegExp; }
+interface EventQuery<TEventMap> extends TickRange { type?: OneOrMany<keyof TEventMap & string>; }
+interface CommandQuery<TCommandMap> extends TickRange { type?: OneOrMany<keyof TCommandMap & string>; outcome?: OneOrMany<'accepted' | 'rejected'>; }
+interface ExecutionQuery<TCommandMap> extends TickRange { type?: OneOrMany<keyof TCommandMap & string>; executed?: boolean; }
+```
+
+Bound validation is eager (synchronous at the call site). `from > to` is a no-op.
+
+### `BundleViewerError`
+
+```ts
+type BundleViewerErrorCode = 'marker_missing' | 'tick_out_of_range' | 'world_factory_required' | 'query_invalid';
+
+interface BundleViewerErrorDetails {
+  readonly [key: string]: JsonValue;
+  readonly code: BundleViewerErrorCode;
+  readonly tick: number | null;
+  readonly markerId: string | null;
+  readonly message: string | null;
+}
+
+class BundleViewerError extends SessionRecordingError {
+  override readonly details: BundleViewerErrorDetails;
+}
+```
+
+Codes are scoped to the class. Replay materialization paths bubble `BundleRangeError` / `BundleIntegrityError` / `ReplayHandlerMissingError` from `SessionReplayer`; `frame.diffSince` is the one place the viewer constructs a `BundleIntegrityError` itself (with enriched `details` for the range).
+
+### `diffSnapshots`
+
+```ts
+function diffSnapshots(a: WorldSnapshot, b: WorldSnapshot, opts?: { tick?: number }): TickDiff;
+```
+
+Standalone snapshot-pair helper exported from `src/snapshot-diff.ts` and re-exported via `bundle-viewer.ts`. Returns a `TickDiff`-shaped result. Result `tick` defaults to `opts.tick ?? b.tick ?? 0`. Engine currently produces v5 `WorldSnapshot`s only; non-v5 inputs throw.
+
+**Scope (intentional):** TickDiff slots only — `entities` (created/destroyed via alive transitions), `components`, `resources`, `state`, `tags`, `metadata`. Snapshot-only fields are excluded: `WorldSnapshot.config` and nested fields, `WorldSnapshot.rng`, `WorldSnapshot.componentOptions`, `WorldSnapshot.entities.{generations,alive,freeList}` directly, `WorldSnapshot.version`. These are registration / determinism invariants and belong outside a state diff.
+
+### `BundleCorpusEntry.openViewer` (Spec 7 surface extension)
+
+```ts
+interface BundleCorpusEntry {
+  // ... existing fields
+  openViewer<
+    TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
+    TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+    TDebug = JsonValue,
+  >(
+    options?: BundleViewerOptions<TEventMap, TCommandMap>,
+  ): BundleViewer<TEventMap, TCommandMap, TDebug>;
+}
+```
+
+One-line corpus-to-viewer composition. Calls `loadBundle()` and constructs a `BundleViewer`. The corpus entry remains frozen after the method is attached.

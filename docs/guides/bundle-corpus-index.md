@@ -79,6 +79,25 @@ const replayer = SessionReplayer.fromSource(entry.openSource(), { worldFactory }
 
 Use `entry.loadBundle()` or `corpus.loadBundle(key)` when you want the whole JSON bundle in memory.
 
+For higher-level navigation (marker-anchored frames, per-tick views, two-path `diffSince`), use `entry.openViewer({ worldFactory })` (v0.8.7+):
+
+```typescript
+import { BundleCorpus } from 'civ-engine';
+const corpus = new BundleCorpus('artifacts/playtests');
+const entry = corpus.entries({ failedTickCount: { min: 1 } })[0];
+if (entry) {
+  const viewer = entry.openViewer({ worldFactory });
+  const firstFailure = viewer.bundle.metadata.failedTicks?.[0];
+  if (firstFailure && firstFailure > viewer.replayableRange.start) {
+    const frame = viewer.atTick(firstFailure - 1);
+    const world = frame.state();
+    // inspect world...
+  }
+}
+```
+
+See `docs/guides/bundle-viewer.md` for the full `BundleViewer` surface.
+
 ## Scan Depth
 
 `scanDepth` controls where bundle directories can live:

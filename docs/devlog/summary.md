@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-28: Spec 4 - Standalone Bundle Viewer (v0.8.7) - `BundleViewer` programmatic agent-driver API with marker-anchored navigation, selective runtime freezing, two-path `frame.diffSince` (folded TickDiffs vs snapshot via `diffSnapshots`), content-bounded `recordedRange`, eager query validation, and `BundleCorpusEntry.openViewer` integration. ADRs 32-35. 69 new tests; 936 passed + 2 todo at ship.
 - 2026-04-28: Code-reviewer model bump (v0.8.6) - AGENTS.md Codex command moved to `gpt-5.5`, Claude commands and the tie-breaker moved to `claude-opus-4-7[1m]` at `--effort max`, with required-CLI-version, bracket-quoting, and model-currency notes added. Both reviewers ACCEPT iter-1 with no findings.
 - 2026-04-28: Thread design relocation (v0.8.5) - Moved accepted thread design/plan docs to objective roots as `DESIGN.md` and `PLAN.md`, kept iteration folders `REVIEW.md`-only, and added regression coverage for thread-root docs plus committed log-artifact bans.
 - 2026-04-28: Thread archive migration (v0.8.4) - Renamed `docs/reviews` to `docs/threads`, split active vs closed objectives into `current` and `done`, preserved date/iteration folders, and made committed thread iterations `REVIEW.md`-only with a regression test.
