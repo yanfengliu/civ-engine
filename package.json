@@ -1,6 +1,6 @@
 {
   "name": "civ-engine",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

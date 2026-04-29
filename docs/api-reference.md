@@ -5592,18 +5592,32 @@ class StrictModeViolationError extends Error {
 Thrown by `assertWritable(this, 'methodName')` at the top of every gated mutation method when `strict: true` and none of `_inTickPhase`, `_inSetup`, `_maintenanceDepth > 0` is set.
 
 
-## AI Playtester Agent (v0.8.9)
+## AI Playtester Agent (v0.8.9, extended v0.8.11)
 
-Async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters. See `docs/guides/ai-playtester.md` for the full guide.
+Async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters. See `docs/guides/ai-playtester.md` for the full guide. v0.8.11 added in-flight marker emission via the context — see `addMarker` / `attach` below.
 
 ### `AgentDriver<TEventMap, TCommandMap>`
 
 ```ts
 interface AgentDriverContext<TEventMap, TCommandMap> {
   readonly world: World<TEventMap, TCommandMap>;
+  // ctx.tick semantics differ between callbacks:
+  // - decide(ctx): pre-step. ctx.tick === world.tick + 1 (the tick about to run).
+  //   Calling addMarker({ tick: ctx.tick, ... }) throws MarkerValidationError
+  //   code '6.1.tick_future' because the recorder rejects ticks > world.tick.
+  // - stopWhen(ctx): post-step. ctx.tick === world.tick (the just-completed
+  //   tick). Calling addMarker({ tick: ctx.tick, ... }) is valid.
+  // Default behavior (omit input.tick) works in both — recorder defaults to
+  // world.tick at the moment of call.
   readonly tick: number;
   readonly startTick: number;
   readonly tickIndex: number;
+  // v0.8.11 additions: emit markers + attach blobs into the playtest's recorder.
+  // Callers should typically OMIT input.tick.
+  addMarker(input: NewMarker): string;
+  // Default sink is MemorySink({ allowSidecar: true }) so oversize PNGs route
+  // to sidecar storage instead of terminating the recorder.
+  attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string;
 }
 
 interface AgentDriver<TEventMap, TCommandMap> {
@@ -5622,6 +5636,9 @@ interface AgentPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
   agent: AgentDriver<TEventMap, TCommandMap>;
   maxTicks: number;
   stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
+  // Default sink (when omitted) is MemorySink({ allowSidecar: true }) as of v0.8.11
+  // so agent-emitted screenshots over the 64 KiB threshold route to sidecar
+  // instead of throwing oversize_attachment.
   sink?: SessionSink & SessionSource;
   sourceLabel?: string;
   snapshotInterval?: number | null;
@@ -5631,6 +5648,9 @@ type AgentStopReason = 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'si
 
 interface AgentPlaytestResult<TEventMap, TCommandMap> {
   bundle: SessionBundle<TEventMap, TCommandMap>;
+  // v0.8.11: same sink the runner used. Default-sink callers can call
+  // `result.source.readSidecar(id)` to retrieve sidecar bytes for attachments.
+  source: SessionSink & SessionSource;
   ticksRun: number;
   stopReason: AgentStopReason;
   ok: boolean;

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.11 - 2026-04-29
+
+Spec 9.1 — `AgentDriverContext` extension for in-flight agent marker emission. Coordinated PHASE 1 of the aoe2 annotation-ui Spec 2 thread; aoe2 v0.1.5 consumes this surface.
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`AgentDriverContext.addMarker(input: NewMarker): string`** — agents emit markers into the playtest's recorder from inside `decide(ctx)`. Callers should typically OMIT `input.tick` so the recorder defaults to `world.tick` (the just-completed tick at the moment `decide` runs). Passing `input.tick = ctx.tick` (= `world.tick + 1`) throws `MarkerValidationError` code `'6.1.tick_future'`.
+- **`AgentDriverContext.attach(blob, options?): string`** — agents attach blobs (e.g., screenshots) and use the returned id in `Marker.attachments`. Sidecar policy follows the `MemorySink({ allowSidecar: true })` default below.
+- **`AgentPlaytestResult.source: SessionSink & SessionSource`** — exposes the sink the runner used. Default-sink callers can `result.source.readSidecar(id)` to recover sidecar-stored bytes for attachments stamped `ref: { sidecar: true }` in `bundle.attachments`. Without this surface, the new sidecar-tolerant default would yield descriptors with no public way to reach the bytes.
+
+### Behavior change (more permissive default)
+
+- **`runAgentPlaytest` default sink:** `new MemorySink()` → `new MemorySink({ allowSidecar: true })`. Oversize attachments (e.g., 100 KiB+ PNGs) now route to sidecar storage instead of throwing `oversize_attachment` and terminating the recorder. Callers that pass `config.sink` are unaffected; callers using the default get a strictly-more-permissive sink.
+
+### Backward compatibility
+
+The new methods are required on the interface (no `?`), but no shipping consumer constructs `AgentDriverContext` directly — only the runner does. Existing `AgentDriver.decide` implementations that destructure `{ world, tick, startTick, tickIndex }` are unaffected. Existing tests pass unchanged.
+
+### Validation
+
+All four engine gates pass: `npm test` (995 passed + 2 todo, +6 from v0.8.10's 989), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review iter-1 (Codex `gpt-5.5` xhigh + Gemini `gemini-3.1-pro-preview` plan + Claude `opus-4-7[1m]` max) found 1 HIGH (sidecar bytes unreachable for default callers — fixed by adding `result.source`), 1 MEDIUM (canonical user guide gap — fixed in `docs/guides/ai-playtester.md` + README), 1 LOW (future-tick test rigor — fixed by adding rule-code test). Iter-2 verifies the fixes landed. Devlog: `docs/devlog/detailed/2026-04-29_2026-04-29.md`.
+
 ## 0.8.10 - 2026-04-29
 
 AGENTS.md tightening — removed the Tie-Breaker role and the hard-abort rule, moved the `docs/learning/lessons.md` rule into Documentation discipline, and trimmed redundancy between the Core-rules multi-CLI mandate and the Code review section.

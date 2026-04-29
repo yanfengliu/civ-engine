@@ -38,8 +38,48 @@ const result = await runAgentPlaytest({
 console.log(result.stopReason);          // 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError'
 console.log(result.ticksRun);            // number of completed ticks
 console.log(result.bundle);              // the recorded SessionBundle
+console.log(result.source);              // v0.8.11: the sink, for sidecar attachment readSidecar(id)
 console.log(result.report);              // whatever agent.report returned
 ```
+
+## Emitting markers and attachments from `decide` (v0.8.11)
+
+As of v0.8.11, the agent's `decide(ctx)` callback receives an extended `AgentDriverContext` that exposes `addMarker` and `attach` methods. Use these to annotate the playtest in flight — for example, when the agent notices an interesting state worth flagging for human review:
+
+```ts
+const llmAgent: AgentDriver<MyEvents, MyCmds> = {
+  async decide(ctx) {
+    if (await detectInterestingState(ctx.world)) {
+      // Optionally attach a screenshot or other blob:
+      const screenshotId = ctx.attach({ mime: 'image/png', data: pngBytes });
+
+      // Emit a marker. Default tick is `ctx.world.tick` (the just-completed
+      // tick at the moment `decide` runs). Passing `tick: ctx.tick` (=
+      // `world.tick + 1`) throws MarkerValidationError code '6.1.tick_future'.
+      ctx.addMarker({
+        kind: 'annotation',
+        text: 'Pathfinding got stuck',
+        refs: { tickRange: { from: ctx.world.tick, to: ctx.world.tick } },
+        attachments: [screenshotId],
+      });
+    }
+    return [];
+  },
+};
+```
+
+**Default sink and attachments:** v0.8.11 changed the default sink from `new MemorySink()` to `new MemorySink({ allowSidecar: true })`. Oversize attachments (PNGs above the 64 KiB threshold) now route to sidecar storage instead of throwing `oversize_attachment` and terminating the recorder. Sidecar bytes are recoverable via `result.source.readSidecar(id)`:
+
+```ts
+for (const attachment of result.bundle.attachments) {
+  if ('sidecar' in attachment.ref) {
+    const bytes = result.source.readSidecar(attachment.id);
+    // ... process the bytes (e.g., write to disk, embed in a viewer).
+  }
+}
+```
+
+Callers who pass `config.sink` keep their own reference; `result.source` is the same instance for symmetry.
 
 ## `bundleSummary` for LLM context
 

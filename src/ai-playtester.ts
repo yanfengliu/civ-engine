@@ -12,6 +12,7 @@ import type { SessionSink, SessionSource } from './session-sink.js';
 import type { ComponentRegistry } from './world.js';
 import { World } from './world.js';
 import type { PolicyCommand } from './synthetic-playtest.js';
+import type { NewMarker } from './session-recorder.js';
 
 export type { PolicyCommand } from './synthetic-playtest.js';
 
@@ -32,6 +33,17 @@ export interface AgentDriverContext<
   readonly startTick: number;
   /** Number of ticks elapsed since startTick (0 on the first call). */
   readonly tickIndex: number;
+  /** Spec 9.1 (v0.8.11): emit a marker into the playtest's recorder. Returns
+   *  marker id. Callers should typically OMIT `input.tick` — the recorder
+   *  defaults it to `world.tick` (the latest completed tick at the moment
+   *  the agent's `decide(ctx)` runs). Passing `input.tick = ctx.tick` (=
+   *  `world.tick + 1`) throws `MarkerValidationError` code `'6.1.tick_future'`. */
+  addMarker(input: NewMarker): string;
+  /** Spec 9.1 (v0.8.11): attach a blob to the playtest's recorder. Returns
+   *  attachment id (use it in `Marker.attachments`). Default sink is
+   *  `MemorySink({ allowSidecar: true })` so oversize PNGs route to sidecar
+   *  instead of terminating the recorder with `oversize_attachment`. */
+  attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string;
 }
 
 export interface AgentDriver<
@@ -79,6 +91,14 @@ export interface AgentPlaytestResult<
   TCommandMap extends Record<keyof TCommandMap, unknown>,
 > {
   bundle: SessionBundle<TEventMap, TCommandMap>;
+  /** Spec 9.1 (v0.8.11): the same sink the runner used. When `config.sink` is
+   *  passed, this is that exact reference; when omitted, this is the default
+   *  `MemorySink({ allowSidecar: true })` constructed internally. Exposed so
+   *  callers can `result.source.readSidecar(id)` to retrieve sidecar bytes for
+   *  attachments stamped `ref: { sidecar: true }` in `bundle.attachments`.
+   *  Without this surface, default-sink callers would get descriptors with no
+   *  way to reach the bytes. */
+  source: SessionSink & SessionSource;
   ticksRun: number;
   stopReason: AgentStopReason;
   ok: boolean;
@@ -129,7 +149,12 @@ export async function runAgentPlaytest<
       ? config.snapshotInterval
       : 1000;
 
-  const sink: SessionSink & SessionSource = config.sink ?? new MemorySink();
+  // Spec 9.1 (v0.8.11): default sink enables sidecar so oversize attachments
+  // (e.g., agent-emitted screenshots) route to sidecar storage instead of
+  // throwing `oversize_attachment` and terminating the recorder. Callers that
+  // pass `config.sink` are unaffected; this is strictly more permissive for
+  // default-using callers (no shipping consumer relies on the throw).
+  const sink: SessionSink & SessionSource = config.sink ?? new MemorySink({ allowSidecar: true });
   const recorder = new SessionRecorder<TEventMap, TCommandMap>({
     world: world as unknown as World<TEventMap, TCommandMap>,
     sink,
@@ -159,6 +184,12 @@ export async function runAgentPlaytest<
         tick: world.tick + 1,
         startTick,
         tickIndex,
+        // Spec 9.1 (v0.8.11): delegating closures around the runner's recorder.
+        // Agents call `ctx.addMarker(input)` / `ctx.attach(blob, opts?)` from
+        // inside `decide` (or `stopWhen`, see below) to emit markers into the
+        // same bundle the runner produces.
+        addMarker: (input) => recorder.addMarker(input),
+        attach: (blob, opts) => recorder.attach(blob, opts),
       };
 
       let commands: readonly PolicyCommand<TCommandMap>[];
@@ -245,6 +276,10 @@ export async function runAgentPlaytest<
 
   return {
     bundle,
+    // Spec 9.1: expose the sink so default-sink callers can `result.source.readSidecar(id)`
+    // for sidecar-stored attachment bytes. Without this, bundle.attachments[i].ref =
+    // { sidecar: true } descriptors would be unreachable for default-sink callers.
+    source: sink,
     ticksRun,
     stopReason,
     // Tighten ok per runSynthPlaytest: also check recorder.lastError, so a
