@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.6 - 2026-04-28
+
+Process documentation: bump code-reviewer CLI commands to the most-capable, largest-context models reachable under the project's standard auth (Claude account + Codex ChatGPT login).
+
+### Changed
+
+- AGENTS.md Code-review section: Codex command moved from `--model gpt-5.4` to `--model gpt-5.5`; added a note documenting the required Codex CLI ≥ 0.125.0 and that Codex caps reasoning effort at `xhigh` (no `max` value).
+- AGENTS.md Code-review section: Claude commands (both diff-piped and full-codebase variants) moved from `--model opus --effort xhigh` to `--model "claude-opus-4-7[1m]" --effort max`; added a note that the `[1m]` suffix selects the 1 M-token-context Opus 4.7 variant and that the model string must be quoted to suppress shell glob-expansion.
+- AGENTS.md Team-of-subagents section: Tie-breaker bumped to the same `claude --model "claude-opus-4-7[1m]" --effort max` invocation.
+- AGENTS.md Code-review section: added a "Keep model IDs current" bullet that mandates a one-line smoke test before committing future model bumps.
+
+### Validation
+
+- `npm test` (gates re-run after the doc bump)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- Smoke tests: `claude -p --model "claude-opus-4-7[1m]" --effort max` and `codex exec --model gpt-5.5 -c model_reasoning_effort=xhigh ...` both returned `ok` after upgrading the local Codex CLI from 0.121.0 to 0.125.0.
+
 ## 0.8.5 - 2026-04-28
 
 Process and documentation archive cleanup for thread design artifacts.
