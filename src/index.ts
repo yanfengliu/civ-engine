@@ -22,7 +22,7 @@ export * from './visibility-map.js';
 export * from './world.js';
 export * from './world-debugger.js';
 
-// Session-recording subsystem (T1+; see docs/design/2026-04-26-session-recording-and-replay-design.md)
+// Session-recording subsystem (T1+; see docs/threads/done/session-recording/DESIGN.md)
 export {
   SESSION_BUNDLE_SCHEMA_VERSION,
   type SessionBundle,

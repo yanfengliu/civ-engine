@@ -4,7 +4,7 @@ Capture deterministic, replayable bundles of any `World` run. Inspect a recordin
 
 The session-recording subsystem is the substrate for civ-engine's AI-first debugging vision. It allows agents (and humans) to load a recorded session, jump to a marked tick, inspect game state, replay forward, and verify determinism.
 
-See `docs/design/2026-04-26-session-recording-and-replay-design.md` for the full design spec and `docs/design/ai-first-dev-roadmap.md` for the broader vision.
+See `docs/threads/done/session-recording/DESIGN.md` for the full design spec and `docs/design/ai-first-dev-roadmap.md` for the broader vision.
 
 ## Quickstart
 

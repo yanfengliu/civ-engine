@@ -122,4 +122,4 @@ Attachments stored as `dataUrl` are embedded in `manifest.json`, so their bytes 
 
 - `docs/guides/session-recording.md` for `FileSink` and `SessionReplayer`.
 - `docs/guides/behavioral-metrics.md` for `runMetrics` over a bundle iterable.
-- `docs/design/2026-04-27-bundle-corpus-index-design.md` for the accepted Spec 7 design.
+- `docs/threads/done/bundle-corpus-index/DESIGN.md` for the accepted Spec 7 design.

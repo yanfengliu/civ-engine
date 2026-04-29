@@ -1085,7 +1085,7 @@ export class World<
    * `applySnapshot(snap)` to load state without conflict.
    *
    * Note: replay across recorded tick failures is out of scope (see
-   * `docs/design/2026-04-26-session-recording-and-replay-design.md` §2).
+   * `docs/threads/done/session-recording/DESIGN.md` §2).
    * `applySnapshot` clears any current `lastTickFailure` / poison state.
    */
   applySnapshot(snapshot: WorldSnapshot): void {

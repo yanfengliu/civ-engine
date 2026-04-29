@@ -25,7 +25,7 @@ When you do dispatch, the team roles below describe how to brief them. The Team 
 
 - **Team lead** (always the main agent):
   - Breaks the human's request into atomic tasks, selects the appropriate domain specialists, routes the tasks, and acts as the final gatekeeper before merging.
-  - If tests fail or review consensus is not reached after 3 iterations, execute a hard abort. Ask the user before destructive operations like `git reset --hard`. Dump error logs and the failed approach into `docs/learning/lessons.md`, and start over with a fresh plan that explicitly avoids the failed approach.
+  - If tests fail or review consensus is not reached after 3 iterations, execute a hard abort. Ask the user before destructive operations like `git reset --hard`. Summarize the failed approach and the smallest useful diagnostics in `docs/learning/lessons.md` without dumping raw error logs, then start over with a fresh plan that explicitly avoids the failed approach.
 - **Architect**: Acts as a consultant. Drafts the initial implementation plan and verifies it against ARCHITECTURE.md before work dispatches.
 - **Game designer**: Validates that the game mechanism works well and is fun. Researches local and online sources to ground opinions.
 - **Software engineer**: Handles code writing.
@@ -34,8 +34,9 @@ When you do dispatch, the team roles below describe how to brief them. The Team 
   - After addressing review comments, ask the reviewer to verify the fix.
   - If engineer + reviewer cannot reach consensus after 3 iterations, escalate to the Tie-Breaker.
   - Save reviewer synthesis under `docs/threads/current/<objective>/<date>/<iteration_number>/`, mirroring the full-codebase review convention (see `docs/threads/done/full/<date>/<iteration_number>/` for historical precedent). The `<objective>` folder is a concise kebab-case phrase naming the work, such as `synthetic-playtest-task-2`, `behavioral-metrics-task-1`, or `thread-archive-migration`; for full-codebase reviews, use `full`.
-  - Each iteration directory contains only `REVIEW.md`, the concise synthesized summary with severity-tagged findings and the final disposition. Do not commit raw CLI output, stderr/stdout logs, prompts, or diff snapshots inside `docs/threads`.
-  - If temporary capture files are useful while synthesizing a review, write them outside the thread tree under `tmp/review-runs/<objective>/<date>/<iteration_number>/` and do not stage them. The committed thread artifact is the summary only.
+  - Thread-level design artifacts live directly under the objective folder as `DESIGN.md` and `PLAN.md`. These are the authoritative design and implementation-plan docs for that objective; `<date>/design-N/REVIEW.md` and `<date>/plan-N/REVIEW.md` are only historical review summaries of design or plan iterations.
+  - Each iteration directory contains only `REVIEW.md`, the concise synthesized summary with severity-tagged findings and the final disposition. Do not commit raw CLI output, stderr/stdout logs, error logs, prompts, or diff snapshots anywhere under `docs`.
+  - If temporary capture files are useful while synthesizing a review, write them outside the thread tree under `tmp/review-runs/<objective>/<date>/<iteration_number>/`, do not stage them, and clean them up when they are no longer useful. The committed thread artifact is the summary only.
   - `<iteration_number>` starts at 1 and increments for each re-review. Re-reviewers should consider previous iterations' `REVIEW.md` + `docs/learning/lessons.md` + the new diff so they verify earlier fixes landed and don't re-flag old issues.
   - After folding the final iteration's `REVIEW.md` into the devlog entry for the task, move the objective folder from `docs/threads/current/` to `docs/threads/done/`. The done thread stays as a historical artifact (do not delete — these are valuable audit trails alongside the full-review history).
   - Continue iterating until reviewers nitpick instead of catching real bugs / giving substantial feedback. Do not get stuck in an infinite loop.
@@ -83,7 +84,7 @@ Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` at session
 
 - `src`: app code.
 - `docs`: architecture, devlogs, threads, API, tutorials, guides.
-- `design`: app and mechanism notes.
+- `docs/design`: cross-thread roadmaps and historical design notes that do not belong to one thread. Thread-specific designs and implementation plans belong under `docs/threads/<current|done>/<objective>/DESIGN.md` and `PLAN.md`.
 
 ### Discipline (mandatory; not optional)
 
@@ -112,11 +113,12 @@ Code changes are not done until the docs match. Before declaring any task comple
 
 - `docs/guides/<topic>.md` — every guide whose subject overlaps the change. A new resource API → `resources.md`. A new system feature → `systems-and-simulation.md`. A new spatial primitive → `spatial-grid.md` / `rts-primitives.md`. A new AI-relevant surface → `ai-integration.md`. A new field-data utility → `map-generation.md`. A new tutorial-grade feature → `building-a-game.md` and `getting-started.md`. The `concepts.md` standalone-utilities list and tick-lifecycle ASCII must reflect new utilities and lifecycle changes.
 - Examples and tutorials must use the current API. If a guide demonstrates the deprecated pattern, replace the demo, don't add a "new way" sidebar.
+- Thread design and plan docs — when an objective has an accepted design or implementation plan, keep the current authoritative versions directly under `docs/threads/current/<objective>/DESIGN.md` and `PLAN.md`; move them with the thread to `docs/threads/done/<objective>/` when the objective closes.
 
 **Verification step (mandatory before declaring task done):**
 
 - Invoke the `doc-review` skill or grep for removed-API names across `docs/` and `README.md`. The audit must come back clean for the change's diff. Stale references in historical changelog / devlog / drift-log entries are intentional context and should remain — every other surface must reflect current reality.
-- The multi-CLI code review must explicitly verify doc accuracy as part of its review prompt — include "verify docs in the diff match implementation; flag any stale signatures, removed APIs still mentioned, or missing coverage of new APIs in canonical guides."
+- The multi-CLI code review must explicitly verify doc accuracy as part of its review prompt — include "verify docs in the diff match implementation; flag any stale signatures, removed APIs still mentioned, missing coverage of new APIs in canonical guides, or thread design/plan docs that are missing from the objective root."
 
 **Why this is mandatory:** doc drift compounds. A single stale signature in `api-reference.md` becomes the source of truth for the next reader, then for the next feature built on top, then for an external consumer. Treating documentation as part of the change (not after the change) is the only way to keep the surface trustworthy. If a feature is too small to merit a guide update, it is small enough to merit one sentence in the relevant existing guide — silence is not a valid signal.
 

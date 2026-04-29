@@ -4,13 +4,13 @@
 
 **Plan revision:** v3 (2026-04-27) — collapses T1+T2 into a single commit per Codex iter-2's HIGH on the T1/T2 doc split (AGENTS.md: structural docs land with the code that introduces the subsystem, not in a follow-up). Spec 8 is one coherent shipped change → one version bump (v0.8.2, c-bump, additive). Iter-2: Codex 1 HIGH + 2 MED; Opus ACCEPT + 5 NIT. v3 also folds the integration tests into the same task; no separate T2.
 
-**Goal:** Implement Spec 8 (Behavioral Metrics over Corpus) per `docs/design/2026-04-27-behavioral-metrics-design.md` (v4, converged after 4 multi-CLI design review iterations).
+**Goal:** Implement Spec 8 (Behavioral Metrics over Corpus) per `docs/threads/done/behavioral-metrics/DESIGN.md` (v4, converged after 4 multi-CLI design review iterations).
 
 **Architecture:** Adds an accumulator-style `Metric<TState, TResult>` contract, a synchronous `runMetrics(bundles, metrics)` reducer over `Iterable<SessionBundle>`, 11 engine-generic built-in metric factories, and a thin `compareMetricsResults(baseline, current)` delta helper. Pure functional, exact, single-pass-multiplexed.
 
 **Tech Stack:** TypeScript 5.7+, Vitest 3, ESLint 9, Node 18+. ESM + Node16 module resolution.
 
-**Spec sections referenced:** §-numbered references map 1:1 to sections in `2026-04-27-behavioral-metrics-design.md`.
+**Spec sections referenced:** §-numbered references map 1:1 to sections in `docs/threads/done/behavioral-metrics/DESIGN.md`.
 
 **Branch:** None — direct-to-main per AGENTS.md (solo-developer policy).
 

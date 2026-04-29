@@ -211,7 +211,7 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 ## See also
 
 - `docs/architecture/decisions.md` ADRs 17-22 for the design trade-offs.
-- `docs/design/2026-04-27-synthetic-playtest-harness-design.md` (v10) for the full spec.
+- `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) for the full spec.
 - `docs/design/ai-first-dev-roadmap.md` for how Spec 3 fits into the broader roadmap.
 - `docs/guides/session-recording.md` for the underlying SessionRecorder/SessionReplayer machinery.
 

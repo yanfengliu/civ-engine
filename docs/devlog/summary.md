@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-04-28: Thread design relocation (v0.8.5) - Moved accepted thread design/plan docs to objective roots as `DESIGN.md` and `PLAN.md`, kept iteration folders `REVIEW.md`-only, and added regression coverage for thread-root docs plus committed log-artifact bans.
 - 2026-04-28: Thread archive migration (v0.8.4) - Renamed `docs/reviews` to `docs/threads`, split active vs closed objectives into `current` and `done`, preserved date/iteration folders, and made committed thread iterations `REVIEW.md`-only with a regression test.
 - 2026-04-27: Spec 7 - Bundle Search / Corpus Index (v0.8.3) - `BundleCorpus` indexes closed FileSink bundle directories, exposes manifest-only `entries(query?)`, lazy `bundles(query?)`, deterministic ordering, metadata/failure/attachment summaries, and `CorpusIndexError` diagnostics. Adds ADRs 28-31 and the bundle corpus guide. 20 new tests; review-fix gates: 865 passed + 2 todo.
 - 2026-04-27: Spec 8 - Behavioral Metrics over Corpus (v0.8.2) - `runMetrics(bundles, metrics)` reducer over `Iterable<SessionBundle>`, 11 engine-generic metrics, accumulator-style `Metric`, and `compareMetricsResults`. ADRs 23-27. 44 new tests; 842 passed + 2 todo at ship.

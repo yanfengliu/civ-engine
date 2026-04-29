@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.8.5 - 2026-04-28
+
+Process and documentation archive cleanup for thread design artifacts.
+
+### Changed
+
+- Moved accepted thread-specific design docs and implementation plans from dated `docs/design/` filenames into their owning thread roots as `DESIGN.md` and `PLAN.md`.
+- Kept review iterations unchanged: date folders still contain iteration folders, and committed iterations still contain only `REVIEW.md`.
+- Updated AGENTS.md and the docs index so future threads store authoritative design/plan docs at `docs/threads/<current|done>/<objective>/`.
+- Tightened the docs-thread regression test so committed docs reject raw review captures, prompt/diff snapshots, and stdout/stderr/error-log artifacts.
+
+### Validation
+
+- `npm test -- tests/docs-threads.test.ts`
+- `npm test` (867 passed + 2 todo)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+
 ## 0.8.4 - 2026-04-28
 
 Process and documentation archive cleanup for review/thread artifacts.

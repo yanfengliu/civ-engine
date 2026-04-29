@@ -4654,7 +4654,7 @@ These helpers expose standalone utility state through the same debugger surface.
 
 The session-recording subsystem captures deterministic, replayable bundles of `World` runs. This section documents the bundle / marker / error type definitions; subsequent sections cover the sink interfaces, recorder, replayer, and scenario adapter.
 
-See `docs/guides/session-recording.md` for the user-facing guide and `docs/design/2026-04-26-session-recording-and-replay-design.md` for the full subsystem design.
+See `docs/guides/session-recording.md` for the user-facing guide and `docs/threads/done/session-recording/DESIGN.md` for the full subsystem design.
 
 ### `SessionBundle`
 

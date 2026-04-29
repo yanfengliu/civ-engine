@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the engine-level session-recording-and-replay primitives defined in `docs/design/2026-04-26-session-recording-and-replay-design.md` (v5, converged after 4 multi-CLI review iterations).
+**Goal:** Implement the engine-level session-recording-and-replay primitives defined in `docs/threads/done/session-recording/DESIGN.md` (v5, converged after 4 multi-CLI review iterations).
 
 **Architecture:** Adds `SessionRecorder` (captures live World runs into a `SessionBundle` via a `SessionSink`), `SessionReplayer` (loads bundles, opens paused worlds at any tick, runs three-stream `selfCheck()`), the bundle/marker/sink/source types, two sink implementations (`MemorySink`, `FileSink`), a `scenarioResultToBundle()` adapter, and an additive `captureCommandPayloads: true` option on `WorldHistoryRecorder`. v1 is opt-in, synchronous, and covers clean-tick replay only — replay across recorded `TickFailure` is out of scope (future spec extends `WorldSnapshot` to v6).
 
 **Tech Stack:** TypeScript 5.7+, Vitest 3, ESLint 9, Node 18+ (the project's `package.json:engines`). All new code follows the project's existing ESM + Node16 module-resolution conventions.
 
-**Spec sections referenced throughout:** §-numbered references in this plan map 1:1 to sections in `2026-04-26-session-recording-and-replay-design.md`.
+**Spec sections referenced throughout:** §-numbered references in this plan map 1:1 to sections in `docs/threads/done/session-recording/DESIGN.md`.
 
 **Branch strategy:** All work on a single chained branch `agent/session-recording`, one commit per Task. Branch stays at the tip awaiting explicit user merge authorization per AGENTS.md. **Per-task multi-CLI review** lands before each commit (see "Per-task review pattern" below) — this is mandatory per AGENTS.md, not optional.
 
@@ -700,7 +700,7 @@ Add to `docs/changelog.md` (top, under any `## Unreleased`):
 ```markdown
 ## v0.7.7 (2026-04-27)
 
-Added session-recording bundle and error types (`SessionBundle`, `Marker`, `RecordedCommand`, `SessionMetadata`, `AttachmentDescriptor`, `EntityRef`, `MarkerRefs`, plus `SessionRecordingError` hierarchy with seven subclasses). Types only; no runtime behavior. Foundation for `SessionRecorder`/`SessionReplayer` (next commits). See `docs/design/2026-04-26-session-recording-and-replay-design.md` §5, §6, §12.
+Added session-recording bundle and error types (`SessionBundle`, `Marker`, `RecordedCommand`, `SessionMetadata`, `AttachmentDescriptor`, `EntityRef`, `MarkerRefs`, plus `SessionRecordingError` hierarchy with seven subclasses). Types only; no runtime behavior. Foundation for `SessionRecorder`/`SessionReplayer` (next commits). See `docs/threads/done/session-recording/DESIGN.md` §5, §6, §12.
 ```
 
 Add to `docs/devlog/summary.md` (one new line):
@@ -741,7 +741,7 @@ SessionReplayer in subsequent commits.
 - tests/session-bundle.test.ts + tests/session-errors.test.ts (8
   tests, all gates pass).
 
-See docs/design/2026-04-26-session-recording-and-replay-design.md
+See docs/threads/done/session-recording/DESIGN.md
 §5, §6, §12.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"

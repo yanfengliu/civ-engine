@@ -4,7 +4,7 @@
 
 **Vision:** civ-engine should support an environment where AI agents do as much game-development work as possible without human intervention — generating, exercising, debugging, and verifying game logic autonomously, with humans involved only for design intent and judgment calls. This document captures the multi-spec roadmap that delivers that environment.
 
-A single recording-and-replay spec is the substrate. The full vision spans nine specs across three tiers; specs are tracked individually under `docs/design/<date>-<topic>-design.md`.
+A single recording-and-replay spec is the substrate. The full vision spans nine specs across three tiers; implemented thread-specific designs are tracked under `docs/threads/done/<objective>/DESIGN.md`, with implementation plans beside them as `PLAN.md`; cross-thread roadmap material stays in `docs/design/`.
 
 ## Tier 1 — Foundational
 
@@ -12,7 +12,7 @@ Without these, "AI-first" is aspirational. They are the irreducible substrate fo
 
 ### Spec 1: Session Recording & Replay (engine primitives)
 
-Status: **Implemented** (v0.7.7-pre -> v0.7.19). See `2026-04-26-session-recording-and-replay-design.md`.
+Status: **Implemented** (v0.7.7-pre -> v0.7.19). See `docs/threads/done/session-recording/DESIGN.md`.
 
 What it delivers: deterministic capture of any World run as a portable `SessionBundle`; replay engine that opens a paused World at any tick; marker API for human and programmatic annotations; sink interface for memory and disk persistence; unification with `ScenarioRunner` so test runs and live captures share the same bundle format and replayer.
 
@@ -20,7 +20,7 @@ What it unlocks: every other spec in this roadmap.
 
 ### Spec 3: Synthetic Playtest Harness
 
-Status: **Implemented** (v0.7.20 + v0.8.0 + v0.8.1). See `2026-04-27-synthetic-playtest-harness-design.md` and `2026-04-27-synthetic-playtest-implementation-plan.md`.
+Status: **Implemented** (v0.7.20 + v0.8.0 + v0.8.1). See `docs/threads/done/synthetic-playtest/DESIGN.md` and `docs/threads/done/synthetic-playtest/PLAN.md`.
 
 What it delivers: `runSynthPlaytest` drives a supplied `World` with pluggable synchronous policies, records through `SessionRecorder`, and returns a replayable `SessionBundle`. Built-ins cover no-op, random catalog, and scripted policies; LLM-driven policies remain future Spec 9 work.
 
@@ -30,7 +30,7 @@ Why it depends on Spec 1: synthetic playtest is just "policy → submit() → Se
 
 ### Spec 8: Behavioral Metrics over Corpus
 
-Status: **Implemented** (v0.8.2). See `2026-04-27-behavioral-metrics-design.md` and `2026-04-27-behavioral-metrics-implementation-plan.md`.
+Status: **Implemented** (v0.8.2). See `docs/threads/done/behavioral-metrics/DESIGN.md` and `docs/threads/done/behavioral-metrics/PLAN.md`.
 
 What it delivers: `runMetrics(bundles, metrics)` reduces any `Iterable<SessionBundle>` with engine-generic built-ins (bundle count, session length, command/event rates, failure rates, command validation acceptance, execution failure) plus user-defined metrics, and `compareMetricsResults` computes deltas across commits. Game-semantic metrics such as resource Gini or time-to-first-conflict remain user-defined because the engine does not own game event contracts.
 
@@ -56,7 +56,7 @@ Why it depends on Spec 3: the playtester is just a specific class of policy plug
 
 ### Spec 7: Bundle Search / Corpus Index
 
-Status: **Implemented** (v0.8.3). See `2026-04-27-bundle-corpus-index-design.md` and `2026-04-27-bundle-corpus-index-implementation-plan.md`.
+Status: **Implemented** (v0.8.3). See `docs/threads/done/bundle-corpus-index/DESIGN.md` and `docs/threads/done/bundle-corpus-index/PLAN.md`.
 
 What it delivers: `BundleCorpus` indexes closed `FileSink` bundle directories by `manifest.json`, provides metadata-only listing/filtering over manifest-derived fields, exposes deterministic entry order, and lazily opens matching bundles through `FileSink` for `SessionReplayer` or `runMetrics`. Content-derived command/event/marker predicates are deferred to a future summary index.
 
@@ -157,14 +157,14 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 
 | Spec | Title                                | Status     | File                                                      |
 | ---- | ------------------------------------ | ---------- | --------------------------------------------------------- |
-| 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `2026-04-26-session-recording-and-replay-design.md` (v5)  |
+| 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `docs/threads/done/session-recording/DESIGN.md` (v5) + `docs/threads/done/session-recording/PLAN.md` |
 | 2    | Game-Side Annotation UI              | Proposed   | not yet drafted                                           |
-| 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `2026-04-27-synthetic-playtest-harness-design.md` (v10) + `2026-04-27-synthetic-playtest-implementation-plan.md` (v7) |
+| 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
 | 4    | Standalone Bundle Viewer             | Proposed   | not yet drafted                                           |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |
-| 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `2026-04-27-bundle-corpus-index-design.md` (v4 + plan-review correction) + `2026-04-27-bundle-corpus-index-implementation-plan.md` (v6) |
-| 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `2026-04-27-behavioral-metrics-design.md` (v4) + `2026-04-27-behavioral-metrics-implementation-plan.md` (v4) |
+| 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
+| 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
 | 9    | AI Playtester Agent                  | Proposed   | not yet drafted                                           |
 
 Update this row as specs are drafted, accepted, implemented, and merged.

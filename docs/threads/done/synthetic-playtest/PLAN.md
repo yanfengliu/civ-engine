@@ -5,7 +5,7 @@
 **Plan revision:** v7 (2026-04-27) — addresses iter-6 multi-CLI plan review. Both reviewers (Codex + Opus) converged on the same HIGH: v6 claimed the metrics-stripping fix landed at both T2 step 9 + T3 step 2 sites, but only T2 was actually patched (the v6 `replace_all` matched a string that only existed at the T2 site). T3 step 2 still had `expect(r1.bundle.ticks).toEqual(r2.bundle.ticks)` and would fail intermittently on `durationMs` timing noise. Iter-1 through iter-6 syntheses live under `docs/threads/done/synthetic-playtest/2026-04-27/` as `plan-1/REVIEW.md` through `plan-6/REVIEW.md`. v7 fixes:
 - (Both HIGH) Patches T3 step 2 with the same `stripTickMetrics` helper now in T2 step 9 (line 1220-1223). Verified via `grep -n "bundle\.ticks).toEqual"` returning zero matches and `grep -n "bundle\.ticks\.map.*stripTickMetrics"` returning two (T2 + T3 sites).
 
-**Goal:** Implement the engine-level Synthetic Playtest Harness defined in `docs/design/2026-04-27-synthetic-playtest-harness-design.md` (v10, converged after 10 multi-CLI review iterations).
+**Goal:** Implement the engine-level Synthetic Playtest Harness defined in `docs/threads/done/synthetic-playtest/DESIGN.md` (v10, converged after 10 multi-CLI review iterations).
 
 **Architecture:** Adds `runSynthPlaytest` (synchronous harness driving a `World` via pluggable `Policy` functions for `N` ticks → `SessionBundle`), three built-in policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`), shared `PolicyContext` / `StopContext` types with seeded sub-RNG, and a discriminated-union `PolicyCommand`. Extends `SessionRecorderConfig` with optional `sourceKind?` and `policySeed?` (additive); widens `SessionMetadata.sourceKind` from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'` (b-bump per AGENTS.md compile-breaking rule). Non-poisoned bundles with `ticksRun ≥ 1` round-trip through `SessionReplayer.selfCheck()`.
 
@@ -13,7 +13,7 @@
 
 **Shell:** Although the OS is Windows, the project's harness uses **bash** (mingw on Windows). All shell snippets in this plan use Unix syntax (`/tmp/`, `&` for backgrounding, `$(...)`, `[ -s file ]`, `mkdir -p`). This matches the project's convention as documented in CLAUDE.md.
 
-**Spec sections referenced:** §-numbered references map 1:1 to sections in `2026-04-27-synthetic-playtest-harness-design.md`.
+**Spec sections referenced:** §-numbered references map 1:1 to sections in `docs/threads/done/synthetic-playtest/DESIGN.md`.
 
 **Branch:** `agent/synthetic-playtest`. Three commits T1/T2/T3. Branch stays at tip awaiting explicit user merge authorization per AGENTS.md.
 

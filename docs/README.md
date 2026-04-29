@@ -42,7 +42,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 
 ## Plans and Threads
 
-Active work and review syntheses live under `threads/current/`; closed objectives live under `threads/done/`. Each objective folder is a concise kebab-case thread name, then date, then iteration, with `REVIEW.md` as the committed summary.
+Active work and review syntheses live under `threads/current/`; closed objectives live under `threads/done/`. Each objective folder is a concise kebab-case thread name. Authoritative thread designs and implementation plans live directly under that folder as `DESIGN.md` and `PLAN.md`; review iterations stay one level deeper under date and iteration folders, with `REVIEW.md` as the committed summary.
 
 ### Active
 
@@ -66,5 +66,6 @@ Active work and review syntheses live under `threads/current/`; closed objective
 - [Devlog Detailed](devlog/detailed/) - Detailed implementation logs
 - [`superpowers/plans/`](superpowers/plans) - Historical implementation plans
 - [`superpowers/specs/`](superpowers/specs) - Historical design specs
+- [`design/`](design) - Cross-thread roadmap and historical design material that does not belong to a single thread
 
-The `superpowers/` and devlog documents are retained as project history. They may mention files or workflows that have since been reorganized.
+The `superpowers/`, `design/`, and devlog documents are retained as project history. They may mention files or workflows that have since been reorganized.

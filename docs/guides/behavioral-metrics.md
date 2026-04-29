@@ -142,7 +142,7 @@ Pair them to detect both regression types:
 
 ## See also
 
-- `docs/design/2026-04-27-behavioral-metrics-design.md` — full spec (v4, converged).
+- `docs/threads/done/behavioral-metrics/DESIGN.md` — full spec (v4, converged).
 - `docs/architecture/decisions.md` — ADRs 23-27.
 - `docs/guides/synthetic-playtest.md` — Spec 3 harness that produces the corpus.
 - `docs/guides/bundle-corpus-index.md` - Spec 7 disk-backed corpus listing and lazy bundle loading.
