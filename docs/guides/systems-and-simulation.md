@@ -339,3 +339,8 @@ function dailySystem(w: World): void {
 ```
 
 The manual form pays the call/return overhead every tick and shows up as a tracked entry with near-zero duration in `metrics.systems`. Prefer the `interval` field unless you genuinely need the cadence to vary at runtime.
+
+
+## Strict mode (v0.8.8+)
+
+When `WorldConfig.strict === true`, mutations from outside system phases / setup window / `runMaintenance(fn)` callbacks throw `StrictModeViolationError`. **Inside system execution**, all mutations are allowed because `_inTickPhase === true`. Diff listeners and `onTickFailure` listeners also run in-tick (the flag is cleared after listener emission). Note: `submitWithResult()` callbacks (validators and command-result listeners) fire in the **caller's phase**, not in the next tick — between-tick callers see those callbacks with `_inTickPhase === false`. See `docs/guides/strict-mode.md` for escape hatches and submit-callback semantics.

@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.8.8 - 2026-04-29
+
+Spec 6 - Strict-Mode Determinism Enforcement. Tier-3 of the AI-first dev roadmap; opt-in `WorldConfig.strict` flag rejects content mutations called outside system phases / setup window / `runMaintenance(fn)` callbacks.
+
+### New (additive)
+
+- **`WorldConfig.strict?: boolean`** (default `false`): opt-in mutation-gate enforcement.
+- **`World.endSetup()`**: explicitly close the setup window before the first tick. Idempotent. No-op when `strict !== true`.
+- **`World.runMaintenance<T>(fn): T`**: out-of-tick mutation hatch. Reentrant via depth counter (no-op nesting). Returns `fn`'s return value.
+- **`World.isStrict()`**, **`World.isInTick()`**, **`World.isInSetup()`**, **`World.isInMaintenance()`**: introspection getters.
+- **`StrictModeViolationError`** (`src/world-strict-mode.ts`): thrown when a gated method is called outside a writable phase. `details = { code: 'strict_mode_violation', method, phase: 'between-ticks' | 'after-failure', advice }`.
+
+### Behavior callouts
+
+- **22 mutation methods are gated** when `strict: true`: createEntity, destroyEntity, addComponent, setComponent, removeComponent, patchComponent, setPosition, addResource, removeResource, setResourceMax, setProduction, setConsumption, addTransfer, removeTransfer, setState, deleteState, addTag, removeTag, setMeta, deleteMeta, emit, random. Each calls `assertWritable(this, 'methodName')` at the top.
+- **Registration is NOT gated** — registerComponent, registerSystem, registerHandler, registerValidator, registerResource work at any time (per ADR 38).
+- **Listener-side mutations stay in-tick** — `_inTickPhase` is cleared in an outer `runTick` finally that runs *after* both diff-listener emission AND `onTickFailure` listener emission. Listeners that mutate (e.g., `world.recover()` from inside `onTickFailure`) succeed.
+- **`CommandTransaction.commit()` does NOT auto-open maintenance** (per ADR 40). Inside-tick commit works via `_inTickPhase`; outside-tick callers must wrap explicitly: `world.runMaintenance(() => txn.commit())`.
+- **`applySnapshot` uses `_maintenanceDepth` increment** for forward-compat (per ADR 37). Today's path uses internal-only mutations that bypass the public gate; the increment makes a future refactor safe.
+- **`World.deserialize` is static** — the new world's `_inSetup` (when strict) covers internal state-loading mutations.
+- **Bundles are unchanged modulo `config.strict`**: a strict world produces a `SessionBundle` byte-identical to a non-strict world's for the same seed/inputs, except the snapshot's `config.strict: true` field (added so `World.deserialize` preserves the flag). Strict mode does not affect tick-content determinism — only enforcement.
+
+### ADRs
+
+- ADR 36: Strict mode is opt-in default-off.
+- ADR 37: applySnapshot uses `_maintenanceDepth` for forward-compat; deserialize relies on the fresh world's setup window.
+- ADR 38: Registration calls are not gated.
+- ADR 39: Reentrant maintenance via depth counter (no-op nesting).
+- ADR 40: `CommandTransaction.commit()` does NOT auto-open maintenance.
+
+### Implementation notes
+
+- New module `src/world-strict-mode.ts` (extracted to keep `src/world.ts` from compounding existing 2379-LOC overage). Exports `StrictModeViolationError`, `StrictModePhase`, `StrictModeViolationDetails`, and the `assertWritable` helper.
+- `src/types.ts` extended with `WorldConfig.strict?: boolean`.
+- `src/command-transaction.ts` `FORBIDDEN_PRECONDITION_METHODS` extended with `endSetup` and `runMaintenance` (state-management calls forbidden inside read-only precondition predicates).
+
+### Validation
+
+All four engine gates pass: `npm test` (966 passed + 2 todo, +22 new in `tests/strict-mode.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 0.8.7 - 2026-04-28
 
 Spec 4 - Standalone Bundle Viewer. Tier-3 of the AI-first dev roadmap; programmatic agent-driver API for navigating, slicing, and diffing a `SessionBundle`. Composes with `BundleCorpus` and `SessionReplayer`.

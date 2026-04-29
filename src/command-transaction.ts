@@ -43,6 +43,8 @@ export const FORBIDDEN_PRECONDITION_METHODS = [
   'warnIfPoisoned',
   // RNG (mutates DeterministicRandom.state)
   'random',
+  // Strict-mode lifecycle (Spec 6, v0.8.8 — mutate _inSetup / _maintenanceDepth)
+  'endSetup', 'runMaintenance',
 ] as const;
 
 type ForbiddenMethod = (typeof FORBIDDEN_PRECONDITION_METHODS)[number];

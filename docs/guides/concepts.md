@@ -279,3 +279,8 @@ Every data structure the engine produces is plain JSON — no class instances, n
 ### Separation of engine and game
 
 The engine provides infrastructure. Game-specific logic (what units do, how combat works, what resources mean) lives in **systems** and **command handlers** written by the game project. The engine never makes game-design decisions.
+
+
+## Strict Mode (v0.8.8+)
+
+Optional `WorldConfig.strict` flag rejects mutations called outside the writable phases (system execution / setup window / `runMaintenance(fn)` callback). Default false. See `docs/guides/strict-mode.md`.

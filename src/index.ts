@@ -143,6 +143,15 @@ export {
   runSynthPlaytest,
 } from './synthetic-playtest.js';
 
+// Strict-Mode Determinism — Spec 6 (v0.8.8+): opt-in `WorldConfig.strict` flag
+// rejects mutation methods called outside system phases / setup window /
+// runMaintenance callbacks. See docs/threads/done/strict-mode/DESIGN.md.
+export {
+  StrictModeViolationError,
+  type StrictModePhase,
+  type StrictModeViolationDetails,
+} from './world-strict-mode.js';
+
 // Bundle Viewer — Spec 4 (v0.8.7+): Programmatic agent-driver API for navigating,
 // slicing, and diffing a SessionBundle. Composes with BundleCorpus and SessionReplayer.
 // See docs/threads/done/bundle-viewer/DESIGN.md.

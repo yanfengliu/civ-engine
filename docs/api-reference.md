@@ -5544,3 +5544,49 @@ interface BundleCorpusEntry {
 ```
 
 One-line corpus-to-viewer composition. Calls `loadBundle()` and constructs a `BundleViewer`. The corpus entry remains frozen after the method is attached.
+
+
+## Strict Mode (v0.8.8)
+
+Opt-in `WorldConfig.strict` flag rejects content mutations called outside system phases / setup window / `runMaintenance(fn)` callbacks. See `docs/guides/strict-mode.md` for the full guide.
+
+### `WorldConfig.strict?: boolean`
+
+Default `false`. When `true`, the 22 gated mutation methods (createEntity, destroyEntity, addComponent, setComponent, removeComponent, patchComponent, setPosition, addResource, removeResource, setResourceMax, setProduction, setConsumption, addTransfer, removeTransfer, setState, deleteState, addTag, removeTag, setMeta, deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a writable phase.
+
+### `World.endSetup()` / `World.runMaintenance` / `World.isStrict` / `World.isInTick` / `World.isInSetup` / `World.isInMaintenance`
+
+```ts
+class World<...> {
+  endSetup(): void;
+  runMaintenance<T>(fn: () => T): T;
+  isStrict(): boolean;
+  isInTick(): boolean;
+  isInSetup(): boolean;
+  isInMaintenance(): boolean;
+}
+```
+
+`endSetup()`: explicitly close the construction-time setup window. Idempotent. The first tick (any entry point) implicitly invokes it.
+
+`runMaintenance(fn)`: out-of-tick mutation block. Depth-counted reentrant (no-op nesting; only outermost exit clears the gate). `try`/`finally` decrements the counter even when `fn` throws.
+
+### `StrictModeViolationError`
+
+```ts
+type StrictModePhase = 'between-ticks' | 'after-failure';
+
+interface StrictModeViolationDetails {
+  readonly [key: string]: JsonValue;
+  readonly code: 'strict_mode_violation';
+  readonly method: string;
+  readonly phase: StrictModePhase;
+  readonly advice: string;
+}
+
+class StrictModeViolationError extends Error {
+  readonly details: StrictModeViolationDetails;
+}
+```
+
+Thrown by `assertWritable(this, 'methodName')` at the top of every gated mutation method when `strict: true` and none of `_inTickPhase`, `_inSetup`, `_maintenanceDepth > 0` is set.

@@ -230,3 +230,8 @@ const delta = frame.diffSince(0);      // BundleStateDiff over [0, frame.tick]
 ```
 
 `viewer.replayer()` returns the lazily-constructed memoized `SessionReplayer` if you need direct `selfCheck()` or `openAt()` access. See `docs/guides/bundle-viewer.md` for the full surface (sparse-tick semantics, content-bounded `recordedRange` for incomplete bundles, layered freezing model, and BundleCorpus integration).
+
+
+## Strict mode (v0.8.8+)
+
+`SessionReplayer.selfCheck()` is the post-hoc determinism verification. Strict mode (`WorldConfig.strict`, Spec 6) is the **structural complement**: violations throw at the call site rather than surfacing as replay divergences. See `docs/guides/strict-mode.md`. Bundle output is byte-identical between strict and non-strict worlds for the same seed/inputs (modulo the `config.strict` flag in the snapshot).

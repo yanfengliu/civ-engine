@@ -35,6 +35,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Bundle Corpus Index](guides/bundle-corpus-index.md) - Tier-2 manifest-first FileSink corpus listing, filtering, and lazy bundle loading
 - [Behavioral Metrics over Corpus](guides/behavioral-metrics.md) — Tier-2 corpus reducer with 11 engine-generic built-in metrics + comparison helper
 - [Bundle Viewer](guides/bundle-viewer.md) — Tier-3 programmatic agent-driver API over a `SessionBundle` (marker-anchored navigation, two-path `diffSince`, `diffSnapshots` helper, `BundleCorpusEntry.openViewer` integration)
+- [Strict Mode](guides/strict-mode.md) — Tier-3 opt-in `WorldConfig.strict` mutation-gate enforcement (rejects out-of-tick mutations; `runMaintenance(fn)` escape hatch; `StrictModeViolationError` at the call site)
 - [Renderer Integration](guides/rendering.md)
 - [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)

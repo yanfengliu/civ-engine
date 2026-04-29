@@ -104,7 +104,7 @@ Why it's deferred: high architectural complexity (input substitution, divergence
 
 ### Spec 6: Engine Strict-Mode Determinism Enforcement
 
-Status: **Proposed.** Independent of the other specs in this roadmap.
+Status: **Implemented** (v0.8.8). See `docs/threads/done/strict-mode/DESIGN.md` and `docs/threads/done/strict-mode/PLAN.md`.
 
 What it delivers: `World({ strict: true })` flag that rejects mutations from outside system phases. All external state changes must go through `submit()`. Includes escape hatches for setup, deserialization, and explicit out-of-tick maintenance. Auditing of all mutation methods to gate on inside-tick state.
 
@@ -162,7 +162,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
 | 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/threads/done/bundle-viewer/PLAN.md` (v2) |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
-| 6    | Strict-Mode Determinism Enforcement  | Proposed   | not yet drafted                                           |
+| 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/threads/done/strict-mode/DESIGN.md` (v3) + `docs/threads/done/strict-mode/PLAN.md` (v2) |
 | 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
 | 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
 | 9    | AI Playtester Agent                  | Proposed   | not yet drafted                                           |

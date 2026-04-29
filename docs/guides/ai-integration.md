@@ -343,3 +343,8 @@ for (const entry of failed) {
 Selective runtime freezing means agents can pass frames around without defensive copies. `frame.diffSince(otherTick)` returns either a folded TickDiff (cheap, common case) or a snapshot-derived diff (correct across sparse intermediates and entity recycling) and exposes the source via `BundleStateDiff.source` so the agent can reason about confidence.
 
 See `docs/guides/bundle-viewer.md` for the full surface, including the `worldFactory` requirements and the failure-in-range error semantics.
+
+
+## Strict mode (v0.8.8+, Spec 6)
+
+For agents that want determinism violations to throw at the source rather than surface as replay divergences, opt into `WorldConfig.strict: true`. The flag rejects 22 mutation methods called outside system phases / setup window / `runMaintenance(fn)` callbacks with `StrictModeViolationError` (Tier-3 of the AI-first roadmap). Default is off. See `docs/guides/strict-mode.md`.

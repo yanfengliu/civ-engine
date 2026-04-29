@@ -519,6 +519,8 @@ describe('CommandTransaction', () => {
         'getMeta', 'getByMeta',
         'getSpeed', 'isPaused', 'hasCommandHandler',
         'getAliveEntities', 'getResourceEntities', 'tick',
+        // Strict-mode read-only getters (Spec 6, v0.8.8)
+        'isStrict', 'isInTick', 'isInSetup', 'isInMaintenance',
         // TypeScript-private methods (not detectable at runtime; listed
         // explicitly so new private additions still require classification).
         'makeWorldPoisonedFailure', 'getObservableTick',

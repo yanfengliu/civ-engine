@@ -46,6 +46,7 @@ import {
   validateWorldConfig,
 } from './world-internal.js';
 import type { SystemPhase } from './world-internal.js';
+import { assertWritable } from './world-strict-mode.js';
 
 export type System<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
@@ -296,6 +297,14 @@ export class World<
   private tagsDirtyEntities = new Set<EntityId>();
   private metaDirtyEntities = new Set<EntityId>();
 
+  // Spec 6 (v0.8.8): strict-mode fields. The `_inSetup`, `_inTickPhase`, and
+  // `_maintenanceDepth` fields are accessed by `assertWritable` in
+  // `world-strict-mode.ts` via the `StrictModeWorldView` shape.
+  readonly strict: boolean;
+  /** @internal */ _inSetup = false;
+  /** @internal */ _inTickPhase = false;
+  /** @internal */ _maintenanceDepth = 0;
+
   constructor(config: WorldConfig) {
     validateWorldConfig(config);
     this.entityManager = new EntityManager();
@@ -328,15 +337,60 @@ export class World<
         this.gameLoop.pause();
       },
     });
+    this.strict = config.strict === true;
+    if (this.strict) this._inSetup = true;
+  }
+
+  // -------------------------------------------------------------------------
+  // Strict mode (Spec 6, v0.8.8)
+  // -------------------------------------------------------------------------
+
+  /** Whether this world was constructed with `strict: true`. */
+  isStrict(): boolean { return this.strict; }
+
+  /** Whether the world is currently executing a tick (any phase). */
+  isInTick(): boolean { return this._inTickPhase; }
+
+  /** Whether the construction-time setup window is still open. */
+  isInSetup(): boolean { return this._inSetup; }
+
+  /** Whether the world is inside one or more `runMaintenance(fn)` callbacks. */
+  isInMaintenance(): boolean { return this._maintenanceDepth > 0; }
+
+  /**
+   * Marks the construction-time setup window as ended. Idempotent — calling
+   * twice is a no-op. The first tick (via `step`, `stepWithResult`, or a
+   * `GameLoop.start()`-driven tick) implicitly invokes `endSetup()` as well.
+   * No-op when `strict !== true`.
+   */
+  endSetup(): void {
+    if (this._inSetup) this._inSetup = false;
+  }
+
+  /**
+   * Run an out-of-tick mutation block. Mutations inside `fn` are accepted
+   * regardless of strict mode. Reentrant via depth counter (no-op nesting).
+   * Returns `fn`'s return value. The depth is decremented in finally so an
+   * exception from `fn` does not leave the world permanently writable.
+   */
+  runMaintenance<T>(fn: () => T): T {
+    this._maintenanceDepth++;
+    try {
+      return fn();
+    } finally {
+      this._maintenanceDepth--;
+    }
   }
 
   createEntity(): EntityId {
+    assertWritable(this, 'createEntity');
     const id = this.entityManager.create();
     this.entitySignatures[id] = 0n;
     return id;
   }
 
   destroyEntity(id: EntityId): void {
+    assertWritable(this, 'destroyEntity');
     if (!this.entityManager.isAlive(id)) return;
 
     // Mark dying (alive=false, generation bumped) so re-entrant
@@ -426,12 +480,14 @@ export class World<
   addComponent<K extends keyof TComponents & string>(entity: EntityId, key: K, data: TComponents[K]): void;
   addComponent<T>(entity: EntityId, key: string, data: T): void;
   addComponent(entity: EntityId, key: string, data: unknown): void {
+    assertWritable(this, 'addComponent');
     this.setComponent(entity, key, data);
   }
 
   setComponent<K extends keyof TComponents & string>(entity: EntityId, key: K, data: TComponents[K]): void;
   setComponent<T>(entity: EntityId, key: string, data: T): void;
   setComponent(entity: EntityId, key: string, data: unknown): void {
+    assertWritable(this, 'setComponent');
     this.assertAlive(entity);
     const position = key === this.positionKey ? asPosition(data) : null;
     if (position) {
@@ -468,6 +524,7 @@ export class World<
   removeComponent<K extends keyof TComponents & string>(entity: EntityId, key: K): void;
   removeComponent(entity: EntityId, key: string): void;
   removeComponent(entity: EntityId, key: string): void {
+    assertWritable(this, 'removeComponent');
     this.assertAlive(entity);
     const store = this.componentStores.get(key);
     const hadComponent = store?.has(entity) ?? false;
@@ -486,6 +543,7 @@ export class World<
   patchComponent<T>(entity: EntityId, key: string, patch: (data: T) => T | void): T;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   patchComponent(entity: EntityId, key: string, patch: (data: any) => any): any {
+    assertWritable(this, 'patchComponent');
     this.assertAlive(entity);
     const current = this.getComponent(entity, key);
     if (current === undefined) {
@@ -501,6 +559,7 @@ export class World<
     position: Position,
     key = this.positionKey,
   ): void {
+    assertWritable(this, 'setPosition');
     this.setComponent(entity, key, { x: position.x, y: position.y });
   }
 
@@ -704,6 +763,7 @@ export class World<
   }
 
   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
+    assertWritable(this, 'emit');
     this.eventBus.emit(type, data);
   }
 
@@ -838,6 +898,7 @@ export class World<
   }
 
   random(): number {
+    assertWritable(this, 'random');
     return this.rng.random();
   }
 
@@ -874,6 +935,11 @@ export class World<
     }
     if (this.instrumentationProfile !== 'full') {
       config.instrumentationProfile = this.instrumentationProfile;
+    }
+    if (this.strict) {
+      // Spec 6 (v0.8.8): preserve strict flag across serialize/deserialize so
+      // a fresh world from World.deserialize(snap) keeps the same enforcement.
+      config.strict = true;
     }
 
     const componentOptions: Record<string, ComponentStoreOptions> = {};
@@ -1089,12 +1155,21 @@ export class World<
    * `applySnapshot` clears any current `lastTickFailure` / poison state.
    */
   applySnapshot(snapshot: WorldSnapshot): void {
-    if (this.isPoisoned()) {
-      this.recover();
+    // Spec 6 (v0.8.8): increment maintenance depth for forward-compat. Today's
+    // implementation uses internal-only paths (`_replaceStateFrom`) that bypass
+    // the public mutation gate; the increment makes a future refactor that
+    // routes through public methods safe under strict mode. See ADR 37.
+    this._maintenanceDepth++;
+    try {
+      if (this.isPoisoned()) {
+        this.recover();
+      }
+      const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot);
+      this._replaceStateFrom(fresh);
+      this.gameLoop.setTick(snapshot.tick);
+    } finally {
+      this._maintenanceDepth--;
     }
-    const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot);
-    this._replaceStateFrom(fresh);
-    this.gameLoop.setTick(snapshot.tick);
   }
 
   /**
@@ -1214,11 +1289,13 @@ export class World<
   }
 
   addResource(entity: EntityId, key: string, amount: number): number {
+    assertWritable(this, 'addResource');
     this.assertAlive(entity);
     return this.resourceStore.addResource(entity, key, amount);
   }
 
   removeResource(entity: EntityId, key: string, amount: number): number {
+    assertWritable(this, 'removeResource');
     this.assertAlive(entity);
     return this.resourceStore.removeResource(entity, key, amount);
   }
@@ -1231,6 +1308,7 @@ export class World<
   }
 
   setResourceMax(entity: EntityId, key: string, max: ResourceMax): void {
+    assertWritable(this, 'setResourceMax');
     this.assertAlive(entity);
     this.resourceStore.setResourceMax(entity, key, max);
   }
@@ -1240,11 +1318,13 @@ export class World<
   }
 
   setProduction(entity: EntityId, key: string, rate: number): void {
+    assertWritable(this, 'setProduction');
     this.assertAlive(entity);
     this.resourceStore.setProduction(entity, key, rate);
   }
 
   setConsumption(entity: EntityId, key: string, rate: number): void {
+    assertWritable(this, 'setConsumption');
     this.assertAlive(entity);
     this.resourceStore.setConsumption(entity, key, rate);
   }
@@ -1263,12 +1343,14 @@ export class World<
     resource: string,
     rate: number,
   ): number {
+    assertWritable(this, 'addTransfer');
     this.assertAlive(from);
     this.assertAlive(to);
     return this.resourceStore.addTransfer(from, to, resource, rate);
   }
 
   removeTransfer(id: number): void {
+    assertWritable(this, 'removeTransfer');
     this.resourceStore.removeTransfer(id);
   }
 
@@ -1287,6 +1369,7 @@ export class World<
   setState<K extends keyof TState & string>(key: K, value: TState[K]): void;
   setState(key: string, value: unknown): void;
   setState(key: string, value: unknown): void {
+    assertWritable(this, 'setState');
     assertJsonCompatible(value, `state '${key}'`);
     this.stateStore.set(key, value);
     this.stateDirtyKeys.add(key);
@@ -1302,6 +1385,7 @@ export class World<
   deleteState<K extends keyof TState & string>(key: K): void;
   deleteState(key: string): void;
   deleteState(key: string): void {
+    assertWritable(this, 'deleteState');
     if (this.stateStore.has(key)) {
       this.stateStore.delete(key);
       this.stateDirtyKeys.delete(key);
@@ -1316,12 +1400,14 @@ export class World<
   }
 
   addTag(entity: EntityId, tag: string): void {
+    assertWritable(this, 'addTag');
     this.assertAlive(entity);
     this.addTagInternal(entity, tag);
     this.tagsDirtyEntities.add(entity);
   }
 
   removeTag(entity: EntityId, tag: string): void {
+    assertWritable(this, 'removeTag');
     this.assertAlive(entity);
     const tags = this.entityTags.get(entity);
     if (!tags || !tags.has(tag)) return;
@@ -1350,6 +1436,7 @@ export class World<
   }
 
   setMeta(entity: EntityId, key: string, value: string | number): void {
+    assertWritable(this, 'setMeta');
     this.assertAlive(entity);
     this.setMetaInternal(entity, key, value);
     this.metaDirtyEntities.add(entity);
@@ -1360,6 +1447,7 @@ export class World<
   }
 
   deleteMeta(entity: EntityId, key: string): void {
+    assertWritable(this, 'deleteMeta');
     this.assertAlive(entity);
     const meta = this.entityMeta.get(entity);
     if (!meta) return;
@@ -1563,6 +1651,13 @@ export class World<
     // gameLoop.tick after advance.
     const tick = metrics?.tick ?? this.gameLoop.tick + 1;
 
+    // Spec 6 (v0.8.8): strict-mode tick-phase tracking. Outer try/finally so
+    // the flag stays true through finalizeTickFailure (which fires
+    // onTickFailure listeners) AND through the diff-listener emission below.
+    if (this._inSetup) this._inSetup = false;
+    this._inTickPhase = true;
+    try {
+
     try {
       this.eventBus.clear();
       this.entityManager.clearDirty();
@@ -1668,6 +1763,12 @@ export class World<
     }
 
     return null;
+    } finally {
+      // Spec 6 (v0.8.8): clear `_inTickPhase` AFTER both diff-listener emission
+      // AND any finalizeTickFailure-driven onTickFailure listener emission have
+      // completed. Listener-side mutations remain in-tick.
+      this._inTickPhase = false;
+    }
   }
 
   private processCommands(tick: number): {
