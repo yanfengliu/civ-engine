@@ -8,7 +8,7 @@ const threadsDir = path.join(docsDir, 'threads');
 
 const threadNamePattern = /^[a-z0-9][a-z0-9-]*$/;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-const iterationPattern = /^(?:\d+|(?:design|plan)-\d+|tie-breaker)$/;
+const iterationPattern = /^(?:\d+|(?:design|plan)-\d+)$/;
 const threadRootFiles = new Set(['DESIGN.md', 'PLAN.md']);
 const splitReviewThreadParents = new Map<string, { parent: string; doc: string }>([
   ['session-recording-spec', { parent: 'session-recording', doc: 'DESIGN.md' }],

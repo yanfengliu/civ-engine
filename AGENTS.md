@@ -25,14 +25,13 @@ When you do dispatch, the team roles below describe how to brief them. The Team 
 
 - **Team lead** (always the main agent):
   - Breaks the human's request into atomic tasks, selects the appropriate domain specialists, routes the tasks, and acts as the final gatekeeper before merging.
-  - If tests fail or review consensus is not reached after 3 iterations, execute a hard abort. Ask the user before destructive operations like `git reset --hard`. Summarize the failed approach and the smallest useful diagnostics in `docs/learning/lessons.md` without dumping raw error logs, then start over with a fresh plan that explicitly avoids the failed approach.
 - **Architect**: Acts as a consultant. Drafts the initial implementation plan and verifies it against ARCHITECTURE.md before work dispatches.
 - **Game designer**: Validates that the game mechanism works well and is fun. Researches local and online sources to ground opinions.
 - **Software engineer**: Handles code writing.
   - CRITICAL: After coding, ask the code reviewer to review (see Code review section).
   - Iterate with reviewers — diff reviews take ~5 minutes per CLI; use `run_in_background: true` and an `until [ -s <output-file> ]; do sleep 8; done` poller to wait without burning context or hitting harness sleep limits.
   - After addressing review comments, ask the reviewer to verify the fix.
-  - If engineer + reviewer cannot reach consensus after 3 iterations, escalate to the Tie-Breaker.
+  - If engineer + reviewer cannot reach consensus after 3 iterations, surface the disagreement to the user with both positions and let the user decide.
   - Save reviewer synthesis under `docs/threads/current/<objective>/<date>/<iteration_number>/`, mirroring the full-codebase review convention (see `docs/threads/done/full/<date>/<iteration_number>/` for historical precedent). The `<objective>` folder is a concise kebab-case phrase naming the work, such as `synthetic-playtest-task-2`, `behavioral-metrics-task-1`, or `thread-archive-migration`; for full-codebase reviews, use `full`.
   - Thread-level design artifacts live directly under the objective folder as `DESIGN.md` and `PLAN.md`. These are the authoritative design and implementation-plan docs for that objective; `<date>/design-N/REVIEW.md` and `<date>/plan-N/REVIEW.md` are only historical review summaries of design or plan iterations.
   - Each iteration directory contains only `REVIEW.md`, the concise synthesized summary with severity-tagged findings and the final disposition. Do not commit raw CLI output, stderr/stdout logs, error logs, prompts, or diff snapshots anywhere under `docs`.
@@ -41,11 +40,10 @@ When you do dispatch, the team roles below describe how to brief them. The Team 
   - After folding the final iteration's `REVIEW.md` into the devlog entry for the task, move the objective folder from `docs/threads/current/` to `docs/threads/done/`. The done thread stays as a historical artifact (do not delete — these are valuable audit trails alongside the full-review history).
   - Continue iterating until reviewers nitpick instead of catching real bugs / giving substantial feedback. Do not get stuck in an infinite loop.
 - **Code reviewer**: Follow the Code review section.
-- **Tie breaker**: Use `claude --model "claude-opus-4-7[1m]" --effort max`. Its prompt dictates that it must definitively choose to either ACCEPT the current diff (overriding the reviewer) or REJECT it with a mandatory, prescriptive patch. The Tie-Breaker's decision is final.
 
-## Code review (mandatory; not optional)
+## Code review
 
-This section is the operational implementation of the Core-rules "Multi-CLI code review is mandatory" rule. Every code or behavior change runs through this loop before merge — no exceptions, no carve-outs for "small" or "single-file" changes.
+Operational details for the multi-CLI review rule above.
 
 - Use Codex / Claude in CLI to independently review every change. Aspects to review:
   1. Design — easily scales, generalizes, debugs, can be understood and reasoned about, stays lean.
@@ -117,6 +115,7 @@ Code changes are not done until the docs match. Before declaring any task comple
 - `docs/guides/<topic>.md` — every guide whose subject overlaps the change. A new resource API → `resources.md`. A new system feature → `systems-and-simulation.md`. A new spatial primitive → `spatial-grid.md` / `rts-primitives.md`. A new AI-relevant surface → `ai-integration.md`. A new field-data utility → `map-generation.md`. A new tutorial-grade feature → `building-a-game.md` and `getting-started.md`. The `concepts.md` standalone-utilities list and tick-lifecycle ASCII must reflect new utilities and lifecycle changes.
 - Examples and tutorials must use the current API. If a guide demonstrates the deprecated pattern, replace the demo, don't add a "new way" sidebar.
 - Thread design and plan docs — when an objective has an accepted design or implementation plan, keep the current authoritative versions directly under `docs/threads/current/<objective>/DESIGN.md` and `PLAN.md`; move them with the thread to `docs/threads/done/<objective>/` when the objective closes.
+- `docs/learning/lessons.md` — when you encounter a non-obvious failure mode worth preserving for future sessions (a recurring trap, a rule that prevented a reasonable-seeming mistake, a process step that turned out load-bearing). One concise entry per lesson; this is the source of process learnings that re-reviewers consult alongside prior `REVIEW.md` files.
 
 **Verification step (mandatory before declaring task done):**
 

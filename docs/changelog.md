@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.10 - 2026-04-29
+
+AGENTS.md tightening — removed the Tie-Breaker role and the hard-abort rule, moved the `docs/learning/lessons.md` rule into Documentation discipline, and trimmed redundancy between the Core-rules multi-CLI mandate and the Code review section.
+
+### Process changes
+
+- **Tie-Breaker role removed.** Same-model-family tie-breaking didn't add genuine independence (the tie-breaker was Claude reviewing Claude's review at higher effort). When engineer + reviewer can't reach consensus after 3 iterations, surface the disagreement to the user with both positions and let the user decide.
+- **Hard-abort rule removed.** The 3-iteration cap that triggered `git reset --hard` + a `docs/learning/lessons.md` write-up was an artifact of a multi-developer workflow; in solo mode the natural escalation is "ask the user."
+- **`docs/learning/lessons.md` rule moved.** Previously triggered only by hard abort (now removed). Now lives under Documentation discipline → "Update if applicable to the change's topic" with a clearer write trigger (non-obvious failure modes worth preserving for future sessions). The re-reviewer reference at the iteration-folder rule is unchanged.
+- **Redundancy trimmed.** The `Code review (mandatory; not optional)` section header and its intro paragraph re-stated the Core-rules multi-CLI mandate (same "no exceptions, no carve-outs" framing). The section is now just `## Code review` with a one-line operational pointer to the Core rule. The anti-rationalization armor stays in Core rules where it's the source of truth.
+
+### Validation
+
+No runtime engine behavior change. The only code-side touches are the `src/version.ts` constant bump (0.8.9 → 0.8.10) and a one-line regex tightening in `tests/docs-threads.test.ts` removing `tie-breaker` from the allowed iteration-folder name set (no historical thread used that folder name; verified via glob). All four engine gates pass: `npm test` (989 passed + 2 todo, unchanged from v0.8.9), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max) ran on the v0.8.10 diff; full reviewer findings and iteration history are in the devlog and `docs/threads/done/agents-md-tightening/`.
+
 ## 0.8.9 - 2026-04-29
 
 Spec 9 - AI Playtester Agent. Tier-2 of the AI-first dev roadmap; engine-side substrate for LLM-driven (or any other async-decision) playtesters.
