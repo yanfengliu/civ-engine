@@ -143,6 +143,20 @@ export {
   runSynthPlaytest,
 } from './synthetic-playtest.js';
 
+// AI Playtester Agent — Spec 9 (v0.8.9+): async sibling to runSynthPlaytest for
+// LLM-driven (or any other async-decision) playtesters, plus bundleSummary helper
+// for feeding bundle facts to an LLM. See docs/threads/done/ai-playtester/DESIGN.md.
+export {
+  runAgentPlaytest,
+  bundleSummary,
+  type AgentDriver,
+  type AgentDriverContext,
+  type AgentPlaytestConfig,
+  type AgentPlaytestResult,
+  type AgentStopReason,
+  type BundleSummary,
+} from './ai-playtester.js';
+
 // Strict-Mode Determinism — Spec 6 (v0.8.8+): opt-in `WorldConfig.strict` flag
 // rejects mutation methods called outside system phases / setup window /
 // runMaintenance callbacks. See docs/threads/done/strict-mode/DESIGN.md.

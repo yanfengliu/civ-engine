@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.9 - 2026-04-29
+
+Spec 9 - AI Playtester Agent. Tier-2 of the AI-first dev roadmap; engine-side substrate for LLM-driven (or any other async-decision) playtesters.
+
+### New (additive)
+
+- **`runAgentPlaytest(config)`**: async sibling to `runSynthPlaytest`. Loops up to `maxTicks`, calls `agent.decide(ctx)` once per tick (sync or async), submits returned commands, calls `world.step()`, optionally invokes `agent.report(bundle)` post-run. Records via `SessionRecorder` with `sourceKind: 'synthetic'`.
+- **`AgentDriver<TEventMap, TCommandMap>`**: user-implemented contract. `decide(ctx) => Promise<PolicyCommand[]> | PolicyCommand[]` plus optional `report(bundle)` for qualitative summaries. LLM integration is intentionally out of scope — game projects wire their own clients.
+- **`AgentPlaytestConfig`** / **`AgentPlaytestResult`**: config + result types. `stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError'` (matches Spec 3 taxonomy).
+- **`bundleSummary(bundle)`** + **`BundleSummary`**: pure helper turning a `SessionBundle` into a JSON-serializable structured snapshot designed to fit a small LLM context window.
+
+### Behavior callouts
+
+- **Async sibling, not async Policy.** Per ADR 41, `Policy` stays synchronous (Spec 3 ADR 21). `runAgentPlaytest` owns its own async tick loop and adapts an async driver via per-tick await.
+- **Per-tick `recorder.lastError` check.** Mirrors `runSynthPlaytest`'s sink-error guard so a FileSink failure mid-run stops the loop with `stopReason: 'sinkError'`.
+- **`agent.report` errors are captured, not propagated.** If `report(bundle)` throws, the rejection is captured in `result.report = { error: { name, message, stack } }`.
+
+### ADRs
+
+- ADR 41: Async runner is a sibling to `runSynthPlaytest`, not an extension of `Policy`.
+
+### Validation
+
+All four engine gates pass: `npm test` (981 passed + 2 todo, +11 new in `tests/ai-playtester.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Codex CLI was unreachable for the design review (sandbox-blocked PowerShell call); proceeded with Claude per AGENTS.md fallback rule.
+
 ## 0.8.8 - 2026-04-29
 
 Spec 6 - Strict-Mode Determinism Enforcement. Tier-3 of the AI-first dev roadmap; opt-in `WorldConfig.strict` flag rejects content mutations called outside system phases / setup window / `runMaintenance(fn)` callbacks.

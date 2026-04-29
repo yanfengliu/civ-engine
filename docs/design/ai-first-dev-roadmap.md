@@ -46,7 +46,7 @@ Tier 1 makes AI-first possible. Tier 2 makes it powerful.
 
 ### Spec 9: AI Playtester Agent
 
-Status: **Proposed.**
+Status: **Implemented** (v0.8.9). See `docs/threads/done/ai-playtester/DESIGN.md` and `docs/threads/done/ai-playtester/PLAN.md`.
 
 What it delivers: a separate LLM-driven agent that plays the game (via the same `submit()` boundary), then writes natural-language qualitative feedback ("I found myself doing X repetitively in the early game; the second hour felt aimless"). Distinct from coding agents — its job is to *play and report*, not to edit code.
 
@@ -165,6 +165,6 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/threads/done/strict-mode/DESIGN.md` (v3) + `docs/threads/done/strict-mode/PLAN.md` (v2) |
 | 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
 | 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
-| 9    | AI Playtester Agent                  | Proposed   | not yet drafted                                           |
+| 9    | AI Playtester Agent                  | **Implemented** (v0.8.9) | `docs/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/threads/done/ai-playtester/PLAN.md` (v1) |
 
 Update this row as specs are drafted, accepted, implemented, and merged.

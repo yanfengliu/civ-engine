@@ -5590,3 +5590,84 @@ class StrictModeViolationError extends Error {
 ```
 
 Thrown by `assertWritable(this, 'methodName')` at the top of every gated mutation method when `strict: true` and none of `_inTickPhase`, `_inSetup`, `_maintenanceDepth > 0` is set.
+
+
+## AI Playtester Agent (v0.8.9)
+
+Async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters. See `docs/guides/ai-playtester.md` for the full guide.
+
+### `AgentDriver<TEventMap, TCommandMap>`
+
+```ts
+interface AgentDriverContext<TEventMap, TCommandMap> {
+  readonly world: World<TEventMap, TCommandMap>;
+  readonly tick: number;
+  readonly startTick: number;
+  readonly tickIndex: number;
+}
+
+interface AgentDriver<TEventMap, TCommandMap> {
+  decide(ctx: AgentDriverContext<TEventMap, TCommandMap>):
+    Promise<readonly PolicyCommand<TCommandMap>[]> | readonly PolicyCommand<TCommandMap>[];
+  report?(bundle: SessionBundle<TEventMap, TCommandMap>):
+    Promise<unknown> | unknown;
+}
+```
+
+### `runAgentPlaytest(config)`
+
+```ts
+interface AgentPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
+  agent: AgentDriver<TEventMap, TCommandMap>;
+  maxTicks: number;
+  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
+  sink?: SessionSink & SessionSource;
+  sourceLabel?: string;
+  snapshotInterval?: number | null;
+}
+
+type AgentStopReason = 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError';
+
+interface AgentPlaytestResult<TEventMap, TCommandMap> {
+  bundle: SessionBundle<TEventMap, TCommandMap>;
+  ticksRun: number;
+  stopReason: AgentStopReason;
+  ok: boolean;
+  agentError?: { tick: number; error: { name: string; message: string; stack: string | null } };
+  report?: unknown;
+}
+
+function runAgentPlaytest<...>(config): Promise<AgentPlaytestResult<...>>;
+```
+
+### `bundleSummary(bundle)`
+
+```ts
+interface BundleSummary {
+  sessionId: string;
+  recordedAt: string;
+  engineVersion: string;
+  nodeVersion: string;
+  sourceKind: 'session' | 'scenario' | 'synthetic';
+  sourceLabel: string | null;
+  startTick: number;
+  endTick: number;
+  durationTicks: number;
+  incomplete: boolean;
+  totalCommands: number;
+  acceptedCommands: number;
+  acceptedCommandRate: number;
+  commandTypeCounts: Record<string, number>;
+  totalEvents: number;
+  eventTypeCounts: Record<string, number>;
+  markerCount: number;
+  markersByKind: Record<string, number>;
+  failureCount: number;
+  failedTicks: number[];
+}
+
+function bundleSummary(bundle: SessionBundle): BundleSummary;
+```
+
+Pure function. JSON-serializable result designed to fit a small LLM context window.
