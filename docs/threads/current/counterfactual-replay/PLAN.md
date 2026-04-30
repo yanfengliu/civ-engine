@@ -1,6 +1,17 @@
 # Counterfactual Replay / Fork — Implementation Plan
 
-**Status:** Draft v1 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Awaiting multi-CLI plan review.
+**Status:** Draft v2 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Awaiting plan-2 review.
+
+**v2 deltas vs v1:** addresses iter-1 review (Codex + Claude both ITERATE — convergent on H1/H2):
+- **H1:** `recorder.start()` → `recorder.connect()` everywhere. Plus `lastError` guard after connect (matching `runSynthPlaytest`/`runAgentPlaytest`).
+- **H2:** Step 10 reworked. `openAt` does forward-replay via `worldFactory + submitWithResult`, NOT TickDiff folding. There is no existing `applyTickDiff(snapshot, diff): WorldSnapshot` helper. New Step 10a introduces that helper as a net-new piece over all six TickDiff dimensions. Step 10b is the `diffBundles` state-fold consumer.
+- **Off-by-one (Codex H#1):** Step 5 IMPL bullet 6 loop condition fixed. The continuation loop runs `while world.tick < untilTick` (i.e., `for t = targetTick + 1; t < untilTick; t++`, exclusive upper bound). `untilTick` is interpreted matching `openAt`'s contract: the desired `world.tick` at run end (= bundle.endTick). For `forkAt(5).run({ untilTick: source.persistedEndTick = 10 })`, the fork processes submission-ticks `5..9` (5 step()s), produces TickDiff.tick `6..10`, and ends with `world.tick = 10`, matching source's slice over `[5, 10]`.
+- **Commit cadence:** Spec 5 is one coherent shipped change → ONE commit + ONE version bump (`0.8.11 → 0.8.12`) at the end. Per-step "checkpoints" in this plan are local TDD milestones, NOT commits. Affected-suite gates run per checkpoint; the full gate (`npm test && typecheck && lint && build`) runs once before the final commit + multi-CLI implementation review.
+- **Step 5/6 split (Claude M1):** Step 5 returns `Divergence` with `commandSequenceMap` populated and other fields as empties; Step 6 fills `firstDivergentTick`, `perTickCounts`, `equivalent`. Test (h)'s `perTickCounts` assertion moved to Step 6.
+- **Test coverage gaps (Codex M3):** added cases for `untilTick > source.persistedEndTick` and validator-rejected substitution / changed acceptance outcome in both inline divergence and `diffBundles`.
+- **Step 11 harness (Claude M2):** switched to `runSynthPlaytest` per DESIGN §8.
+- **policySeed propagation (Claude L2):** explicit "no policySeed" in Step 5 IMPL recorder construction.
+- **Risks row 7 (Claude L1):** rewritten to conclusion + defensive test; stream-of-consciousness removed.
 
 **Author:** civ-engine team.
 
@@ -8,185 +19,205 @@
 
 ## 1. Overview
 
-Land Spec 5 in 11 ordered steps, each landing as its own commit on `main` after the per-step gates pass. Each step is TDD: write the failing test first, implement to green, then run the affected suites + typecheck + lint before staging.
+Land Spec 5 in 12 ordered TDD checkpoints. The full diff lands as ONE commit on `main` (per AGENTS.md "one version bump per coherent shipped change"); per-checkpoint progression is internal to the working tree and uses focused vitest suites for tight feedback. The full gate (`npm test && npm run typecheck && npm run lint && npm run build`) runs once before the final commit + multi-CLI implementation review.
 
-The full gate (`npm test && npm run typecheck && npm run lint && npm run build`) runs once before the final commit + multi-CLI implementation review. Per-step iteration uses focused suites (`vitest run tests/session-fork.test.ts` etc.) for tight feedback.
-
-The ordering is bottom-up: types and errors first, then the substitution mechanism, then divergence accumulator, then `diffBundles`. The equivalence test (Step 7) is the load-bearing milestone — once it passes, the substitution path is correct enough that divergence work is straightforward. After Step 7 the design is "running"; Steps 8–11 add the comparison layer.
+The ordering is bottom-up: types and errors first, then the substitution mechanism, then divergence accumulator, then `diffBundles`. The equivalence test (Step 7) is the load-bearing milestone. The `applyTickDiff` helper (Step 10a) is the largest new piece by LOC; it gets its own checkpoint so it can be reviewed standalone.
 
 ## 2. File layout
 
 ```
 src/
-  session-fork.ts             ← NEW (~450 LOC budget; split if it grows past 500)
-  session-bundle-diff.ts      ← NEW (~350 LOC budget)
-  session-replayer.ts         ← MODIFY (add forkAt method, ~30 LOC delta)
+  session-fork.ts             ← NEW (~450 LOC budget; split if past 500)
+  session-bundle-diff.ts      ← NEW (~400 LOC)
+  apply-tick-diff.ts          ← NEW (~250 LOC; the snapshot-folding helper)
+  session-replayer.ts         ← MODIFY (add forkAt, ~30 LOC delta)
   index.ts                    ← MODIFY (~15 LOC of new exports)
 
 tests/
   session-fork.test.ts             ← NEW
   session-fork-equivalence.test.ts ← NEW (with the bundle normalizer helper)
   session-bundle-diff.test.ts      ← NEW
+  apply-tick-diff.test.ts          ← NEW
   session-fork-integration.test.ts ← NEW (full RSI loop)
 ```
 
-Budgeted LOC: target ~800 production + ~800 test. Per AGENTS.md "no file > 500 LOC" — if `session-fork.ts` approaches the limit we split out `session-fork-divergence.ts` (the inline accumulator) and `session-fork-builder.ts` (the chainable API). Decide at Step 6 once the substitution mechanism is in.
+Budgeted production ~1100 LOC + tests ~1000 LOC. Per AGENTS.md "no file > 500 LOC" — if `session-fork.ts` approaches 500 we split out `session-fork-divergence.ts` (the inline accumulator) and `session-fork-builder.ts` (the chainable API). Decide at Step 6 once the substitution mechanism is in.
 
 ## 3. Step-by-step
 
-Each step has a TEST line (the failing test that captures the contract) and an IMPL line (the production change to make it pass). Per-step gates are listed once at the bottom of each step.
+Each checkpoint has a TEST line (the failing test that captures the contract) and an IMPL line (the production change to make it pass). Per-checkpoint gates: `vitest run <affected files>` + `npm run typecheck`. Lint and full gate run once at the end.
 
 ### Step 1 — Types + error classes (no behavior)
 **TEST:** `tests/session-fork.test.ts` — import-only smoke test that asserts the new exports exist with the expected shapes (`ForkBuilder`, `ForkResult`, `Divergence`, `DivergenceCounts`, `CommandSequenceMap`, `ForkRunConfig`, `ForkSubstitutionError`, `ForkBuilderConflictError`, `BuilderConsumedError`).
 
 **IMPL:** `src/session-fork.ts` types and error classes (no `forkAt` yet, no `ForkBuilder` impl). `src/index.ts` re-exports.
 
-**Gates (this step):** typecheck + targeted vitest.
+### Step 2 — `SessionReplayer.forkAt` skeleton + preconditions
+**TEST:** `tests/session-fork.test.ts` —
+- `replayer.forkAt(targetTick)` returns a `ForkBuilder`.
+- Precondition errors: out-of-range, replay-across-failure, no-payload, incomplete-beyond-persistedEndTick — same shape as `openAt`'s tests.
 
-### Step 2 — `SessionReplayer.forkAt` skeleton
-**TEST:** `tests/session-fork.test.ts` — `replayer.forkAt(targetTick)` returns a `ForkBuilder` with the queued-substitutions arrays empty; no precondition errors thrown (delegate to a stub `_initBuilder` that returns the skeleton). Then add precondition tests (out-of-range, replay-across-failure, no-payload, incomplete-beyond-persistedEndTick) — same shape as `openAt`'s tests, checked by reusing `openAt`'s precondition validator (extract a `validateOpenAtTick(targetTick)` helper if not already present).
+**IMPL:** Extract `validateOpenAtTick(targetTick): void` from `openAt`'s precondition checks (private helper). `forkAt` calls it, then `openAt(targetTick)` eagerly to materialize the paused world (because `.snapshot()` requires it; alternative lazy-build was considered and rejected — eager pays the openAt cost once where the user expects it). Stores the world inside the builder constructor.
 
-**IMPL:** `forkAt(targetTick)` in `session-replayer.ts` performs the same precondition checks as `openAt` (extract a shared private helper) then returns a new `ForkBuilder` constructed with `{ replayer: this, targetTick }`. The builder is NOT yet running `openAt` — that's deferred to `run()` to keep `forkAt` cheap and to support the case where the caller calls `.snapshot()` and `.replace()` etc. without ever calling `.run()`.
-
-Wait — `.snapshot()` requires the world. So `forkAt` must invoke `openAt` eagerly to materialize the paused world. Decision: `forkAt` calls `openAt(targetTick)` immediately and stores the world inside the builder. Cost is one full replay, but that's intrinsic to the operation.
-
-**Gates:** typecheck + `vitest run tests/session-fork.test.ts`.
+**Reasoning for eager openAt:** confirmed by plan-1 reviewers as sound. `.snapshot()` is a pre-`run()` operation and needs a materialized world; lazy build would either re-do the openAt cost on each `.snapshot()` or cache an eager result on first call. Eager just chooses where to pay the intrinsic cost.
 
 ### Step 3 — `ForkBuilder.snapshot()`
-**TEST:** `tests/session-fork.test.ts` — `builder.snapshot()` returns a `WorldSnapshot` whose `tick === targetTick`; calling it twice produces structurally-equal but reference-distinct snapshots; values match `world.serialize()` at the same tick (compare against a parallel `replayer.openAt(targetTick).serialize()`).
+**TEST:** `tests/session-fork.test.ts` — `builder.snapshot()` returns a `WorldSnapshot` with `tick === targetTick`; calling twice produces equal-but-distinct snapshots; values match `replayer.openAt(targetTick).serialize()`.
 
-**IMPL:** `ForkBuilder.snapshot()` calls `world.serialize()` and returns. Throws `BuilderConsumedError` if called after `.run()` (consumed flag).
-
-**Gates:** typecheck + targeted vitest.
+**IMPL:** `ForkBuilder.snapshot()` calls `world.serialize()`. Throws `BuilderConsumedError` if called after `.run()`.
 
 ### Step 4 — `replace`/`insert`/`drop` builder ops + conflict rules
-**TEST:** `tests/session-fork.test.ts` — for each of: replace/drop with unknown sequence (throws `ForkSubstitutionError`), duplicate replace (throws `ForkBuilderConflictError(duplicate_replace)`), duplicate drop (throws `duplicate_drop`), replace+drop on same seq (throws `replace_drop_conflict`), replace/drop of source-rejected command (allowed, no throw), multi-insert preserves FIFO, ops-after-run (throws `BuilderConsumedError`). Also: replace/insert/drop chainable returns; insert with no original sequence works fine.
-
-**IMPL:** Internal `Map<sequence, 'replaced' | 'dropped'>` used to enforce conflicts synchronously. Inserts go in a separate `Array` to preserve order. Lookups against the source bundle's commands at `targetTick` (precomputed once in `forkAt`). Mark `consumed: true` after `run()`; check at every public method.
-
-**Gates:** typecheck + targeted vitest.
-
-### Step 5 — `ForkBuilder.run()` substitution mechanism (no inline divergence yet)
 **TEST:** `tests/session-fork.test.ts` —
-- (a) No-substitution `run({ untilTick: source.persistedEndTick })` returns a `ForkResult` whose `bundle.commands.length` matches the source's `commands` count over `[targetTick, persistedEndTick]`. Detailed equivalence-by-bytes comes in Step 7.
-- (b) Substituted command (replace) appears in fork bundle at `targetTick`; old command's payload absent.
-- (c) Inserted command appears at `targetTick` AFTER all source commands at that tick (assert via `bundle.commands.filter(c => c.submissionTick === targetTick)` — the inserted entry's index in that filtered list equals the count of source-commands-at-targetTick).
+- replace/drop with unknown sequence → `ForkSubstitutionError`.
+- duplicate replace / duplicate drop / replace+drop on same seq → `ForkBuilderConflictError` with appropriate codes.
+- replace/drop of source-rejected command (`result.accepted: false`) → allowed, no throw.
+- multi-insert preserves FIFO order (recorded in builder-internal `inserts` array).
+- ops-after-run → `BuilderConsumedError`.
+- chainable returns (each op returns the builder).
+
+**IMPL:** Internal `Map<originalSequence, 'replaced' | 'dropped'>` enforces conflicts synchronously. Inserts in a separate `Array`. Lookups against precomputed source-commands-at-targetTick (built once in `forkAt`). `consumed` flag checked at every public method.
+
+### Step 5 — `ForkBuilder.run()` substitution mechanism (Divergence with empty per-tick fields)
+**TEST:** `tests/session-fork.test.ts` —
+- (a) No-substitution `run({ untilTick: source.metadata.endTick })` returns a `ForkResult` whose `bundle.commands.length` matches the count of source commands with `submissionTick` in `[targetTick, source.metadata.endTick - 1]` (the `< untilTick` range; see "untilTick semantic" below).
+- (b) Substituted command (replace) appears in fork bundle at `submissionTick = targetTick`; old command's payload absent.
+- (c) Inserted command appears at `submissionTick = targetTick` AFTER all source commands at that tick.
 - (d) Dropped command absent from fork bundle.
-- (e) `commandSequenceMap.replaced/inserted/dropped/preserved` all populated with correct shape; `originalSequence`/`assignedSequence` integers monotonic per fork tick.
-- (f) Calling `.run()` twice throws `BuilderConsumedError`.
-- (g) `run({ untilTick: targetTick - 1 })` throws `RangeError`.
-- (h) `run()` mid-fork handler-failure aborts cleanly: `bundle.metadata.failedTicks` populated, `bundle.failures[]` non-empty, `Divergence.perTickCounts` only has entries for `[targetTick, T_fail-1]`.
+- (e) `divergence.commandSequenceMap.{replaced, inserted, dropped, preserved}` populated with correct shape; assigned-sequence values are integers `>= 0` and monotonic per fork tick.
+- (f) Calling `.run()` twice → `BuilderConsumedError`.
+- (g) `run({ untilTick: targetTick - 1 })` → `RangeError`.
+- (h) Mid-fork handler-failure: `bundle.metadata.failedTicks` populated; `bundle.failures[]` non-empty; `run()` does NOT rethrow. (`Divergence.perTickCounts` shape assertions deferred to Step 6.)
+- (i) `recorder.lastError` non-null after `connect()` causes `run()` to throw the captured error (matching `runSynthPlaytest:208-214`).
+- (j) `run({ untilTick > source.metadata.endTick })` continues forward beyond source range; bundle `endTick > source.endTick`. Inline `Divergence` only covers `[targetTick, source.metadata.endTick]`. (`perTickCounts` content deferred to Step 6.)
+
+**untilTick semantic:** matching `openAt`'s contract, `untilTick` is the desired `world.tick` at run end (= `bundle.metadata.endTick`). The continuation loop runs `while world.tick < untilTick`. Equivalently: `for t = targetTick + 1; t < untilTick; t++ { submit_source_at_t; world.step(); }`. This means the fork's last submission-tick is `untilTick - 1`, which matches source's slice over `[targetTick, untilTick]`.
 
 **IMPL:** `run()` does:
 1. Materialize the configured (or default) sink: `new MemorySink({ allowSidecar: true })`.
-2. Construct fresh `SessionRecorder` with `sourceKind: 'synthetic'`, `sourceLabel: config.sourceLabel ?? \`counterfactual-fork-of-${source.metadata.sessionId}@${targetTick}\``. Call `recorder.start()` — this captures the initial snapshot at `targetTick` and installs the `submitWithResult` wrap.
-3. Walk the source bundle's commands at `targetTick` in `originalSequence` order:
+2. Construct fresh `SessionRecorder` with `sourceKind: 'synthetic'`, `sourceLabel: config.sourceLabel ?? \`counterfactual-fork-of-${source.metadata.sessionId}@${targetTick}\``. **No `policySeed`** (different lineage; per DESIGN §7 normalizer).
+3. `recorder.connect()`. Check `recorder.lastError` immediately (matching `runSynthPlaytest:207-214` and `runAgentPlaytest:169-172`); if non-null, `recorder.disconnect()` (best-effort) and rethrow the captured error.
+4. Walk the source bundle's commands at `submissionTick === targetTick` in `originalSequence` order:
    - In dropped set → skip.
    - In replaced map → `world.submitWithResult(replacement.type, replacement.data)`; record `{tick: targetTick, originalSequence, assignedSequence: result.sequence}` in `commandSequenceMap.replaced`.
    - Otherwise → `world.submitWithResult(rc.type, rc.data)`; record `{tick: targetTick, originalSequence, assignedSequence: result.sequence}` in `commandSequenceMap.preserved`.
-4. After source commands, submit inserts in builder-call order: `world.submitWithResult(insert.type, insert.data)`; record `{tick: targetTick, assignedSequence: result.sequence}` in `commandSequenceMap.inserted`.
-5. Step the world for `targetTick` (`world.step()`).
-6. From `targetTick + 1` through `untilTick`: forward-replay loop matching `openAt`'s body — submit source commands at tick `t`, then `world.step()`. Wrap in try/catch for `WorldTickFailureError`; on failure, break the loop, let `recorder.disconnect()` finalize the bundle with the failed tick recorded.
-7. `recorder.disconnect()`. Return `ForkResult { bundle: sink.readBundle(...), divergence: { ...empty for now... }, source: sink }`.
+5. After source commands, submit inserts in builder-call order: `world.submitWithResult(insert.type, insert.data)`; record `{tick: targetTick, assignedSequence: result.sequence}` in `commandSequenceMap.inserted`.
+6. `world.step()`. Recorder's diff/execution listeners fire and capture the targetTick TickDiff.
+7. Continuation loop: `while world.tick < untilTick { for each source command at submissionTick === world.tick: world.submitWithResult(rc.type, rc.data); try { world.step() } catch (WorldTickFailureError) { break } }`. (Recorder captures everything via the `submitWithResult` wrap installed by `connect()`.)
+8. `recorder.disconnect()`. Returns `ForkResult { bundle: sink.toBundle(), divergence: { firstDivergentTick: null, perTickCounts: new Map(), commandSequenceMap, equivalent: false }, source: sink }`. `equivalent` and `firstDivergentTick` will be backfilled in Step 6.
 
-Use a builder-local `_consumed` flag.
+The `consumed` flag is set on `run()` entry (or in a try/finally to handle the failure-mid-run case correctly).
 
-**Gates:** typecheck + targeted vitest. The existing test suite for `openAt`, `MemorySink`, recorder semantics should not regress; run `vitest run tests/session-replayer.test.ts tests/session-recorder.test.ts tests/memory-sink.test.ts` as a quick check.
+**Note:** `sink.toBundle()` is the actual reader API (per `MemorySink` in `src/session-sink.ts`); my v1 plan said `readBundle` which doesn't exist.
 
-### Step 6 — Inline `Divergence` accumulator in `run()`
+### Step 6 — Inline `Divergence` accumulator
 **TEST:** `tests/session-fork.test.ts` —
-- (a) No-substitution: `Divergence.firstDivergentTick === null`, `equivalent === true`, `perTickCounts` empty.
-- (b) Replace causes downstream event delta: `firstDivergentTick === targetTick` (substitution counts as targetTick divergence if it produced any command/event delta); `perTickCounts.get(targetTick)` has appropriate `commandsChanged` count; later ticks may also have entries.
-- (c) Drop produces `commandsSourceOnly: 1` at `targetTick`.
-- (d) Insert produces `commandsForkOnly: 1` at `targetTick`.
-- (e) Same-payload event emitted at the fork that the source didn't emit → `eventsForkOnly: 1`; vice versa → `eventsSourceOnly: 1`.
+- (a) No-substitution: `divergence.firstDivergentTick === null`, `equivalent === true`, `perTickCounts` empty.
+- (b) Replace causes downstream event delta: `firstDivergentTick === targetTick + 1` (TickDiff.tick numbering — submission-tick targetTick produces diff at targetTick+1; if substitution caused command-result divergence at targetTick, that's reported under TickDiff.tick=targetTick+1 in the per-tick counts).
+- (c) Drop produces `commandsSourceOnly: 1` at substitution tick (i.e., the `SessionTickEntry.tick` matching `submissionTick + 1`).
+- (d) Insert produces `commandsForkOnly: 1` at the same.
+- (e) Same-payload event emitted at fork that source didn't → `eventsForkOnly: 1` at the appropriate tick; vice versa → `eventsSourceOnly: 1`.
+- (f) Validator-rejected substituted command (replace whose new payload validator rejects) → `commandsChanged: 1` at substitution tick (since the source's command at the same `originalSequence` was accepted with different payload+result vs fork's rejected substitute).
+- (g) Acceptance flip due to state divergence (replace causes earlier substitution that flips a later command's accept/reject) → `commandsChanged: 1` at the affected later tick.
+- (h) Mid-fork handler-failure: `Divergence.perTickCounts` only has entries for ticks in `[targetTick + 1, T_fail]` (TickDiff.tick numbering — the diff for processing-tick T_fail-1 fires before the failure on T_fail).
+- (i) `untilTick > source.metadata.endTick`: `Divergence.perTickCounts` covers `[targetTick + 1, source.metadata.endTick]` only; the tail `[source.metadata.endTick + 1, untilTick]` is `forkOnly`-shaped data but not divergence-counted (no source to compare). `firstDivergentTick` is `null` if no actual divergence in the overlapping range.
 
-**IMPL:** Inside `run()`'s tick loop, walk source `bundle.ticks[]` and `bundle.commands[]` and `bundle.events[]` for the current tick `t` in lockstep with the fork's freshly-recorded data (read from the fork's recorder via the sink's writeTick listener — easier path: read from `sink.readBundle()` at the end and walk both bundles' tick entries in a second pass). Decision: do the comparison in a second pass over the completed fork bundle, since the recorder already has all the data by the time `run()` is about to return. This keeps the run-loop simple and doesn't bind the divergence accumulator to the recorder's internal state.
+**IMPL:** `computeInlineDivergence(sourceBundle, forkBundle, commandSequenceMap, [overlapStart, overlapEnd])` reads both bundles after `recorder.disconnect()` and walks per `SessionTickEntry`:
+- At the targetTick-correspondent `SessionTickEntry` (TickDiff.tick = targetTick+1): use `commandSequenceMap` to align commands. Inserts → `forkOnly`. Drops → `sourceOnly`. Preserved+replaced → check payload+result equivalence; differing → `changed`.
+- At ticks > targetTick-correspondent: align by per-tick submission-order index.
+- Events at every tick: align by per-tick submission-order index.
+- Compute `firstDivergentTick = min(t in perTickCounts.keys())` or `null`.
+- `equivalent = firstDivergentTick === null`.
 
-Helper: `computeInlineDivergence(source, fork, commandSequenceMap, [overlappingStart, overlappingEnd])` returns `Divergence`. Per-tick:
-- Align `targetTick` commands using `commandSequenceMap`.
-- Align ticks > `targetTick` by per-tick submission-order index (events too).
-- Count `sourceOnly`/`forkOnly`/`changed` per dimension.
-- `firstDivergentTick` = lowest tick with any non-zero count.
-- `equivalent` = `firstDivergentTick === null`.
+Backfill `divergence` fields in the `ForkResult` after this pass.
 
-**Gates:** typecheck + targeted vitest + `vitest run tests/session-replayer.test.ts` (no regression).
+### Step 7 — Equivalence test (the load-bearing checkpoint)
+**TEST:** `tests/session-fork-equivalence.test.ts` — for each of several source bundles (prototype game, multi-tick events, agent-driven, periodic snapshots): `forkAt(midTick).run({ untilTick: source.metadata.endTick })` with no substitution → assert `divergence.equivalent === true` AND `normalizeBundle(forkBundle)` byte-equals `normalizeBundle(bundleSlice(sourceBundle, midTick, source.endTick))`.
 
-### Step 7 — `tests/session-fork-equivalence.test.ts` (the load-bearing test)
-**TEST:** Build several source bundles via existing fixtures (prototype game, multi-tick events bundle, agent-driven `runAgentPlaytest` bundle, bundle with periodic snapshots). For each: `forkAt(midTick).run({ untilTick: source.persistedEndTick })` with no substitution → assert `divergence.equivalent === true` AND `normalizeBundle(forkBundle)` byte-equals `normalizeBundle(sourceBundle.slice(midTick))`.
-
-`normalizeBundle(bundle, { startTickAlignment, snapshotTicks })` is a test helper that:
+`normalizeBundle(bundle, options)` test helper:
 - Replaces `metadata.{sessionId, recordedAt, sourceKind, sourceLabel, startTick, endTick, persistedEndTick, durationTicks, policySeed}` with stable placeholders.
-- For each `commands[i]`: replace `sequence` and `result.sequence` with `i` (rebased index).
-- For each `executions[i]`: replace `submissionSequence` with the corresponding rebased index.
-- For each `ticks[i]`: replace `metrics` with `null`.
-- Strip `markers` and `attachments`.
-- Align `snapshots[]` by tick number; drop snapshots that don't exist on both sides.
+- For each `commands[i]`: replaces `sequence` and `result.sequence` with the rebased index `i`.
+- For each `executions[i]`: replaces `submissionSequence` with the rebased index.
+- For each `ticks[i]`: replaces `metrics` with `null`.
+- Strips `markers` and `attachments`.
+- Aligns `snapshots[]` by tick; drops snapshots not present on both sides.
 
-Sourceslice helper `bundleSlice(bundle, fromTick, toTick)` produces a `SessionBundle`-shaped object covering `[fromTick, toTick]` of the source.
+`bundleSlice(bundle, fromTick, toTick)` test helper produces a `SessionBundle`-shaped object covering ticks where `submissionTick` is in `[fromTick, toTick - 1]` (commands), `SessionTickEntry.tick` is in `[fromTick + 1, toTick]` (ticks), and snapshots in `[fromTick, toTick]`. It also rebuilds `initialSnapshot` to be the snapshot at `fromTick` (folded via `applyTickDiff` from Step 10a if necessary).
 
-**IMPL:** No production change — Step 5+6's implementation should already pass. If it doesn't, debug. This is the contract-clarifying test that distinguishes "the substitution path works" from "the recorder is doing the right thing per-tick."
+**IMPL:** No production change — Step 5+6 should already pass. If not, debug. Note: this test depends on Step 10a's `applyTickDiff` for `bundleSlice`'s `initialSnapshot` rebuild, so technically Step 7 is gated on Step 10a. **Reorder:** do Step 10a before Step 7. Updated ordering: `1, 2, 3, 4, 5, 6, 10a, 7, 8, 9, 10b, 11`.
 
-**Gates:** typecheck + `vitest run tests/session-fork-equivalence.test.ts`.
-
-### Step 8 — `diffBundles` skeleton
+### Step 8 — `diffBundles` skeleton (no per-tick deltas yet)
 **TEST:** `tests/session-bundle-diff.test.ts` —
-- Identical bundles → `equivalent: true`, empty `perTickDeltas`.
-- Bundles with different metadata.sessionId → `metadataDeltas` populated.
-- Source-vs-fork pair (from the equivalence test fixtures) → `equivalent: true`, empty `perTickDeltas`, populated `metadataDeltas`.
+- Identical bundles → `equivalent: true`, empty `perTickDeltas`, empty `metadataDeltas`.
+- Bundles with different `metadata.sessionId` → `metadataDeltas` populated; `equivalent` unaffected (per ADR 7).
+- Bundles with different markers → `markersDeltas` populated; `equivalent` unaffected.
+- Bundles with different attachments → `attachmentsDeltas` populated; `equivalent` unaffected.
 
-**IMPL:** `src/session-bundle-diff.ts` — `diffBundles(a, b, options?)`. Walks the union of tick ranges. For each tick, builds a `BundleTickDelta` with empty per-dimension deltas (state diff stub returns empty `TickDiff`). `metadataDeltas` populated from a field-by-field comparison of `a.metadata` vs `b.metadata`. `markersDeltas`/`attachmentsDeltas` populated by `Marker.id` / `AttachmentDescriptor.id` keying. Symmetry holds (no map): both arms use the same alignment.
+**IMPL:** `src/session-bundle-diff.ts` — `diffBundles(a, b, options?): BundleDiff`. Per-tick deltas populated as empties for now (state diff comes in Step 10b). `metadataDeltas` from per-field `a.metadata` vs `b.metadata` comparison. `markersDeltas` keyed by `Marker.id`; `attachmentsDeltas` keyed by `AttachmentDescriptor.id`.
 
-**Gates:** typecheck + targeted vitest.
-
-### Step 9 — `diffBundles` per-tick command/event alignment
+### Step 9 — `diffBundles` per-tick command + event alignment
 **TEST:** `tests/session-bundle-diff.test.ts` —
-- Source-vs-fork (with substitution) using `commandSequenceMap` → at `targetTick`, replace shows up as `changed` with both sides populated; insert as `forkOnly`; drop as `sourceOnly`. At ticks > targetTick, downstream effects show as appropriate sourceOnly/forkOnly/changed.
-- Source-vs-fork without `commandSequenceMap` → falls back to per-tick submission-order index; some commands may be misaligned for duplicate same-type same-data cases (assert: best-effort behavior, document via test comment).
-- Symmetry test: `diffBundles(a, b)` and `diffBundles(b, a)` produce mirror-image deltas (without map).
-- Asymmetry test (with map): swapping args produces incorrect alignment (expected per ADR 7).
-- Events alignment by per-tick submission-order index.
+- Source-vs-fork (with substitution) using `commandSequenceMap`: at TickDiff.tick = targetTick+1, replace → `changed`; insert → `forkOnly`; drop → `sourceOnly`. At later ticks, downstream effects show as appropriate buckets.
+- Source-vs-fork without `commandSequenceMap`: per-tick submission-order index fallback; duplicate same-type same-data may show as `changed` under index swap (best-effort, document via test comment).
+- Symmetry without map: `diffBundles(a, b)` and `diffBundles(b, a)` produce mirror-image deltas.
+- Asymmetry with map: swapping `a` and `b` produces wrong alignment (regression test for the documented constraint).
+- Events alignment by per-tick submission-order index. Trailing-extras rule: extras in shorter list become sourceOnly/forkOnly.
+- Type mismatch at same index for events → split into sourceOnly+forkOnly (not `changed`, since changed implies same type).
 
-**IMPL:** Extend `diffBundles` per-tick logic per §4.3 of DESIGN. Use the `commandSequenceMap` at `targetTick`; per-tick submission-order index elsewhere. Events always align by index. Length mismatch → trailing extras are sourceOnly/forkOnly. Type mismatch at same index → split into sourceOnly+forkOnly (per Codex M1's spec for events).
+**IMPL:** Extend `diffBundles` per §4.3. At `targetTick + 1` use the map; everywhere else use per-tick index. Length mismatch → trailing extras to sourceOnly/forkOnly. Events align by index throughout.
 
-**Gates:** typecheck + targeted vitest.
+### Step 10a — `applyTickDiff(snapshot, diff): WorldSnapshot` helper
+**TEST:** `tests/apply-tick-diff.test.ts` —
+- For each of the six TickDiff dimensions (entities created/destroyed, components set/removed per type, resources, state, tags, metadata):
+  - Apply a diff against a fresh empty snapshot → produces snapshot with the additions.
+  - Apply a diff against a snapshot containing prior values → produces snapshot with overlays applied (set replaces, removed drops).
+- Round-trip: `diffSnapshots(applyTickDiff(snapA, d), snapB)` is empty when `d = diffSnapshots(snapA, snapB)` (assuming snapA, snapB are valid snapshots).
+- Edge cases: empty diff is a no-op; recycling-generation entity (destroyed AND created in same diff) handled correctly.
+- Dimensions not touched by the diff (e.g., `rng`, `componentOptions`, `config`) are passed through unchanged from the input snapshot.
 
-### Step 10 — `diffBundles` state-diff fold
+**IMPL:** `src/apply-tick-diff.ts` — `applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSnapshot` returns a new snapshot. Fold over each dimension:
+- `entities`: apply created/destroyed to alive[]/generations[]/freeList[]. Recycled entities (destroyed AND created with same id but different generation) handled per `diffEntities` recycling logic in `snapshot-diff.ts`.
+- `components`: for each type, apply set (overwrite/insert) and removed (delete).
+- `resources`: apply per-pool set/removed.
+- `state`: apply set/removed.
+- `tags`: apply per-entity set/removed.
+- `metadata`: apply per-entity set/removed.
+
+Pass-through fields: `version`, `config`, `rng`, `componentOptions`. `tick` field set to `diff.tick`.
+
+This is a NEW helper — there is no existing fold to extract. Per Codex H#2 / Claude H2.
+
+### Step 10b — `diffBundles` state-diff fold
 **TEST:** `tests/session-bundle-diff.test.ts` —
-- State-only divergence (e.g., a substitution that changes a resource without changing event/command shape) → `BundleTickDelta.stateDiff.resources` populated; commands/events deltas empty.
+- State-only divergence (substitution that changes a resource without changing event/command shape) → `BundleTickDelta.stateDiff.resources` populated; commands/events deltas empty.
 - Component-only divergence → `stateDiff.components` populated.
 - Identical bundles (post-normalizer) → all six `stateDiff` dimensions empty at every tick.
-- Hydrated state at tick T matches `replayer.openAt(T).serialize()`.
+- Hydrated state at tick T matches `replayer.openAt(T).serialize()` (within the normalizer's invariants — same components, resources, state, tags, metadata).
 
-**IMPL:** Helper `hydrateStateAtTick(bundle, t)` walks `initialSnapshot` + closest preceding snapshot in `bundle.snapshots[]` + per-tick TickDiffs from that snapshot to t. Reuses or refactors out the same fold `SessionReplayer.openAt` already does. Then `diffSnapshots(hydrateStateAtTick(a, t), hydrateStateAtTick(b, t))` produces the per-tick `stateDiff: TickDiff`.
+**IMPL:** `hydrateStateAtTick(bundle, t)` walks `initialSnapshot` + closest preceding entry in `bundle.snapshots[]` + per-tick `bundle.ticks[].diff` from that snapshot to t, applying each via `applyTickDiff`. Optimization: `diffBundles` walks both bundles' tick streams in lockstep, maintaining running state per side and updating per-tick. Reset to nearest snapshot when crossing a snapshot boundary. O(N) total per side.
 
-**Performance:** for an N-tick bundle, naive hydration per tick is O(N²). Optimize: walk both bundles' tick streams in lockstep, maintaining a running state per side and updating per-tick via `applyTickDiff(state, tickDiff)`. Reset to nearest snapshot when crossing a snapshot boundary. O(N) total per side.
-
-**Gates:** typecheck + targeted vitest + full `vitest run tests/session-bundle-diff.test.ts tests/session-fork.test.ts tests/session-fork-equivalence.test.ts`.
+`stateDiff = diffSnapshots(hydrateStateAtTick(a, t), hydrateStateAtTick(b, t))` per tick.
 
 ### Step 11 — Integration test (full RSI loop)
 **TEST:** `tests/session-fork-integration.test.ts` —
-- `runAgentPlaytest` produces source bundle.
-- `replayer.fromBundle(sourceBundle).forkAt(midTick).replace(...).run({ untilTick: source.persistedEndTick })` produces fork bundle.
+- `runSynthPlaytest` produces source bundle (per DESIGN §8).
+- `replayer.fromBundle(sourceBundle).forkAt(midTick).replace(...).run({ untilTick: source.metadata.endTick })` produces fork bundle.
 - `diffBundles(source, fork.bundle, { commandSequenceMap: fork.divergence.commandSequenceMap })` reports the substituted command's downstream effect across commands, events, and state.
-- Fork bundle is itself replayable via `SessionReplayer.fromBundle(fork.bundle).openAt(...)`.
-- Fork bundle is itself forkable via `SessionReplayer.fromBundle(fork.bundle).forkAt(...)` (chained fork).
+- Fork bundle is itself replayable: `SessionReplayer.fromBundle(fork.bundle).openAt(...)` succeeds.
+- Fork bundle is itself forkable: chained fork via `forkAt(...).run(...)` succeeds.
 
-**IMPL:** None — purely integration assertion. If anything fails here, it's a regression in the existing layer.
-
-**Gates:** typecheck + full `vitest run tests/session-fork-integration.test.ts` plus the full suite (`npm test`) and full gates (`typecheck && lint && build`). This is the final pre-commit checkpoint before invoking multi-CLI implementation review.
+**IMPL:** None — purely integration assertion.
 
 ## 4. Documentation deliverables (per AGENTS.md)
 
 Updated as part of the final commit batch:
 
-- `docs/changelog.md` — new `0.8.12` entry: forkAt + ForkBuilder + Divergence + diffBundles + BundleDiff + new error classes; usage example; validation summary.
+- `docs/changelog.md` — new `0.8.12` entry: forkAt + ForkBuilder + Divergence + diffBundles + BundleDiff + applyTickDiff + new error classes; usage example; validation summary.
 - `docs/devlog/summary.md` — one line.
 - `docs/devlog/detailed/<latest>.md` — full task entry.
 - `package.json` — version bump 0.8.11 → 0.8.12.
-- `docs/api-reference.md` — new sections for `forkAt`, `ForkBuilder`, `Divergence`, `DivergenceCounts`, `CommandSequenceMap`, `diffBundles`, `BundleDiff`, `BundleTickDelta`, `ForkSubstitutionError`, `ForkBuilderConflictError`, `BuilderConsumedError`.
+- `docs/api-reference.md` — sections for `forkAt`, `ForkBuilder`, `Divergence`, `DivergenceCounts`, `CommandSequenceMap`, `diffBundles`, `BundleDiff`, `BundleTickDelta`, `applyTickDiff`, `ForkSubstitutionError`, `ForkBuilderConflictError`, `BuilderConsumedError`.
 - `README.md` — Feature Overview row + Public Surface bullet for `forkAt`/`diffBundles`.
-- `docs/guides/ai-integration.md` — short paragraph + code example showing how an agent uses `forkAt(...)` to test a counterfactual decision.
+- `docs/guides/ai-integration.md` — short paragraph + code example for agents using `forkAt(...)`.
 - `docs/architecture/decisions.md` — new ADR row referencing the seven design ADRs.
 - `docs/threads/current/counterfactual-replay/` → `docs/threads/done/counterfactual-replay/` after the post-impl review closes.
 
@@ -194,36 +225,41 @@ Updated as part of the final commit batch:
 
 | Risk | Mitigation |
 |---|---|
-| Recorder wrap timing — the wrap on `submitWithResult` is installed in `recorder.start()`. If we submit substitutions before `start()`, they aren't captured. | Step 5 IMPL strictly orders: `recorder.start()` first, then `forkBuilder` consumes the queued substitutions through `submitWithResult`. Test (e) in Step 5 verifies all four sequence-map fields populated. |
-| `nextCommandResultSequence` magnitude — fork sequences start fresh from the rebuilt world's counter, which incremented through openAt's loop. They are NOT zero at `targetTick`. | Step 5 test asserts `commandSequenceMap.preserved[0].assignedSequence > 0` for any non-empty source bundle. Document via inline comment in `session-fork.ts`. |
-| Snapshot-cadence misalignment — fork's recorder takes snapshots at `snapshotInterval`-aligned ticks measured from `targetTick`, not from the source's `startTick`. | Step 7's normalizer aligns `snapshots[]` by tick number and only compares matching-tick snapshots. Test asserts the byte-equivalence holds even when source has snapshots fork doesn't (e.g., source snapshot at tick 1000, fork starts at tick 500 with snapshot at tick 1500). |
-| Memory: `BundleDiff.perTickDeltas` is O(N) for an N-tick bundle. | Document in DESIGN's §9 (already present); future streaming variant deferred to Q4. |
-| TickDiff fold double-counting at snapshot boundaries — if we apply both the snapshot AND its tick's TickDiff, state would be wrong. | Step 10 IMPL: when crossing a snapshot boundary, RESET running state to the snapshot's value, then apply TickDiffs for ticks > snapshot.tick. Existing `SessionReplayer.openAt` already gets this right; reuse the same fold logic. |
-| Fork-of-fork chained replay diverges from parent's replay — chained `forkAt(fork1.bundle)` re-replays fork1 from `fork1.metadata.startTick = targetTick1`, not from source's startTick. | Verified by ADR 1 (forks are normal SessionBundles) + Step 11 test (chained fork produces a valid bundle). |
-| `world.submitWithResult` is wrapped by `SessionRecorder.start()` (`session-recorder.ts:163-172`); we need the wrap intact across forkAt's openAt-internal-replay → forkBuilder.run sequence. | Step 5 IMPL unwraps before openAt (otherwise openAt's submitWithResult calls during forward-replay would be captured by the source's recorder, which doesn't exist) — wait, openAt doesn't have a recorder; it just calls submitWithResult on the fresh world. So the unwrap concern is moot. But we DO need to confirm that openAt's invocations don't accidentally trigger a recorder hook from a stale wrap. Verify with a defensive test in Step 5: openAt's submitWithResult calls should NOT add commands to `bundle.commands` — only forkBuilder.run's recorder-time submitWithResult should. |
+| Recorder wrap timing — the wrap on `submitWithResult` is installed in `recorder.connect()` (`src/session-recorder.ts:163-172`). Substitutions submitted before `connect()` aren't captured. | Step 5 IMPL strictly orders: `recorder.connect()` first (with `lastError` guard), then forkBuilder consumes the queued substitutions through `submitWithResult`. Test (e) verifies all four `commandSequenceMap` slots populated. |
+| `nextCommandResultSequence` magnitude — fork sequences start fresh from the rebuilt world's counter, which incremented through openAt's loop. They are NOT zero at `targetTick`. | Step 5 test (e) asserts `commandSequenceMap.preserved[0].assignedSequence > 0` for any non-empty source bundle. Document via inline comment in `session-fork.ts`. |
+| Snapshot-cadence misalignment — fork's recorder takes snapshots at `snapshotInterval`-aligned ticks measured from `targetTick`, not from source's `startTick`. | Step 7 normalizer aligns `snapshots[]` by tick number; only matches matching-tick snapshots. Test asserts byte-equivalence holds even when source has snapshots fork doesn't. |
+| Memory: `BundleDiff.perTickDeltas` is O(N). | Documented in DESIGN §9; future streaming variant deferred (DESIGN §11 Q1). |
+| TickDiff fold boundary — at a snapshot tick, naive double-application (snapshot AND its tick's TickDiff) overwrites correct state. | Step 10b: when crossing a snapshot boundary, RESET running state to the snapshot's value, then apply TickDiffs for ticks > `snapshot.tick`. `applyTickDiff` itself never assumes the snapshot is the starting point; it just folds the delta. |
+| Fork-of-fork chained replay — chained `forkAt(fork1.bundle)` re-replays fork1 from `fork1.metadata.startTick = targetTick1`, not from source's startTick. | ADR 1 (forks are normal bundles); Step 11 test exercises chained fork. |
+| Recorder wrap collision on the openAt-internal world — `openAt` builds a fresh world via `worldFactory(snapshot)`; that world has no prior `__payloadCapturingRecorder` (`src/session-recorder.ts:126-130` enforces single-recorder). Substitutions submitted via the fork's recorder won't collide. | Defensive test in Step 5: confirm the openAt phase's `submitWithResult` calls (during forward-replay before `recorder.connect()`) do NOT add commands to the fork's bundle. Only post-`connect()` submissions should appear. |
+| `applyTickDiff` correctness — six dimensions, including entity recycling and tag/metadata edge cases. New helper, no prior precedent in the codebase. | Step 10a's dedicated test file with round-trip property (`diffSnapshots(applyTickDiff(a, d), b)` is empty when `d = diffSnapshots(a, b)`) plus per-dimension unit tests. The round-trip property is the strongest correctness check; if it holds for every fixture, the helper is sound. |
+| `untilTick` semantic mismatch — `openAt`'s contract is "world.tick at completion." `run({ untilTick })` mirrors this: world.tick = untilTick at end. The continuation loop is `while world.tick < untilTick`. | Documented in Step 5 ("untilTick semantic"). Equivalence test (Step 7) directly exercises `untilTick = source.metadata.endTick` and asserts byte-equivalence. |
 
 ## 6. Ordering rationale
 
-- Steps 1–2 are purely additive types/exports + the cheapest possible `forkAt` skeleton — get the export surface in early to avoid downstream API churn.
-- Steps 3–4 build the synchronous chainable surface (no `run()` yet), so the conflict-rule semantics are nailed down before any execution happens.
-- Step 5 is the load-bearing implementation of the substitution mechanism. Most likely place for bugs.
-- Step 6 piggybacks on Step 5's data to compute `Divergence` — no new mechanism, just a comparison pass.
-- Step 7 is the strongest invariant test — if substitution and recording are correct, the equivalence holds. Fail here → bug in Step 5.
-- Steps 8–10 build `diffBundles` independently (consumes only `SessionBundle`s + the `CommandSequenceMap` shape).
-- Step 11 ties the loop. Last because it depends on every prior step.
+Final ordering (revised v2): `1, 2, 3, 4, 5, 6, 10a, 7, 8, 9, 10b, 11`.
+
+- Steps 1–4: types + chainable surface, no execution.
+- Step 5: load-bearing substitution mechanism (most likely place for bugs).
+- Step 6: divergence accumulator (post-run pass over Step 5's output).
+- Step 10a (NEW position): `applyTickDiff` helper, needed for Step 7's bundleSlice helper. Net-new code; warrants its own checkpoint with dedicated tests.
+- Step 7: equivalence test — depends on Step 10a's helper for slicing source bundles.
+- Steps 8–9: `diffBundles` skeleton + command/event alignment (uses session-bundle data only, no state hydration).
+- Step 10b: `diffBundles` state-diff fold — uses Step 10a's `applyTickDiff` to hydrate per-tick states.
+- Step 11: integration test, depends on every prior step.
 
 ## 7. Multi-CLI implementation review (post-Step 11, pre-commit)
 
-Per AGENTS.md, the full diff goes through Codex + Claude with the baseline prompt + diff-specific context including:
-- Anti-regression checklist: existing recorder semantics, `openAt` precondition behavior, `MemorySink({ allowSidecar: true })` default still works without sidecar use, `runAgentPlaytest` still produces the same bundle shape (untouched in this work).
-- Doc-accuracy checklist: api-reference.md sections for every new export, no stale references to removed/renamed APIs (none in this diff), changelog narrative matches behavior.
-- Boundary checklist: no file > 500 LOC; if `session-fork.ts` is over, split before commit.
-- Performance: Step 10's O(N) hydration fold; Step 6's per-tick comparison pass.
+Per AGENTS.md, the full diff goes through Codex + Claude with the AGENTS.md baseline prompt + diff-specific context including:
+- Anti-regression checklist: existing recorder semantics (especially `connect()` + `submitWithResult` wrap), `openAt` precondition behavior, `MemorySink({ allowSidecar: true })` default still works without sidecar use, `runSynthPlaytest`/`runAgentPlaytest` still produce the same bundle shape.
+- Doc-accuracy checklist: api-reference.md sections for every new export; no stale references to removed/renamed APIs (none in this diff); changelog narrative matches behavior.
+- Boundary checklist: no file > 500 LOC; if any approach the limit, split before commit.
+- Performance: Step 10b's O(N) hydration fold; Step 6's per-tick comparison pass.
 
-After review, address findings, re-run gates, re-review until reviewers nitpick. Commit when consensus.
+After review, address findings, re-run gates, re-review until reviewers nitpick. Single commit when consensus.
 
-## 8. Open questions for the plan reviewer
+## 8. Open questions for plan-2 reviewer
 
-1. **Step 2: should `forkAt` eagerly call `openAt` or defer until `run()`?** Plan says eager (because `.snapshot()` needs the world). Alternative: lazy with `.snapshot()` returning a fresh openAt result. Eager is simpler and matches DESIGN's intent. Confirm.
-2. **Step 6 implementation pass placement: walk during run() or post-run?** Plan says post-run (read both bundles after recorder finalizes). Trade-off: simpler vs. one extra full pass through fork bundle. Likely fine since divergence is a once-per-fork operation. Confirm.
-3. **Step 10 hydration fold: extract a shared helper from `SessionReplayer.openAt` or duplicate?** Plan says extract. The existing fold logic in `openAt` is private; promoting it to a `hydrateStateAtTick(bundle, t)` named export is a small refactor. Reviewer should verify this doesn't break `openAt`'s existing tests.
+1. **Is `apply-tick-diff.ts` the right home for the helper, or should it live in `snapshot-diff.ts`?** Symmetry argument: `diffSnapshots(a, b)` lives there; `applyTickDiff(snap, diff)` is its inverse. Counter-argument: `snapshot-diff.ts` is intentionally the diff-producer; combining producer+consumer increases its surface. Plan: separate file. Confirm.
+2. **Should `applyTickDiff` be exported publicly, or stay internal?** Use case: external consumers might want to do `bundle.snapshots[i] + bundle.ticks[i+1].diff` to compute "snapshot at tick N+1" without re-running the world. Plan: public export. Confirm.
+3. **`bundleSlice` test helper lives in `tests/session-fork-equivalence.test.ts` or a shared `tests/test-utils/bundle-slice.ts`?** Used only by Step 7 currently. Plan: keep it in the test file unless Step 11 needs it too.
