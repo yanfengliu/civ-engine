@@ -4945,6 +4945,8 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug> {
   tickEntriesBetween(fromTick: number, toTick: number): SessionTickEntry[];  // inclusive both ends
   selfCheck(options?: SelfCheckOptions): SelfCheckResult;
   validateMarkers(): MarkerValidationResult;
+  // Spec 5 (v0.8.12+):
+  forkAt(targetTick: number): ForkBuilder<TEventMap, TCommandMap>;
 }
 
 interface ReplayerConfig {
@@ -5691,3 +5693,111 @@ function bundleSummary(bundle: SessionBundle): BundleSummary;
 ```
 
 Pure function. JSON-serializable result designed to fit a small LLM context window.
+
+## Counterfactual Replay / Fork (v0.8.12+)
+
+Spec 5. Counterfactual primitive for "what if the agent had submitted X here instead?" experiments. `SessionReplayer.forkAt(targetTick)` opens a paused world at a chosen tick and returns a chainable builder; `.run({ untilTick })` materializes a fresh `SessionBundle` of the diverged timeline plus a `Divergence` summary. `diffBundles(a, b)` is a standalone utility for cross-bundle comparison.
+
+### `SessionReplayer.forkAt(targetTick): ForkBuilder`
+
+Eagerly calls `openAt(targetTick)` to materialize the paused world (so `.snapshot()` works pre-`run()`). Inherits `openAt`'s preconditions (`BundleRangeError`, `BundleIntegrityError`, `ReplayHandlerMissingError`).
+
+### `ForkBuilder<TEventMap, TCommandMap>`
+
+```typescript
+interface ForkBuilder<TEventMap, TCommandMap> {
+  replace<K extends keyof TCommandMap & string>(
+    originalSequence: number,
+    newCommand: { type: K; data: TCommandMap[K] },
+  ): ForkBuilder<TEventMap, TCommandMap>;
+  insert<K extends keyof TCommandMap & string>(
+    newCommand: { type: K; data: TCommandMap[K] },
+  ): ForkBuilder<TEventMap, TCommandMap>;
+  drop(originalSequence: number): ForkBuilder<TEventMap, TCommandMap>;
+  snapshot(): WorldSnapshot;
+  run(config: ForkRunConfig): ForkResult<TEventMap, TCommandMap>;
+}
+
+interface ForkRunConfig {
+  untilTick: number;       // required: > targetTick. World.tick at run end.
+  sink?: SessionSink & SessionSource;   // default: new MemorySink({ allowSidecar: true })
+  sourceLabel?: string;     // default: counterfactual-fork-of-<sessionId>@<targetTick>
+}
+
+interface ForkResult<TEventMap, TCommandMap> {
+  bundle: SessionBundle<TEventMap, TCommandMap>;
+  divergence: Divergence;
+  source: SessionSink & SessionSource;  // mirrors AgentPlaytestResult.source
+}
+```
+
+Single-use: any call after `.run()` throws `BuilderConsumedError`. Conflict rules (synchronous, throw at call time):
+- replace/drop with unknown sequence → `ForkSubstitutionError(code: 'unknown_command_sequence')`
+- duplicate replace, duplicate drop, replace+drop on same seq → `ForkBuilderConflictError(code: 'duplicate_replace' | 'duplicate_drop' | 'replace_drop_conflict')`
+- replace/drop of source command with `result.accepted: false` → allowed (replace re-runs validator; drop is a true no-op)
+
+Multi-insert preserves FIFO builder-call order. Inserts arrive AFTER all source commands at `targetTick`.
+
+### `Divergence`
+
+```typescript
+interface Divergence {
+  firstDivergentTick: number | null;     // earliest submission-tick with command/event divergence
+  perTickCounts: ReadonlyMap<number, DivergenceCounts>;  // keyed by submission-tick
+  commandSequenceMap: CommandSequenceMap;
+  equivalent: boolean;                    // === firstDivergentTick === null
+}
+
+interface DivergenceCounts {
+  commandsSourceOnly: number;
+  commandsForkOnly: number;
+  commandsChanged: number;
+  eventsSourceOnly: number;
+  eventsForkOnly: number;
+  eventsChanged: number;
+}
+
+interface CommandSequenceMap {
+  preserved: ReadonlyArray<{ tick: number; originalSequence: number; assignedSequence: number }>;
+  replaced: ReadonlyArray<{ tick: number; originalSequence: number; assignedSequence: number }>;
+  inserted: ReadonlyArray<{ tick: number; assignedSequence: number }>;
+  dropped: ReadonlyArray<{ tick: number; originalSequence: number }>;
+}
+```
+
+`equivalent` ignores metadata, markers, and attachments by definition (they vary per recorder). State-level divergence is NOT included in `Divergence` — see `diffBundles` for that.
+
+### `diffBundles(a, b, options?): BundleDiff`
+
+```typescript
+interface DiffBundlesOptions {
+  commandSequenceMap?: CommandSequenceMap;
+  // With map: alignment at targetTick is asymmetric (a MUST be source, b MUST be fork).
+  // Without map: per-tick submission-order index everywhere; symmetric.
+}
+
+interface BundleDiff<TEventMap, TCommandMap> {
+  firstDivergentTick: number | null;
+  equivalent: boolean;
+  perTickDeltas: ReadonlyMap<number, BundleTickDelta<TEventMap, TCommandMap>>;
+  metadataDeltas: ReadonlyArray<{ field: string; a: unknown; b: unknown }>;
+  markersDeltas: { aOnly: Marker[]; bOnly: Marker[]; changed: Array<{ a: Marker; b: Marker }> };
+  attachmentsDeltas: { aOnly: AttachmentDescriptor[]; bOnly: AttachmentDescriptor[]; changed: Array<{ a: AttachmentDescriptor; b: AttachmentDescriptor }> };
+}
+
+interface BundleTickDelta<TEventMap, TCommandMap> {
+  commands: { sourceOnly: RecordedCommand[]; forkOnly: RecordedCommand[]; changed: Array<{ a; b }> };
+  events: { sourceOnly: Array<{ type; data }>; forkOnly: Array<{ type; data }>; changed: Array<{ a; b }> };
+  stateDiff: TickDiff;  // all six diffSnapshots dimensions
+}
+```
+
+`equivalent` only considers per-tick command/event/state deltas. Metadata, markers, and attachments are reported separately.
+
+### Error classes
+
+```typescript
+class ForkSubstitutionError extends SessionRecordingError;
+class ForkBuilderConflictError extends SessionRecordingError;
+class BuilderConsumedError extends SessionRecordingError;
+```

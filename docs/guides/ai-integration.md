@@ -348,3 +348,54 @@ See `docs/guides/bundle-viewer.md` for the full surface, including the `worldFac
 ## Strict mode (v0.8.8+, Spec 6)
 
 For agents that want determinism violations to throw at the source rather than surface as replay divergences, opt into `WorldConfig.strict: true`. The flag rejects 22 mutation methods called outside system phases / setup window / `runMaintenance(fn)` callbacks with `StrictModeViolationError` (Tier-3 of the AI-first roadmap). Default is off. See `docs/guides/strict-mode.md`.
+
+
+## Counterfactual replay (v0.8.12+, Spec 5)
+
+Once an agent has a `SessionBundle` it can pose **what-if** questions: "what if I had submitted command X here instead of Y?" `SessionReplayer.forkAt(targetTick)` opens a paused world at the chosen tick and returns a chainable builder; `.replace(seq, cmd)` swaps a recorded command, `.insert(cmd)` adds a new one, `.drop(seq)` removes one, `.run({ untilTick })` materializes the diverged timeline as a normal `SessionBundle` plus a structured `Divergence` summary.
+
+```ts
+import { SessionReplayer, diffBundles } from 'civ-engine';
+
+// Source bundle came from runAgentPlaytest, runSynthPlaytest, or BundleCorpus.
+const replayer = SessionReplayer.fromBundle(bundle, { worldFactory });
+
+// Inspect state at the fork point before deciding what to substitute.
+const builder = replayer.forkAt(midTick);
+const snap = builder.snapshot();  // read-only WorldSnapshot at midTick
+
+// Substitute and run. Conflict rules (duplicate replace, replace+drop on same
+// seq, etc.) are enforced synchronously at builder-call time.
+const fork = builder
+  .replace(originalSequence, { type: 'retreat', data: { /* ... */ } })
+  .drop(otherSequence)
+  .insert({ type: 'spawnUnit', data: { /* ... */ } })
+  .run({ untilTick: bundle.metadata.persistedEndTick });
+
+// Inline divergence: equivalent flag, firstDivergentTick, and per-tick split
+// counts (commandsSourceOnly/forkOnly/changed + same for events). Metadata,
+// markers, and attachments excluded by definition.
+console.log(fork.divergence.firstDivergentTick, fork.divergence.equivalent);
+
+// Full per-tick + state-level comparison via diffBundles. State diffs cover
+// all six TickDiff dimensions: entities, components, resources, state, tags,
+// metadata.
+const diff = diffBundles(bundle, fork.bundle, {
+  commandSequenceMap: fork.divergence.commandSequenceMap,
+});
+for (const [t, delta] of diff.perTickDeltas) {
+  // delta.commands, delta.events, delta.stateDiff
+}
+
+// Fork bundles are normal SessionBundles — replayable, forkable again,
+// indexable by BundleCorpus, reducible by runMetrics. Chained forks are the
+// path to multi-tick substitution (DESIGN ADR 2).
+```
+
+**Equivalence-by-construction.** A no-substitution fork is structurally equivalent to source's slice over `[midTick, persistedEndTick]` modulo per-recorder noise (sessionId, recordedAt, sequence range, metrics, markers/attachments). This isolates substitution effects: any divergence is caused by your substitutions, not the fork primitive.
+
+**Builder lifecycle.** Single-use: any call after `.run()` throws `BuilderConsumedError`. `untilTick > targetTick` is required (use `replayer.openAt(targetTick).serialize()` if you only want the snapshot at the fork point — `forkAt(t).snapshot()` returns the same value).
+
+**Performance.** Each `.run()` replays the source bundle from `metadata.startTick` to `targetTick` (intrinsic cost). Chained forks compound this — for high-volume what-if exploration, batch substitutions through one builder rather than chaining many small forks.
+
+See `docs/api-reference.md` § "Counterfactual Replay / Fork (v0.8.12+)" for the full type surface, and `docs/guides/session-recording.md` § "Counterfactual replay" for storage and corpus integration.

@@ -3,6 +3,7 @@ import type {
   EntityRef,
   Marker,
   MarkerKind,
+  RecordedCommand,
   SessionBundle,
   SessionMetadata,
   SessionSnapshotEntry,
@@ -18,6 +19,7 @@ import type { SessionSource } from './session-sink.js';
 import { ENGINE_VERSION } from './version.js';
 import type { CommandExecutionResult, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
+import { createForkBuilder, type ForkBuilder } from './session-fork.js';
 
 export interface ReplayerConfig<
   TEventMap extends Record<keyof TEventMap, unknown>,
@@ -182,6 +184,22 @@ export class SessionReplayer<
   }
 
   ticks(): number[] { return this._bundle.ticks.map((t) => t.tick); }
+
+  /** Begin a counterfactual fork at `targetTick`. See DESIGN.md (v4) §4 +
+   *  PLAN.md Step 2. Eagerly calls `openAt(targetTick)` so `.snapshot()` works
+   *  pre-`run()`. Inherits openAt's preconditions. */
+  forkAt(targetTick: number): ForkBuilder<TEventMap, TCommandMap> {
+    const world = this.openAt(targetTick);
+    const cmdsAtTarget = this._commandsByTick.get(targetTick) ?? [];
+    const sourceCommandsAtTargetTick = new Map<number, RecordedCommand<TCommandMap>>();
+    for (const rc of cmdsAtTarget) sourceCommandsAtTargetTick.set(rc.sequence, rc);
+    return createForkBuilder<TEventMap, TCommandMap>({
+      world,
+      sourceBundle: this._bundle as unknown as SessionBundle<TEventMap, TCommandMap>,
+      sourceCommandsAtTargetTick,
+      targetTick,
+    });
+  }
 
   openAt(targetTick: number): World<TEventMap, TCommandMap> {
     const md = this._bundle.metadata;

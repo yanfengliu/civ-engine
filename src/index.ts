@@ -100,6 +100,29 @@ export {
   scenarioResultToBundle,
   type ScenarioResultToBundleOptions,
 } from './session-scenario-bundle.js';
+// Counterfactual Replay / Fork — Spec 5 (v0.8.12+):
+// SessionReplayer.forkAt(targetTick) builder API + Divergence summary.
+// See docs/threads/done/counterfactual-replay/DESIGN.md.
+export {
+  ForkSubstitutionError,
+  ForkBuilderConflictError,
+  BuilderConsumedError,
+  type ForkBuilder,
+  type ForkResult,
+  type ForkRunConfig,
+  type Divergence,
+  type DivergenceCounts,
+  type CommandSequenceMap,
+  type ForkBuilderConflictCode,
+  type ForkSubstitutionErrorDetails,
+  type ForkBuilderConflictErrorDetails,
+} from './session-fork.js';
+export {
+  diffBundles,
+  type DiffBundlesOptions,
+  type BundleDiff,
+  type BundleTickDelta,
+} from './session-bundle-diff.js';
 // Behavioral Metrics over Corpus — Spec 8 (v0.8.2+): pure-function corpus reducer
 // over Iterable<SessionBundle>. 11 engine-generic built-in metrics + accumulator-style
 // Metric contract + thin compareMetricsResults delta helper.

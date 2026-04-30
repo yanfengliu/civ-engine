@@ -213,7 +213,6 @@ Replay treats synthetic bundles like organic recordings: `SessionReplayer.fromBu
 - **Single payload-capturing recorder per world.** A `SessionRecorder` and a `WorldHistoryRecorder({ captureCommandPayloads: true })` cannot both attach to the same world. Default-config `WorldHistoryRecorder` (no payload capture) is unrestricted.
 - **Replay across recorded `TickFailure` is out of scope.** `WorldSnapshotV5` doesn't carry poison state; future spec extends to v6.
 - **Sinks are synchronous.** Composes with `World.onDiff`'s synchronous listener invariant. Async/streaming sinks revisit when synthetic playtest needs them.
-- **Counterfactual replay (input substitution + divergence tracking) is a future spec.** v1 replays the recording verbatim.
 
 
 ## Inspecting bundles (v0.8.7+)
@@ -230,6 +229,38 @@ const delta = frame.diffSince(0);      // BundleStateDiff over [0, frame.tick]
 ```
 
 `viewer.replayer()` returns the lazily-constructed memoized `SessionReplayer` if you need direct `selfCheck()` or `openAt()` access. See `docs/guides/bundle-viewer.md` for the full surface (sparse-tick semantics, content-bounded `recordedRange` for incomplete bundles, layered freezing model, and BundleCorpus integration).
+
+
+## Counterfactual replay (v0.8.12+)
+
+Spec 5 adds `SessionReplayer.forkAt(targetTick)` for "what if the agent had submitted X here instead?" experiments, plus `diffBundles(a, b)` for cross-bundle comparison. Both produce normal `SessionBundle`s, so the rest of the recording ecosystem (`BundleCorpus`, `runMetrics`, `BundleViewer`, `selfCheck`) treats counterfactual results as first-class citizens.
+
+```ts
+import { SessionReplayer, diffBundles } from 'civ-engine';
+
+const replayer = SessionReplayer.fromBundle(bundle, { worldFactory });
+const fork = replayer
+  .forkAt(midTick)                                              // paused World at midTick
+  .replace(originalSequence, { type: 'attack', data: { ... } }) // swap a recorded command
+  .insert({ type: 'spawnUnit', data: { ... } })                 // inject a new one (after source cmds)
+  .drop(otherSequence)                                          // remove an existing one
+  .run({ untilTick: bundle.metadata.persistedEndTick });
+
+console.log(fork.divergence.firstDivergentTick);  // earliest submission-tick with divergence (or null)
+console.log(fork.divergence.equivalent);          // true iff no command/event divergence
+
+// Full per-tick + state-level comparison:
+const diff = diffBundles(bundle, fork.bundle, {
+  commandSequenceMap: fork.divergence.commandSequenceMap,
+});
+for (const [t, delta] of diff.perTickDeltas) {
+  console.log(t, delta.commands, delta.events, delta.stateDiff);
+}
+```
+
+The fork builder is single-use (call after `.run()` throws `BuilderConsumedError`); conflict rules (duplicate replace, replace+drop on same seq) are enforced synchronously at builder-call time. See `docs/api-reference.md` "Counterfactual Replay / Fork (v0.8.12+)" section for the full surface.
+
+**Equivalence invariant:** a no-substitution fork (`forkAt(midTick).run({ untilTick: source.persistedEndTick })`) is structurally equivalent to source's slice over `[midTick, persistedEndTick]` modulo per-recorder noise (sessionId, recordedAt, sequence range, metrics, markers/attachments — see `tests/session-fork-equivalence.test.ts`). This isolates substitution effects: any divergence is caused by your substitutions, not the fork primitive.
 
 
 ## Strict mode (v0.8.8+)

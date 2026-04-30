@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.8.12 - 2026-04-30
+
+Spec 5 — Counterfactual Replay / Fork. AI-first roadmap deliverable: `SessionReplayer.forkAt(targetTick)` for "what if the agent had submitted X here instead?" experiments, plus `diffBundles(a, b)` standalone utility for cross-bundle comparison. The full thread is at `docs/threads/done/counterfactual-replay/` (4 design iterations + 5 plan iterations to convergence; both reviewers ACCEPT).
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`SessionReplayer.forkAt(targetTick): ForkBuilder`** — opens a paused `World` at `targetTick` (using `openAt`'s logic) and returns a chainable builder. Inherits `openAt`'s preconditions (out-of-range, replay-across-failure, no-payload, incomplete-beyond-persistedEndTick).
+- **`ForkBuilder<TEventMap, TCommandMap>`** — single-use builder with:
+  - `replace(originalSequence, newCommand)` — swap an existing recorded command at `targetTick`. `originalSequence` is the source's `RecordedCommand.sequence`.
+  - `insert(newCommand)` — add a new command at `targetTick`, AFTER all source commands. Multi-insert preserves FIFO builder-call order.
+  - `drop(originalSequence)` — remove an existing recorded command at `targetTick`.
+  - `snapshot(): WorldSnapshot` — read-only snapshot of the paused world (cheap; safe pre-`run()`).
+  - `run({ untilTick, sink?, sourceLabel? }): ForkResult` — materialize the fork. Required: `untilTick > targetTick` (matches `openAt`'s contract). Default sink: `MemorySink({ allowSidecar: true })` (matches `runAgentPlaytest`).
+- **`Divergence`** summary returned in `ForkResult`:
+  - `firstDivergentTick: number | null` — earliest submission-tick with command/event divergence.
+  - `perTickCounts: Map<number, DivergenceCounts>` — split into `commandsSourceOnly`/`commandsForkOnly`/`commandsChanged`/`eventsSourceOnly`/`eventsForkOnly`/`eventsChanged`. Keyed by submission-tick.
+  - `commandSequenceMap` — `originalSequence ↔ assignedSequence` map covering ALL source commands at `targetTick` (preserved + replaced) plus inserts and drops. Used by `diffBundles` for source-vs-fork alignment.
+  - `equivalent: boolean` — true iff `firstDivergentTick === null` (ignores metadata, markers, and attachments per ADR 7).
+- **`diffBundles(a, b, { commandSequenceMap? }): BundleDiff`** — standalone utility. Walks the union of tick ranges and produces per-tick deltas (commands, events, state). State diffs covered all six dimensions `diffSnapshots` returns (entities, components, resources, state, tags, metadata). Without `commandSequenceMap`, the call is symmetric (alignment by per-tick submission-order index). With map, asymmetric: `a` MUST be source, `b` MUST be fork. `metadataDeltas`/`markersDeltas`/`attachmentsDeltas` are exposed separately and excluded from `equivalent`.
+- **Error classes:** `ForkSubstitutionError` (unknown sequence), `ForkBuilderConflictError` (codes: `duplicate_replace` / `duplicate_drop` / `replace_drop_conflict`), `BuilderConsumedError` (call after `run()`).
+- **Internal helper:** `applyTickDiff(snapshot, diff): WorldSnapshot` — folds a TickDiff into a snapshot over all six dimensions. Internal-only (NOT exported from `src/index.ts`); produces partial-hydration snapshots (rng/componentOptions don't appear in TickDiff). Safe inside `diffSnapshots` consumers, which exclude rng by design. External callers wanting "snapshot at tick N" should use `replayer.openAt(N).serialize()` (= `replayer.stateAtTick(N)`).
+
+### Equivalence invariant
+
+A no-substitution fork (`forkAt(midTick).run({ untilTick: source.persistedEndTick })`) produces a `ForkResult` with `divergence.equivalent === true`, and the fork's bundle is structurally equivalent to source's slice over `[midTick, persistedEndTick]` modulo per-recorder noise (sessionId, recordedAt, sequence range, metrics, etc. — see `tests/session-fork-equivalence.test.ts`). This is the strongest invariant; it isolates substitution effects.
+
+### Validation
+
+All four engine gates pass: `npm test` (1063 passed + 2 todo, +68 from v0.8.11's 995), `npm run typecheck`, `npm run lint`, `npm run build`. New tests: `tests/session-fork.test.ts` (42), `tests/session-fork-equivalence.test.ts` (5), `tests/session-bundle-diff.test.ts` (10), `tests/apply-tick-diff.test.ts` (11). Multi-CLI design + plan reached convergent ACCEPT after 4+5 review iterations (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max). Implementation review took 3 iterations: iter-1 caught 6+7 findings (engine-version constant stale, identity-replace counted as divergence, narrow `commandsEquivalent`, fork-vs-full-source overlap end, stale public docs, file > 500 LOC, helper duplication, hydrateAtTick proxy bug, dead code, Math.min spread); iter-2 caught a test failure due to non-numeric iteration directory naming (`impl-1` vs the `^(?:\d+|(?:design|plan)-\d+)$` regex), package-lock stale at 0.8.6, README missing public-surface entries, and `docs/guides/ai-integration.md` missing the agent-facing counterfactual section; iter-3 ACCEPTed after all fixes landed. Devlog: `docs/devlog/detailed/2026-04-29_2026-04-30.md`.
+
 ## 0.8.11 - 2026-04-29
 
 Spec 9.1 — `AgentDriverContext` extension for in-flight agent marker emission. Coordinated PHASE 1 of the aoe2 annotation-ui Spec 2 thread; aoe2 v0.1.5 consumes this surface.
