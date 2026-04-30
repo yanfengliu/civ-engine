@@ -94,13 +94,11 @@ Why it depends on Spec 1: the marker schema is engine-side; the UI just produces
 
 ### Spec 5: Counterfactual Replay / Fork
 
-Status: **Proposed.**
+Status: **Implemented** (v0.8.12). See `docs/threads/done/counterfactual-replay/DESIGN.md` (v4) and `docs/threads/done/counterfactual-replay/PLAN.md` (v5).
 
-What it delivers: `SessionReplayer.forkAt(tick).substitute(commands).run()` — change inputs at tick N, replay forward, observe how the simulation diverges from the original. Two-bundle diff utility for visualizing divergence. Substitution semantics, divergence detection, replay-fork tree.
+What it delivers: `SessionReplayer.forkAt(tick).replace/insert/drop.run({ untilTick })` — change inputs at tick N, replay forward, observe how the simulation diverges. `Divergence` summary with per-tick split counts (commandsSourceOnly/forkOnly/changed and same for events) plus `commandSequenceMap` for cross-bundle alignment. `diffBundles(a, b, { commandSequenceMap? })` standalone utility covers commands, events, and state across all six TickDiff dimensions. Equivalence-by-construction: a no-substitution fork is structurally equivalent to source's slice. Single-tick substitution; multi-tick is chained via re-fork (ADR 2). Internal `applyTickDiff` helper folds TickDiffs into snapshots for `diffBundles`'s state-fold consumer.
 
-What it unlocks: the most powerful debugging primitive. "If the player had done X instead of Y, what would have happened?" becomes a single API call.
-
-Why it's deferred: high architectural complexity (input substitution, divergence representation, fork trees), and the agent's main debugging workflow (load, jump to marker, inspect, step) is fully served by Spec 1's `openAt`. Build it when synthetic playtest reveals concrete counterfactual queries the agent wants to issue.
+What it unlocks: the most powerful debugging primitive. "If the player/agent had submitted X instead of Y, what would have happened?" becomes a single API call. Pairs with Specs 8 and 9 for counterfactual exploration of agent decision branches.
 
 ### Spec 6: Engine Strict-Mode Determinism Enforcement
 
@@ -161,7 +159,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 2    | Game-Side Annotation UI              | **Implemented in aoe2 v0.1.5** (capture-only) | `aoe2/docs/threads/done/annotation-ui/DESIGN.md` (v5) + `PLAN.md` (v2). Coordinated with civ-engine v0.8.11 (`AgentDriverContext.addMarker / attach`). Replay scrubber → v0.1.6. |
 | 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
 | 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/threads/done/bundle-viewer/PLAN.md` (v2) |
-| 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
+| 5    | Counterfactual Replay / Fork         | **Implemented** (v0.8.12) | `docs/threads/done/counterfactual-replay/DESIGN.md` (v4) + `docs/threads/done/counterfactual-replay/PLAN.md` (v5) |
 | 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/threads/done/strict-mode/DESIGN.md` (v3) + `docs/threads/done/strict-mode/PLAN.md` (v2) |
 | 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
 | 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
