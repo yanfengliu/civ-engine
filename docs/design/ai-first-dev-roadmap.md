@@ -46,7 +46,7 @@ Tier 1 makes AI-first possible. Tier 2 makes it powerful.
 
 ### Spec 9: AI Playtester Agent
 
-Status: **Implemented** (v0.8.9). See `docs/threads/done/ai-playtester/DESIGN.md` and `docs/threads/done/ai-playtester/PLAN.md`.
+Status: **Implemented** (v0.8.9, extended in v0.8.11 with `AgentDriverContext.addMarker / attach` and `AgentPlaytestResult.source` to support Spec 2's in-flight agent markers). See `docs/threads/done/ai-playtester/DESIGN.md` and `docs/threads/done/ai-playtester/PLAN.md` (and `docs/threads/done/spec-9-1/2026-04-29/` for the v0.8.11 follow-up reviews).
 
 What it delivers: a separate LLM-driven agent that plays the game (via the same `submit()` boundary), then writes natural-language qualitative feedback ("I found myself doing X repetitively in the early game; the second hour felt aimless"). Distinct from coding agents — its job is to *play and report*, not to edit code.
 
@@ -84,9 +84,9 @@ Why it depends on Spec 1: the viewer reads bundles.
 
 ### Spec 2: Game-Side Annotation UI
 
-Status: **Proposed.**
+Status: **Implemented in aoe2 v0.1.5** (capture-only). See `aoe2/docs/threads/done/annotation-ui/DESIGN.md` (v5) and `PLAN.md` (v2). The aoe2 implementation also drove the coordinated civ-engine v0.8.11 extension (Spec 9.1: `AgentDriverContext.addMarker / attach`). Replay scrubber + tick-jumping are the v0.1.6 follow-up (out of scope for v0.1.5; needs aoe2 bridge-snapshot prereqs).
 
-What it delivers: in-game hotkey + annotation form + drawing tools (entity selection, region lasso, suggested-path arrow, freehand scribble, screenshot capture). Resolves visual gestures to engine references (entity IDs, world coordinates) at annotation time, attaching the resolved refs to the marker. Free-text and screenshot blob travel as supplementary attachments. Game-specific code per game; this spec defines the conventions.
+What it delivers: in-game hotkey + annotation form + drawing tools (entity selection, region lasso, suggested-path arrow, freehand scribble, screenshot capture). Resolves visual gestures to engine references (entity IDs, world coordinates) at annotation time, attaching the resolved refs to the marker. Free-text and screenshot blob travel as supplementary attachments. Game-specific code per game; this spec defines the conventions. aoe2 v0.1.5 ships the minimum-viable subset (entity refs + tickRange fallback, no lasso/arrow/scribble) plus IndexedDB-backed crash-recovery persistence + Prior Sessions inspection / export — replay scrubber deferred.
 
 What it unlocks: rich, structured human bug reports. Player annotations populate the scenario library (Tier 1).
 
@@ -158,13 +158,13 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | Spec | Title                                | Status     | File                                                      |
 | ---- | ------------------------------------ | ---------- | --------------------------------------------------------- |
 | 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `docs/threads/done/session-recording/DESIGN.md` (v5) + `docs/threads/done/session-recording/PLAN.md` |
-| 2    | Game-Side Annotation UI              | Proposed   | not yet drafted                                           |
+| 2    | Game-Side Annotation UI              | **Implemented in aoe2 v0.1.5** (capture-only) | `aoe2/docs/threads/done/annotation-ui/DESIGN.md` (v5) + `PLAN.md` (v2). Coordinated with civ-engine v0.8.11 (`AgentDriverContext.addMarker / attach`). Replay scrubber → v0.1.6. |
 | 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
 | 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/threads/done/bundle-viewer/PLAN.md` (v2) |
 | 5    | Counterfactual Replay / Fork         | Proposed   | not yet drafted                                           |
 | 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/threads/done/strict-mode/DESIGN.md` (v3) + `docs/threads/done/strict-mode/PLAN.md` (v2) |
 | 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
 | 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
-| 9    | AI Playtester Agent                  | **Implemented** (v0.8.9) | `docs/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/threads/done/ai-playtester/PLAN.md` (v1) |
+| 9    | AI Playtester Agent                  | **Implemented** (v0.8.9, extended v0.8.11) | `docs/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/threads/done/ai-playtester/PLAN.md` (v1). v0.8.11 extension reviews: `docs/threads/done/spec-9-1/2026-04-29/`. |
 
 Update this row as specs are drafted, accepted, implemented, and merged.
