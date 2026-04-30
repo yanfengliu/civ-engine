@@ -44,8 +44,13 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Session Recording — SessionRecorder](#session-recording--sessionrecorder)
 - [Session Recording — SessionReplayer](#session-recording--sessionreplayer)
 - [Session Recording — scenarioResultToBundle](#session-recording--scenarioresulttobundle)
+- [Synthetic Playtest — Policies](#synthetic-playtest--policies-v0720)
+- [Synthetic Playtest — Harness](#synthetic-playtest--harness-v080)
 - [Bundle Corpus Index](#bundle-corpus-index-v083)
 - [Behavioral Metrics](#behavioral-metrics-v082)
+- [Bundle Viewer](#bundle-viewer-v087)
+- [Strict Mode](#strict-mode-v088)
+- [AI Playtester Agent](#ai-playtester-agent-v089-extended-v0811)
 
 ---
 
