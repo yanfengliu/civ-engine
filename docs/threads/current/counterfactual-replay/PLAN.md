@@ -1,6 +1,16 @@
 # Counterfactual Replay / Fork — Implementation Plan
 
-**Status:** Draft v2 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Awaiting plan-2 review.
+**Status:** Draft v3 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Awaiting plan-3 review.
+
+**v3 deltas vs v2:** addresses iter-2 review (Codex + Claude convergent ITERATE on H1/H2 + 1 MEDIUM + 1 Claude-only MEDIUM):
+- **H1 (rng-mismatch in bundleSlice):** Step 7's `bundleSlice` rebuilds `initialSnapshot` via `replayer.openAt(midTick).serialize()` (= `replayer.stateAtTick(midTick)`), NOT `applyTickDiff`. Reason: TickDiff doesn't carry rng/componentOptions/config (`snapshot-diff.ts:14-21` excludes them); folding via `applyTickDiff` from a preceding source snapshot keeps stale rng, while the fork's `initialSnapshot` (written by `recorder.connect()` after openAt's loop) has evolved rng. Same code path the fork uses — rng matches by construction. Side effect: Step 7 no longer depends on Step 10a; ordering reverts to `1, 2, 3, 4, 5, 6, 7, 8, 9, 10a, 10b, 11`. `applyTickDiff` (Step 10a) remains needed for Step 10b's state-diff fold via `diffSnapshots`, where rng is excluded by design.
+- **H2 (tick numbering inconsistency):** Plan now uses **submission-tick numbering** throughout `Divergence`/`perTickCounts` references, matching DESIGN's public contract (DESIGN §4 Divergence doc-comment: "Substitutions at targetTick count as divergence at targetTick"; DESIGN §6 row: "[targetTick, T_fail - 1]"). Test descriptions in Step 6 reference submission-tick numbering. The implementation accumulates per-tick deltas via the existing `SessionTickEntry.tick` field (= TickDiff.tick = submissionTick + 1) but EXPOSES them keyed by submission-tick (= SessionTickEntry.tick - 1) so the public `Divergence.perTickCounts` matches the contract.
+- **M1 (untilTick === targetTick degenerate):** Step 5 (g) now requires `untilTick > targetTick`. Equality is rejected with `RangeError` because the substitute-and-step semantics forces world.tick to advance past targetTick before the continuation loop runs. Rationale documented in Step 5's "untilTick semantic" subsection.
+- **M2 (Step 6 (h) range off by one):** plan said `[targetTick + 1, T_fail]` (TickDiff.tick numbering); on tick failure, `finalizeTickFailure` short-circuits before `gameLoop.advance` and before diff-listener emission, so no TickDiff fires for T_fail. Corrected to `[targetTick, T_fail - 1]` in submission-tick numbering (matching DESIGN §6).
+- **L1 (numbering wording):** Step 5 (j) and Step 6 (i) clarified to use submission-tick numbering consistently; "(submission-tick numbering)" annotation added wherever a range is given.
+- **L2 (Step 10a destroyed-before-created):** explicit pin in Step 10a IMPL — apply destroyed first (mark not-alive, free slot, generation unchanged), then created (mark alive, increment generation if recycling).
+
+**v2 deltas vs v1:** addresses iter-1 review (Codex + Claude both ITERATE — convergent on H1/H2):
 
 **v2 deltas vs v1:** addresses iter-1 review (Codex + Claude both ITERATE — convergent on H1/H2):
 - **H1:** `recorder.start()` → `recorder.connect()` everywhere. Plus `lastError` guard after connect (matching `runSynthPlaytest`/`runAgentPlaytest`).
@@ -85,12 +95,14 @@ Each checkpoint has a TEST line (the failing test that captures the contract) an
 - (d) Dropped command absent from fork bundle.
 - (e) `divergence.commandSequenceMap.{replaced, inserted, dropped, preserved}` populated with correct shape; assigned-sequence values are integers `>= 0` and monotonic per fork tick.
 - (f) Calling `.run()` twice → `BuilderConsumedError`.
-- (g) `run({ untilTick: targetTick - 1 })` → `RangeError`.
-- (h) Mid-fork handler-failure: `bundle.metadata.failedTicks` populated; `bundle.failures[]` non-empty; `run()` does NOT rethrow. (`Divergence.perTickCounts` shape assertions deferred to Step 6.)
+- (g) `run({ untilTick: targetTick })` and `run({ untilTick: targetTick - 1 })` → `RangeError`. (Equality is degenerate: the substitute-and-step in Step 5 IMPL bullet 6 unconditionally advances `world.tick` to `targetTick + 1`, so `untilTick === targetTick` cannot end with `world.tick === targetTick` — the contract requires `untilTick > targetTick`.)
+- (h) Mid-fork handler-failure (some tick T_fail throws `WorldTickFailureError`): `bundle.metadata.failedTicks` populated; `bundle.failures[]` non-empty; `run()` does NOT rethrow. Per `world.ts:1716-1763`, `finalizeTickFailure` short-circuits BEFORE `gameLoop.advance` and BEFORE diff-listener emission, so no SessionTickEntry is written for T_fail. (`Divergence.perTickCounts` shape assertions deferred to Step 6 (h).)
 - (i) `recorder.lastError` non-null after `connect()` causes `run()` to throw the captured error (matching `runSynthPlaytest:208-214`).
-- (j) `run({ untilTick > source.metadata.endTick })` continues forward beyond source range; bundle `endTick > source.endTick`. Inline `Divergence` only covers `[targetTick, source.metadata.endTick]`. (`perTickCounts` content deferred to Step 6.)
+- (j) `run({ untilTick > source.metadata.endTick })` continues forward beyond source range; bundle `endTick > source.endTick`. Inline `Divergence.perTickCounts` only covers submission-ticks `[targetTick, source.metadata.endTick - 1]` (the source-overlap range; ticks past it are `forkOnly`-shaped data but not divergence-counted, no source to compare). (`perTickCounts` content deferred to Step 6 (i).)
 
-**untilTick semantic:** matching `openAt`'s contract, `untilTick` is the desired `world.tick` at run end (= `bundle.metadata.endTick`). The continuation loop runs `while world.tick < untilTick`. Equivalently: `for t = targetTick + 1; t < untilTick; t++ { submit_source_at_t; world.step(); }`. This means the fork's last submission-tick is `untilTick - 1`, which matches source's slice over `[targetTick, untilTick]`.
+**untilTick semantic:** matching `openAt`'s contract, `untilTick` is the desired `world.tick` at run end (= `bundle.metadata.endTick`). Required: `untilTick > targetTick`. The continuation loop runs `while world.tick < untilTick`. Equivalently: `for t = targetTick + 1; t < untilTick; t++ { submit_source_at_t; world.step(); }`. This means the fork's last submission-tick is `untilTick - 1`, which matches source's slice over `[targetTick, untilTick]`.
+
+**Tick numbering note (load-bearing for Step 6):** `world.step()` advances `world.tick` from T to T+1 and emits a `TickDiff` with `tick = T+1`. The recorder writes a `SessionTickEntry` with `tick = TickDiff.tick = T+1`. Commands submitted via `submitWithResult` while `world.tick === T` get `submissionTick = T` (per `getObservableTick()` at `src/world.ts:1472-1479`). So one step processes "submission-tick T" and produces "SessionTickEntry.tick = T+1". DESIGN's public `Divergence.perTickCounts` is keyed by submission-tick (= TickDiff.tick - 1); the implementation accumulates deltas walking `SessionTickEntry`s and re-keys for the public contract.
 
 **IMPL:** `run()` does:
 1. Materialize the configured (or default) sink: `new MemorySink({ allowSidecar: true })`.
@@ -110,20 +122,22 @@ The `consumed` flag is set on `run()` entry (or in a try/finally to handle the f
 **Note:** `sink.toBundle()` is the actual reader API (per `MemorySink` in `src/session-sink.ts`); my v1 plan said `readBundle` which doesn't exist.
 
 ### Step 6 — Inline `Divergence` accumulator
+All tick references below are in **submission-tick numbering**, matching DESIGN's public `Divergence.perTickCounts` contract.
+
 **TEST:** `tests/session-fork.test.ts` —
 - (a) No-substitution: `divergence.firstDivergentTick === null`, `equivalent === true`, `perTickCounts` empty.
-- (b) Replace causes downstream event delta: `firstDivergentTick === targetTick + 1` (TickDiff.tick numbering — submission-tick targetTick produces diff at targetTick+1; if substitution caused command-result divergence at targetTick, that's reported under TickDiff.tick=targetTick+1 in the per-tick counts).
-- (c) Drop produces `commandsSourceOnly: 1` at substitution tick (i.e., the `SessionTickEntry.tick` matching `submissionTick + 1`).
-- (d) Insert produces `commandsForkOnly: 1` at the same.
-- (e) Same-payload event emitted at fork that source didn't → `eventsForkOnly: 1` at the appropriate tick; vice versa → `eventsSourceOnly: 1`.
-- (f) Validator-rejected substituted command (replace whose new payload validator rejects) → `commandsChanged: 1` at substitution tick (since the source's command at the same `originalSequence` was accepted with different payload+result vs fork's rejected substitute).
-- (g) Acceptance flip due to state divergence (replace causes earlier substitution that flips a later command's accept/reject) → `commandsChanged: 1` at the affected later tick.
-- (h) Mid-fork handler-failure: `Divergence.perTickCounts` only has entries for ticks in `[targetTick + 1, T_fail]` (TickDiff.tick numbering — the diff for processing-tick T_fail-1 fires before the failure on T_fail).
-- (i) `untilTick > source.metadata.endTick`: `Divergence.perTickCounts` covers `[targetTick + 1, source.metadata.endTick]` only; the tail `[source.metadata.endTick + 1, untilTick]` is `forkOnly`-shaped data but not divergence-counted (no source to compare). `firstDivergentTick` is `null` if no actual divergence in the overlapping range.
+- (b) Replace causes downstream event delta: `firstDivergentTick === targetTick` (substitution at submission-tick `targetTick` counts as divergence at `targetTick`); `perTickCounts.get(targetTick).commandsChanged >= 1`. Later submission-ticks may also have entries.
+- (c) Drop produces `perTickCounts.get(targetTick).commandsSourceOnly === 1`.
+- (d) Insert produces `perTickCounts.get(targetTick).commandsForkOnly === 1`.
+- (e) Same-payload event emitted at fork that source didn't → `perTickCounts.get(t).eventsForkOnly === 1` for the appropriate submission-tick `t`; vice versa → `eventsSourceOnly === 1`.
+- (f) Validator-rejected substituted command (replace whose new payload validator rejects) → `perTickCounts.get(targetTick).commandsChanged === 1`. The recorded `RecordedCommand.result.accepted` differs across source (true) and fork (false) at the matching original/assigned sequence pair.
+- (g) Acceptance flip due to state divergence (a replace causes a later command's validator to flip its accept/reject) → `perTickCounts.get(t_flip).commandsChanged === 1` at the affected submission-tick.
+- (h) Mid-fork handler-failure at submission-tick `T_fail`: `Divergence.perTickCounts` only has entries with keys in `[targetTick, T_fail - 1]`. (No SessionTickEntry exists for `T_fail` per `world.ts:1716-1763`'s pre-advance failure path; the divergence accumulator can only key off ticks the recorder wrote.)
+- (i) `untilTick > source.metadata.endTick`: `Divergence.perTickCounts` covers submission-ticks in `[targetTick, source.metadata.endTick - 1]` only. Submission-ticks past `source.metadata.endTick - 1` are not divergence-counted (no source to compare). `firstDivergentTick` is `null` if no actual divergence in the overlapping range.
 
-**IMPL:** `computeInlineDivergence(sourceBundle, forkBundle, commandSequenceMap, [overlapStart, overlapEnd])` reads both bundles after `recorder.disconnect()` and walks per `SessionTickEntry`:
-- At the targetTick-correspondent `SessionTickEntry` (TickDiff.tick = targetTick+1): use `commandSequenceMap` to align commands. Inserts → `forkOnly`. Drops → `sourceOnly`. Preserved+replaced → check payload+result equivalence; differing → `changed`.
-- At ticks > targetTick-correspondent: align by per-tick submission-order index.
+**IMPL:** `computeInlineDivergence(sourceBundle, forkBundle, commandSequenceMap, overlapTickRange)` reads both bundles after `recorder.disconnect()` and walks both per `SessionTickEntry`. The walk is keyed by `SessionTickEntry.tick` (= TickDiff.tick = submissionTick + 1) but stores per-tick deltas in the public-contract `perTickCounts` map keyed by `submissionTick = SessionTickEntry.tick - 1`:
+- At the SessionTickEntry with `tick === targetTick + 1` (the entry produced by stepping submission-tick `targetTick`): use `commandSequenceMap` to align commands. Inserts → `forkOnly`. Drops → `sourceOnly`. Preserved+replaced (matched via originalSequence/assignedSequence) → check payload+result equivalence; differing → `changed`. Store the count under `perTickCounts.set(targetTick, ...)`.
+- At SessionTickEntries with `tick > targetTick + 1`: align by per-tick submission-order index. Store under `perTickCounts.set(SessionTickEntry.tick - 1, ...)`.
 - Events at every tick: align by per-tick submission-order index.
 - Compute `firstDivergentTick = min(t in perTickCounts.keys())` or `null`.
 - `equivalent = firstDivergentTick === null`.
@@ -141,9 +155,11 @@ Backfill `divergence` fields in the `ForkResult` after this pass.
 - Strips `markers` and `attachments`.
 - Aligns `snapshots[]` by tick; drops snapshots not present on both sides.
 
-`bundleSlice(bundle, fromTick, toTick)` test helper produces a `SessionBundle`-shaped object covering ticks where `submissionTick` is in `[fromTick, toTick - 1]` (commands), `SessionTickEntry.tick` is in `[fromTick + 1, toTick]` (ticks), and snapshots in `[fromTick, toTick]`. It also rebuilds `initialSnapshot` to be the snapshot at `fromTick` (folded via `applyTickDiff` from Step 10a if necessary).
+`bundleSlice(bundle, fromTick, toTick)` test helper produces a `SessionBundle`-shaped object covering ticks where `submissionTick` is in `[fromTick, toTick - 1]` (commands), `SessionTickEntry.tick` is in `[fromTick + 1, toTick]` (ticks), and snapshots in `[fromTick, toTick]`. It rebuilds `initialSnapshot` via `replayer.openAt(fromTick).serialize()` (= `replayer.stateAtTick(fromTick)` per `src/session-replayer.ts:242-244`) — same code path the fork's `recorder.connect()` writes from, so rng evolution matches by construction.
 
-**IMPL:** No production change — Step 5+6 should already pass. If not, debug. Note: this test depends on Step 10a's `applyTickDiff` for `bundleSlice`'s `initialSnapshot` rebuild, so technically Step 7 is gated on Step 10a. **Reorder:** do Step 10a before Step 7. Updated ordering: `1, 2, 3, 4, 5, 6, 10a, 7, 8, 9, 10b, 11`.
+**Why not `applyTickDiff` for `initialSnapshot`?** TickDiff doesn't carry rng/componentOptions/config (`snapshot-diff.ts:14-21` excludes them); folding from a preceding source snapshot would keep stale rng while the fork's actual `initialSnapshot` has rng evolved through openAt's loop. `replayer.openAt(fromTick).serialize()` is the same forward-replay the fork uses, guaranteeing match.
+
+**IMPL:** No production change — Step 5+6 should already pass. If not, debug.
 
 ### Step 8 — `diffBundles` skeleton (no per-tick deltas yet)
 **TEST:** `tests/session-bundle-diff.test.ts` —
@@ -175,7 +191,7 @@ Backfill `divergence` fields in the `ForkResult` after this pass.
 - Dimensions not touched by the diff (e.g., `rng`, `componentOptions`, `config`) are passed through unchanged from the input snapshot.
 
 **IMPL:** `src/apply-tick-diff.ts` — `applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSnapshot` returns a new snapshot. Fold over each dimension:
-- `entities`: apply created/destroyed to alive[]/generations[]/freeList[]. Recycled entities (destroyed AND created with same id but different generation) handled per `diffEntities` recycling logic in `snapshot-diff.ts`.
+- `entities`: apply **destroyed first** (mark not-alive in `alive[]`, push id to `freeList[]`, leave `generations[id]` unchanged), **then created** (set `alive[id] = true`, increment `generations[id]` if the slot was being recycled, pop id from `freeList[]`). Order matters for recycled entities — `diffEntities` in `snapshot-diff.ts:66-78` surfaces recycling as both destroyed AND created with same id (different generation). Reverse order would leave the entity dead.
 - `components`: for each type, apply set (overwrite/insert) and removed (delete).
 - `resources`: apply per-pool set/removed.
 - `state`: apply set/removed.
@@ -237,15 +253,15 @@ Updated as part of the final commit batch:
 
 ## 6. Ordering rationale
 
-Final ordering (revised v2): `1, 2, 3, 4, 5, 6, 10a, 7, 8, 9, 10b, 11`.
+Final ordering (revised v3 — reverted from v2's reorder since Step 7 no longer depends on Step 10a): `1, 2, 3, 4, 5, 6, 7, 8, 9, 10a, 10b, 11`.
 
 - Steps 1–4: types + chainable surface, no execution.
 - Step 5: load-bearing substitution mechanism (most likely place for bugs).
 - Step 6: divergence accumulator (post-run pass over Step 5's output).
-- Step 10a (NEW position): `applyTickDiff` helper, needed for Step 7's bundleSlice helper. Net-new code; warrants its own checkpoint with dedicated tests.
-- Step 7: equivalence test — depends on Step 10a's helper for slicing source bundles.
+- Step 7: equivalence test — uses `replayer.openAt(fromTick).serialize()` for `bundleSlice.initialSnapshot` so rng matches by construction; no dependency on `applyTickDiff`.
 - Steps 8–9: `diffBundles` skeleton + command/event alignment (uses session-bundle data only, no state hydration).
-- Step 10b: `diffBundles` state-diff fold — uses Step 10a's `applyTickDiff` to hydrate per-tick states.
+- Step 10a: `applyTickDiff` helper. Net-new code; warrants its own checkpoint with dedicated tests. Required by Step 10b only.
+- Step 10b: `diffBundles` state-diff fold — uses Step 10a's `applyTickDiff` to hydrate per-tick states. `diffSnapshots` (the consumer of the hydrated states) excludes rng/componentOptions/config by design (`snapshot-diff.ts:14-21`), so the partial-hydration limitation of `applyTickDiff` is safe in this consumer.
 - Step 11: integration test, depends on every prior step.
 
 ## 7. Multi-CLI implementation review (post-Step 11, pre-commit)
@@ -261,5 +277,5 @@ After review, address findings, re-run gates, re-review until reviewers nitpick.
 ## 8. Open questions for plan-2 reviewer
 
 1. **Is `apply-tick-diff.ts` the right home for the helper, or should it live in `snapshot-diff.ts`?** Symmetry argument: `diffSnapshots(a, b)` lives there; `applyTickDiff(snap, diff)` is its inverse. Counter-argument: `snapshot-diff.ts` is intentionally the diff-producer; combining producer+consumer increases its surface. Plan: separate file. Confirm.
-2. **Should `applyTickDiff` be exported publicly, or stay internal?** Use case: external consumers might want to do `bundle.snapshots[i] + bundle.ticks[i+1].diff` to compute "snapshot at tick N+1" without re-running the world. Plan: public export. Confirm.
+2. **Should `applyTickDiff` be exported publicly, or stay internal?** v2 leaned public; v3 leans **internal** because the helper produces a partial-hydration snapshot (no rng/componentOptions evolution). External consumers reaching for "snapshot at tick N" should use `replayer.openAt(N).serialize()` (= `replayer.stateAtTick(N)`), which evolves rng correctly. `applyTickDiff` is safe ONLY when the consumer is `diffSnapshots`, which excludes rng by design. Plan: keep internal (not exported from `src/index.ts`). Confirm.
 3. **`bundleSlice` test helper lives in `tests/session-fork-equivalence.test.ts` or a shared `tests/test-utils/bundle-slice.ts`?** Used only by Step 7 currently. Plan: keep it in the test file unless Step 11 needs it too.
