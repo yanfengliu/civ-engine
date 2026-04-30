@@ -1,6 +1,6 @@
 # Counterfactual Replay / Fork — Implementation Plan
 
-**Status:** Draft v5 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Awaiting plan-5 review.
+**Status:** Accepted v5 (2026-04-29). For DESIGN.md v4 (Accepted). civ-engine roadmap Spec 5. Plan-5 review: both Codex and Claude ACCEPT. Proceeding to implementation per Step 1.
 
 **v5 deltas vs v4:** addresses iter-4 review (Codex 3 HIGHs + 2 MEDIUMs; Claude 1 MEDIUM + 4 NITs):
 - **HIGH (entity-create IMPL ID sourcing):** Step 10a entity-create wording was misleading — `TickDiff.entities.created` carries **explicit IDs** (`src/diff.ts:9`, populated sorted ascending by `src/snapshot-diff.ts:64-78`). v4 said "pop from freeList else extend," which would discard the diff's IDs and produce wrong `alive[]`/`freeList` state when `snapA.freeList` holds IDs that don't match the diff's `created[]` order. v5 IMPL: for each `id` in `diff.entities.created`, use that exact id — set `alive[id] = true`, remove `id` from `freeList` if present, extend arrays up to `id+1` if needed (init new slots `gen=0`).
