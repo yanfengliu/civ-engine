@@ -1,6 +1,12 @@
 # Counterfactual Replay / Fork — Design Spec
 
-**Status:** Draft v3 (2026-04-29). civ-engine roadmap Spec 5. Awaiting multi-CLI design-3 review.
+**Status:** Draft v4 (2026-04-29). civ-engine roadmap Spec 5. Awaiting multi-CLI design-4 review (Claude ACCEPTed v3, Codex ITERATEd with 1 BLOCKER + 3 MAJORs — v4 addresses Codex's findings).
+
+**v4 deltas vs v3:**
+- **§4.1 step 1** corrected: `openAt(targetTick)` leaves `world.tick === targetTick` (not `targetTick - 1`). The `for (let t = start.tick; t < targetTick; t++)` loop in `src/session-replayer.ts:226-238` calls `world.step()` each iteration; after the final iteration's step, `world.tick === targetTick`. The fork starts substituting commands when the world is already at `targetTick` and ready to accept commands for that tick.
+- **`BundleTickDelta.events` schema** widened from payload-only to `{ type, data }` pairs (mirrors the actual `SessionTickEntry.events` shape at `src/session-bundle.ts:55`). Type-only mismatches are now representable.
+- **`BundleTickDelta` state diff** replaced `stateKeys: { added, removed, changed }` with `stateDiff: TickDiff` covering all six dimensions `diffSnapshots` returns (entities, components, resources, state, tags, metadata) per `src/snapshot-diff.ts:43-52`. Component/resource-only counterfactual divergence is now reportable.
+- **ADR 7 symmetry** narrowed: symmetric when `commandSequenceMap` is absent; asymmetric when present (`a` MUST be the source bundle, `b` MUST be the fork bundle, since the map's `originalSequence`/`assignedSequence` slots encode that orientation). §4.3 + ADR 7 + `DiffBundlesOptions` doc all updated.
 
 **v3 deltas vs v2:** addresses iter-2 review findings (Codex + Claude both ITERATE — one BLOCKER convergent across reviewers, plus alignment/normalizer correctness gaps).
 
@@ -273,7 +279,13 @@ export interface DiffBundlesOptions {
   /** Optional CommandSequenceMap from a Divergence — when provided,
    *  diffBundles uses it for `targetTick` alignment. Without it,
    *  diffBundles falls back to per-tick submission-order index. See
-   *  §4.3. */
+   *  §4.3.
+   *
+   *  When provided, the diffBundles call is asymmetric per ADR 7: `a`
+   *  MUST be the source bundle (whose commands have `originalSequence`s
+   *  in the map) and `b` MUST be the fork bundle (whose commands have
+   *  `assignedSequence`s). Reversing the args without reversing the
+   *  map produces incorrect alignment. */
   readonly commandSequenceMap?: CommandSequenceMap;
 }
 
@@ -312,15 +324,20 @@ export interface BundleTickDelta<TEventMap, TCommandMap> {
     readonly changed: ReadonlyArray<{ a: RecordedCommand<TCommandMap>; b: RecordedCommand<TCommandMap> }>;
   };
   readonly events: {
-    readonly sourceOnly: ReadonlyArray<TEventMap[keyof TEventMap]>;
-    readonly forkOnly: ReadonlyArray<TEventMap[keyof TEventMap]>;
-    readonly changed: ReadonlyArray<{ a: unknown; b: unknown }>;
+    readonly sourceOnly: ReadonlyArray<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+    readonly forkOnly: ReadonlyArray<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+    readonly changed: ReadonlyArray<{
+      a: { type: keyof TEventMap; data: TEventMap[keyof TEventMap] };
+      b: { type: keyof TEventMap; data: TEventMap[keyof TEventMap] };
+    }>;
   };
-  readonly stateKeys: {
-    readonly added: ReadonlyArray<string>;
-    readonly removed: ReadonlyArray<string>;
-    readonly changed: ReadonlyArray<{ key: string; a: unknown; b: unknown }>;
-  };
+  /** State divergence at this tick, expressed as a TickDiff between the
+   *  source's hydrated state and the fork's hydrated state at this tick.
+   *  Covers all six dimensions diffSnapshots returns: entities,
+   *  components, resources, state, tags, metadata. Empty subfields
+   *  indicate no divergence on that dimension. (TickDiff shape from
+   *  src/diff.ts; matches diffSnapshots' return at src/snapshot-diff.ts:43.) */
+  readonly stateDiff: TickDiff;
 }
 ```
 
@@ -328,7 +345,7 @@ export interface BundleTickDelta<TEventMap, TCommandMap> {
 
 **The mechanism is `world.submitWithResult()` with sequence post-mapping.** When `run()` materializes the fork:
 
-1. Use `openAt(targetTick)`'s logic to leave the world paused at `world.tick === targetTick - 1` (the same forward-replay path; `openAt` ends with the world ready to accept commands for `targetTick`).
+1. Use `openAt(targetTick)`'s logic to leave the world ready to accept commands for `targetTick`. Per `openAt`'s implementation (`src/session-replayer.ts:226-238`), the loop is `for (let t = start.tick; t < targetTick; t++) world.step()`; after the loop, `world.tick === targetTick` and the next `submitWithResult(...)` queues commands that will execute when `world.step()` runs for tick `targetTick`. (Subsequent `submitWithResult` calls record `submissionTick = world.tick = targetTick` via `getObservableTick()` at `src/world.ts:1472-1479,1904`.)
 2. Construct a fresh `SessionRecorder` over the configured sink with `sourceKind: 'synthetic'`, `sourceLabel: ForkRunConfig.sourceLabel ?? 'counterfactual-fork-of-<sourceSessionId>@<targetTick>'`. Recorder's `start()` captures the initial snapshot at `targetTick`.
 3. Walk source commands at `targetTick` in **original `sequence` order** (preserves submission order — handler invocation depends on it):
    - If the source command's `sequence` is in the builder's `dropped` set → skip (no submission).
@@ -372,7 +389,7 @@ For ALL ticks in the union of `a`'s and `b`'s ranges:
 
 Events at every tick align by **submission-order index** (events are emitted in deterministic order from the world's event bus).
 
-State-key deltas at every tick are folded from `a.snapshots[]` + `a.ticks[].diff` and `b.snapshots[]` + `b.ticks[].diff`, computed by walking the snapshot+TickDiff streams per tick (the same fold `SessionReplayer.openAt` already uses for hydration) and applying `diffSnapshots` at each pair.
+State diffs at every tick are computed via `diffSnapshots(sourceStateAtT, forkStateAtT)`, where each side's state is hydrated by walking the bundle's `initialSnapshot` + intermediate `snapshots[]` + per-tick `ticks[].diff` from the nearest preceding snapshot up to tick T. The result is a `TickDiff` covering all six dimensions (entities, components, resources, state, tags, metadata) — exposed as `BundleTickDelta.stateDiff`.
 
 ## 5. ADRs
 
@@ -420,9 +437,18 @@ State-key deltas at every tick are folded from `a.snapshots[]` + `a.ticks[].diff
 
 ### ADR 7: `diffBundles` is symmetric and total; `equivalent` ignores metadata, markers, and attachments
 
-**Decision:** `diffBundles(a, b)` walks the union of `a` and `b`'s tick ranges, producing per-tick deltas for ticks present in either or both. Symmetric: `diffBundles(a, b)` and `diffBundles(b, a)` produce equivalent deltas with `a`/`b` slots swapped. Total: every divergent tick is reported, not just the first. `metadataDeltas`, `markersDeltas`, and `attachmentsDeltas` are exposed as separate fields but do NOT participate in `BundleDiff.equivalent`.
+**Decision:** `diffBundles(a, b)` walks the union of `a` and `b`'s tick ranges, producing per-tick deltas for ticks present in either or both. Total: every divergent tick is reported, not just the first.
 
-**Rationale:** Symmetry simplifies reasoning. Totality is necessary for visualization (UI wants to highlight every diff, not just the first); `firstDivergentTick` is a derived helper. Excluding metadata, markers, and attachments from `equivalent` is necessary because:
+Symmetry is conditional on `commandSequenceMap`:
+
+- **Without `commandSequenceMap`:** `diffBundles(a, b, undefined)` is symmetric — `diffBundles(b, a)` produces equivalent deltas with `a`/`b` slots swapped throughout. Alignment is per-tick submission-order index, which is order-independent.
+- **With `commandSequenceMap`:** `diffBundles(a, b, { commandSequenceMap })` is **asymmetric** by design — `a` MUST be the source bundle (the one whose commands have `originalSequence`s referenced in the map) and `b` MUST be the fork bundle (the one whose commands have `assignedSequence`s referenced in the map). Reversing the arguments without reversing the map's orientation produces incorrect alignment. The asymmetry is intrinsic to the map's structure, not a bug.
+
+`metadataDeltas`, `markersDeltas`, and `attachmentsDeltas` are exposed as separate fields but do NOT participate in `BundleDiff.equivalent`.
+
+**Rationale:** Symmetry without a map simplifies reasoning for cross-bundle comparisons. The asymmetry under a map is a load-bearing consequence of the map's contract: `originalSequence` and `assignedSequence` are slot names that encode source/fork orientation, and reversing the bundle args without reversing the map's slot labels would silently misalign commands. Documenting the constraint forestalls a footgun.
+
+Totality is necessary for visualization (UI wants to highlight every diff, not just the first); `firstDivergentTick` is a derived helper. Excluding metadata, markers, and attachments from `equivalent` is necessary because:
 
 - Every fork has fresh `sessionId` (random UUID) and `recordedAt` (Date.now); including them would make every fork non-equivalent to its source by definition, defeating the equivalence test for the no-substitution case (§7).
 - Markers are user-emitted via recorder hooks (`SessionRecorder.addMarker`), not derivable from world state. The fork's recorder writes its own marker stream from scratch; counterfactual semantics are about world-driven content, not user annotations.
