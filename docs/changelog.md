@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.13 - 2026-04-30
+
+`bundleHotspots(bundle, options?)` — first concrete incarnation of the "anomaly detection over the corpus" continuous capability mentioned in `docs/design/ai-first-dev-roadmap.md`. Per-bundle helper that returns a sorted-by-tick list of "interesting ticks" — tick failures, execution failures, per-tick metric outliers (z-score on `metrics.durationMs.total`), and (optionally) marker locations. Designed for AI agents investigating a recorded session: the output is a triage list pointing the agent at specific ticks to load via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`.
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`bundleHotspots(bundle, options?): BundleHotspot[]`** — pure synchronous function. Single-pass scan: collects tick failures, execution failures (`bundle.executions[i].executed === false`), per-tick metric outliers (z-score above `options.durationStdevThreshold ?? 3` on `metrics.durationMs.total`), and (optionally) markers. Sorted ascending by tick; within a tick, ordered by kind priority (failures → execution failures → duration outliers → markers).
+- **`BundleHotspot`** — `{ tick, kind, severity, message, details }`. `kind` ∈ `'tick_failure' | 'execution_failure' | 'duration_outlier' | 'marker'`. `severity` ∈ `'low' | 'medium' | 'high'`: tick failures are `high`; execution failures are `medium` (recorded `executions[i].executed === false` — emitted by the engine for missing handlers, thrown handlers, AND commands dropped because the tick already aborted, so an execution_failure hotspot may accompany a tick_failure at the same tick); duration outliers scale with z-score (`high` when z ≥ 2× threshold, else `medium`); markers are always `low`.
+- **`BundleHotspotsOptions`** — `{ durationStdevThreshold?, includeMarkers?, maxDurationOutliers? }`. Defaults: 3, true, 10. Setting `durationStdevThreshold: Infinity` disables duration outlier detection.
+
+### Behavior
+
+- Z-score requires ≥3 samples; bundles with <3 metric-bearing ticks return no duration outliers.
+- All-identical durations (stdev === 0) yield no outliers (no signal in the data).
+- Only the high tail of the distribution is flagged — fast ticks are not anomalies for a recorded session, slow ticks are.
+- Top-N capping applies to duration outliers only; tick failures and execution failures are always reported in full.
+
+### Validation
+
+All four engine gates pass: `npm test` (1075 passed + 2 todo, +12 from v0.8.12's 1063), `npm run typecheck`, `npm run lint`, `npm run build`. New file: `src/bundle-hotspots.ts` (225 LOC). New test: `tests/bundle-hotspots.test.ts` (12 tests). Multi-CLI implementation review (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max) ran in 5 iterations:
+- iter-1 found 5 real issues (missing api-reference section + README bullet, vacuous `maxDurationOutliers` test, inaccurate "failures are always high" wording, untested `execution_failure` code path, untested within-tick kind ordering) plus 2 NITs (dead `metrics` field, missing short-bundle z-score note); all addressed inline.
+- iter-2 found stale test-count wording (file went 10 → 13 → 12 across iter-1/iter-2 edits; counts now correct) plus 3 NITs (vacuous default-threshold cap test still present, inaccurate "deduped per tick" comment, ordering test missing duration_outlier kind); all addressed.
+- iter-3 found 2 doc-accuracy issues: `execution_failure` was documented as "handler threw, tick continued" but the engine also emits it for missing handlers and dropped commands after a tick aborted; short-bundle z-score formula was `(n-1)/√n` (wrong for population stdev — correct is `√(n-1)`). Both addressed across api-reference, changelog, source doc-comment, and test rationale.
+- iter-4 found that iter-3's `execution_failure` fix landed in 3 of 4 surfaces (missed `src/bundle-hotspots.ts:92-96`), and the devlog still cited the old `(n-1)/√n` formula in the iter-1 entry. Both addressed.
+- iter-5 found stale "ran in 2 iterations" wording in this very paragraph (now corrected to 5), an LOC drift in this paragraph (200 → 225 actual), and a parenthetical-attachment ambiguity in the source comment about which `executed: false` causes co-emit a TickFailure (now spelled out per-cause). All addressed.
+
+The "single-pass scan" framing is shorthand — the implementation has separate linear loops for failures, executions, duration-outlier mean/variance/candidate-collection, markers, and a final sort. Total cost is O(n_ticks + n_failures + n_executions + n_markers) plus the sort.
+
 ## 0.8.12 - 2026-04-30
 
 Spec 5 — Counterfactual Replay / Fork. AI-first roadmap deliverable: `SessionReplayer.forkAt(targetTick)` for "what if the agent had submitted X here instead?" experiments, plus `diffBundles(a, b)` standalone utility for cross-bundle comparison. The full thread is at `docs/threads/done/counterfactual-replay/` (4 design iterations + 5 plan iterations to convergence; both reviewers ACCEPT).

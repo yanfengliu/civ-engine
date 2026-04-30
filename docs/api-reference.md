@@ -5801,3 +5801,43 @@ class ForkSubstitutionError extends SessionRecordingError;
 class ForkBuilderConflictError extends SessionRecordingError;
 class BuilderConsumedError extends SessionRecordingError;
 ```
+
+## Bundle Hotspots (v0.8.13+)
+
+`bundleHotspots(bundle, options?)` — per-bundle anomaly-detection helper. Returns a sorted-by-tick list of "interesting ticks" worth investigating: tick failures, execution failures, per-tick duration outliers (z-score above threshold), and (optionally) marker locations. First concrete incarnation of the "anomaly detection over the corpus" continuous capability mentioned in `docs/design/ai-first-dev-roadmap.md`. Designed for AI agents inspecting a recorded session — the output points the agent at specific ticks to load via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`.
+
+```typescript
+function bundleHotspots<TEventMap, TCommandMap>(
+  bundle: SessionBundle<TEventMap, TCommandMap>,
+  options?: BundleHotspotsOptions,
+): BundleHotspot[];
+
+interface BundleHotspot {
+  tick: number;
+  kind: 'tick_failure' | 'execution_failure' | 'duration_outlier' | 'marker';
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  details: JsonValue;
+}
+
+interface BundleHotspotsOptions {
+  durationStdevThreshold?: number;   // default 3 (z-score). Set to Infinity to disable duration outlier detection.
+  includeMarkers?: boolean;          // default true
+  maxDurationOutliers?: number;      // default 10 (top-N by z-score)
+}
+```
+
+**Severity rules:**
+- `tick_failure` → always `high` (a failed tick aborted the simulation phase)
+- `execution_failure` → always `medium` (a recorded execution with `executed === false`. The engine emits this for missing handlers, thrown handlers, AND commands dropped because the tick already aborted; an `execution_failure` hotspot may therefore accompany a `tick_failure` at the same tick rather than indicating a benign per-command failure. The two are reported separately so the agent can distinguish "what command failed" from "what tick failed".)
+- `duration_outlier` → `high` when z-score ≥ 2× threshold, else `medium`
+- `marker` → always `low` (annotations, not errors)
+
+**Ordering:** ascending by tick; within the same tick, hotspots are ordered by kind priority `tick_failure → execution_failure → duration_outlier → marker`.
+
+**Short-bundle note for duration outliers:** the z-score uses the population stdev (divide by n, not n-1), so the maximum possible z for any sample in a bundle of n metric-bearing ticks is `√(n-1)`. With the default threshold of 3, that means bundles with <10 metric-bearing ticks cannot produce duration outliers regardless of how skewed the distribution is, and at n=10 only the extreme pathological case (one sample at the maximum, all others equal) reaches the boundary. Lower the threshold or accumulate more ticks if you need outlier detection on short bundles.
+
+**Edge cases handled:**
+- <3 metric-bearing samples → no duration outliers (need ≥3 for meaningful z-score).
+- All-identical durations (stdev = 0) → no duration outliers (no signal in the data).
+- Only the high tail is flagged — fast ticks aren't anomalies for a recorded session.

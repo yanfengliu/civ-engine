@@ -123,6 +123,16 @@ export {
   type BundleDiff,
   type BundleTickDelta,
 } from './session-bundle-diff.js';
+// Bundle Hotspots (v0.8.13+) — per-bundle anomaly detection helper.
+// First incarnation of the "anomaly detection over the corpus" continuous
+// capability in `docs/design/ai-first-dev-roadmap.md`. See
+// `docs/api-reference.md` § "Bundle Hotspots (v0.8.13+)".
+export {
+  bundleHotspots,
+  type BundleHotspot,
+  type BundleHotspotKind,
+  type BundleHotspotsOptions,
+} from './bundle-hotspots.js';
 // Behavioral Metrics over Corpus — Spec 8 (v0.8.2+): pure-function corpus reducer
 // over Iterable<SessionBundle>. 11 engine-generic built-in metrics + accumulator-style
 // Metric contract + thin compareMetricsResults delta helper.
