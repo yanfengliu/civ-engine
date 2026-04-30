@@ -23,8 +23,6 @@ const forbiddenArtifactFileNames = new Set([
   'diff.txt',
   'error.md',
   'error.txt',
-  'gemini.md',
-  'gemini.txt',
   'opus.md',
   'opus.txt',
   'prompt.md',
