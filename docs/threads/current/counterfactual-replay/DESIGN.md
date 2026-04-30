@@ -1,6 +1,6 @@
 # Counterfactual Replay / Fork — Design Spec
 
-**Status:** Draft v4 (2026-04-29). civ-engine roadmap Spec 5. Awaiting multi-CLI design-4 review (Claude ACCEPTed v3, Codex ITERATEd with 1 BLOCKER + 3 MAJORs — v4 addresses Codex's findings).
+**Status:** Accepted v4 (2026-04-29). civ-engine roadmap Spec 5. Design-4 review: Claude ACCEPT (Codex unreachable this round — sandbox blocked PowerShell pattern-match calls; documented in 2026-04-29/design-4/REVIEW.md). Proceeding to plan-stage.
 
 **v4 deltas vs v3:**
 - **§4.1 step 1** corrected: `openAt(targetTick)` leaves `world.tick === targetTick` (not `targetTick - 1`). The `for (let t = start.tick; t < targetTick; t++)` loop in `src/session-replayer.ts:226-238` calls `world.step()` each iteration; after the final iteration's step, `world.tick === targetTick`. The fork starts substituting commands when the world is already at `targetTick` and ready to accept commands for that tick.
