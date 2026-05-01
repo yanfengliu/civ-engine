@@ -125,7 +125,17 @@ Code changes are not done until the docs match. Before declaring any task comple
 - `docs/guides/<topic>.md` — every guide whose subject overlaps the change. A new resource API → `resources.md`. A new system feature → `systems-and-simulation.md`. A new spatial primitive → `spatial-grid.md` / `rts-primitives.md`. A new AI-relevant surface → `ai-integration.md`. A new field-data utility → `map-generation.md`. A new tutorial-grade feature → `building-a-game.md` and `getting-started.md`. The `concepts.md` standalone-utilities list and tick-lifecycle ASCII must reflect new utilities and lifecycle changes.
 - Examples and tutorials must use the current API. If a guide demonstrates the deprecated pattern, replace the demo, don't add a "new way" sidebar.
 - Thread design and plan docs — when an objective has an accepted design or implementation plan, keep the current authoritative versions directly under `docs/threads/current/<objective>/DESIGN.md` and `PLAN.md`; move them with the thread to `docs/threads/done/<objective>/` when the objective closes.
-- `docs/learning/lessons.md` — when you encounter a non-obvious failure mode worth preserving for future sessions (a recurring trap, a rule that prevented a reasonable-seeming mistake, a process step that turned out load-bearing). One concise entry per lesson; this is the source of process learnings that re-reviewers consult alongside prior `REVIEW.md` files.
+- `docs/learning/lessons.md` — when you encounter a non-obvious failure mode worth preserving for future sessions (a recurring trap, a rule that prevented a reasonable-seeming mistake, a process step that turned out load-bearing). **Each lesson MUST start with this evidence-anchor table** — without anchors a "lesson" is folklore and self-improvement becomes prompt drift:
+
+  | Field | Value |
+  |---|---|
+  | Surfaced by | path to `REVIEW.md` / debug log / commit / conversation that exposed the failure |
+  | Reviewer findings | which CLI flagged it, severity, finding ID — e.g. `Codex 3-C1`, `Claude iter-2 IMPORTANT` |
+  | Fix commit | short SHA of the commit that closed it |
+  | Test added | exact test node id that pins the lesson — e.g. `tests/sim/path.test.ts > "specific behaviour"` (or `n/a — process lesson` for review/tooling-only lessons) |
+  | Behavior delta | concrete before/after — what would have happened in production without the fix; for engine/sim changes include the affected bundle ID / replay seed / behavioral metric (faction win-rate, pathfinding cost, tick lifecycle ordering) |
+
+  Code lessons require a real test node id; only genuinely process-level lessons may use `n/a`. One concise entry per lesson; this is the source of process learnings that re-reviewers consult alongside prior `REVIEW.md` files.
 
 **Verification step (mandatory before declaring task done):**
 
