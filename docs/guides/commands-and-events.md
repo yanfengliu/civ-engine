@@ -339,12 +339,12 @@ Commands trigger handlers that emit events:
 
 ```typescript
 world.registerHandler('attackUnit', (data, w) => {
-  const targetHp = w.getComponent<Health>(data.targetId, 'health')!;
   const attackPower = w.getComponent<Attack>(data.attackerId, 'attack')!;
-  
-  targetHp.hp -= attackPower.damage;
-  
-  if (targetHp.hp <= 0) {
+  const updated = w.patchComponent<Health>(data.targetId, 'health', (hp) => {
+    hp.hp -= attackPower.damage;
+  });
+
+  if (updated.hp <= 0) {
     w.emit('unitDied', { entityId: data.targetId, cause: 'attack' });
     w.destroyEntity(data.targetId);
   }

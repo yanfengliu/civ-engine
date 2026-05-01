@@ -1088,7 +1088,7 @@ Messages sent from client to server:
 
 ## World
 
-`World<TEventMap, TCommandMap, TComponents>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
+`World<TEventMap, TCommandMap, TComponents, TState>` is the top-level API and the only public entry point. All subsystems (entity manager, component stores, spatial grid, game loop, event bus, command queue, resource store) are owned as private fields.
 
 ```typescript
 import { World } from 'civ-engine';
@@ -1101,11 +1101,12 @@ import { World } from 'civ-engine';
 | `TEventMap` | `Record<keyof TEventMap, unknown>` | `Record<string, never>` | Map of event type names to event data types |
 | `TCommandMap` | `Record<keyof TCommandMap, unknown>` | `Record<string, never>` | Map of command type names to command data types |
 | `TComponents` | `ComponentRegistry` | `Record<string, unknown>` | Optional component registry. When specified, component methods infer value types from registry keys |
+| `TState` | `Record<string, unknown>` | `Record<string, unknown>` | Optional world-state registry. When specified, `setState`/`getState`/`deleteState`/`hasState` infer value types from registry keys |
 
 ### Constructor
 
 ```typescript
-new World<TEventMap, TCommandMap, TComponents>(config: WorldConfig)
+new World<TEventMap, TCommandMap, TComponents, TState>(config: WorldConfig)
 ```
 
 Creates a new world with the specified grid dimensions, tick rate, and optional configuration.
@@ -1296,7 +1297,7 @@ Sets position data and updates the spatial grid immediately when the key is the 
 getComponent<T>(entity: EntityId, key: string): T | undefined
 ```
 
-Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference, so mutations are reflected immediately. Direct mutations are detected for diffs, but `setComponent()` and `patchComponent()` are the preferred write APIs for clearer intent and immediate position/grid synchronization.
+Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference into engine storage, so in-place mutations write through to the stored value. They are **not** detected by the diff system or the spatial grid — every component change must go through `setComponent()` / `addComponent()` / `patchComponent()` (or `setPosition()` for the configured position key) for the engine to mark the entity dirty and update derived structures. The example below mutates the live store but the change will not appear in `TickDiff`; use `patchComponent` instead when the diff matters.
 
 ```typescript
 const hp = world.getComponent<Health>(unit, 'health');
@@ -1560,10 +1561,10 @@ console.log(world.tick); // 1
 #### `grid`
 
 ```typescript
-readonly grid: SpatialGrid
+readonly grid: SpatialGridView
 ```
 
-Read-only reference to the spatial grid. Use `grid.getAt()` and `grid.getNeighbors()` to query spatial data. Do not call `grid.insert()`, `grid.remove()`, or `grid.move()` directly — the World handles spatial sync automatically.
+Read-only delegate over the internal spatial grid. Exposes `getAt(x, y)`, `getNeighbors(x, y, offsets?)`, and `getInRadius(cx, cy, radius, metric?)`; mutating methods (`insert`, `remove`, `move`) are not part of the delegate. The delegate object itself is `Object.freeze`d in the constructor (since v0.7.3) so attempts to monkey-patch its methods throw `TypeError` in strict mode. `getAt()` returns a fresh `Set` copy on every call, so the delegate's read-only promise also covers the returned cell view.
 
 ### Speed Control
 
@@ -2271,7 +2272,9 @@ Component data and state values are `structuredClone`d on read so the input snap
 
 **Throws:**
 - `Error` if `snapshot.version` is not `1`, `2`, `3`, `4`, or `5`
+- `Error` if `snapshot.tick` is `NaN`, negative, fractional, or `Infinity` (validated before any loader runs)
 - `Error` if entity state arrays have mismatched lengths
+- `Error` if any component or resource entry references a non-integer or dead entity id (`snapshot.components[*]`, `snapshot.resources.pools[*]`, `snapshot.resources.production[*]`, `snapshot.resources.consumption[*]`, or any transfer endpoint)
 - `Error` if `snapshot.tags` or `snapshot.metadata` references a dead entity id
 
 Version 1 snapshots load with an empty resource store. Version 2 snapshots restore resource registrations, pools, rates, transfers, and the next transfer ID. Version 3 snapshots also restore deterministic RNG state. Version 4 snapshots also restore world-level state, entity tags, and entity metadata. Version 5 snapshots additionally round-trip per-component `ComponentStoreOptions` (`diffMode`) plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default.
@@ -2393,10 +2396,10 @@ Unregisters a destroy callback. Pass the exact same function reference used in `
 
 ## SpatialGrid
 
-A sparse occupied-cell grid that tracks which entities are at each cell. The World automatically syncs entity positions to the grid. You should **read** from the grid but not write to it directly.
+A sparse occupied-cell grid that tracks which entities are at each cell. The World owns the grid and updates it lock-step with every `setPosition`/`setComponent` write on the configured position key — there is no per-tick scan and no separate sync phase. The `world.grid` property exposes a frozen read-only `SpatialGridView` (see the `World.grid` section above) with `getAt`, `getNeighbors`, and `getInRadius`; the mutating `insert`/`remove`/`move` methods of the underlying `SpatialGrid` are not part of the delegate. The direction constants (`ORTHOGONAL`, `DIAGONAL`, `ALL_DIRECTIONS`) are exported for use with `getNeighbors`.
 
 ```typescript
-import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';
+import { ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';
 ```
 
 ### Properties
@@ -2450,6 +2453,26 @@ const allNearby = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
 
 // Only diagonal
 const diag = world.grid.getNeighbors(5, 3, DIAGONAL);
+```
+
+#### `getInRadius(cx, cy, radius, metric?)`
+
+```typescript
+getInRadius(
+  cx: number,
+  cy: number,
+  radius: number,
+  metric?: 'euclidean' | 'manhattan',
+): EntityId[]
+```
+
+Returns all entities whose cell falls within `radius` of `(cx, cy)`. Uses Euclidean distance by default; pass `'manhattan'` for orthogonal-only distance. The cell scan is bounded by `Math.ceil(radius)` so non-integer radii work correctly.
+
+**Throws:** `RangeError` if `(cx, cy)` is out of bounds or `radius` is negative or non-finite.
+
+```typescript
+const inRange = world.grid.getInRadius(10, 10, 5);
+const orthOnly = world.grid.getInRadius(10, 10, 5, 'manhattan');
 ```
 
 ### Direction Constants

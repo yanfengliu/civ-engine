@@ -117,3 +117,13 @@ Position writes through `world.setPosition()` or `world.setComponent()` with the
 
 For architectural decisions, see `docs/architecture/decisions.md`.
 For architecture drift history, see `docs/architecture/drift-log.md`.
+
+## Drift Log
+
+Structural mismatches detected during periodic doc audits but not addressed in the same pass. Use this list to schedule follow-ups; it is intentionally short-form and dated.
+
+| Date       | Detected drift / structural change                                                                                                                                                                                                                                                                            | Status                                          |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------|
+| 2026-05-01 | `docs/devlog/detailed/2026-04-25_2026-04-25.md` is 542 lines (over the ~500-line cap). Should be archived (rename `END_DATE` to last-entry date) and a new active file rotated in. Not edited in this audit pass.                                                                                              | Deferred — archive on next devlog work          |
+| 2026-05-01 | `src/world.ts` is 2270 lines, far above the 500 LOC review preference; previous extraction (v0.6.4) split out `world-internal.ts` but the deeper class-method extraction (serialize, system scheduling, tick pipeline) is still pending per drift-log row 2026-04-26 (`world-internal.ts` extraction). | Deferred — composition redesign required        |
+| 2026-05-01 | `src/occupancy-grid.ts` is 42KB / ~1500 LOC and combines `OccupancyGrid`, `OccupancyBinding`, and `SubcellOccupancyGrid` in one file; per devlog summary the split is deferred until composition redesign. Not edited in this audit pass.                                                                | Deferred — composition redesign required        |
