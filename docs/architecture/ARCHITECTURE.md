@@ -46,6 +46,8 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Strict Mode | `src/world-strict-mode.ts` | Opt-in `WorldConfig.strict` mutation-gate enforcement (Spec 6, v0.8.8). Provides `assertWritable(world, method)` helper called at the top of every gated mutation method on `World`; rejects out-of-tick mutations with `StrictModeViolationError`. Escape hatches: `World.endSetup()`, `World.runMaintenance(fn)` (depth-counted reentrant), and `applySnapshot` (internal `_maintenanceDepth` increment). |
 | Bundle Viewer | `src/bundle-viewer.ts`, `src/snapshot-diff.ts` | Tier-3 programmatic agent-driver API over a `SessionBundle`. Marker-anchored navigation (`atMarker(id).state()`), per-tick `TickFrame` views with selective runtime freezing (frame + arrays frozen, elements not), lazy memoized `SessionReplayer` materialization, two-path `frame.diffSince()` (folded TickDiffs vs snapshot via `diffSnapshots`), content-bounded `recordedRange` for incomplete bundles. Composes with `BundleCorpus`. New in v0.8.7 (Spec 4). |
 | Behavioral Metrics | `src/behavioral-metrics.ts` | Tier-2 corpus reducer over `Iterable<SessionBundle>`. Accumulator-style `Metric<TState, TResult>` contract; 11 engine-generic built-in metrics (`bundleCount`, `sessionLengthStats`, etc.); pure-function `runMetrics` + `compareMetricsResults` delta helper. New in v0.8.2 (Spec 8). |
+| Counterfactual Replay / Fork | `src/session-fork.ts`, `src/session-fork-divergence.ts`, `src/session-bundle-diff.ts`, `src/session-bundle-equivalence.ts`, `src/apply-tick-diff.ts` | Tier-3 "what if the agent had submitted X here?" primitive. `SessionReplayer.forkAt(targetTick)` returns a single-use chainable `ForkBuilder` (`replace`/`insert`/`drop`/`run`/`snapshot`); `.run({ untilTick })` materializes a normal `SessionBundle` plus a `Divergence` summary (per-tick command/event split counts, `firstDivergentTick`, `commandSequenceMap`, `equivalent` flag). Standalone `diffBundles(a, b, { commandSequenceMap? })` utility compares commands, events, and state across all six TickDiff dimensions. Equivalence-by-construction: a no-substitution fork is structurally equivalent to source's slice. Internal `applyTickDiff` helper folds TickDiffs into snapshots for the state-fold consumer (NOT exported). New in v0.8.12 (Spec 5). |
+| Bundle Hotspots | `src/bundle-hotspots.ts` | Per-bundle anomaly-detection helper. `bundleHotspots(bundle, options?)` returns a sorted-by-tick triage list of "interesting ticks": tick failures (`high`), execution failures (`medium`), per-tick duration outliers (z-score above threshold; `medium`/`high`), and optionally markers (`low`). First concrete incarnation of the "anomaly detection over the corpus" continuous capability in `docs/design/ai-first-dev-roadmap.md`. Designed for AI agents to identify ticks worth loading via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`. New in v0.8.13. |
 | Public exports | `src/index.ts`           | Barrel export for the intended package API                                             |
 | Types          | `src/types.ts`           | Shared type definitions (EntityId, EntityRef, Position, WorldConfig, InstrumentationProfile) |
 
@@ -54,21 +56,22 @@ The engine provides reusable infrastructure (entities, components, spatial index
 ```
 World.step()
   -> GameLoop.step()
-    -> World.executeTick()
-      -> World.eventBus.clear()       [reset buffer from previous tick]
-      -> World.entityManager.clearDirty()
-      -> World.clearComponentDirty()   [clear dirty flags on all stores]
-      -> World.processCommands()       [drain queue, run handlers]
-      -> input systems
-      -> preUpdate systems
-      -> update systems
-      -> postUpdate systems
-      -> output systems
-      -> World.resourceStore.processTick()  [production, consumption, transfers]
-      -> World.buildDiff()             [collect dirty state into TickDiff]
-      -> World.getMetrics() state updated   [detailed in `full`, coarse in `minimal`, skipped by implicit `step()` in `release`]
-      -> notify onDiff listeners
-    -> tick++
+    -> onTick callback -> World.executeTickOrThrow()
+      -> World.runTick()
+        -> World.eventBus.clear()       [reset buffer from previous tick]
+        -> World.entityManager.clearDirty()
+        -> World.clearComponentDirty()  [clear dirty flags on all stores]
+        -> World.processCommands()      [drain queue, run handlers]
+        -> input systems
+        -> preUpdate systems
+        -> update systems
+        -> postUpdate systems
+        -> output systems
+        -> World.resourceStore.processTick()  [production, consumption, transfers]
+        -> World.buildDiff()            [collect dirty state into TickDiff]
+        -> World.getMetrics() state updated   [detailed in `full`, coarse in `minimal`, skipped by implicit `step()` in `release`]
+        -> gameLoop.advance()           [tick++]
+        -> notify onDiff listeners
 ```
 
 ### Spatial Index Sync
