@@ -37,11 +37,9 @@ What changed, which files, and why this specific fix addresses the root cause
 rather than the symptom.
 
 ## Verification
-- Commands run (full gate: `npx vitest run`, `npx tsc --noEmit`, `npx vite build`).
-- Browser tests if relevant: `npm run test:browser`.
+- Commands run (full gate: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`).
 - Any new regression tests added.
 
 ## Follow-ups
-- Engine-level gaps worth flagging in `docs/engine-feedback/current.md`.
 - Lessons to persist in `docs/learning/lessons.md`.
-- Architecture implications, if any.
+- Architecture implications, if any (update `docs/architecture/ARCHITECTURE.md` and `docs/architecture/drift-log.md`).
