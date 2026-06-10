@@ -1,19 +1,50 @@
 {
   "name": "civ-engine",
-  "version": "0.8.13",
+  "version": "0.8.14",
+  "description": "Headless, AI-native 2D grid-based game engine: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies.",
+  "keywords": [
+    "game-engine",
+    "ecs",
+    "headless",
+    "deterministic",
+    "simulation",
+    "grid",
+    "ai-agents",
+    "replay",
+    "playtesting",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "Yanfeng Liu <yanfengliux@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yanfengliu/civ-engine.git"
+  },
+  "homepage": "https://github.com/yanfengliu/civ-engine#readme",
+  "bugs": {
+    "url": "https://github.com/yanfengliu/civ-engine/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "LICENSE",
+    "docs/README.md",
+    "docs/api-reference.md",
+    "docs/changelog.md",
+    "docs/guides",
+    "docs/architecture"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

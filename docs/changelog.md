@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.14 - 2026-06-09
+
+Package-metadata hygiene release. No API or behavior changes.
+
+- Added an MIT `LICENSE` file. The README has always declared MIT, but the repository (and the published package) carried no license text and `package.json` had no `license` field — formally, that meant "all rights reserved" to downstream tooling. Both are now in place.
+- `package.json` gained standard registry metadata: `description`, `keywords`, `license`, `author`, `repository`, `homepage`, `bugs`, and `engines` (`node >= 18`, matching the long-documented requirement).
+- Trimmed the published `files` set. The npm package previously shipped the entire `docs/` tree — including internal process archives (`docs/threads/` review history alone is ~1.6 MB). The package now ships `dist`, `README.md`, `LICENSE`, and the consumer-relevant docs: `docs/README.md`, `docs/api-reference.md`, `docs/changelog.md`, `docs/guides/`, and `docs/architecture/`. AI agents reading engine docs from `node_modules` keep the prose docs they need (API reference, guides, architecture, changelog); dev-process archives (threads, devlogs, lessons, debugging templates, roadmap) remain in the GitHub repository only. Two known dangling-pointer classes inside the package: some links in the packaged `docs/README.md` index, and JSDoc/source comments in `dist/` that cite `docs/threads/done/.../DESIGN.md` or `docs/design/ai-first-dev-roadmap.md` pointers. Both resolve on GitHub, not inside `node_modules`.
+
+- Fixed a broken link in the (now-shipped) `docs/guides/getting-started.md`: the Architecture pointer linked `../ARCHITECTURE.md`; the file lives at `../architecture/ARCHITECTURE.md`.
+
+### Validation
+
+All four gates pass: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Package contents verified with `npm pack --dry-run`. Multi-CLI review (Codex + Gemini + Claude) converged ACCEPT in 1 iteration; findings were doc-navigation minors, both addressed.
+
 ## 0.8.13 - 2026-04-30
 
 `bundleHotspots(bundle, options?)` — first concrete incarnation of the "anomaly detection over the corpus" continuous capability mentioned in `docs/design/ai-first-dev-roadmap.md`. Per-bundle helper that returns a sorted-by-tick list of "interesting ticks" — tick failures, execution failures, per-tick metric outliers (z-score on `metrics.durationMs.total`), and (optionally) marker locations. Designed for AI agents investigating a recorded session: the output is a triage list pointing the agent at specific ticks to load via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`.

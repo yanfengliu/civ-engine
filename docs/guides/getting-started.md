@@ -309,7 +309,7 @@ Client messages: `command` (submit a game command), `requestSnapshot` (request f
 
 - [Building a Complete Game](./building-a-game.md) — Step-by-step tutorial building a colony survival simulation
 - [Debugging](./debugging.md) — Diagnostic flowchart, error code reference, and debugging scenarios
-- [Architecture](../ARCHITECTURE.md) — Detailed architecture documentation
+- [Architecture](../architecture/ARCHITECTURE.md) — Detailed architecture documentation
 - [API Reference](../api-reference.md) — Full method listing
 
 ## Recording Your First Session
