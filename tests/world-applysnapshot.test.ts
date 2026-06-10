@@ -107,3 +107,20 @@ describe('World.applySnapshot', () => {
     expect(w2.getDiff()).toBeNull();
   });
 });
+
+describe('event buffer across applySnapshot (full-review 2026-06-10 L2)', () => {
+  it('getEvents() is empty after an in-place applySnapshot', () => {
+    type Events = { ping: { n: number } };
+    const mk = () => {
+      const w = new World<Events>({ gridWidth: 8, gridHeight: 8, tps: 60 });
+      w.registerSystem((lw) => { lw.emit('ping', { n: lw.tick }); });
+      return w;
+    };
+    const world = mk();
+    world.step();
+    expect(world.getEvents().length).toBe(1);
+    const snapshot = new World<Events>({ gridWidth: 8, gridHeight: 8, tps: 60 }).serialize();
+    world.applySnapshot(snapshot);
+    expect(world.getEvents()).toEqual([]);
+  });
+});

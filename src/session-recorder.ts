@@ -81,6 +81,7 @@ export class SessionRecorder<
 
   private _connected = false;
   private _closed = false;
+  private _sinkOpened = false;          // open() succeeded; safe to finalize metadata on disconnect
   private _terminated = false;          // true after a sink failure short-circuits writes
   private _startTick = 0;
   private _tickCount = 0;
@@ -148,6 +149,7 @@ export class SessionRecorder<
     };
     try {
       this._sink.open(initialMetadata);
+      this._sinkOpened = true;
       // Write initial snapshot synchronously so bundles always have one.
       const initial = this._world.serialize();
       this._sink.writeSnapshot({ tick: this._startTick, snapshot: initial });
@@ -213,20 +215,23 @@ export class SessionRecorder<
     }
 
     // Finalize metadata via a fresh open() with the final values would be wrong;
-    // sinks already track persistedEndTick on writeSnapshot. We mutate the
-    // sink's metadata directly via close() — sinks rewrite the manifest on close.
-    // For sinks that don't expose metadata mutation (defensively), the
-    // close() path is sufficient; the bundle's metadata.endTick is read from
-    // the sink at toBundle() time, and FileSink/MemorySink both keep it
-    // synced with whatever was passed to open() plus any incremental updates
-    // (failedTicks, persistedEndTick).
-    // However the spec calls for finalized endTick + durationTicks at
-    // disconnect; we set them via a sink hook.
-    const finalMetadata = this._sink.metadata;
-    finalMetadata.endTick = this._world.tick;
-    finalMetadata.durationTicks = this._world.tick - this._startTick;
-    if (this._terminated) {
-      finalMetadata.incomplete = true;
+    // sinks already track persistedEndTick on writeSnapshot. The spec calls
+    // for finalized endTick + durationTicks at disconnect; we mutate the
+    // sink's metadata and close() persists it. Finalize ONLY when OUR open()
+    // succeeded: after a connect-time open() failure there is nothing to
+    // finalize (full-review 2026-06-10 M3), and a read-preloaded FileSink
+    // exposes the EXISTING bundle's metadata — mutating + close()-writing it
+    // would destroy that bundle's manifest (full-review 2026-06-10 iter-2).
+    let finalMetadata: SessionMetadata | null = null;
+    if (this._sinkOpened) {
+      try { finalMetadata = this._sink.metadata; } catch { finalMetadata = null; }
+    }
+    if (finalMetadata) {
+      finalMetadata.endTick = this._world.tick;
+      finalMetadata.durationTicks = this._world.tick - this._startTick;
+      if (this._terminated) {
+        finalMetadata.incomplete = true;
+      }
     }
 
     try {

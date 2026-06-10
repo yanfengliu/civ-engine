@@ -291,3 +291,16 @@ describe('SessionRecorder', () => {
     expect(round.commands).toHaveLength(1);
   });
 });
+
+describe('disconnect after connect-time sink failure (full-review 2026-06-10 M3)', () => {
+  it('disconnect() does not throw when sink.open() failed during connect()', () => {
+    const world = mkWorld();
+    const sink = new MemorySink();
+    sink.open = () => { throw new Error('disk full'); };
+    const rec = new SessionRecorder({ world, sink });
+    rec.connect();
+    expect(rec.lastError).not.toBeNull();
+    expect(() => rec.disconnect()).not.toThrow();
+    expect(rec.isClosed).toBe(true);
+  });
+});

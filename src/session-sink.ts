@@ -173,8 +173,11 @@ export class MemorySink implements SessionSink, SessionSource {
     const explicitDataUrl = 'dataUrl' in descriptor.ref;
     // 'auto' is the default ref shape from SessionRecorder.attach() when caller
     // didn't specify a policy. MemorySink's default is dataUrl for under-cap,
-    // sidecar for over-cap (with allowSidecar), throw otherwise.
-    if (oversized && !explicitSidecar && !this._allowSidecar) {
+    // sidecar for over-cap (with allowSidecar), throw otherwise. An explicit
+    // dataUrl request is honored regardless of size — the caller asked for
+    // inline bytes (full-review 2026-06-10 N1: the guard previously threw
+    // for explicit-dataUrl oversize, contradicting the comment below).
+    if (oversized && !explicitSidecar && !explicitDataUrl && !this._allowSidecar) {
       throw new SinkWriteError(
         `attachment ${descriptor.id} (${data.byteLength} bytes) exceeds threshold ` +
           `${this._threshold} and sidecar is not enabled (pass MemorySinkOptions.allowSidecar: true)`,

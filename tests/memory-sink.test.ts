@@ -73,7 +73,7 @@ describe('MemorySink', () => {
     sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
     const huge = new Uint8Array(65537);
     expect(() => sink.writeAttachment(
-      { id: 'x', mime: 'application/octet-stream', sizeBytes: huge.byteLength, ref: { dataUrl: '' } },
+      { id: 'x', mime: 'application/octet-stream', sizeBytes: huge.byteLength, ref: { auto: true } },
       huge,
     )).toThrow(/sidecar/);
   });
@@ -178,5 +178,17 @@ describe('MemorySink', () => {
     sink.writeTick({ tick: 1, diff: { tick: 1 } as never, events: [], metrics: null, debug: null });
     sink.writeTick({ tick: 2, diff: { tick: 2 } as never, events: [], metrics: null, debug: null });
     expect([...sink.ticks()].map((t) => t.tick)).toEqual([1, 2]);
+  });
+});
+
+describe('explicit dataUrl oversize handling (full-review 2026-06-10 N1)', () => {
+  it('explicit dataUrl ref is honored regardless of size', () => {
+    const sink = new MemorySink({ sidecarThresholdBytes: 8 });
+    sink.open(mkMetadata());
+    const desc = sink.writeAttachment(
+      { id: 'big', mime: 'text/plain', sizeBytes: 16, ref: { dataUrl: '' } },
+      new Uint8Array(16),
+    );
+    expect('dataUrl' in desc.ref).toBe(true);
   });
 });

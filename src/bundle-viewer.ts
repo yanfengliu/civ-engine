@@ -219,7 +219,15 @@ export class BundleViewer<
       if (provFilter && !provFilter.has(m.provenance)) continue;
       if (idFilter !== undefined) {
         if (typeof idFilter === 'string') { if (m.id !== idFilter) continue; }
-        else if (!idFilter.test(m.id)) continue;
+        else {
+          // Reset lastIndex around .test() so caller-supplied /g and /y
+          // regexes match statelessly — mirrors the corpus filter
+          // (bundle-corpus.ts matchesKey; full-review 2026-06-10 L1).
+          idFilter.lastIndex = 0;
+          const matched = idFilter.test(m.id);
+          idFilter.lastIndex = 0;
+          if (!matched) continue;
+        }
       }
       yield m;
     }

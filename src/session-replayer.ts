@@ -301,8 +301,15 @@ export class SessionReplayer<
     for (let i = 0; i < allSnapshots.length - 1; i++) {
       const a = allSnapshots[i];
       const b = allSnapshots[i + 1];
-      // Skip segments containing a recorded TickFailure
-      if (md.failedTicks?.some((ft) => ft >= a.tick && ft < b.tick)) {
+      // Skip segments containing a recorded TickFailure. A segment (a, b]
+      // replays ticks a+1 .. b, so a failure at exactly b.tick is inside it —
+      // and that is the DEFAULT terminal layout: a failed tick consumes its
+      // tick number and the disconnect-time terminal snapshot lands on it.
+      // (full-review 2026-06-10 H1: the previous `ft >= a.tick && ft < b.tick`
+      // guard missed the terminal case, so selfCheck() threw a raw
+      // WorldTickFailureError on every poisoned-stop bundle. A failure at
+      // a.tick belongs to the PREVIOUS segment and must not skip this one.)
+      if (md.failedTicks?.some((ft) => ft > a.tick && ft <= b.tick)) {
         result.skippedSegments.push({ fromTick: a.tick, toTick: b.tick, reason: 'failure_in_segment' });
         continue;
       }

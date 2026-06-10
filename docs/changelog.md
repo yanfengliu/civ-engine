@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.8.16 - 2026-06-10
+
+Full-codebase review hardening (first full review since v0.7.6). Three independent reviewers (Codex + two Claude lenses) swept the engine; every accepted finding is fixed here. The core tick/ECS/determinism machinery had zero defects — the real bugs clustered in session-recording/replay **error paths**. See `docs/threads/done/full/2026-06-10/` for the full synthesis.
+
+### Fixed — session recording / replay
+
+- **`selfCheck()` no longer throws on failure-terminated bundles** (HIGH, repro-confirmed). The failure-segment skip guard was off-by-one at the terminal boundary (`ft >= a.tick && ft < b.tick` for a segment that replays `(a, b]`), and the default poisoned-stop layout puts the terminal snapshot exactly at the failed tick — so every poisoned `runSynthPlaytest` / `runAgentPlaytest` / fork bundle made `selfCheck()` re-throw the original `WorldTickFailureError` raw. Such segments are now reported in `skippedSegments` with reason `'failure_in_segment'`. **Behavior change:** code that relied on the documented re-throw must read `skippedSegments` instead.
+- **FileSink path-traversal guard** (HIGH). Attachment ids become sidecar file basenames and were joined into paths unvalidated, on both the write path and the untrusted-manifest read path. Ids must now match `[A-Za-z0-9][A-Za-z0-9._-]*`; `FileSink` rejects others with `SinkWriteError` code `invalid_attachment_id`, and the corpus manifest validator rejects them as `manifest_invalid`.
+- **`FileSink.open()` refuses reused bundle directories** (HIGH). Streams are append-only and `toBundle()` globs every snapshot, so recording into a previously-used directory silently merged two sessions into one corrupt bundle. `open()` now throws `SinkWriteError` code `bundle_dir_not_empty`; constructor preload for read access is unchanged. **Behavior change:** pass a fresh directory per recording (this was already the only correct usage).
+- **`scenarioResultToBundle` populates `metadata.failedTicks`** (MEDIUM). Replay guards (`openAt`'s `replay_across_failure`, `selfCheck`'s skip, `forkAt`) key off `failedTicks` exclusively and were silently disabled for scenario bundles; the integration test pinning this was vacuous (assertions behind an always-false guard) and now actually asserts it.
+- **`FileSink.writeSnapshot` is atomic** (MEDIUM): tmp+rename like the manifest, so a crash mid-write can no longer leave a torn snapshot that makes the whole bundle unloadable.
+- **`SessionRecorder.disconnect()` finalizes cleanly after a connect-time `open()` failure** (MEDIUM) instead of throwing `not_opened` from the metadata getter and leaving the recorder half-open. Iteration 2 hardened the same path further: a recorder pointed at an *existing* bundle directory could mutate and rewrite that bundle's manifest on disconnect (the FileSink constructor preloads it for read access) — finalization now requires that *this* recorder's `open()` succeeded, FileSink's `close()` only writes a manifest it opened for write, stream writes on a read-preloaded sink throw `not_opened`, and `open()` also refuses directories containing orphaned snapshots.
+- `BundleViewer` marker id `RegExp` filters reset `lastIndex` (stateless for `/g`/`/y` regexes, mirroring the corpus filter). `MemorySink` honors an explicit `ref: { dataUrl }` request regardless of size, as its docs always claimed.
+
+### Fixed — core engine
+
+- **`onDiff` listeners receive a per-listener defensive copy** (MEDIUM). Previously they received the live internal `TickDiff` with write-through references into component/state stores — inconsistent with `getDiff()`'s documented deep clone and the EventBus per-listener clone discipline. **Behavior change:** mutating the received diff no longer corrupts engine state (and no longer "works" as a back door); zero cost with zero listeners.
+- **`findNearest` rewritten to perimeter-ring scanning** (MEDIUM): O(R²) total cell probes on a full-map miss instead of O(R³) cumulative-disk rescans. **Behavior changes:** exact-distance ties now deterministically break on the lowest entity id (previously scan-order-dependent); out-of-bounds query points are now answered instead of throwing, with cost bounded by the grid; non-integer coordinates throw `RangeError` (iteration-2 fix — `±Infinity` would otherwise have looped forever).
+- Ordering constraints (`before`/`after`) that reference a duplicated system name now throw an explicit "ambiguous" error instead of silently binding to whichever system registered last; duplicate names without constraints keep working.
+- `PathRequestQueue` honors `passabilityVersion` for empty-string cache keys (truthiness bug pinned `''` entries to version 0 forever, serving stale paths across passability changes).
+- `applySnapshot` clears the per-tick event buffer, so `getEvents()` no longer returns the previous timeline's events after an in-place snapshot load.
+- `WorldHistoryRecorder` ids use a deterministic counter — the last `Math.random()` call in `src/` is gone.
+
+### Project setup
+
+- `prebuild` cleans `dist/` (five orphaned modules from pre-rename builds were still shipping) and `prepublishOnly` runs all four gates — publishing a stale build is no longer possible.
+- ESLint gains targeted type-aware rules: `no-floating-promises` / `no-misused-promises` / `await-thenable` for the async surface, and `consistent-type-imports` / `no-import-type-side-effects` which make the `World` layer chain's "upward imports are type-only" invariant (ADR 43) lint-enforced. `noImplicitOverride` enabled in tsconfig.
+- CI: Node 20/22 matrix, `npm audit --audit-level=high`, `npm pack --dry-run`, concurrency cancellation, least-privilege `permissions`, push runs limited to `main`. `engines` honestly bumped to `>=20` (Node 18 is EOL; README updated).
+- `.gitattributes` (`* text=auto`) ends the mixed-EOL churn; `vitest`'s inverted-safety `passWithNoTests` flag removed; `exports` gains `./package.json`.
+
+### Validation
+
+All four gates pass: `npm test` (1103 passed + 2 todo; +25 tests pinning every fix above, written failing-first), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI review iteration 2 (Codex + Claude) verified every iteration-1 fix and contributed the preloaded-sink manifest-protection HIGH, the orphaned-snapshots guard, and the findNearest input guard; iteration 3 verified those (see thread).
+
 ## 0.8.15 - 2026-06-09
 
 Internal file reorganization enforcing the project's 500-line-per-file budget. **No public API or behavior changes** — the runtime export list was captured before and after the refactor and is byte-identical; the full 1080-test suite passes unchanged (plus 3 new budget tests).

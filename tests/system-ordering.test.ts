@@ -87,3 +87,22 @@ describe('System ordering constraints', () => {
     expect(order).toEqual(['pre', 'A', 'B', 'post']);
   });
 });
+
+describe('duplicate system names (full-review 2026-06-10 L3)', () => {
+  it('throws when an ordering constraint references an ambiguous (duplicated) name', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.registerSystem({ name: 'dup', execute: () => undefined });
+    world.registerSystem({ name: 'dup', execute: () => undefined });
+    world.registerSystem({ name: 'late', after: ['dup'], execute: () => undefined });
+    expect(() => world.step()).toThrow(/ambiguous/);
+  });
+
+  it('duplicate names without constraints keep working (back-compat)', () => {
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    let runs = 0;
+    world.registerSystem({ name: 'dup', execute: () => { runs++; } });
+    world.registerSystem({ name: 'dup', execute: () => { runs++; } });
+    world.step();
+    expect(runs).toBe(2);
+  });
+});

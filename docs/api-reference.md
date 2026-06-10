@@ -2039,7 +2039,7 @@ Non-entity structured state stored at the world level. Values must be JSON-compa
 setState(key: string, value: unknown): void
 ```
 
-Stores a world-level state value under the given key. Overwrites any existing value for that key. The value must be JSON-compatible.
+Stores a world-level state value under the given key. Overwrites any existing value for that key. The value must be JSON-compatible. **Size note:** every state value is JSON-fingerprinted twice per tick for in-place-mutation detection — keep state values small (counters, config records, clocks). Large read-mostly data (terrain arrays, field maps) belongs in a `Layer<T>`, which exists for exactly that and costs nothing per tick.
 
 ```typescript
 world.setState('turnNumber', 1);
@@ -2233,7 +2233,7 @@ findNearest(
 ): EntityId | undefined
 ```
 
-Returns the closest entity to `(cx, cy)` that matches all specified components, or `undefined` if no entity matches. Uses Euclidean distance.
+Returns the closest entity to `(cx, cy)` that matches all specified components, or `undefined` if no entity matches. Uses squared Euclidean distance; exact-distance ties break on the lowest entity id, so the result is deterministic and independent of scan order (since v0.8.16). Scans expanding perimeter rings — each grid cell is probed at most once, so a full-map miss costs O(R²) instead of the pre-v0.8.16 O(R³). Coordinates must be integers (`RangeError` otherwise); out-of-bounds query points are answered (pre-v0.8.16 they threw), with cost bounded by the grid regardless of distance.
 
 ```typescript
 const closest = world.findNearest(10, 10, 'position', 'enemy');
@@ -2347,7 +2347,7 @@ Returns the most recent structured tick failure, or `null` if no tick has failed
 onDiff(fn: (diff: TickDiff) => void): void
 ```
 
-Subscribes to per-tick diffs. The callback fires at the end of each tick, after systems and resource processing.
+Subscribes to per-tick diffs. The callback fires at the end of each tick, after systems and resource processing. Each listener receives its own JSON-deep-cloned defensive copy (since v0.8.16) — mutating the diff cannot corrupt engine state or other listeners, matching `getDiff()`'s contract.
 
 ```typescript
 world.onDiff((diff) => {
@@ -3156,7 +3156,7 @@ const result = findGridPath({
 
 ### `PathCache<TResult>`
 
-Reusable cache keyed by request identity and passability version.
+Reusable cache keyed by request identity and passability version. The cache is unbounded — entries are bypassed (not deleted) when their passability version goes stale, and default keys include the moving entity id, so long sessions with roaming units grow until you call `clear()` (or `clearCache()` on a grid queue). Schedule periodic clears in long-running processes.
 
 #### Constructor
 
@@ -4731,7 +4731,7 @@ interface Marker {
 }
 ```
 
-`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()`; recorder-added markers always get `provenance: 'game'`.
+`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()`; recorder-added markers always get `provenance: 'game'`. Since v0.8.16 the adapter also populates `metadata.failedTicks` from the recorded history, so scenario bundles get the same replay guards (`openAt` `replay_across_failure` rejection, `selfCheck` failure-segment skip, `forkAt` preconditions) as recorder bundles.
 
 ### `RecordedCommand`
 
@@ -4794,6 +4794,8 @@ Read by `SessionRecorder` and `scenarioResultToBundle()` for `metadata.engineVer
 ## Session Recording — Sinks (SessionSink, SessionSource, MemorySink)
 
 `SessionSink` (write) / `SessionSource` (read) interfaces plus `MemorySink` reference implementation. Bundle types travel through these.
+
+Contract notes (since v0.8.16): attachment ids must be safe file basenames (`[A-Za-z0-9][A-Za-z0-9._-]*`) — `FileSink` rejects others with `SinkWriteError` code `invalid_attachment_id` on both write and read, and the corpus manifest validator rejects them as `manifest_invalid` (path-traversal guard). `FileSink.open()` requires a fresh directory and throws `bundle_dir_not_empty` if the directory already contains a recording (streams are append-only; reuse would silently merge sessions). `FileSink.writeSnapshot` writes via tmp+rename, so a crash cannot leave a torn snapshot that makes the bundle unloadable. `MemorySink` honors an explicit `ref: { dataUrl }` request regardless of size.
 
 ### `SessionSink`
 
@@ -5130,7 +5132,7 @@ interface SynthPlaytestResult<TEventMap, TCommandMap, TDebug = JsonValue> {
 
 ### Determinism — CI guard pattern
 
-`SessionReplayer.selfCheck()` is meaningful for non-poisoned synthetic bundles where `ticksRun >= 1`. For `stopReason === 'poisoned'` bundles, `selfCheck()` re-throws the original tick failure (the failed-tick-bounded final segment is replayed). For `ticksRun === 0`, the terminal snapshot equals the initial → `selfCheck()` returns `ok:true` vacuously.
+`SessionReplayer.selfCheck()` is meaningful for non-poisoned synthetic bundles where `ticksRun >= 1`. For `stopReason === 'poisoned'` bundles, the failed-tick-bounded final segment is skipped and reported in `skippedSegments` with reason `'failure_in_segment'` (since v0.8.16; previously it was replayed and `selfCheck()` re-threw the original tick failure). For `ticksRun === 0`, the terminal snapshot equals the initial → `selfCheck()` returns `ok:true` vacuously.
 
 ```typescript
 if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {

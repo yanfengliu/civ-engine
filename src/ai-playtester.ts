@@ -10,7 +10,7 @@ import { RecorderClosedError } from './session-errors.js';
 import type { SessionBundle } from './session-bundle.js';
 import type { SessionSink, SessionSource } from './session-sink.js';
 import type { ComponentRegistry } from './world.js';
-import { World } from './world.js';
+import type { World } from './world.js';
 import type { PolicyCommand } from './synthetic-playtest.js';
 import type { NewMarker } from './session-recorder.js';
 
@@ -201,7 +201,8 @@ export async function runAgentPlaytest<
         break;
       }
 
-      // Submit can throw when a user-validator throws (world.ts:2151-2157).
+      // Submit can throw when a user-validator throws (see validateCommand in
+      // src/world-commands.ts).
       // Classify those as agentError, not sinkError — sinkError is reserved
       // for recorder.lastError mid-run.
       try {

@@ -382,3 +382,39 @@ describe('deepEqualWithPath', () => {
     expect(deepEqualWithPath(a, b).equal).toBe(true);
   });
 });
+
+describe('selfCheck on failure-terminated bundles (full-review 2026-06-10 H1)', () => {
+  type BoomCmds = { spawn: { x: number; y: number }; boom: Record<string, never> };
+
+  it('reports skippedSegments instead of throwing when the terminal snapshot sits at the failed tick', () => {
+    const world = new World<Record<string, never>, BoomCmds>(mkConfig());
+    world.registerHandler('spawn', () => undefined);
+    world.registerHandler('boom', () => { throw new Error('intentional'); });
+    const sink = new MemorySink();
+    const rec = new SessionRecorder({ world, sink });
+    rec.connect();
+    world.step();
+    world.step();
+    world.submit('boom', {});
+    expect(() => world.step()).toThrow();
+    rec.disconnect();
+    const bundle = rec.toBundle() as unknown as SessionBundle<Record<string, never>, BoomCmds>;
+    expect(bundle.metadata.failedTicks).toEqual([3]);
+
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => {
+        const w = new World<Record<string, never>, BoomCmds>(mkConfig());
+        w.registerHandler('spawn', () => undefined);
+        w.registerHandler('boom', () => { throw new Error('intentional'); });
+        w.applySnapshot(snap);
+        return w;
+      },
+    });
+    const result = replayer.selfCheck();
+    expect(result.skippedSegments).toEqual([
+      { fromTick: 0, toTick: 3, reason: 'failure_in_segment' },
+    ]);
+    expect(result.checkedSegments).toBe(0);
+    expect(result.stateDivergences).toEqual([]);
+  });
+});

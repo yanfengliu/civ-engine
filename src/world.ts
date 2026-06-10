@@ -391,6 +391,11 @@ export class World<
     this.tagsDirtyEntities = other.tagsDirtyEntities;
     this.metaDirtyEntities = other.metaDirtyEntities;
     // --- Cached per-tick state — clear; will rebuild on next step ---
+    // Event listeners are preserved (registration-bearing), but the per-tick
+    // buffer belongs to the previous timeline: without this clear,
+    // getEvents() after an in-place applySnapshot returns stale events until
+    // the next tick (full-review 2026-06-10 L2).
+    this.eventBus.clear();
     this.currentDiff = null;
     this.currentMetrics = null;
     this.activeMetrics = null;

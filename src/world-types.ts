@@ -8,7 +8,7 @@
 import type { ComponentStoreOptions } from './component-store.js';
 import type { EntityId } from './types.js';
 import type { JsonValue } from './json.js';
-import {
+import type {
   COMMAND_EXECUTION_SCHEMA_VERSION,
   COMMAND_RESULT_SCHEMA_VERSION,
   TICK_FAILURE_SCHEMA_VERSION,

@@ -119,3 +119,67 @@ describe('findNearest', () => {
     expect(world.findNearest(0, 0)).toBe(corner);
   });
 });
+
+describe('findNearest correctness + determinism (full-review 2026-06-10 M5)', () => {
+  it('matches brute force with (distance, id) ordering on a seeded layout', () => {
+    const world = createWorld();
+    const placed: Array<{ id: number; x: number; y: number }> = [];
+    // Deterministic pseudo-random layout (LCG), no Math.random.
+    let s = 12345;
+    const next = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; };
+    for (let i = 0; i < 40; i++) {
+      const x = Math.floor(next() * 20);
+      const y = Math.floor(next() * 20);
+      const id = placeEntity(world, x, y, { health: { hp: 1 } });
+      placed.push({ id, x, y });
+    }
+    const queries: Array<[number, number]> = [[0, 0], [10, 10], [19, 19], [5, 14], [14, 3]];
+    for (const [cx, cy] of queries) {
+      const got = world.findNearest(cx, cy, 'health');
+      let best: { id: number; d: number } | null = null;
+      for (const p of placed) {
+        const d = (p.x - cx) ** 2 + (p.y - cy) ** 2;
+        if (!best || d < best.d || (d === best.d && p.id < best.id)) best = { id: p.id, d };
+      }
+      expect(got).toBe(best!.id);
+    }
+  });
+
+  it('breaks exact-distance ties by lowest entity id', () => {
+    const world = createWorld();
+    const a = placeEntity(world, 12, 10, { health: { hp: 1 } });
+    const b = placeEntity(world, 8, 10, { health: { hp: 1 } });
+    // Both at distance 2 from (10,10); lower id wins regardless of scan order.
+    expect(world.findNearest(10, 10, 'health')).toBe(Math.min(a, b));
+  });
+
+  it('returns undefined when no candidate exists', () => {
+    const world = createWorld();
+    expect(world.findNearest(10, 10, 'health')).toBeUndefined();
+  });
+});
+
+describe('findNearest degenerate inputs (full-review 2026-06-10 iter-2)', () => {
+  it('throws RangeError on non-integer coordinates instead of hanging', () => {
+    const world = createWorld();
+    placeEntity(world, 5, 5, { health: { hp: 1 } });
+    expect(() => world.findNearest(Infinity, 5, 'health')).toThrow(RangeError);
+    expect(() => world.findNearest(5, -Infinity, 'health')).toThrow(RangeError);
+    expect(() => world.findNearest(NaN, 5, 'health')).toThrow(RangeError);
+    expect(() => world.findNearest(2.5, 5, 'health')).toThrow(RangeError);
+  });
+
+  it('answers modest out-of-bounds queries', () => {
+    const world = createWorld();
+    const a = placeEntity(world, 0, 0, { health: { hp: 1 } });
+    expect(world.findNearest(-5, 0, 'health')).toBe(a);
+  });
+
+  it('answers far out-of-bounds queries in O(grid), not O(distance²)', () => {
+    const world = createWorld();
+    const a = placeEntity(world, 19, 19, { health: { hp: 1 } });
+    const start = performance.now();
+    expect(world.findNearest(1_000_000, 1_000_000, 'health')).toBe(a);
+    expect(performance.now() - start).toBeLessThan(250);
+  });
+});

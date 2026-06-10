@@ -168,3 +168,20 @@ describe('PathRequestQueue', () => {
     expect(second.result!.path[0]).toEqual({ x: 0, y: 0 });
   });
 });
+
+describe('PathRequestQueue cacheKey edge cases (full-review 2026-06-10 L4)', () => {
+  it('an empty-string cacheKey still respects passabilityVersion', () => {
+    let version = 0;
+    let resolves = 0;
+    const queue = new PathRequestQueue<{ tag: string }, number>({
+      resolve: () => ++resolves,
+      cacheKey: () => '',
+      passabilityVersion: () => version,
+    });
+    queue.enqueue({ tag: 'a' });
+    expect(queue.process(1)[0].result).toBe(1);
+    version = 1; // passability changed; '' key must not serve the stale path
+    queue.enqueue({ tag: 'b' });
+    expect(queue.process(1)[0].result).toBe(2);
+  });
+});

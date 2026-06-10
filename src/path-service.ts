@@ -112,7 +112,10 @@ export class PathRequestQueue<TRequest, TResult> {
     while (completed.length < maxRequests && this.head < this.pending.length) {
       const current = this.pending[this.head++];
       const key = this.options.cacheKey?.(current.request);
-      const version = key
+      // `!== undefined`, not truthiness: an empty-string key is a legal cache
+      // key and must still track passabilityVersion (full-review 2026-06-10
+      // L4 — truthiness pinned '' entries to version 0 forever).
+      const version = key !== undefined
         ? (this.options.passabilityVersion?.(current.request) ?? 0)
         : 0;
 

@@ -1,4 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { assertSafeAttachmentId } from './session-attachment-id.js';
 import { join } from 'node:path';
 import { assertJsonCompatible, bytesToBase64 } from './json.js';
 import type { WorldSnapshot } from './serializer.js';
@@ -84,6 +85,11 @@ export class FileSink implements SessionSink, SessionSource {
   private _metadata: SessionMetadata | null = null;
   private readonly _attachments: AttachmentDescriptor[] = [];
   private _closed = false;
+  // True only after open() succeeds. Constructor manifest-preload gives READ
+  // access; a sink that never opened for write must never rewrite the
+  // existing bundle's manifest (full-review 2026-06-10 iter-2 HIGH: a failed
+  // connect() + disconnect() against an existing dir destroyed its manifest).
+  private _openedForWrite = false;
 
   constructor(bundleDir: string) {
     this._dir = bundleDir;
@@ -91,8 +97,10 @@ export class FileSink implements SessionSink, SessionSource {
     // load metadata + attachments from it so the FileSink can be used as
     // a SessionSource without going through `open()` first. The user can
     // call `toBundle()` / `readSnapshot()` / `readSidecar()` directly.
-    // If they later call `open()` to start a new recording on the same dir,
-    // the manifest is rewritten. Iter-1 code review fix (Codex C1).
+    // Calling `open()` on such a directory throws `bundle_dir_not_empty`:
+    // streams are append-only, so a second recording would silently merge
+    // with the first (full-review 2026-06-10 H3; supersedes the iter-1
+    // Codex C1 manifest-rewrite behavior).
     const manifestPath = join(this._dir, MANIFEST_FILE);
     if (existsSync(manifestPath)) {
       try {
@@ -102,8 +110,9 @@ export class FileSink implements SessionSink, SessionSource {
           this._attachments.push(...manifest.attachments);
         }
       } catch {
-        // Manifest unreadable — leave _metadata null; constructor doesn't throw.
-        // open() will rewrite if/when called.
+        // Manifest unreadable — leave _metadata null; constructor doesn't
+        // throw. open() on this directory throws bundle_dir_not_empty (the
+        // manifest file exists, readable or not).
       }
     }
   }
@@ -118,6 +127,20 @@ export class FileSink implements SessionSink, SessionSource {
   open(metadata: SessionMetadata): void {
     if (this._closed) {
       throw new SinkWriteError('sink already closed', { code: 'already_closed' });
+    }
+    // A bundle directory is single-recording: streams are append-only and
+    // toBundle() globs every snapshots/*.json, so a second recording into the
+    // same directory would silently merge with the first (full-review
+    // 2026-06-10 H3). Constructor preload for read access is unaffected.
+    if (
+      existsSync(join(this._dir, MANIFEST_FILE)) ||
+      this._anyStreamHasData() ||
+      this._snapshotsDirHasData()
+    ) {
+      throw new SinkWriteError(
+        `bundle directory ${this._dir} already contains a recording; FileSink.open() requires a fresh directory`,
+        { code: 'bundle_dir_not_empty', dir: this._dir },
+      );
     }
     if (!existsSync(this._dir)) {
       mkdirSync(this._dir, { recursive: true });
@@ -138,16 +161,35 @@ export class FileSink implements SessionSink, SessionSource {
     // cross-process read access.)
     this._metadata = { ...metadata };
     this._attachments.length = 0;
+    this._openedForWrite = true;
     this._writeManifest();
   }
 
   private _assertOpen(): void {
-    if (!this._metadata) {
+    // Gate on _openedForWrite, not _metadata: a constructor-preloaded sink
+    // has metadata (read access) but must reject stream writes, which would
+    // append to the existing recording (full-review 2026-06-10 iter-2).
+    if (!this._openedForWrite || !this._metadata) {
       throw new SinkWriteError('sink not opened', { code: 'not_opened' });
     }
     if (this._closed) {
       throw new SinkWriteError('sink already closed', { code: 'already_closed' });
     }
+  }
+
+  private _anyStreamHasData(): boolean {
+    for (const f of [TICKS_FILE, COMMANDS_FILE, EXECUTIONS_FILE, FAILURES_FILE, MARKERS_FILE]) {
+      const p = join(this._dir, f);
+      if (existsSync(p) && statSync(p).size > 0) return true;
+    }
+    return false;
+  }
+
+  private _snapshotsDirHasData(): boolean {
+    // Orphaned snapshots merge into toBundle()'s glob just like stale streams
+    // would (full-review 2026-06-10 iter-2 MEDIUM).
+    const dir = join(this._dir, SNAPSHOTS_DIR);
+    return existsSync(dir) && readdirSync(dir).some((f) => f.endsWith('.json'));
   }
 
   private _writeManifest(): void {
@@ -238,10 +280,19 @@ export class FileSink implements SessionSink, SessionSource {
   writeSnapshot(entry: SessionSnapshotEntry): void {
     this._assertOpen();
     assertJsonCompatible(entry, 'snapshot entry');
+    // tmp + rename, mirroring the manifest write: a crash mid-write must not
+    // leave a torn snapshots/<tick>.json that makes the whole bundle
+    // unloadable (full-review 2026-06-10 M2). toBundle()'s glob matches only
+    // `.json`, so an orphaned `.json.tmp` from a crashed process is inert.
     const path = join(this._dir, SNAPSHOTS_DIR, `${entry.tick}.json`);
+    const tmp = `${path}.tmp`;
     try {
-      writeFileSync(path, JSON.stringify(entry, null, 2));
+      writeFileSync(tmp, JSON.stringify(entry, null, 2));
+      renameSync(tmp, path);
     } catch (e) {
+      if (existsSync(tmp)) {
+        try { rmSync(tmp, { force: true }); } catch { /* swallow */ }
+      }
       throw new SinkWriteError(`snapshot write failed: ${(e as Error).message}`, {
         code: 'snapshot_write', tick: entry.tick,
       });
@@ -259,6 +310,7 @@ export class FileSink implements SessionSink, SessionSource {
   }
 
   writeAttachment(descriptor: AttachmentDescriptor, data: Uint8Array): AttachmentDescriptor {
+    assertSafeAttachmentId(descriptor.id);
     this._assertOpen();
     // FileSink default for 'auto' (no caller preference): sidecar — disk-backed
     // sink keeps blobs as files. Caller opts into manifest embedding via
@@ -293,7 +345,9 @@ export class FileSink implements SessionSink, SessionSource {
 
   close(): void {
     if (this._closed) return;
-    this._writeManifest();  // final manifest with terminal endTick + clean state
+    if (this._openedForWrite) {
+      this._writeManifest();  // final manifest with terminal endTick + clean state
+    }
     this._closed = true;
   }
 
@@ -318,6 +372,9 @@ export class FileSink implements SessionSink, SessionSource {
   }
 
   readSidecar(id: string): Uint8Array {
+    // Guard before any lookup: ids can arrive from an untrusted on-disk
+    // manifest (full-review 2026-06-10 H2).
+    assertSafeAttachmentId(id);
     const desc = this._attachments.find((a) => a.id === id);
     if (!desc) {
       throw new SinkWriteError(`sidecar ${id} not found in attachments index`, {

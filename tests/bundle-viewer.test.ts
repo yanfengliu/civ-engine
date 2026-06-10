@@ -414,3 +414,17 @@ describe('BundleViewer', () => {
     });
   });
 });
+
+describe('marker id RegExp filters (full-review 2026-06-10 L1)', () => {
+  it('global-flag regexes match consistently across markers and repeated queries', () => {
+    const bundle = recordSimpleBundle(2);
+    bundle.markers = [
+      { id: 'aa', tick: 1, kind: 'annotation', provenance: 'engine' },
+      { id: 'ab', tick: 1, kind: 'annotation', provenance: 'engine' },
+    ];
+    const viewer = new BundleViewer(bundle);
+    const re = /a[ab]/g;
+    expect([...viewer.markers({ id: re })].map((m) => m.id)).toEqual(['aa', 'ab']);
+    expect([...viewer.markers({ id: re })].map((m) => m.id)).toEqual(['aa', 'ab']);
+  });
+});

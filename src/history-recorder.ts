@@ -13,8 +13,9 @@ import type {
   WorldMetrics,
 } from './world.js';
 import type { DebugSeverity } from './world-debugger.js';
+import type {
+  WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION} from './ai-contract.js';
 import {
-  WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION,
   WORLD_HISTORY_SCHEMA_VERSION,
 } from './ai-contract.js';
 
@@ -92,6 +93,11 @@ export interface WorldHistoryRangeSummary {
   };
 }
 
+// Process-local counter for debug-recorder ids. A counter keeps the engine's
+// only former Math.random() call out of src/ — ids only need uniqueness
+// within a process (full-review 2026-06-10 L5).
+let nextRecorderId = 0;
+
 type SubmitWithResultFn<TCommandMap extends Record<keyof TCommandMap, unknown>> = <
   K extends keyof TCommandMap,
 >(type: K, data: TCommandMap[K]) => CommandSubmissionResult<keyof TCommandMap>;
@@ -156,7 +162,7 @@ export class WorldHistoryRecorder<
     this.debugCapture = config.debug?.capture.bind(config.debug);
     this.captureInitialSnapshot = config.captureInitialSnapshot ?? true;
     this.captureCommandPayloads = config.captureCommandPayloads ?? false;
-    this.recorderId = `history-${Math.random().toString(36).slice(2, 10)}`;
+    this.recorderId = `history-${++nextRecorderId}`;
     this.diffListener = (diff) => this.recordTick(diff);
     this.commandListener = (result) => this.recordCommand(result);
     this.executionListener = (result) => this.recordExecution(result);

@@ -1,0 +1,23 @@
+# Full Codebase Review — 2026-06-10, iteration 2 (fix verification)
+
+**Diff:** working tree (v0.8.16 fix wave) vs HEAD `0769dea`. **Reviewers:** Codex `gpt-5.5` (xhigh) + Claude `claude-fable-5[1m]` (max), both instructed to verify every iteration-1 "fix now" item against the live tree.
+
+## Verification result
+
+Both reviewers independently confirmed **all 17 iteration-1 fixes landed correctly with real (non-vacuous) test coverage**: the selfCheck guard semantics (including the subtle "failure at `a.tick` belongs to the previous segment" half), the attachment-id allowlist at all three trust boundaries (write, read, manifest) with UUID compatibility verified, the fresh-directory refusal, tmp+rename snapshot atomicity (Windows rename-replace semantics checked), per-listener `onDiff` clones with listener-phase failure semantics unchanged, the `findNearest` ring algorithm's invariants (early-stop, tie-scan continuation, disjoint rings), the ambiguity guard's back-compat, the three small fixes, all config changes (including that `npm pack` does not trigger `prepublishOnly`, so the CI step is sound), and doc/version consistency. Claude re-ran three of the four gates itself.
+
+## New findings (this iteration) — all fixed inline
+
+| # | Sev | Reviewer | Finding (verified) | Fix |
+|---|-----|----------|--------------------|-----|
+| 2-1 | HIGH | Codex | **Failed `connect()` against an existing bundle directory destroys that bundle's manifest.** FileSink's constructor preloads the existing manifest for read access; the new `open()` refusal throws *before* replacing `_metadata`; the recorder swallows the failure, stays connected for `disconnect()`, which then mutates `sink.metadata` (the OLD bundle's!) and `close()` rewrites the manifest. The iteration-1 M3 test used MemorySink (no preload) and missed this FileSink-specific data-loss path. | Three layers: recorder finalizes metadata only when *its* `open()` succeeded (`_sinkOpened`); `FileSink.close()` writes a manifest only when `_openedForWrite`; `_assertOpen` gates stream writes on `_openedForWrite` so a read-preloaded sink rejects writes outright. Regression test pins manifest byte-equality across failed connect + disconnect. |
+| 2-2 | MEDIUM | Codex | The fresh-directory guard checked manifest + streams but not `snapshots/` — orphaned snapshot files (no manifest, empty streams) still merged into `toBundle()`'s glob. | `open()` also refuses when `snapshots/` contains `*.json`. Attachments orphans are inert (read only via manifest descriptors). Test added. |
+| 2-3 | LOW | Claude | The `findNearest` rewrite lost fail-fast input validation: `±Infinity` hangs forever (`Infinity++` never advances), huge finite coordinates are an effective O(distance²) hang, `NaN` silently returns `undefined` — all previously threw `RangeError` via `assertBounds`. The out-of-bounds widening itself was an undocumented behavior change. | Integer-coordinate `RangeError` guard at entry; `minRadius` skips rings that cannot intersect the grid and each ring edge is clamped to the grid intersection, so far-out-of-bounds queries cost O(grid), not O(distance²). Behavior changes documented in api-reference + changelog. Tests: Infinity/NaN/fractional throw; modest OOB answers; 10⁶-offset query bounded by a wall-clock assertion. |
+| 2-4 | LOW | Codex | Stale "Node.js 18+" in `ARCHITECTURE.md` and `getting-started.md` after the engines bump. | Both updated to 20+ (remaining 18+ mentions are in historical plan/spec archives, intentionally untouched). |
+| 2-5 | LOW | Codex | Changelog/devlog referenced `docs/threads/done/full/...` while the thread was still under `current/`. | Resolves at the close-out move in the shipping commit (same disposition as the loc-budget thread's identical finding). |
+| 2-6 | NIT | Claude | Iteration-1's deferred section promised a "steer bulk data to Layer" guide note that batch C did not deliver. | Delivered: size note on `setState` in api-reference (the world-state docs' actual home — no guide has a world-state section). |
+| 2-7 | NIT | Claude | `writeAttachment` validates the id before `_assertOpen`, so a bad id on a closed sink reports `invalid_attachment_id` rather than `not_opened`. | Recorded as a deliberate choice: id validity is independent of sink state, and the earlier error is the more actionable one. No change. |
+
+## Disposition
+
+Iteration 2 confirms the iteration-1 wave and contributes three real fixes of its own (one HIGH — caught precisely because the reviewer probed the interaction between two iteration-1 fixes). All fixed inline with failing-first tests; gates green (1103 passed + 2 todo). Iteration 3 is a focused convergence check on the three incremental fixes.

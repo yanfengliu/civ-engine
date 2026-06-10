@@ -100,9 +100,11 @@ export abstract class WorldSystems<
       byPhase.set(phase, []);
     }
     const nameToSystem = new Map<string, RegisteredSystem<TEventMap, TCommandMap, TComponents, TState>>();
+    const duplicateNames = new Set<string>();
     for (const sys of this.systems) {
       byPhase.get(sys.phase)!.push(sys);
       if (sys.name) {
+        if (nameToSystem.has(sys.name)) duplicateNames.add(sys.name);
         nameToSystem.set(sys.name, sys);
       }
     }
@@ -119,6 +121,15 @@ export abstract class WorldSystems<
 
     for (const sys of this.systems) {
       for (const ref of [...sys.before, ...sys.after]) {
+        // Duplicate names without constraints are legal (common with inferred
+        // names); a CONSTRAINT on a duplicated name would silently bind to
+        // whichever system registered last, so reject it as ambiguous
+        // (full-review 2026-06-10 L3).
+        if (duplicateNames.has(ref)) {
+          throw new Error(
+            `System '${sys.name}' has an ordering constraint on '${ref}', which is registered more than once — the constraint target is ambiguous`,
+          );
+        }
         const target = nameToSystem.get(ref);
         if (!target) {
           throw new Error(

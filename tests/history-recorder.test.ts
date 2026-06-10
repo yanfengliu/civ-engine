@@ -181,3 +181,14 @@ describe('WorldHistoryRecorder', () => {
     });
   });
 });
+
+describe('recorderId determinism (full-review 2026-06-10 L5)', () => {
+  it('uses a deterministic counter, not Math.random', () => {
+    const readId = (r: unknown): string => (r as { recorderId: string }).recorderId;
+    const r1 = new WorldHistoryRecorder({ world: createWorld() });
+    const r2 = new WorldHistoryRecorder({ world: createWorld() });
+    expect(readId(r1)).toMatch(/^history-\d+$/);
+    expect(readId(r2)).toMatch(/^history-\d+$/);
+    expect(readId(r1)).not.toBe(readId(r2));
+  });
+});

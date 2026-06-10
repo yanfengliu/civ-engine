@@ -11,6 +11,7 @@ import {
 import { SCENARIO_RESULT_SCHEMA_VERSION } from './ai-contract.js';
 import type {
   CommandSubmissionResult,
+  TickFailure,
   World,
   WorldMetrics,
 } from './world.js';
@@ -470,9 +471,9 @@ function normalizeCode(name: string): string {
 }
 
 class ScenarioTickFailure extends Error {
-  readonly failure: import('./world.js').TickFailure;
+  readonly failure: TickFailure;
 
-  constructor(failure: import('./world.js').TickFailure) {
+  constructor(failure: TickFailure) {
     super(failure.message);
     this.name = 'ScenarioTickFailure';
     this.failure = failure;

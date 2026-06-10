@@ -541,7 +541,7 @@ describe('CommandTransaction', () => {
         'updateQueryCacheMembership', 'normalizeQueryKeys', 'getQueryCache',
         'queryMask', 'rebuildComponentSignatures',
         // Layer-chain internals (v0.8.15 LOC-budget split, src/world.ts)
-        'asWorld', 'getComponentForQuery',
+        'asWorld',
       ]);
       // Walk the full prototype chain: since v0.8.15 `World` is composed from
       // internal layer classes (see src/world.ts), so its methods live on

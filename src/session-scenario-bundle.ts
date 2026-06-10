@@ -59,6 +59,15 @@ export function scenarioResultToBundle<
     RecordedCommand<TCommandMap>
   >;
 
+  // Replay guards (`openAt`'s replay_across_failure rejection, `selfCheck`'s
+  // failure-segment skip, `forkAt` preconditions) key off metadata.failedTicks
+  // exclusively — bundle.failures is informational. Populate it from the
+  // recorded history so scenario bundles get the same guards as recorder
+  // bundles (full-review 2026-06-10 M1).
+  const failedTicks = [...new Set(result.history.failures.map((f) => f.tick))].sort(
+    (x, y) => x - y,
+  );
+
   const metadata: SessionMetadata = {
     sessionId: randomUUID(),
     engineVersion: ENGINE_VERSION,
@@ -70,6 +79,7 @@ export function scenarioResultToBundle<
     durationTicks: endTick - startTick,
     sourceKind: 'scenario',
     sourceLabel: options?.sourceLabel ?? result.name,
+    ...(failedTicks.length > 0 ? { failedTicks } : {}),
   };
 
   const markers: Marker[] = result.checks.map((outcome) => ({

@@ -4,7 +4,7 @@ import {
   createBehaviorTree,
   createBTState,
   clearRunningState,
-  BTNode,
+  type BTNode,
 } from '../src/behavior-tree.js';
 
 interface TestContext {

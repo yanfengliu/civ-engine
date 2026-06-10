@@ -1,8 +1,9 @@
 import type { JsonValue } from './json.js';
 import type { SessionBundle, SessionMetadata } from './session-bundle.js';
-import { SESSION_BUNDLE_SCHEMA_VERSION } from './session-bundle.js';
+import type { SESSION_BUNDLE_SCHEMA_VERSION } from './session-bundle.js';
 import { SessionRecordingError } from './session-errors.js';
 import type { SessionSource } from './session-sink.js';
+import type { BundleViewer, BundleViewerOptions } from './bundle-viewer.js';
 
 export type BundleCorpusScanDepth = 'root' | 'children' | 'all';
 
@@ -100,8 +101,8 @@ export interface BundleCorpusEntry {
     TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
     TDebug = JsonValue,
   >(
-    options?: import('./bundle-viewer.js').BundleViewerOptions<TEventMap, TCommandMap>,
-  ): import('./bundle-viewer.js').BundleViewer<TEventMap, TCommandMap, TDebug>;
+    options?: BundleViewerOptions<TEventMap, TCommandMap>,
+  ): BundleViewer<TEventMap, TCommandMap, TDebug>;
 }
 
 interface CorpusIndexErrorDetailsInput {

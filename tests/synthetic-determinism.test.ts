@@ -140,7 +140,7 @@ describe('synthetic-playtest sub-RNG isolation', () => {
 });
 
 describe('synthetic-playtest poisoned-bundle replay', () => {
-  it('selfCheck on a stopReason="poisoned" bundle re-throws the original tick failure', () => {
+  it('selfCheck on a stopReason="poisoned" bundle skips the failure-bounded terminal segment', () => {
     const setup = (): World<Record<string, never>, Cmds> => {
       const w = setupWorld();
       w.registerSystem({
@@ -163,8 +163,14 @@ describe('synthetic-playtest poisoned-bundle replay', () => {
     const replayer = SessionReplayer.fromBundle(result.bundle, {
       worldFactory: (snap) => { const w = setup(); w.applySnapshot(snap); return w; },
     });
-    // selfCheck doesn't return ok:false — it re-throws while replaying the failed segment.
-    expect(() => replayer.selfCheck()).toThrow();
+    // Until v0.8.15 the terminal failed-tick-bounded segment escaped the
+    // skip guard and selfCheck re-threw the original tick failure raw
+    // (full-review 2026-06-10 H1). The guard now covers a failure at the
+    // segment's end tick, so poisoned bundles verify structurally.
+    const check = replayer.selfCheck();
+    expect(check.skippedSegments.length).toBeGreaterThan(0);
+    expect(check.skippedSegments.at(-1)!.reason).toBe('failure_in_segment');
+    expect(check.stateDivergences).toEqual([]);
   });
 });
 

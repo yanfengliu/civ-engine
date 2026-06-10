@@ -11,7 +11,7 @@ npm install
 npm test        # verify everything works
 ```
 
-Requires Node.js 18+.
+Requires Node.js 20+.
 
 ## Core Concepts
 

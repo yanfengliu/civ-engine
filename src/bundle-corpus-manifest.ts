@@ -1,6 +1,7 @@
 import { lstatSync, readFileSync } from 'node:fs';
 import type { AttachmentDescriptor, SessionMetadata } from './session-bundle.js';
 import { SESSION_BUNDLE_SCHEMA_VERSION } from './session-bundle.js';
+import { isSafeAttachmentId } from './session-attachment-id.js';
 import { corpusError } from './bundle-corpus-types.js';
 
 export interface FileManifest {
@@ -162,8 +163,19 @@ function validateAttachment(value: unknown, path: string, index: number): Attach
     });
   }
 
+  const id = assertString(value.id, `attachments[${index}].id`, path);
+  // Manifests are untrusted disk input and attachment ids become sidecar
+  // file basenames; an unsafe id here would let a crafted corpus read
+  // outside the bundle directory (full-review 2026-06-10 H2).
+  if (!isSafeAttachmentId(id)) {
+    throw corpusError(
+      `attachments[${index}].id must be a safe file basename ([A-Za-z0-9][A-Za-z0-9._-]*)`,
+      { code: 'manifest_invalid', path, message: `attachments[${index}].id` },
+    );
+  }
+
   return {
-    id: assertString(value.id, `attachments[${index}].id`, path),
+    id,
     mime: assertString(value.mime, `attachments[${index}].mime`, path),
     sizeBytes: assertNonNegativeInteger(value.sizeBytes, `attachments[${index}].sizeBytes`, path),
     ref: ref as AttachmentDescriptor['ref'],

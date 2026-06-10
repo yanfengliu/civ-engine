@@ -7,6 +7,7 @@ import type { EntityId } from './types.js';
 import { jsonFingerprint } from './json.js';
 import { WORLD_STEP_RESULT_SCHEMA_VERSION } from './ai-contract.js';
 import {
+  cloneTickDiff,
   cloneTickFailure,
   createMetrics,
   errorMessage,
@@ -192,8 +193,12 @@ export abstract class WorldTick<
     }
 
     try {
+      // Per-listener defensive copy: listeners must not be able to write
+      // through to live component/state references, matching getDiff()'s
+      // documented deep clone and the EventBus per-listener clone discipline
+      // (full-review 2026-06-10 M4). Zero cost with zero listeners.
       for (const listener of this.diffListeners) {
-        listener(this.currentDiff!);
+        listener(cloneTickDiff(this.currentDiff!));
       }
     } catch (error) {
       return this.finalizeTickFailure(

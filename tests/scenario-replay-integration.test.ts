@@ -141,19 +141,22 @@ describe('Scenario → bundle → replay integration (CI gate)', () => {
     });
     const bundle = scenarioResultToBundle(result);
     expect(bundle.failures.length).toBeGreaterThanOrEqual(1);
-    if (bundle.metadata.failedTicks && bundle.metadata.failedTicks.length > 0) {
-      // selfCheck would skip segments containing the failure
-      const replayer = SessionReplayer.fromBundle(bundle, {
-        worldFactory: (snap) => {
-          const w = new World<Events, CrashCmds>(mkConfig());
-          w.registerHandler('boom', () => { throw new Error('intentional'); });
-          w.applySnapshot(snap);
-          return w;
-        },
-      });
-      const checkResult = replayer.selfCheck();
-      // ok depends on whether ALL segments contain failures or just some
-      expect(checkResult.skippedSegments.length + checkResult.checkedSegments).toBeGreaterThan(0);
-    }
+    // Previously these assertions sat behind `if (bundle.metadata.failedTicks
+    // && ...)` — always false because the adapter never populated failedTicks,
+    // so the named behavior was never actually asserted (full-review
+    // 2026-06-10 M1: vacuous test + missing metadata both fixed).
+    expect(bundle.metadata.failedTicks).toBeDefined();
+    expect(bundle.metadata.failedTicks!.length).toBeGreaterThan(0);
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => {
+        const w = new World<Events, CrashCmds>(mkConfig());
+        w.registerHandler('boom', () => { throw new Error('intentional'); });
+        w.applySnapshot(snap);
+        return w;
+      },
+    });
+    const checkResult = replayer.selfCheck();
+    expect(checkResult.skippedSegments.length).toBeGreaterThan(0);
+    expect(checkResult.skippedSegments[0].reason).toBe('failure_in_segment');
   });
 });

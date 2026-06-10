@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-0.8.15-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
+![version](https://img.shields.io/badge/version-0.8.16-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
 
 > **Pre-release alpha - unverified.** This engine is under active development. The public API surface is still shifting (see `docs/changelog.md` for the recent breaking-change cadence - `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`), invariants are still being hardened through mandatory multi-CLI reviews, and no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - do **not** depend on it for shipped products yet.
 
@@ -21,7 +21,7 @@ npm run build   # emit dist package files
 npm run debug:client   # build and serve the browser debug client example
 ```
 
-Requires Node.js 18+.
+Requires Node.js 20+.
 
 ## Documentation
 

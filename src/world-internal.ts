@@ -133,8 +133,9 @@ export function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
 // is JSON-shaped because createTickFailure normalizes the optional Error field
 // to a plain {name, message, stack} via createErrorDetails and asserts
 // JSON-compat on `details`. JSON is ~2-5× faster than structuredClone for
-// these plain shapes on V8, and cloneTickDiff runs once per tick per diff
-// listener so the throughput matters.
+// these plain shapes on V8, and cloneTickDiff runs once per diff listener per
+// tick (world-tick.ts onDiff emission, since v0.8.16) plus once per getDiff()
+// call, so the throughput matters.
 
 export function cloneTickFailure(failure: TickFailure): TickFailure {
   return JSON.parse(JSON.stringify(failure)) as TickFailure;

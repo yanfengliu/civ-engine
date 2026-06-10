@@ -13,7 +13,7 @@ import type {
 } from './types.js';
 import type { TickDiff } from './diff.js';
 import { EntityManager } from './entity-manager.js';
-import { ComponentStore } from './component-store.js';
+import type { ComponentStore } from './component-store.js';
 import { SpatialGrid } from './spatial-grid.js';
 import type { SpatialGridView } from './spatial-grid.js';
 import { GameLoop } from './game-loop.js';

@@ -51,55 +51,85 @@ export abstract class WorldQueries<
     }
   }
 
+  /**
+   * Nearest entity by squared Euclidean distance; exact-distance ties break
+   * on the lowest entity id, so the result is independent of scan order.
+   * Scans expanding Chebyshev perimeter rings — each grid cell is visited at
+   * most once, so a full-map miss costs O(R²) cell probes instead of the
+   * O(R³) cumulative-disk rescans used before v0.8.16 (full-review
+   * 2026-06-10 M5).
+   */
   findNearest(
     cx: number,
     cy: number,
     ...components: string[]
   ): EntityId | undefined {
+    if (!Number.isInteger(cx) || !Number.isInteger(cy)) {
+      // Fail fast like the pre-v0.8.16 implementation did (via assertBounds):
+      // a non-finite coordinate would otherwise loop forever.
+      throw new RangeError(`findNearest coordinates must be integers (got ${cx}, ${cy})`);
+    }
     const w = this.spatialGrid.width;
     const h = this.spatialGrid.height;
-    const maxRadius = Math.ceil(Math.hypot(Math.max(w - 1, 0), Math.max(h - 1, 0)));
     const mask = components.length > 0 ? this.queryMask(components) : 0n;
-    const seen = new Set<EntityId>();
+    // Ring-scan bounds: rings closer than the query point's Chebyshev
+    // distance TO the grid cannot contain entities (skip them outright, so a
+    // far out-of-bounds query costs O(grid), not O(distance²)); the farthest
+    // grid column/row bounds the scan on the high side.
+    const minRadius = Math.max(0, -cx, cx - (w - 1), -cy, cy - (h - 1));
+    const maxRadius = Math.max(
+      Math.abs(cx), Math.abs(w - 1 - cx),
+      Math.abs(cy), Math.abs(h - 1 - cy),
+    );
     let bestId: EntityId | undefined;
     let bestDistSq = Infinity;
 
-    for (let r = 0; r <= maxRadius; r++) {
-      // Every entity returned by getInRadius(cx, cy, r) is within Euclidean
-      // distance r. If our best is already inside (r-1) the next ring cannot
-      // improve it, so we can stop. r is the cell-radius bound; bestDistSq is
-      // squared Euclidean.
-      if (bestId !== undefined && bestDistSq <= (r - 1) * (r - 1)) {
-        return bestId;
-      }
-      const entityIds = this.spatialGrid.getInRadius(cx, cy, r);
-      for (const id of entityIds) {
-        if (seen.has(id)) continue;
-        seen.add(id);
+    const consider = (x: number, y: number): void => {
+      if (x < 0 || x >= w || y < 0 || y >= h) return;
+      const cell = this.spatialGrid.getAt(x, y);
+      if (!cell) return;
+      // Grid cells equal exact entity positions (lock-step sync), so the
+      // cell distance IS each occupant's distance.
+      const dx = x - cx;
+      const dy = y - cy;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > bestDistSq) return;
+      for (const id of cell) {
         if (components.length > 0) {
           const sig = this.entitySignatures[id] ?? 0n;
           if ((sig & mask) !== mask) continue;
         }
-        const pos = this.getComponentForQuery(id);
-        if (!pos) continue;
-        const dx = pos.x - cx;
-        const dy = pos.y - cy;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < bestDistSq) {
+        if (
+          distSq < bestDistSq ||
+          (distSq === bestDistSq && (bestId === undefined || id < bestId))
+        ) {
           bestDistSq = distSq;
           bestId = id;
         }
       }
+    };
+
+    for (let r = minRadius; r <= maxRadius; r++) {
+      // Ring r's minimum squared distance is r² (axis cells); later rings
+      // only get farther. Stop once the best strictly beats r² — on an exact
+      // tie keep scanning so a smaller id at equal distance can still win.
+      if (bestId !== undefined && bestDistSq < r * r) break;
+      if (r === 0) {
+        consider(cx, cy);
+        continue;
+      }
+      // Clamp each ring edge to the grid intersection so per-ring cost is
+      // bounded by the grid, not by r.
+      const xLo = Math.max(cx - r, 0);
+      const xHi = Math.min(cx + r, w - 1);
+      if (cy - r >= 0 && cy - r < h) for (let x = xLo; x <= xHi; x++) consider(x, cy - r);
+      if (cy + r >= 0 && cy + r < h) for (let x = xLo; x <= xHi; x++) consider(x, cy + r);
+      const yLo = Math.max(cy - r + 1, 0);
+      const yHi = Math.min(cy + r - 1, h - 1);
+      if (cx - r >= 0 && cx - r < w) for (let y = yLo; y <= yHi; y++) consider(cx - r, y);
+      if (cx + r >= 0 && cx + r < w) for (let y = yLo; y <= yHi; y++) consider(cx + r, y);
     }
     return bestId;
-  }
-
-  /** Position read used by `findNearest`; equivalent to
-   *  `getComponent<Position>(id, this.positionKey)` without depending on the
-   *  entity layer above. */
-  private getComponentForQuery(id: EntityId): Position | undefined {
-    const store = this.componentStores.get(this.positionKey);
-    return store?.get(id) as Position | undefined;
   }
 
   protected syncSpatialEntity(entity: EntityId, pos: Position): void {

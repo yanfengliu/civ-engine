@@ -1,6 +1,8 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readManifest } from '../src/bundle-corpus-manifest.js';
+import { SESSION_BUNDLE_SCHEMA_VERSION } from '../src/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   BundleCorpus,
@@ -390,5 +392,19 @@ describe('BundleCorpus query and loading contracts', () => {
     expect(corpus.loadBundle('one')).toEqual(new FileSink(join(root, 'one')).toBundle());
     expect([...corpus].map((bundle) => bundle.metadata.sessionId)).toEqual(['one', 'two']);
     expect(runMetrics(corpus.bundles({ sourceKind: 'synthetic' }), [bundleCount()]).bundleCount).toBe(1);
+  });
+});
+
+describe('manifest attachment-id safety (full-review 2026-06-10 H2)', () => {
+  it('readManifest rejects attachment ids containing path separators', () => {
+    const dir = tempRoot();
+    writeRawManifest(dir, JSON.stringify({
+      schemaVersion: SESSION_BUNDLE_SCHEMA_VERSION,
+      metadata: metadata('evil-manifest'),
+      attachments: [
+        { id: '../escape', mime: 'application/octet-stream', sizeBytes: 1, ref: { sidecar: true } },
+      ],
+    }));
+    expectCorpusError(() => readManifest(join(dir, 'manifest.json')), 'manifest_invalid');
   });
 });
