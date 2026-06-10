@@ -12,7 +12,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 
 | Component      | File                     | Responsibility                                                                         |
 | -------------- | ------------------------ | -------------------------------------------------------------------------------------- |
-| World          | `src/world.ts`           | Top-level API, owns all subsystems, phased system pipeline, metrics, spatial index sync |
+| World          | `src/world.ts` (facade + serialization; composed from internal layer modules `world-types.ts`, `world-core.ts`, `world-queries.ts`, `world-tags-meta.ts`, `world-entities.ts`, `world-observers.ts`, `world-commands.ts`, `world-systems.ts`, `world-tick.ts`) | Top-level API, owns all subsystems, phased system pipeline, metrics, spatial index sync. Since v0.8.15 the class is one runtime class assembled from an internal abstract layer chain (file-organization for the 500-LOC budget; layers are not public API) |
 | EntityManager  | `src/entity-manager.ts`  | Entity creation/destruction, ID recycling via free-list, generation counters           |
 | ComponentStore | `src/component-store.ts` | Sparse array storage per component type, generation counter for change detection       |
 | SpatialGrid    | `src/spatial-grid.ts`    | Sparse occupied-cell grid plus read-only view, neighbor/radius queries                 |
@@ -23,7 +23,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
-| OccupancyGrid  | `src/occupancy-grid.ts`  | Deterministic blocked-cell, footprint, reservation, lifecycle binding, blocker metadata, metrics, and sub-cell crowding tracking |
+| OccupancyGrid  | `src/occupancy-grid.ts` (re-export barrel; classes in `occupancy-cell-grid.ts` / `occupancy-subcell.ts` / `occupancy-binding.ts`, shared `occupancy-types.ts` / `occupancy-internal.ts` / `occupancy-binding-internal.ts`) | Deterministic blocked-cell, footprint, reservation, lifecycle binding, blocker metadata, metrics, and sub-cell crowding tracking |
 | Layer          | `src/layer.ts`           | Generic typed overlay map at configurable downsampled resolution; sparse cell storage with default-value semantics, JSON-serializable; multi-resolution field data (pollution, influence, weather, danger, etc.) |
 | JSON helpers   | `src/json.ts`            | JSON-compatible component validation and fingerprints for mutation detection           |
 | Noise          | `src/noise.ts`           | Seedable 2D simplex noise, octave layering utility                                     |
@@ -34,11 +34,11 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | RenderAdapter  | `src/render-adapter.ts`  | Projects world state into renderer-facing snapshots and diffs with generation-aware refs |
 | ScenarioRunner | `src/scenario-runner.ts` | Headless setup/run/check harness built on World, WorldDebugger, and WorldHistoryRecorder |
 | VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
-| WorldDebugger  | `src/world-debugger.ts`  | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
+| WorldDebugger  | `src/world-debugger.ts` (+ `src/world-debug-probes.ts`) | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
 | ClientAdapter  | `src/client-adapter.ts`  | Bridges World API to typed client messages via send callback |
 | BehaviorTree   | `src/behavior-tree.ts`   | Generic BT framework: NodeStatus, BTNode, Selector, Sequence, ReactiveSelector, ReactiveSequence, Action, Condition, BTState, createBehaviorTree, clearRunningState |
 | SessionRecorder | `src/session-recorder.ts` | Captures live World runs into SessionBundle via SessionSink; mutex-locked single payload-capturing recorder per world (slot at world.__payloadCapturingRecorder); marker validation per spec §6.1; terminal snapshot on disconnect |
-| SessionReplayer | `src/session-replayer.ts` | Loads a SessionBundle/Source; openAt(tick) returns paused World; selfCheck() 3-stream comparison (state via deepEqualWithPath, events, executions); failedTicks-skipping; cross-b/cross-Node-major version checks |
+| SessionReplayer | `src/session-replayer.ts` (+ `src/session-deep-equal.ts`) | Loads a SessionBundle/Source; openAt(tick) returns paused World; selfCheck() 3-stream comparison (state via deepEqualWithPath, events, executions); failedTicks-skipping; cross-b/cross-Node-major version checks |
 | SessionBundle / SessionSink / SessionSource / Marker / RecordedCommand | `src/session-bundle.ts`, `src/session-sink.ts`, `src/session-file-sink.ts` | Shared bundle types + sink/source interfaces + MemorySink + FileSink (disk-backed; manifest atomic-rename; defaults to sidecar attachments). scenarioResultToBundle adapter at `src/session-scenario-bundle.ts`. |
 | Synthetic Playtest Harness | `src/synthetic-playtest.ts` | Tier-1 autonomous-driver primitive: `runSynthPlaytest` drives a `World` via pluggable `Policy` functions for N ticks → `SessionBundle`. Sub-RNG (`PolicyContext.random()`) sandboxed from `world.rng`, seeded from `policySeed`. Built-in policies: `noopPolicy`, `randomPolicy`, `scriptedPolicy`. Composes with `SessionRecorder`/`SessionReplayer`. New in v0.7.20 + v0.8.0 + v0.8.1 (Spec 3). |
 | Bundle Corpus Index | `src/bundle-corpus.ts`, `src/bundle-corpus-types.ts`, `src/bundle-corpus-manifest.ts` | Tier-2 manifest-first corpus index over closed FileSink bundle directories; metadata query/filtering plus lazy FileSink-backed SessionBundle loading. `BundleCorpusEntry.openViewer()` added in v0.8.7 (Spec 4) for one-line corpus-to-viewer composition. New in v0.8.3 (Spec 7). |

@@ -540,10 +540,23 @@ describe('CommandTransaction', () => {
         'registerComponentBit', 'setEntityComponentSignature', 'setEntitySignature',
         'updateQueryCacheMembership', 'normalizeQueryKeys', 'getQueryCache',
         'queryMask', 'rebuildComponentSignatures',
+        // Layer-chain internals (v0.8.15 LOC-budget split, src/world.ts)
+        'asWorld', 'getComponentForQuery',
       ]);
-      const allMembers = Object.getOwnPropertyNames(World.prototype).filter(
-        (name) => !name.startsWith('_') && name !== 'constructor',
-      );
+      // Walk the full prototype chain: since v0.8.15 `World` is composed from
+      // internal layer classes (see src/world.ts), so its methods live on
+      // ancestor prototypes rather than on World.prototype alone.
+      const allMembers: string[] = [];
+      const seenMembers = new Set<string>();
+      let proto: object | null = World.prototype;
+      while (proto && proto !== Object.prototype) {
+        for (const name of Object.getOwnPropertyNames(proto)) {
+          if (name.startsWith('_') || name === 'constructor' || seenMembers.has(name)) continue;
+          seenMembers.add(name);
+          allMembers.push(name);
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
       const forbidden = new Set<string>(FORBIDDEN_PRECONDITION_METHODS);
       const uncovered: string[] = [];
       for (const member of allMembers) {
@@ -557,12 +570,12 @@ describe('CommandTransaction', () => {
       ).toEqual([]);
 
       // Also verify: every entry in FORBIDDEN_PRECONDITION_METHODS exists on
-      // World.prototype. Catches typos / dead entries.
+      // the World prototype chain. Catches typos / dead entries.
       const memberSet = new Set(allMembers);
       const phantom = FORBIDDEN_PRECONDITION_METHODS.filter((name) => !memberSet.has(name));
       expect(
         phantom,
-        `FORBIDDEN_PRECONDITION_METHODS contains entries not on World.prototype: ${phantom.join(', ')}`,
+        `FORBIDDEN_PRECONDITION_METHODS contains entries not on the World prototype chain: ${phantom.join(', ')}`,
       ).toEqual([]);
     });
 

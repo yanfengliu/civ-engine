@@ -16,6 +16,7 @@ import {
   ReplayHandlerMissingError,
 } from './session-errors.js';
 import type { SessionSource } from './session-sink.js';
+import { deepEqualOrdered, deepEqualWithPath } from './session-deep-equal.js';
 import { ENGINE_VERSION } from './version.js';
 import type { CommandExecutionResult, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
@@ -484,51 +485,4 @@ function parseNodeMajor(version: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/**
- * Recursive deep-equal that short-circuits on first mismatch and produces
- * a best-effort dotted `firstDifferingPath`. Snapshot serialization
- * preserves insertion order, so deep-equal need not canonicalize.
- */
-export function deepEqualWithPath(a: unknown, b: unknown, path = ''): { equal: boolean; firstDifferingPath?: string } {
-  if (Object.is(a, b)) return { equal: true };
-  if (typeof a !== typeof b) return { equal: false, firstDifferingPath: path || '<root>' };
-  if (a === null || b === null) return { equal: false, firstDifferingPath: path || '<root>' };
-  if (typeof a !== 'object') return { equal: false, firstDifferingPath: path || '<root>' };
-
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b)) {
-      return { equal: false, firstDifferingPath: path || '<root>' };
-    }
-    if (a.length !== b.length) return { equal: false, firstDifferingPath: `${path}.length` };
-    for (let i = 0; i < a.length; i++) {
-      const r = deepEqualWithPath(a[i], b[i], `${path}[${i}]`);
-      if (!r.equal) return r;
-    }
-    return { equal: true };
-  }
-
-  const ao = a as Record<string, unknown>;
-  const bo = b as Record<string, unknown>;
-  const aKeys = Object.keys(ao);
-  const bKeys = Object.keys(bo);
-  if (aKeys.length !== bKeys.length) {
-    return { equal: false, firstDifferingPath: `${path}.<keys>` };
-  }
-  for (const k of aKeys) {
-    if (!Object.prototype.hasOwnProperty.call(bo, k)) {
-      return { equal: false, firstDifferingPath: `${path}.${k}<missing>` };
-    }
-    const r = deepEqualWithPath(ao[k], bo[k], path ? `${path}.${k}` : k);
-    if (!r.equal) return r;
-  }
-  return { equal: true };
-}
-
-function deepEqualOrdered(a: unknown[], b: unknown[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (!deepEqualWithPath(a[i], b[i]).equal) return false;
-  }
-  return true;
-}
-
+export { deepEqualWithPath } from './session-deep-equal.js';

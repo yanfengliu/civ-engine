@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.15 - 2026-06-09
+
+Internal file reorganization enforcing the project's 500-line-per-file budget. **No public API or behavior changes** — the runtime export list was captured before and after the refactor and is byte-identical; the full 1080-test suite passes unchanged (plus 3 new budget tests).
+
+- **New regression test `tests/loc-budget.test.ts`:** every `src/*.ts` file must be ≤ 500 lines (no exceptions); oversized test suites are pinned at their current size by a shrink-only ratchet (entries must be deleted once a file drops under 500).
+- **`World` (was 2480 lines) is now composed from an internal layer chain** — `WorldCore → WorldQueries → WorldTagsMeta → WorldEntities → WorldObservers → WorldCommands → WorldSystems → WorldTick → World` — one file per layer, all ≤ 500 lines, with `src/world.ts` keeping serialization (`serialize` / `deserialize` / `applySnapshot`) and re-exporting the same public types as before. `World` remains the only concrete class; the layer classes are **not** exported from the package and are not API. Consumers who read `dist/*.d.ts` will notice two representational changes: internal state fields now appear as `protected` instead of `private` (TypeScript-level only — they were never runtime-private), and `World`'s members are spread across the layer declaration files. Subclassing `World` remains unsupported. See ADR 43.
+- **`occupancy-grid.ts` (was 1602 lines) is now a pure re-export barrel** over class-per-file modules: `occupancy-cell-grid.ts` (`OccupancyGrid`), `occupancy-subcell.ts` (`SubcellOccupancyGrid`), `occupancy-binding.ts` (`OccupancyBinding`), plus shared `occupancy-types.ts` / `occupancy-internal.ts` / `occupancy-binding-internal.ts`. All import paths and exported names are unchanged.
+- **Three borderline files trimmed under 500** by extracting self-contained pieces: `summarizeWorldHistoryRange` → `history-range-summary.ts`, `deepEqualWithPath` → `session-deep-equal.ts`, and the occupancy/visibility/path-queue debug probes → `world-debug-probes.ts`. All three remain importable from their original paths via re-exports.
+
+### Validation
+
+All four gates pass: `npm test` (1078 passed + 2 todo, including the 3 new budget tests), `npm run typecheck`, `npm run lint`, `npm run build`. Runtime export surface verified byte-identical pre/post refactor via `Object.keys(import('./dist/index.js'))` diff. Multi-CLI review per `docs/threads/done/loc-budget/`.
+
 ## 0.8.14 - 2026-06-09
 
 Package-metadata hygiene release. No API or behavior changes.
