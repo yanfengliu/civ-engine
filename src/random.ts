@@ -1,3 +1,4 @@
+import { EngineRangeError } from './engine-error.js';
 export interface RandomState {
   state: number;
 }
@@ -34,7 +35,7 @@ export class DeterministicRandom {
       state.state < 0 ||
       state.state > 0xffff_ffff
     ) {
-      throw new RangeError('Random state must be a uint32 integer');
+      throw new EngineRangeError('rng_state_invalid', 'Random state must be a uint32 integer');
     }
     const random = new DeterministicRandom(0);
     random.state = state.state >>> 0;
@@ -45,7 +46,7 @@ export class DeterministicRandom {
 function seedToUint32(seed: number | string): number {
   if (typeof seed === 'number') {
     if (!Number.isFinite(seed)) {
-      throw new RangeError('Random seed must be finite');
+      throw new EngineRangeError('rng_seed_invalid', 'Random seed must be finite');
     }
     return Math.trunc(seed) >>> 0;
   }

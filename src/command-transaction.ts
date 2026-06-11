@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import { assertJsonCompatible } from './json.js';
 import type { EntityId, Position } from './types.js';
 import type { World } from './world.js';
@@ -110,8 +111,9 @@ function makeReadOnlyTransactionWorld<
   return new Proxy(world, {
     get(target, prop, receiver) {
       if (FORBIDDEN_IN_PRECONDITION.has(prop)) {
-        throw new Error(
+        throw new EngineError('transaction_precondition_side_effect',
           `CommandTransaction precondition cannot call '${String(prop)}': preconditions must be side-effect free`,
+          { details: { property: String(prop) } },
         );
       }
       const value = Reflect.get(target, prop, receiver);
@@ -132,13 +134,15 @@ function makeReadOnlyTransactionWorld<
       return value.bind(target);
     },
     set(_target, prop) {
-      throw new Error(
+      throw new EngineError('transaction_precondition_set',
         `CommandTransaction precondition cannot set property '${String(prop)}' on World`,
+        { details: { property: String(prop) } },
       );
     },
     deleteProperty(_target, prop) {
-      throw new Error(
+      throw new EngineError('transaction_precondition_delete',
         `CommandTransaction precondition cannot delete property '${String(prop)}' on World`,
+        { details: { property: String(prop) } },
       );
     },
   }) as unknown as ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>;
@@ -251,7 +255,7 @@ export class CommandTransaction<
   ): this {
     this.assertPending();
     if (typeof predicate !== 'function') {
-      throw new Error('CommandTransaction.require expects a function');
+      throw new EngineError('transaction_require_not_function', 'CommandTransaction.require expects a function');
     }
     this.preconditions.push(predicate);
     return this;
@@ -267,7 +271,7 @@ export class CommandTransaction<
   commit(): TransactionResult {
     if (this.status === 'committed') {
       const reason = this.terminalReason ?? 'committed';
-      throw new Error(`CommandTransaction already ${reason}`);
+      throw new EngineError('transaction_consumed', `CommandTransaction already ${reason}`, { details: { reason } });
     }
     if (this.status === 'aborted') {
       // Mark as terminal so a subsequent commit() throws rather than silently
@@ -359,6 +363,6 @@ export class CommandTransaction<
   private assertPending(): void {
     if (this.status === 'pending') return;
     const reason = this.terminalReason ?? 'committed';
-    throw new Error(`CommandTransaction already ${reason}`);
+    throw new EngineError('transaction_consumed', `CommandTransaction already ${reason}`, { details: { reason } });
   }
 }

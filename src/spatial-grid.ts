@@ -1,3 +1,4 @@
+import { EngineRangeError } from './engine-error.js';
 import type { EntityId } from './types.js';
 
 export const ORTHOGONAL: ReadonlyArray<[number, number]> = [
@@ -119,7 +120,7 @@ export class SpatialGrid {
   ): EntityId[] {
     this.assertBounds(cx, cy);
     if (!Number.isFinite(radius) || radius < 0) {
-      throw new RangeError(`Radius ${radius} is invalid`);
+      throw new EngineRangeError('grid_radius_invalid', `Radius ${radius} is invalid`, { details: { radius } });
     }
     const r = Math.ceil(radius);
     const minX = Math.max(0, cx - r);
@@ -151,10 +152,10 @@ export class SpatialGrid {
 
   assertBounds(x: number, y: number): void {
     if (!Number.isInteger(x) || !Number.isInteger(y)) {
-      throw new RangeError(`Position (${x}, ${y}) must use integer coordinates`);
+      throw new EngineRangeError('position_not_integer', `Position (${x}, ${y}) must use integer coordinates`, { details: { x, y } });
     }
     if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
-      throw new RangeError(`Position (${x}, ${y}) is out of bounds`);
+      throw new EngineRangeError('position_out_of_bounds', `Position (${x}, ${y}) is out of bounds`, { details: { x, y } });
     }
   }
 
@@ -170,6 +171,6 @@ export class SpatialGrid {
 
 function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new RangeError(`Grid ${label} must be a positive integer`);
+    throw new EngineRangeError('grid_dimension_invalid', `Grid ${label} must be a positive integer`, { details: { label } });
   }
 }

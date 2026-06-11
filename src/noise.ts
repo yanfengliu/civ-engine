@@ -1,4 +1,5 @@
 // 2D simplex noise gradients (8 directions). Length is load-bearing: indexed by `gi & 7`.
+import { EngineRangeError } from './engine-error.js';
 const GRAD2: ReadonlyArray<readonly [number, number]> = [
   [1, 1], [-1, 1], [1, -1], [-1, -1],
   [1, 0], [-1, 0], [0, 1], [0, -1],
@@ -100,18 +101,21 @@ export function octaveNoise2D(
   lacunarity = 2.0,
 ): number {
   if (!Number.isInteger(octaves) || octaves < 1) {
-    throw new RangeError(
+    throw new EngineRangeError('noise_octaves_invalid',
       `octaveNoise2D: octaves must be a positive integer (got ${octaves})`,
+      { details: { octaves } },
     );
   }
   if (!Number.isFinite(persistence) || persistence < 0) {
-    throw new RangeError(
+    throw new EngineRangeError('noise_persistence_invalid',
       `octaveNoise2D: persistence must be a finite non-negative number (got ${persistence})`,
+      { details: { persistence } },
     );
   }
   if (!Number.isFinite(lacunarity) || lacunarity <= 0) {
-    throw new RangeError(
+    throw new EngineRangeError('noise_lacunarity_invalid',
       `octaveNoise2D: lacunarity must be a positive finite number (got ${lacunarity})`,
+      { details: { lacunarity } },
     );
   }
 

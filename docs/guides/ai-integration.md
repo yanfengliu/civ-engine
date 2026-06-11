@@ -133,6 +133,10 @@ When a command handler throws (or its handler is missing), every command queued 
 
 The most recent runtime failure is also available through `world.getLastTickFailure()` (until `recover()` clears it).
 
+### Branch on error codes, not messages (v0.8.19)
+
+Every error the core engine throws is an `EngineError` / `EngineRangeError` / `EngineTypeError` carrying a stable `code` and structured `details` — agents must branch on `code`, never on message prose (messages are human-facing and may be reworded; codes are contract). Direct calls: `try { world.addComponent(id, 'hp', hp) } catch (e) { if (isEngineError(e) && e.code === 'entity_not_alive') refreshEntityList(e.details) }`. Inside a tick, the same code survives into the failure surface as `failure.error.code` — note the two levels: `failure.code` classifies the failure (`'system_threw'`), `failure.error.code` is the thrown engine error (`'entity_not_alive'`). The full code table lives in the api-reference Engine Errors section; the session stack keeps its own `details.code` family on `SessionRecordingError` subclasses.
+
 ## Runtime Profiles
 
 Keep AI loops on the default `instrumentationProfile: 'full'`.

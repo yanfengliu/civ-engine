@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError } from './engine-error.js';
 import type { EntityId, Position } from './types.js';
 import type {
   OccupancyQueryOptions,
@@ -162,7 +163,7 @@ export class SubcellOccupancyGrid {
 
     for (const offset of offsets) {
       if (!Number.isInteger(offset.x) || !Number.isInteger(offset.y)) {
-        throw new Error('Neighbor offsets must use integer grid coordinates');
+        throw new EngineError('occupancy_coords_not_integer', 'Neighbor offsets must use integer grid coordinates');
       }
 
       const x = origin.x + offset.x;
@@ -222,19 +223,21 @@ export class SubcellOccupancyGrid {
 
       const position = grid.toPosition(claim.cell);
       if (grid.isBlocked(position.x, position.y, entity, undefined)) {
-        throw new Error(
+        throw new EngineError('subcell_state_invalid',
           `Invalid subcell occupancy for entity ${entity} at blocked cell (${position.x}, ${position.y})`,
+          { details: { entity, x: position.x, y: position.y } },
         );
       }
 
       if (grid.occupiedByEntity.has(entity)) {
-        throw new Error(`Duplicate subcell occupancy for entity ${entity}`);
+        throw new EngineError('subcell_state_invalid', `Duplicate subcell occupancy for entity ${entity}`, { details: { entity } });
       }
 
       const key = grid.toCellSlotKey(claim.cell, claim.slot);
       if (grid.occupiedByCellSlot.has(key)) {
-        throw new Error(
+        throw new EngineError('subcell_state_invalid',
           `Duplicate subcell slot ${claim.slot} at cell (${position.x}, ${position.y})`,
+          { details: { slot: claim.slot, x: position.x, y: position.y } },
         );
       }
 
@@ -387,7 +390,7 @@ function normalizeSubcellSlots(
   slots: ReadonlyArray<SubcellSlotOffset>,
 ): ReadonlyArray<SubcellSlotOffset> {
   if (slots.length === 0) {
-    throw new Error('Subcell slot offsets must not be empty');
+    throw new EngineError('subcell_slots_empty', 'Subcell slot offsets must not be empty');
   }
 
   const seen = new Set<string>();
@@ -396,14 +399,15 @@ function normalizeSubcellSlots(
       assertFiniteNumber(slot.x, 'Subcell slot x');
       assertFiniteNumber(slot.y, 'Subcell slot y');
       if (slot.x < 0 || slot.x >= 1 || slot.y < 0 || slot.y >= 1) {
-        throw new RangeError(
+        throw new EngineRangeError('subcell_slot_offset_invalid',
           `Subcell slot offset (${slot.x}, ${slot.y}) must be within [0, 1)`,
+          { details: { x: slot.x, y: slot.y } },
         );
       }
 
       const key = `${slot.x},${slot.y}`;
       if (seen.has(key)) {
-        throw new Error(`Duplicate subcell slot offset (${slot.x}, ${slot.y})`);
+        throw new EngineError('subcell_slot_offset_duplicate', `Duplicate subcell slot offset (${slot.x}, ${slot.y})`, { details: { x: slot.x, y: slot.y } });
       }
       seen.add(key);
       return Object.freeze({ x: slot.x, y: slot.y });
@@ -413,7 +417,7 @@ function normalizeSubcellSlots(
 
 function normalizeSubcellSlotIndex(slot: number, slotCount: number): number {
   if (!Number.isInteger(slot) || slot < 0 || slot >= slotCount) {
-    throw new RangeError(`Subcell slot ${slot} is out of bounds`);
+    throw new EngineRangeError('subcell_slot_out_of_bounds', `Subcell slot ${slot} is out of bounds`, { details: { slot } });
   }
   return slot;
 }

@@ -4,6 +4,7 @@
 // `bundleSummary` helper for feeding bundle facts to an LLM. Game projects (or
 // downstream tooling) wire their own LLM clients via `AgentDriver.decide`.
 
+import { EngineRangeError } from './engine-error.js';
 import { MemorySink } from './session-sink.js';
 import { SessionRecorder } from './session-recorder.js';
 import { RecorderClosedError } from './session-errors.js';
@@ -131,7 +132,7 @@ export async function runAgentPlaytest<
   config: AgentPlaytestConfig<TEventMap, TCommandMap, TComponents, TState>,
 ): Promise<AgentPlaytestResult<TEventMap, TCommandMap>> {
   if (!Number.isInteger(config.maxTicks) || config.maxTicks < 1) {
-    throw new RangeError(`maxTicks must be a positive integer (got ${config.maxTicks})`);
+    throw new EngineRangeError('playtest_max_ticks_invalid', `maxTicks must be a positive integer (got ${config.maxTicks})`, { details: { maxTicks: config.maxTicks } });
   }
   if (config.world.isPoisoned()) {
     // Match SessionRecorder.connect()'s and runSynthPlaytest's poisoned-world

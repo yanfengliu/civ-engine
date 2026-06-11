@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId, Position } from './types.js';
 import type {
   GridPassability,
@@ -118,8 +119,9 @@ export class OccupancyBinding implements GridPassability {
     const crowdedCell = this.findCrowdingConflictCell(cells);
     if (crowdedCell !== null) {
       const { x, y } = this.toPosition(crowdedCell);
-      throw new Error(
+      throw new EngineError('occupancy_block_crowded',
         `Cannot block cells that still contain crowded occupants (${x}, ${y})`,
+        { details: { x, y } },
       );
     }
     const metadata = normalizeOccupancyMetadata(options.metadata, 'blocked');
@@ -391,7 +393,7 @@ export class OccupancyBinding implements GridPassability {
 
   private requireCrowding(): SubcellOccupancyGrid {
     if (!this.crowding) {
-      throw new Error('OccupancyBinding crowding is disabled');
+      throw new EngineError('occupancy_crowding_disabled', 'OccupancyBinding crowding is disabled');
     }
     return this.crowding;
   }

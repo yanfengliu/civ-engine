@@ -2,6 +2,7 @@
 // reverse index (`getByTag`) and unique key/value metadata (`getByMeta`),
 // plus the destroy-time cleanup used by the entity layer above.
 
+import { EngineError } from './engine-error.js';
 import type { EntityId } from './types.js';
 import { assertWritable } from './world-strict-mode.js';
 import type { ComponentRegistry } from './world-types.js';
@@ -130,8 +131,9 @@ export abstract class WorldTagsMeta<
 
   protected setMetaInternal(entity: EntityId, key: string, value: string | number): void {
     if (typeof value === 'number' && !Number.isFinite(value)) {
-      throw new Error(
+      throw new EngineError('meta_not_finite',
         `Metadata ${JSON.stringify(key)} value must be a finite JSON number; got ${value}`,
+        { details: { key, value } },
       );
     }
     const existingMeta = this.entityMeta.get(entity);
@@ -139,8 +141,9 @@ export abstract class WorldTagsMeta<
     if (keyIndex) {
       const owner = keyIndex.get(value);
       if (owner !== undefined && owner !== entity) {
-        throw new Error(
+        throw new EngineError('meta_not_unique',
           `Metadata ${JSON.stringify(key)}=${JSON.stringify(value)} is already owned by entity ${owner}; metadata reverse index is unique`,
+          { details: { key, value, owner } },
         );
       }
     }

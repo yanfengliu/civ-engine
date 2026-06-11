@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId } from './types.js';
 import { assertJsonCompatible, jsonFingerprint } from './json.js';
 
@@ -20,7 +21,7 @@ export class ComponentStore<T> {
 
   set(entityId: EntityId, component: T): void {
     if (component === undefined) {
-      throw new Error('Component data must not be undefined');
+      throw new EngineError('component_data_undefined', 'Component data must not be undefined');
     }
     const wasPresent = this.data[entityId] !== undefined;
 

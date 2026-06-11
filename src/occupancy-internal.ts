@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError } from './engine-error.js';
 import type { OccupancyArea, OccupancyRect } from './occupancy-types.js';
 
 export function isOccupancyRect(area: OccupancyArea): area is OccupancyRect {
@@ -11,7 +12,7 @@ export function normalizeOccupancyArea(
 ): number[] {
   if (!isOccupancyRect(area)) {
     if (area.length === 0) {
-      throw new Error('Occupancy area must not be empty');
+      throw new EngineError('occupancy_area_empty', 'Occupancy area must not be empty');
     }
     const cells = new Set<number>();
     for (const cell of area) {
@@ -46,25 +47,25 @@ export function assertCellIndex(index: number, width: number, height: number): v
     index < 0 ||
     index >= width * height
   ) {
-    throw new Error(`Cell index ${index} is out of bounds`);
+    throw new EngineError('occupancy_index_out_of_bounds', `Cell index ${index} is out of bounds`, { details: { index } });
   }
 }
 
 export function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive integer`);
+    throw new EngineError('occupancy_value_invalid', `${label} must be a positive integer`, { details: { label } });
   }
 }
 
 export function assertNonNegativeInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`${label} must be a non-negative integer`);
+    throw new EngineError('occupancy_value_invalid', `${label} must be a non-negative integer`, { details: { label } });
   }
 }
 
 export function assertFiniteNumber(value: number, label: string): void {
   if (!Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite number`);
+    throw new EngineError('occupancy_value_invalid', `${label} must be a finite number`, { details: { label } });
   }
 }
 
@@ -75,9 +76,9 @@ export function assertGridPoint(
   height: number,
 ): void {
   if (!Number.isInteger(x) || !Number.isInteger(y)) {
-    throw new Error('Grid coordinates must be integers');
+    throw new EngineError('occupancy_coords_not_integer', 'Grid coordinates must be integers');
   }
   if (x < 0 || x >= width || y < 0 || y >= height) {
-    throw new RangeError(`Grid coordinate (${x}, ${y}) is out of bounds`);
+    throw new EngineRangeError('occupancy_out_of_bounds', `Grid coordinate (${x}, ${y}) is out of bounds`, { details: { x, y } });
   }
 }

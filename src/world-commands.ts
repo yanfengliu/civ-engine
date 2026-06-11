@@ -3,6 +3,7 @@
 // results and their listener emission, transactions, and the shared
 // `TickFailure` construction used by the tick layer above.
 
+import { EngineError } from './engine-error.js';
 import type { JsonValue } from './json.js';
 import { assertJsonCompatible } from './json.js';
 import {
@@ -99,7 +100,7 @@ export abstract class WorldCommands<
     fn: (data: TCommandMap[K], world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
     if (this.handlers.has(type)) {
-      throw new Error(`Handler already registered for command '${String(type)}'`);
+      throw new EngineError('handler_already_registered', `Handler already registered for command '${String(type)}'`, { details: { type: String(type) } });
     }
     this.handlers.set(
       type,

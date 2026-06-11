@@ -1,3 +1,4 @@
+import { EngineRangeError } from './engine-error.js';
 import type { World, ComponentRegistry } from './world.js';
 import type { JsonValue } from './json.js';
 import type { SessionBundle } from './session-bundle.js';
@@ -94,17 +95,18 @@ export function randomPolicy<
 ): Policy<TEventMap, TCommandMap, TComponents, TState> {
   const { catalog, frequency = 1, offset = 0, burst = 1 } = config;
   if (catalog.length === 0) {
-    throw new RangeError('randomPolicy.catalog must be non-empty');
+    throw new EngineRangeError('policy_config_invalid', 'randomPolicy.catalog must be non-empty');
   }
   if (!Number.isInteger(frequency) || frequency < 1) {
-    throw new RangeError('randomPolicy.frequency must be a positive integer');
+    throw new EngineRangeError('policy_config_invalid', 'randomPolicy.frequency must be a positive integer');
   }
   if (!Number.isInteger(burst) || burst < 1) {
-    throw new RangeError('randomPolicy.burst must be a positive integer');
+    throw new EngineRangeError('policy_config_invalid', 'randomPolicy.burst must be a positive integer');
   }
   if (!Number.isInteger(offset) || offset < 0 || offset >= frequency) {
-    throw new RangeError(
+    throw new EngineRangeError('policy_config_invalid',
       `randomPolicy.offset must be a non-negative integer < frequency (got ${offset}, frequency=${frequency})`,
+      { details: { offset, frequency } },
     );
   }
   return (ctx) => {
@@ -162,10 +164,10 @@ export function runSynthPlaytest<
   // seed via world.random() — otherwise a rejected call advances world.rng and
   // perturbs future deterministic behavior after world.recover().
   if (!Number.isInteger(config.maxTicks) || config.maxTicks < 1) {
-    throw new RangeError(`maxTicks must be a positive integer (got ${config.maxTicks})`);
+    throw new EngineRangeError('playtest_max_ticks_invalid', `maxTicks must be a positive integer (got ${config.maxTicks})`, { details: { maxTicks: config.maxTicks } });
   }
   if (config.policySeed !== undefined && !Number.isInteger(config.policySeed)) {
-    throw new RangeError(`policySeed must be a finite integer (got ${config.policySeed})`);
+    throw new EngineRangeError('playtest_seed_invalid', `policySeed must be a finite integer (got ${config.policySeed})`, { details: { policySeed: config.policySeed } });
   }
   if (config.world.isPoisoned()) {
     // Match SessionRecorder.connect()'s poisoned-world guard exactly so callers

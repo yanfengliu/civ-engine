@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId } from './types.js';
 
 export type ResourceMax = number | null;
@@ -42,7 +43,7 @@ export class ResourceStore {
 
   register(key: string, options?: { defaultMax?: ResourceMax }): void {
     if (this.registeredKeys.has(key)) {
-      throw new Error(`Resource '${key}' is already registered`);
+      throw new EngineError('resource_already_registered', `Resource '${key}' is already registered`, { details: { key } });
     }
     const defaultMax = normalizeMax(options?.defaultMax ?? null);
     this.registeredKeys.set(key, { defaultMax });
@@ -345,12 +346,13 @@ export class ResourceStore {
       store.getOpts(transfer.resource);
       assertNonNegativeFinite(transfer.rate, 'Transfer rate');
       if (!Number.isInteger(transfer.id) || transfer.id < 0) {
-        throw new Error(
+        throw new EngineError('resource_state_invalid',
           `Transfer id must be a non-negative integer (got ${transfer.id})`,
+          { details: { id: transfer.id } },
         );
       }
       if (seenTransferIds.has(transfer.id)) {
-        throw new Error(`Duplicate transfer id ${transfer.id} in fromState`);
+        throw new EngineError('resource_state_invalid', `Duplicate transfer id ${transfer.id} in fromState`, { details: { id: transfer.id } });
       }
       seenTransferIds.add(transfer.id);
       if (transfer.id > maxTransferId) {
@@ -359,7 +361,7 @@ export class ResourceStore {
       return { ...transfer };
     });
     if (!Number.isInteger(state.nextTransferId) || state.nextTransferId < 0) {
-      throw new Error('nextTransferId must be a non-negative integer');
+      throw new EngineError('resource_state_invalid', 'nextTransferId must be a non-negative integer');
     }
     store.nextTransferId = Math.max(state.nextTransferId, maxTransferId + 1);
     store.clearDirty();
@@ -369,7 +371,7 @@ export class ResourceStore {
   private getOpts(key: string): { defaultMax: ResourceMax } {
     const opts = this.registeredKeys.get(key);
     if (!opts) {
-      throw new Error(`Resource '${key}' is not registered`);
+      throw new EngineError('resource_not_registered', `Resource '${key}' is not registered`, { details: { key } });
     }
     return opts;
   }
@@ -391,6 +393,6 @@ function maxCapacity(max: ResourceMax): number {
 
 function assertNonNegativeFinite(value: number, label: string): void {
   if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${label} must be a finite non-negative number`);
+    throw new EngineError('resource_value_invalid', `${label} must be a finite non-negative number`, { details: { label } });
   }
 }

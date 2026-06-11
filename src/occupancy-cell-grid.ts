@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId, Position } from './types.js';
 import type {
   GridPassability,
@@ -55,8 +56,9 @@ export class OccupancyGrid implements GridPassability {
           this.reservationsByCell.has(cell)
         ) {
           const { x, y } = this.toPosition(cell);
-          throw new Error(
+          throw new EngineError('occupancy_block_occupied',
             `Cannot block occupied or reserved cell (${x}, ${y})`,
+            { details: { x, y } },
           );
         }
       }
@@ -233,7 +235,7 @@ export class OccupancyGrid implements GridPassability {
     for (const [entity, cells] of state.occupied) {
       const normalized = normalizeIndexes(cells, grid.width, grid.height);
       if (!grid.canClaim(entity, normalized, false)) {
-        throw new Error(`Invalid occupied footprint for entity ${entity}`);
+        throw new EngineError('occupancy_state_invalid', `Invalid occupied footprint for entity ${entity}`, { details: { entity } });
       }
       grid.replaceClaim(
         grid.occupiedByEntity,
@@ -246,7 +248,7 @@ export class OccupancyGrid implements GridPassability {
     for (const [entity, cells] of state.reservations) {
       const normalized = normalizeIndexes(cells, grid.width, grid.height);
       if (!grid.canClaim(entity, normalized, true)) {
-        throw new Error(`Invalid reservation footprint for entity ${entity}`);
+        throw new EngineError('occupancy_state_invalid', `Invalid reservation footprint for entity ${entity}`, { details: { entity } });
       }
       grid.replaceClaim(
         grid.reservationsByEntity,
@@ -365,7 +367,7 @@ function normalizeIndexes(
   height: number,
 ): number[] {
   if (cells.length === 0) {
-    throw new Error('Occupancy footprint must not be empty');
+    throw new EngineError('occupancy_footprint_empty', 'Occupancy footprint must not be empty');
   }
   const unique = new Set<number>();
   for (const cell of cells) {

@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { TickDiff } from './diff.js';
 import type { ResourcePool } from './resource-store.js';
 import type { WorldSnapshot, WorldSnapshotV5 } from './serializer.js';
@@ -32,8 +33,9 @@ export function diffSnapshots(
   // explicitly v5-only — fail fast so callers don't get silently truncated
   // results from missing fields (state/tags/metadata are v4+, etc.).
   if (a.version !== 5 || b.version !== 5) {
-    throw new Error(
+    throw new EngineError('snapshot_unsupported_version',
       `diffSnapshots requires WorldSnapshotV5; got versions ${a.version} and ${b.version}`,
+      { details: { a: a.version, b: b.version } },
     );
   }
   const av = a as WorldSnapshotV5;

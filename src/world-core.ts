@@ -5,6 +5,7 @@
 // The chain is a file-organization device — `World` remains one runtime
 // class; none of the layer classes are public API.
 
+import { EngineError } from './engine-error.js';
 import type {
   EntityId,
   InstrumentationProfile,
@@ -291,13 +292,13 @@ export abstract class WorldCore<
 
   protected getStore<T>(key: string): ComponentStore<T> {
     const store = this.componentStores.get(key);
-    if (!store) throw new Error(`Component '${key}' is not registered`);
+    if (!store) throw new EngineError('component_not_registered', `Component '${key}' is not registered`, { details: { key } });
     return store as ComponentStore<T>;
   }
 
   protected assertAlive(entity: EntityId): void {
     if (!this.entityManager.isAlive(entity)) {
-      throw new Error(`Entity ${entity} is not alive`);
+      throw new EngineError('entity_not_alive', `Entity ${entity} is not alive`, { details: { entity } });
     }
   }
 

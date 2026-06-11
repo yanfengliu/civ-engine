@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError } from './engine-error.js';
 import { ALL_DIRECTIONS, ORTHOGONAL } from './spatial-grid.js';
 import { findPath } from './pathfinding.js';
 import type { PathResult } from './pathfinding.js';
@@ -105,7 +106,7 @@ export class PathRequestQueue<TRequest, TResult> {
     maxRequests = 1,
   ): Array<PathRequestQueueEntry<TRequest, TResult>> {
     if (!Number.isInteger(maxRequests) || maxRequests < 0) {
-      throw new Error('maxRequests must be a non-negative integer');
+      throw new EngineError('path_budget_invalid', 'maxRequests must be a non-negative integer');
     }
 
     const completed: Array<PathRequestQueueEntry<TRequest, TResult>> = [];
@@ -297,7 +298,7 @@ function resolveDimensions(config: GridPathConfig): {
   const width = config.width ?? config.occupancy?.width;
   const height = config.height ?? config.occupancy?.height;
   if (width === undefined || height === undefined) {
-    throw new Error('Grid pathfinding requires width/height or an occupancy grid');
+    throw new EngineError('path_config_missing_grid', 'Grid pathfinding requires width/height or an occupancy grid');
   }
   assertPositiveInteger(width, 'width');
   assertPositiveInteger(height, 'height');
@@ -371,17 +372,18 @@ function assertGridPoint(
   label: string,
 ): void {
   if (!Number.isInteger(point.x) || !Number.isInteger(point.y)) {
-    throw new Error(`${label} position must use integer coordinates`);
+    throw new EngineError('path_coords_not_integer', `${label} position must use integer coordinates`, { details: { label } });
   }
   if (!isInBounds(point.x, point.y, width, height)) {
-    throw new RangeError(
+    throw new EngineRangeError('path_out_of_bounds',
       `${label} position (${point.x}, ${point.y}) is out of bounds`,
+      { details: { label, x: point.x, y: point.y } },
     );
   }
 }
 
 function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive integer`);
+    throw new EngineError('path_value_invalid', `${label} must be a positive integer`, { details: { label } });
   }
 }

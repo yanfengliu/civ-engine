@@ -2,6 +2,7 @@
 // per-phase ordering (with `before`/`after` topological constraints), and
 // tick-time execution with per-system timing + failure capture.
 
+import { EngineError } from './engine-error.js';
 import {
   createErrorDetails,
   errorMessage,
@@ -126,19 +127,22 @@ export abstract class WorldSystems<
         // whichever system registered last, so reject it as ambiguous
         // (full-review 2026-06-10 L3).
         if (duplicateNames.has(ref)) {
-          throw new Error(
+          throw new EngineError('system_ambiguous_target',
             `System '${sys.name}' has an ordering constraint on '${ref}', which is registered more than once — the constraint target is ambiguous`,
+            { details: { system: sys.name, target: ref } },
           );
         }
         const target = nameToSystem.get(ref);
         if (!target) {
-          throw new Error(
+          throw new EngineError('system_unknown_target',
             `System '${sys.name}' references non-existent system '${ref}'`,
+            { details: { system: sys.name, target: ref } },
           );
         }
         if (target.phase !== sys.phase) {
-          throw new Error(
+          throw new EngineError('system_cross_phase_constraint',
             `System '${sys.name}' (phase '${sys.phase}') has a cross-phase constraint on '${ref}' (phase '${target.phase}')`,
+            { details: { system: sys.name, phase: sys.phase, target: ref, targetPhase: target.phase } },
           );
         }
       }
@@ -178,7 +182,7 @@ export abstract class WorldSystems<
 
     const phase = system.phase ?? 'update';
     if (!isSystemPhase(phase)) {
-      throw new Error(`Unknown system phase '${String(phase)}'`);
+      throw new EngineError('system_unknown_phase', `Unknown system phase '${String(phase)}'`, { details: { phase: String(phase) } });
     }
 
     const provisionalName =
@@ -268,7 +272,7 @@ function topologicalSort<
   if (result.length !== systems.length) {
     const inCycle = systems.filter((s) => !result.includes(s));
     const names = inCycle.map((s) => s.name).join(' -> ');
-    throw new Error(`Cycle detected in system ordering: ${names}`);
+    throw new EngineError('system_cycle', `Cycle detected in system ordering: ${names}`, { details: { systems: names } });
   }
 
   return result;

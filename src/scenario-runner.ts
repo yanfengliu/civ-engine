@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
 import type { TickDiff } from './diff.js';
 import type { WorldSnapshot } from './serializer.js';
@@ -385,7 +386,7 @@ function createScenarioFailure(
   source?: ScenarioFailure['source'],
 ): ScenarioFailure {
   if (code.length === 0) {
-    throw new Error('Scenario failure code must not be empty');
+    throw new EngineError('scenario_failure_code_empty', 'Scenario failure code must not be empty');
   }
   if (details !== undefined) {
     assertJsonCompatible(details, `scenario failure details for '${code}'`);
@@ -464,7 +465,7 @@ function failureFromError(
 
 function assertValidStepCount(count: number): void {
   if (!Number.isInteger(count) || count < 0) {
-    throw new Error('Scenario step count must be a non-negative integer');
+    throw new EngineError('scenario_steps_invalid', 'Scenario step count must be a non-negative integer');
   }
 }
 

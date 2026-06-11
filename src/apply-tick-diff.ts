@@ -15,13 +15,14 @@
 // the cycle into one {destroyed, created} pair — applyTickDiff produces gen+1
 // (off by 1 vs. the engine). Edge case; not blocking v1.
 
+import { EngineError } from './engine-error.js';
 import type { TickDiff } from './diff.js';
 import type { WorldSnapshot, WorldSnapshotV5 } from './serializer.js';
 import type { EntityId } from './types.js';
 
 export function applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSnapshot {
   if (snapshot.version !== 5) {
-    throw new Error(`applyTickDiff requires WorldSnapshotV5; got version ${snapshot.version}`);
+    throw new EngineError('snapshot_unsupported_version', `applyTickDiff requires WorldSnapshotV5; got version ${snapshot.version}`, { details: { version: snapshot.version } });
   }
   const v5 = snapshot;
 

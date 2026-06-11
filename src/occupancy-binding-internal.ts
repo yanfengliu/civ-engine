@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId } from './types.js';
 import type {
   OccupancyBindingSubcellOptions,
@@ -29,7 +30,7 @@ export function normalizeOccupancyMetadata(
 ): OccupancyMetadata {
   const kind = metadata?.kind ?? fallbackKind;
   if (kind.length === 0) {
-    throw new Error('Occupancy metadata kind must not be empty');
+    throw new EngineError('occupancy_metadata_kind_empty', 'Occupancy metadata kind must not be empty');
   }
   return { kind };
 }

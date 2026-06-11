@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   | JsonPrimitive
@@ -14,23 +15,23 @@ export function assertJsonCompatible(value: unknown, label = 'value'): void {
     if (type === 'string' || type === 'boolean') return;
     if (type === 'number') {
       if (!Number.isFinite(current)) {
-        throw new Error(`${path} must be a finite JSON number`);
+        throw new EngineError('json_incompatible', `${path} must be a finite JSON number`, { details: { context: path } });
       }
       return;
     }
     if (type === 'undefined') {
-      throw new Error(`${path} must not be undefined`);
+      throw new EngineError('json_incompatible', `${path} must not be undefined`, { details: { context: path } });
     }
     if (type === 'bigint' || type === 'function' || type === 'symbol') {
-      throw new Error(`${path} is not JSON-compatible`);
+      throw new EngineError('json_incompatible', `${path} is not JSON-compatible`, { details: { context: path } });
     }
     if (type !== 'object') {
-      throw new Error(`${path} is not JSON-compatible`);
+      throw new EngineError('json_incompatible', `${path} is not JSON-compatible`, { details: { context: path } });
     }
 
     const object = current as object;
     if (seen.has(object)) {
-      throw new Error(`${path} contains a circular reference`);
+      throw new EngineError('json_incompatible', `${path} contains a circular reference`, { details: { context: path } });
     }
     seen.add(object);
 
@@ -44,7 +45,7 @@ export function assertJsonCompatible(value: unknown, label = 'value'): void {
 
     const prototype = Object.getPrototypeOf(current);
     if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error(`${path} must be a plain object, array, or primitive`);
+      throw new EngineError('json_incompatible', `${path} must be a plain object, array, or primitive`, { details: { context: path } });
     }
 
     for (const [key, child] of Object.entries(current as Record<string, unknown>)) {

@@ -1,3 +1,4 @@
+import { EngineError } from './engine-error.js';
 import type { EntityId } from './types.js';
 
 export class EntityManager {
@@ -98,38 +99,43 @@ export class EntityManager {
     freeList: number[];
   }): EntityManager {
     if (state.generations.length !== state.alive.length) {
-      throw new Error(
+      throw new EngineError('entity_state_invalid',
         'EntityManager.fromState: generations.length must equal alive.length',
       );
     }
     for (let i = 0; i < state.alive.length; i++) {
       if (typeof state.alive[i] !== 'boolean') {
-        throw new Error(
+        throw new EngineError('entity_state_invalid',
           `EntityManager.fromState: alive[${i}] must be a boolean, got ${typeof state.alive[i]}`,
+          { details: { index: i, type: typeof state.alive[i] } },
         );
       }
       const gen = state.generations[i];
       if (!Number.isInteger(gen) || gen < 0) {
-        throw new Error(
+        throw new EngineError('entity_state_invalid',
           `EntityManager.fromState: generations[${i}] must be a non-negative integer, got ${gen}`,
+          { details: { index: i, generation: gen } },
         );
       }
     }
     const seen = new Set<number>();
     for (const id of state.freeList) {
       if (!Number.isInteger(id) || id < 0 || id >= state.alive.length) {
-        throw new Error(
+        throw new EngineError('entity_state_invalid',
           `EntityManager.fromState: freeList contains invalid id ${id}`,
+          { details: { id } },
         );
       }
       if (state.alive[id]) {
-        throw new Error(
+        throw new EngineError('entity_state_invalid',
           `EntityManager.fromState: freeList id ${id} points to an alive entity`,
+          { details: { id } },
         );
       }
       if (seen.has(id)) {
-        throw new Error(
+        throw new EngineError('entity_state_invalid',
           `EntityManager.fromState: freeList contains duplicate id ${id}`,
+          { details: { id } },
         );
       }
       seen.add(id);

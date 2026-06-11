@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError } from './engine-error.js';
 export const DEFAULT_MAX_TICKS_PER_FRAME = 4;
 
 export class GameLoop {
@@ -21,13 +22,13 @@ export class GameLoop {
     onError?: (error: unknown) => void;
   }) {
     if (!Number.isFinite(config.tps) || config.tps <= 0) {
-      throw new Error('TPS must be a finite positive number');
+      throw new EngineError('config_invalid', 'TPS must be a finite positive number', { details: { field: 'tps' } });
     }
     if (
       config.maxTicksPerFrame !== undefined &&
       (!Number.isInteger(config.maxTicksPerFrame) || config.maxTicksPerFrame <= 0)
     ) {
-      throw new Error('maxTicksPerFrame must be a positive integer');
+      throw new EngineError('config_invalid', 'maxTicksPerFrame must be a positive integer', { details: { field: 'maxTicksPerFrame' } });
     }
     this._tps = config.tps;
     this.tickDuration = 1000 / config.tps;
@@ -46,7 +47,7 @@ export class GameLoop {
 
   advance(): void {
     if (this._tick >= Number.MAX_SAFE_INTEGER) {
-      throw new RangeError(
+      throw new EngineRangeError('tick_counter_saturated',
         `GameLoop tick counter saturated at Number.MAX_SAFE_INTEGER (${Number.MAX_SAFE_INTEGER}). ` +
           `Modulo math used by interval scheduling would silently corrupt past this point.`,
       );
@@ -84,7 +85,7 @@ export class GameLoop {
 
   setSpeed(multiplier: number): void {
     if (!Number.isFinite(multiplier) || multiplier <= 0) {
-      throw new Error('Speed multiplier must be a finite positive number');
+      throw new EngineError('speed_invalid', 'Speed multiplier must be a finite positive number');
     }
     this.speedMultiplier = multiplier;
   }

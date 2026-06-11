@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError, isEngineError } from './engine-error.js';
 import type { EntityId, InstrumentationProfile, Position, WorldConfig } from './types.js';
 import type { TickDiff } from './diff.js';
 import { assertJsonCompatible, type JsonValue } from './json.js';
@@ -93,11 +94,11 @@ export function normalizeCommandValidationResult(
   }
 
   if (!result || typeof result !== 'object' || typeof result.code !== 'string') {
-    throw new Error('Command validators must return boolean or a rejection object');
+    throw new EngineError('validator_invalid_return', 'Command validators must return boolean or a rejection object');
   }
 
   if (result.code.length === 0) {
-    throw new Error('Command rejection code must not be empty');
+    throw new EngineError('rejection_code_empty', 'Command rejection code must not be empty');
   }
 
   if (result.details !== undefined) {
@@ -132,10 +133,13 @@ export function cloneMetrics(metrics: WorldMetrics): WorldMetrics {
 // Both helpers deep-clone via JSON. TickDiff is JSON-shaped because component
 // data and state values pass assertJsonCompatible at write time; TickFailure
 // is JSON-shaped because createTickFailure normalizes the optional Error field
-// to a plain {name, message, stack} via createErrorDetails and asserts
-// JSON-compat on `details`. JSON is ~2-5× faster than structuredClone for
-// these plain shapes on V8, and cloneTickDiff runs once per diff listener per
-// tick (world-tick.ts onDiff emission, since v0.8.16) plus once per getDiff()
+// to {name, message, stack, code?, details?} via createErrorDetails and
+// asserts JSON-compat on `details` — where `error.details` is JSON-safe by
+// construction (EngineError sanitizes details at construction: non-finite
+// numbers become strings, so an error ABOUT a NaN input cannot itself break
+// this path). JSON is ~2-5× faster than structuredClone for these plain
+// shapes on V8, and cloneTickDiff runs once per diff listener per tick
+// (world-tick.ts onDiff emission, since v0.8.16) plus once per getDiff()
 // call, so the throughput matters.
 
 export function cloneTickFailure(failure: TickFailure): TickFailure {
@@ -150,7 +154,22 @@ export function createErrorDetails(error: unknown): {
   name: string;
   message: string;
   stack: string | null;
+  code?: string;
+  details?: JsonValue;
 } {
+  if (isEngineError(error)) {
+    // Coded engine errors keep their code/details through the TickFailure
+    // path so agents branch on `failure.error.code`, not message prose.
+    // Fields are absent (not null) for non-engine errors — JSON-stable.
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+      code: error.code,
+      ...(error.details === null ? {} : { details: error.details }),
+    };
+  }
+
   if (error instanceof Error) {
     return {
       name: error.name,
@@ -191,8 +210,9 @@ export function describeIntervalValue(raw: unknown): string {
 export function validateSystemInterval(name: string, raw: number | undefined): number {
   if (raw === undefined) return 1;
   if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 1) {
-    throw new Error(
+    throw new EngineError('system_interval_invalid',
       `System '${name}' interval must be a safe integer >= 1 (got ${describeIntervalValue(raw)})`,
+      { details: { system: name, value: describeIntervalValue(raw) } },
     );
   }
   return raw;
@@ -205,13 +225,15 @@ export function validateSystemIntervalOffset(
 ): number {
   if (raw === undefined) return 0;
   if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw < 0) {
-    throw new Error(
+    throw new EngineError('system_interval_offset_invalid',
       `System '${name}' intervalOffset must be a safe integer >= 0 (got ${describeIntervalValue(raw)})`,
+      { details: { system: name, value: describeIntervalValue(raw) } },
     );
   }
   if (raw >= interval) {
-    throw new Error(
+    throw new EngineError('system_interval_offset_invalid',
       `System '${name}' intervalOffset (${raw}) must be < interval (${interval})`,
+      { details: { system: name, intervalOffset: raw, interval } },
     );
   }
   return raw;
@@ -235,22 +257,22 @@ export function insertSorted(values: EntityId[], value: EntityId): void {
 
 export function validateWorldConfig(config: WorldConfig): void {
   if (!Number.isInteger(config.gridWidth) || config.gridWidth <= 0) {
-    throw new RangeError('gridWidth must be a positive integer');
+    throw new EngineRangeError('config_invalid', 'gridWidth must be a positive integer', { details: { field: 'gridWidth' } });
   }
   if (!Number.isInteger(config.gridHeight) || config.gridHeight <= 0) {
-    throw new RangeError('gridHeight must be a positive integer');
+    throw new EngineRangeError('config_invalid', 'gridHeight must be a positive integer', { details: { field: 'gridHeight' } });
   }
   if (!Number.isFinite(config.tps) || config.tps <= 0) {
-    throw new RangeError('tps must be a finite positive number');
+    throw new EngineRangeError('config_invalid', 'tps must be a finite positive number', { details: { field: 'tps' } });
   }
   if (
     config.maxTicksPerFrame !== undefined &&
     (!Number.isInteger(config.maxTicksPerFrame) || config.maxTicksPerFrame <= 0)
   ) {
-    throw new RangeError('maxTicksPerFrame must be a positive integer');
+    throw new EngineRangeError('config_invalid', 'maxTicksPerFrame must be a positive integer', { details: { field: 'maxTicksPerFrame' } });
   }
   if (config.positionKey !== undefined && config.positionKey.length === 0) {
-    throw new Error('positionKey must not be empty');
+    throw new EngineError('config_invalid', 'positionKey must not be empty', { details: { field: 'positionKey' } });
   }
   if (
     config.instrumentationProfile !== undefined &&
@@ -258,8 +280,9 @@ export function validateWorldConfig(config: WorldConfig): void {
     config.instrumentationProfile !== 'minimal' &&
     config.instrumentationProfile !== 'release'
   ) {
-    throw new Error(
+    throw new EngineError('config_invalid',
       "instrumentationProfile must be 'full', 'minimal', or 'release'",
+      { details: { field: 'instrumentationProfile' } },
     );
   }
 }
@@ -271,7 +294,7 @@ export function asPosition(value: unknown): Position {
     !('x' in value) ||
     !('y' in value)
   ) {
-    throw new Error('Position component must be an object with x and y');
+    throw new EngineError('position_invalid_shape', 'Position component must be an object with x and y');
   }
   const position = value as { x: unknown; y: unknown };
   if (
@@ -280,7 +303,7 @@ export function asPosition(value: unknown): Position {
     !Number.isInteger(position.x) ||
     !Number.isInteger(position.y)
   ) {
-    throw new RangeError('Position coordinates must be integers');
+    throw new EngineRangeError('position_not_integer', 'Position coordinates must be integers');
   }
   return { x: position.x, y: position.y };
 }

@@ -144,11 +144,19 @@ export interface TickFailure {
   commandType: string | null;
   submissionSequence: number | null;
   systemName: string | null;
+  /** Classifies the FAILURE (e.g. 'system_threw', 'world_poisoned') — not
+   *  the thrown error. The thrown EngineError's own code/details live in
+   *  `error.code` / `error.details` below. */
   details: JsonValue | null;
   error: {
     name: string;
     message: string;
     stack: string | null;
+    /** Present iff the thrown error was an EngineError/EngineRangeError/
+     *  EngineTypeError — the agent-branchable code (absent, not null,
+     *  otherwise). */
+    code?: string;
+    details?: JsonValue;
   } | null;
 }
 

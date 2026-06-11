@@ -13,6 +13,7 @@
 // historically lived here so `export * from './world.js'` keeps the exact
 // same package surface.
 
+import { EngineError } from './engine-error.js';
 import type { WorldSnapshot } from './serializer.js';
 import type { EntityId } from './types.js';
 import { EntityManager } from './entity-manager.js';
@@ -163,7 +164,7 @@ export class World<
   ): World<TEventMap, TCommandMap, TComponents, TState> {
     const version = (snapshot as { version: number }).version;
     if (version < 1 || version > 5) {
-      throw new Error(`Unsupported snapshot version: ${version}`);
+      throw new EngineError('snapshot_unsupported_version', `Unsupported snapshot version: ${version}`, { details: { version } });
     }
 
     // Validate snapshot.tick at the boundary before any mutating work runs
@@ -174,8 +175,9 @@ export class World<
       !Number.isSafeInteger(snapshot.tick) ||
       snapshot.tick < 0
     ) {
-      throw new Error(
+      throw new EngineError('snapshot_invalid_tick',
         `WorldSnapshot.tick must be a non-negative safe integer (got ${String(snapshot.tick)})`,
+        { details: { tick: String(snapshot.tick) } },
       );
     }
 
@@ -189,12 +191,13 @@ export class World<
 
     const assertEntityIdAlive = (rawId: unknown, ctx: string): EntityId => {
       if (typeof rawId !== 'number' || !Number.isInteger(rawId) || rawId < 0) {
-        throw new Error(
+        throw new EngineError('snapshot_invalid_entity_key',
           `${ctx} key must be a non-negative integer (got ${JSON.stringify(rawId)})`,
+          { details: { context: ctx, key: String(rawId) } },
         );
       }
       if (!world.entityManager.isAlive(rawId)) {
-        throw new Error(`${ctx} references dead entity ${rawId}`);
+        throw new EngineError('snapshot_dead_entity', `${ctx} references dead entity ${rawId}`, { details: { context: ctx, entity: rawId } });
       }
       return rawId;
     };
@@ -258,13 +261,15 @@ export class World<
       for (const [entityIdStr, tagList] of Object.entries(snapshot.tags)) {
         const entityId = Number(entityIdStr);
         if (!Number.isInteger(entityId) || entityId < 0) {
-          throw new Error(
+          throw new EngineError('snapshot_invalid_entity_key',
             `Invalid entity id key in snapshot.tags: ${JSON.stringify(entityIdStr)}`,
+            { details: { key: entityIdStr } },
           );
         }
         if (!world.entityManager.isAlive(entityId)) {
-          throw new Error(
+          throw new EngineError('snapshot_dead_entity',
             `snapshot.tags references dead entity ${entityId}`,
+            { details: { entity: entityId } },
           );
         }
         for (const tag of tagList as string[]) {
@@ -276,13 +281,15 @@ export class World<
       for (const [entityIdStr, metaRecord] of Object.entries(snapshot.metadata)) {
         const entityId = Number(entityIdStr);
         if (!Number.isInteger(entityId) || entityId < 0) {
-          throw new Error(
+          throw new EngineError('snapshot_invalid_entity_key',
             `Invalid entity id key in snapshot.metadata: ${JSON.stringify(entityIdStr)}`,
+            { details: { key: entityIdStr } },
           );
         }
         if (!world.entityManager.isAlive(entityId)) {
-          throw new Error(
+          throw new EngineError('snapshot_dead_entity',
             `snapshot.metadata references dead entity ${entityId}`,
+            { details: { entity: entityId } },
           );
         }
         for (const [key, value] of Object.entries(metaRecord as Record<string, string | number>)) {

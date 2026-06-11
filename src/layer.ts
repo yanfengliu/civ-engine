@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError, EngineTypeError } from './engine-error.js';
 import { assertJsonCompatible, jsonFingerprint } from './json.js';
 
 export interface LayerOptions<T> {
@@ -49,8 +50,9 @@ export class Layer<T> {
     this.width = Math.ceil(options.worldWidth / blockSize);
     this.height = Math.ceil(options.worldHeight / blockSize);
     if (!Number.isSafeInteger(this.width * this.height)) {
-      throw new RangeError(
+      throw new EngineRangeError('layer_dimensions_overflow',
         `Layer dimensions ${this.width} x ${this.height} exceed Number.MAX_SAFE_INTEGER`,
+        { details: { width: this.width, height: this.height } },
       );
     }
     this._defaultIsPrimitive = isImmutablePrimitive(options.defaultValue);
@@ -187,7 +189,7 @@ export class Layer<T> {
 
   static fromState<T>(state: LayerState<T>): Layer<T> {
     if (state === null || typeof state !== 'object') {
-      throw new TypeError('Layer.fromState requires a non-null object');
+      throw new EngineTypeError('layer_state_invalid', 'Layer.fromState requires a non-null object');
     }
     const {
       worldWidth,
@@ -197,12 +199,12 @@ export class Layer<T> {
       cells,
     } = state as Partial<LayerState<T>>;
     if (blockSize === undefined || blockSize === null) {
-      throw new Error(
+      throw new EngineError('layer_state_invalid',
         'Layer.fromState state.blockSize is required (cannot be omitted)',
       );
     }
     if (!Array.isArray(cells)) {
-      throw new TypeError('Layer.fromState state.cells must be an array');
+      throw new EngineTypeError('layer_state_invalid', 'Layer.fromState state.cells must be an array');
     }
     const layer = new Layer<T>({
       worldWidth: worldWidth as number,
@@ -214,18 +216,19 @@ export class Layer<T> {
     const total = layer.width * layer.height;
     for (const entry of cells) {
       if (!Array.isArray(entry) || entry.length !== 2) {
-        throw new TypeError(
+        throw new EngineTypeError('layer_state_invalid',
           'Layer.fromState each cell entry must be a [index, value] tuple',
         );
       }
       const [index, value] = entry as [unknown, T];
       if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || index >= total) {
-        throw new RangeError(
+        throw new EngineRangeError('layer_index_out_of_bounds',
           `Layer cell index ${String(index)} is out of range [0, ${total})`,
+          { details: { index: String(index), total } },
         );
       }
       if (seen.has(index)) {
-        throw new Error(`Layer state contains duplicate cell index ${index}`);
+        throw new EngineError('layer_state_duplicate_cell', `Layer state contains duplicate cell index ${index}`, { details: { index } });
       }
       seen.add(index);
       // Canonicalize: drop entries that already match the default. For
@@ -275,26 +278,30 @@ export class Layer<T> {
 
   private assertCellInBounds(cx: number, cy: number): void {
     if (!Number.isInteger(cx) || !Number.isInteger(cy)) {
-      throw new RangeError(
+      throw new EngineRangeError('layer_coords_not_integer',
         `Layer cell coordinates must be integers (got ${cx}, ${cy})`,
+        { details: { x: cx, y: cy } },
       );
     }
     if (cx < 0 || cx >= this.width || cy < 0 || cy >= this.height) {
-      throw new RangeError(
+      throw new EngineRangeError('layer_out_of_bounds',
         `Layer cell (${cx}, ${cy}) out of bounds [0, ${this.width}) x [0, ${this.height})`,
+        { details: { x: cx, y: cy } },
       );
     }
   }
 
   private assertWorldInBounds(wx: number, wy: number): void {
     if (!Number.isInteger(wx) || !Number.isInteger(wy)) {
-      throw new RangeError(
+      throw new EngineRangeError('layer_coords_not_integer',
         `Layer world coordinates must be integers (got ${wx}, ${wy})`,
+        { details: { x: wx, y: wy } },
       );
     }
     if (wx < 0 || wx >= this.worldWidth || wy < 0 || wy >= this.worldHeight) {
-      throw new RangeError(
+      throw new EngineRangeError('layer_out_of_bounds',
         `Layer world coord (${wx}, ${wy}) out of bounds [0, ${this.worldWidth}) x [0, ${this.worldHeight})`,
+        { details: { x: wx, y: wy } },
       );
     }
   }
@@ -302,8 +309,9 @@ export class Layer<T> {
 
 function assertSafePositiveInteger(value: number, label: string): void {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(
+    throw new EngineError('layer_dimension_invalid',
       `${label} must be a safe positive integer (got ${String(value)})`,
+      { details: { label, value: String(value) } },
     );
   }
 }

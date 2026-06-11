@@ -1,3 +1,4 @@
+import { EngineRangeError } from './engine-error.js';
 import type { SessionBundle } from './session-bundle.js';
 import type { JsonValue } from './json.js';
 
@@ -39,7 +40,7 @@ export function runMetrics<
   const names = new Set<string>();
   for (const m of metrics) {
     if (names.has(m.name)) {
-      throw new RangeError(`duplicate metric name: ${m.name}`);
+      throw new EngineRangeError('metric_name_duplicate', `duplicate metric name: ${m.name}`, { details: { name: m.name } });
     }
     names.add(m.name);
   }

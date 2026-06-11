@@ -2,6 +2,7 @@
 // sorted query cache, public query iterators, and the spatial-index sync
 // helpers that keep `SpatialGrid` lock-step with position writes.
 
+import { EngineError, EngineRangeError } from './engine-error.js';
 import type { EntityId, Position } from './types.js';
 import type { ComponentStore } from './component-store.js';
 import { asPosition, insertSorted } from './world-internal.js';
@@ -67,7 +68,7 @@ export abstract class WorldQueries<
     if (!Number.isInteger(cx) || !Number.isInteger(cy)) {
       // Fail fast like the pre-v0.8.16 implementation did (via assertBounds):
       // a non-finite coordinate would otherwise loop forever.
-      throw new RangeError(`findNearest coordinates must be integers (got ${cx}, ${cy})`);
+      throw new EngineRangeError('query_coords_not_integer', `findNearest coordinates must be integers (got ${cx}, ${cy})`, { details: { cx, cy } });
     }
     const w = this.spatialGrid.width;
     const h = this.spatialGrid.height;
@@ -228,7 +229,7 @@ export abstract class WorldQueries<
     unique.sort();
     for (const key of unique) {
       if (!this.componentStores.has(key)) {
-        throw new Error(`Component '${key}' is not registered`);
+        throw new EngineError('component_not_registered', `Component '${key}' is not registered`, { details: { key } });
       }
     }
     return unique;
@@ -273,7 +274,7 @@ export abstract class WorldQueries<
     for (const key of keys) {
       const bit = this.componentBits.get(key);
       if (bit === undefined) {
-        throw new Error(`Component '${key}' is not registered`);
+        throw new EngineError('component_not_registered', `Component '${key}' is not registered`, { details: { key } });
       }
       mask |= bit;
     }

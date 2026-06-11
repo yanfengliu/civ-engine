@@ -1,3 +1,4 @@
+import { EngineError, EngineRangeError } from './engine-error.js';
 import type { Position } from './types.js';
 
 export type VisibilityPlayerId = number | string;
@@ -246,19 +247,19 @@ function normalizeKey(value: string | number): string {
 
 function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
-    throw new Error(`${label} must be a positive integer`);
+    throw new EngineError('visibility_value_invalid', `${label} must be a positive integer`, { details: { label } });
   }
 }
 
 function assertNonNegativeFinite(value: number, label: string): void {
   if (!Number.isFinite(value) || value < 0) {
-    throw new Error(`${label} must be a finite non-negative number`);
+    throw new EngineError('visibility_value_invalid', `${label} must be a finite non-negative number`, { details: { label } });
   }
 }
 
 function assertCellIndex(index: number, width: number, height: number): void {
   if (!Number.isInteger(index) || index < 0 || index >= width * height) {
-    throw new Error(`Cell index ${index} is out of bounds`);
+    throw new EngineError('visibility_index_out_of_bounds', `Cell index ${index} is out of bounds`, { details: { index } });
   }
 }
 
@@ -269,9 +270,9 @@ function assertGridPoint(
   height: number,
 ): void {
   if (!Number.isInteger(x) || !Number.isInteger(y)) {
-    throw new Error('Grid coordinates must be integers');
+    throw new EngineError('visibility_coords_not_integer', 'Grid coordinates must be integers');
   }
   if (x < 0 || x >= width || y < 0 || y >= height) {
-    throw new RangeError(`Grid coordinate (${x}, ${y}) is out of bounds`);
+    throw new EngineRangeError('visibility_out_of_bounds', `Grid coordinate (${x}, ${y}) is out of bounds`, { details: { x, y } });
   }
 }

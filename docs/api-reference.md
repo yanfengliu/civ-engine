@@ -46,6 +46,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Session Recording — scenarioResultToBundle](#session-recording--scenarioresulttobundle)
 - [Bundle Corpus Index](#bundle-corpus-index-v083)
 - [Behavioral Metrics](#behavioral-metrics-v082)
+- [Engine Errors](#engine-errors-v0819)
 
 ---
 
@@ -318,11 +319,15 @@ interface TickFailure {
     name: string;
     message: string;
     stack: string | null;
+    code?: string;      // v0.8.19: present iff the thrown error was an EngineError family member
+    details?: JsonValue; // v0.8.19: the thrown EngineError's own details (absent, not null, otherwise)
   } | null;
 }
 ```
 
 Structured runtime failure for one tick. Returned by `world.stepWithResult()`, emitted through `world.onTickFailure()`, exposed through `world.getLastTickFailure()`, and forwarded by `ClientAdapter`.
+
+**Two-level codes — branch on the right one.** The top-level `code`/`details` classify the *failure* (`'system_threw'`, `'command_handler_threw'`, `'world_poisoned'`, …). The nested `error.code`/`error.details` carry the *thrown engine error* when a system/handler tripped a coded engine throw (see [Engine Errors](#engine-errors-v0819)) — e.g. a system touching a dead entity yields `failure.code === 'system_threw'` with `failure.error.code === 'entity_not_alive'`. User-thrown plain errors leave `error.code`/`error.details` absent.
 
 ### `WorldStepResult`
 
@@ -5877,3 +5882,75 @@ interface BundleHotspotsOptions {
 - <3 metric-bearing samples → no duration outliers (need ≥3 for meaningful z-score).
 - All-identical durations (stdev = 0) → no duration outliers (no signal in the data).
 - Only the high tail is flagged — fast ticks aren't anomalies for a recorded session.
+
+## Engine Errors (v0.8.19)
+
+```typescript
+// src/engine-error.ts
+interface EngineErrorOptions { details?: JsonValue }
+
+class EngineError extends Error {
+  readonly code: string;             // stable snake_case discriminator
+  readonly details: JsonValue | null; // structured payload (null when none)
+  constructor(code: string, message: string, options?: EngineErrorOptions);
+}
+class EngineRangeError extends RangeError { /* same shape */ }
+class EngineTypeError extends TypeError  { /* same shape */ }
+
+function isEngineError(e: unknown): e is EngineError | EngineRangeError | EngineTypeError;
+```
+
+Every error the core engine throws carries a stable machine-readable `code` as a first-class field — agents branch on `code`, never on message prose. Messages are unchanged from pre-0.8.19 (regex-based handling keeps working), and historical classes are preserved: sites that threw `RangeError` throw `EngineRangeError` (`instanceof RangeError` still true); `Layer`'s `TypeError` sites throw `EngineTypeError`. `error.name` now reads `'EngineError'`/`'EngineRangeError'`/`'EngineTypeError'` — a wire-visible delta in `TickFailure.error.name`, recorded bundles, and `ClientAdapter` messages (see changelog 0.8.19).
+
+`details` is **sanitized to strict JSON at construction**: non-finite numbers arrive as their string forms (`'NaN'`, `'Infinity'`, `'-Infinity'`), `undefined` object entries are dropped, non-JSON leaves are stringified, cycles become `'[Circular]'`. Validation errors routinely embed the offending value, and `TickFailure` embeds `details` in JSON-asserted, JSON-cloned payloads — an error about a `NaN` input must not itself break the failure path.
+
+`isEngineError` is **instanceof-based**, not duck-typed — a string-`code` check would false-positive on Node `ErrnoException`s (`'ENOENT'` on a plain `Error`), which this engine surfaces via `FileSink`.
+
+**Error families.** The session/corpus/viewer/strict-mode stack predates this module and carries its codes in `details.code` on `SessionRecordingError` subclasses (`BundleIntegrityError`, `BundleViewerError`, `StrictModeViolationError`, …). Codes are unique *within* each family, not across families (`world_poisoned` exists in both). Discriminate by family first (`isEngineError(e)` vs `e instanceof SessionRecordingError`), then by code. Unifying the two shapes is a 1.0-surface question.
+
+**Inside a tick**, thrown engine errors do not escape `step()` raw — they surface as `TickFailure` with the code preserved on `failure.error.code` / `failure.error.details` (see [`TickFailure`](#tickfailure)).
+
+### Error-code table
+
+`details` column lists the structured payload keys; `—` means `details` is `null`. Classes: E = EngineError, R = EngineRangeError, T = EngineTypeError.
+
+| Code | Thrown by | Meaning | Details |
+|---|---|---|---|
+| `entity_not_alive` | World (any entity-taking API) | Entity id is dead or never existed | `{ entity }` (E) |
+| `component_not_registered` | World components/queries | Component key never registered | `{ key }` (E) |
+| `component_already_registered` | `registerComponent` | Duplicate component key | `{ key }` (E) |
+| `component_missing_on_entity` | `patchComponent` | Entity lacks the component | `{ entity, key }` (E) |
+| `component_data_undefined` | ComponentStore | Component data must not be `undefined` | — (E) |
+| `entity_state_invalid` | `EntityManager.fromState` | Malformed entity-manager snapshot state | `{ index }` / `{ id }` per site (E) |
+| `handler_already_registered` | `onCommand` | Duplicate command handler | `{ type }` (E) |
+| `validator_invalid_return` | command validation | Validator returned non-boolean/non-object | — (E) |
+| `rejection_code_empty` | command validation | Rejection object with empty code | — (E) |
+| `system_interval_invalid`, `system_interval_offset_invalid` | `registerSystem` | Bad interval/offset | `{ system, value }` / `{ system, intervalOffset, interval }` (E) |
+| `system_unknown_target`, `system_ambiguous_target`, `system_cross_phase_constraint` | `registerSystem` ordering | Bad before/after constraint | `{ system, target }` (+ `{ phase, targetPhase }` on cross-phase) (E) |
+| `system_unknown_phase` | `registerSystem` | Unknown phase name | `{ phase }` (E) |
+| `system_cycle` | system sort (first step) | Ordering constraints form a cycle | `{ systems }` (E) |
+| `config_invalid` | `new World`, `GameLoop` | Invalid config field | `{ field }` (R/E) |
+| `speed_invalid` | `World.setSpeed` | Non-finite/non-positive speed | — (E) |
+| `tick_counter_saturated` | GameLoop | Tick counter hit MAX_SAFE_INTEGER | — (R) |
+| `position_invalid_shape`, `position_not_integer`, `position_out_of_bounds` | position writes (World, SpatialGrid) | Malformed/out-of-grid position | `{ x, y }` on grid sites (E/R) |
+| `query_coords_not_integer` | `findNearest` | Non-integer query coordinates | `{ cx, cy }` (R) |
+| `meta_not_finite`, `meta_not_unique` | `setMeta` | Non-finite number / unique-index collision | `{ key, value }` / `{ key, value, owner }` (E) |
+| `snapshot_unsupported_version` | `applySnapshot`, `diffSnapshots`, `applyTickDiff` | Snapshot version mismatch | `{ version }` / `{ a, b }` on diffSnapshots (E) |
+| `snapshot_invalid_tick`, `snapshot_invalid_entity_key`, `snapshot_dead_entity` | `applySnapshot` / `World.deserialize` | Malformed snapshot payload | `{ tick }` / `{ key, context? }` / `{ entity, context? }` (E) |
+| `json_incompatible` | `assertJsonCompatible` (setState, component data, validator rejection details, …) | Value is not plain JSON | `{ context }` (E) |
+| `transaction_precondition_side_effect`, `transaction_precondition_set`, `transaction_precondition_delete` | CommandTransaction | Precondition attempted a mutation | `{ property }` (E) |
+| `transaction_require_not_function`, `transaction_consumed` | CommandTransaction | API misuse / reuse after commit-abort | `{ reason }` on consumed (E) |
+| `layer_dimensions_overflow`, `layer_dimension_invalid`, `layer_state_invalid`, `layer_index_out_of_bounds`, `layer_state_duplicate_cell`, `layer_coords_not_integer`, `layer_out_of_bounds` | Layer | Construction/state/coordinate validation | `{ width, height }`, `{ index, total }`, `{ x, y }`, `{ label, value }` per site (R/T/E) |
+| `noise_octaves_invalid`, `noise_persistence_invalid`, `noise_lacunarity_invalid` | `octaveNoise2D` | Bad octave config | `{ octaves }` / `{ persistence }` / `{ lacunarity }` (R) |
+| `grid_radius_invalid`, `grid_dimension_invalid` | SpatialGrid | Bad radius/dimensions | `{ radius }` / `{ label }` (R) |
+| `occupancy_*` (`area_empty`, `footprint_empty`, `index_out_of_bounds`, `value_invalid`, `coords_not_integer`, `out_of_bounds`, `block_occupied`, `block_crowded`, `crowding_disabled`, `state_invalid`, `metadata_kind_empty`) | OccupancyGrid / OccupancyBinding | Occupancy validation & invariants | `{ index }`, `{ label }`, `{ x, y }`, `{ entity }` per site (E/R) |
+| `subcell_state_invalid`, `subcell_slots_empty`, `subcell_slot_offset_invalid`, `subcell_slot_offset_duplicate`, `subcell_slot_out_of_bounds` | SubcellOccupancyGrid | Subcell slot validation | `{ entity, x, y }`, `{ slot, x, y }`, `{ x, y }`, `{ slot }` per site (E/R) |
+| `path_budget_invalid`, `path_config_missing_grid`, `path_coords_not_integer`, `path_out_of_bounds`, `path_value_invalid` | PathService | Path request validation | `{ label }`, `{ label, x, y }` per site (E/R) |
+| `visibility_value_invalid`, `visibility_index_out_of_bounds`, `visibility_coords_not_integer`, `visibility_out_of_bounds` | VisibilityMap | Visibility grid validation | `{ label }`, `{ index }`, `{ x, y }` per site (E/R) |
+| `rng_state_invalid`, `rng_seed_invalid` | Random | Bad RNG state/seed | — (R) |
+| `resource_already_registered`, `resource_not_registered`, `resource_state_invalid`, `resource_value_invalid` | ResourceStore | Resource registry/state validation | `{ key }`, `{ id }`, `{ label }` per site (E) |
+| `scenario_failure_code_empty`, `scenario_steps_invalid` | ScenarioRunner | Scenario config validation | — (E) |
+| `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid` | synthetic playtest / AI playtester | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` (R) |
+| `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
+
+The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.19 - 2026-06-10
+
+Coded engine errors (objective `engine-error-codes`, 3/7 of the improvement wave; full design pipeline — 2 design iterations, see `docs/threads/done/engine-error-codes/`). The core engine's entire throw surface — 130 sites across 31 files — now carries stable machine-readable codes.
+
+- **New public `EngineError` / `EngineRangeError` / `EngineTypeError` classes** (`code: string` first-class + `details: JsonValue | null`) and an instanceof-based `isEngineError()` guard (a duck-typed code check would false-positive on Node errno errors). Historical classes preserved: `RangeError` sites keep `instanceof RangeError`, `Layer`'s `TypeError` sites keep `instanceof TypeError`.
+- **Every core throw site migrated** (World layers, stores, json helpers, serializer boundary, CommandTransaction, GameLoop, and all standalone utilities: Layer/Noise/Occupancy/Subcell/PathService/VisibilityMap/SpatialGrid/Random/ResourceStore/ScenarioRunner/playtest harnesses/behavioral metrics). **Messages are byte-identical** — existing regex-based handling keeps working; the entire pre-existing test suite passed unmodified as the non-breakage proof. Where messages interpolate identifiers, the same values land in `details` (`{ entity }`, `{ key }`, `{ field }`, …). `details` is sanitized to strict JSON at construction (non-finite numbers become `'NaN'`/`'Infinity'` strings, cycles become `'[Circular]'`) so an error about a non-finite input can never break the JSON-asserted TickFailure path it is embedded in.
+- **`TickFailure.error` gains optional `code`/`details`**: engine errors thrown inside systems/handlers keep their code through the failure path (`failure.error.code === 'entity_not_alive'` under `failure.code === 'system_threw'`). Absent (not null) for plain user-thrown errors — existing failure payloads unchanged.
+- **Completeness gate**: `tests/engine-error.test.ts` scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules, so new sites cannot regress to uncoded throws.
+- **Behavior callout — `error.name` wire delta:** errors escaping through `TickFailure.error.name`, recorded bundles, and `ClientAdapter` messages now read `'EngineError'`/`'EngineRangeError'`/`'EngineTypeError'` instead of `'Error'`/`'RangeError'`. Messages, classes, and control flow are unchanged; only consumers string-matching `name` need to adjust.
+- The session/corpus/viewer/strict-mode stack keeps its established `details.code` family (`SessionRecordingError` subclasses); discrimination across families is documented in the api-reference Engine Errors section. Unification deferred to the 1.0-surface objective.
+
+### Validation
+
+14 tests in `tests/engine-error.test.ts` (class behavior, details sanitization, guard semantics incl. errno rejection, per-domain migrated-site assertions of unchanged message + new code/details, TickFailure pass-through both ways incl. the NaN-input repro, completeness gate). Full suite 1152 passed + 2 todo with zero pre-existing test modifications. All four gates + benchmark gate pass. Multi-CLI implementation review (Codex + Gemini + Claude): impl-1 HIGH (non-JSON details could break the failure path) fixed via construction-time sanitization; details coverage extended to every interpolating site the table documents.
+
 ## 0.8.18 - 2026-06-10
 
 worldFactory registration manifest — fail-fast replay verification (objective `registration-manifest`, 2/7 of the improvement wave; the full review called this "the single highest-leverage AI-native improvement available"). Full design pipeline: 2 design iterations to unanimous CONVERGED, including a design-1 HIGH that reshaped the comparison semantics (see ADR 44).

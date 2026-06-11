@@ -3,6 +3,7 @@
 // surface (register/set/get/patch/remove/setPosition) that keeps signatures
 // and the spatial index in sync via the layers below.
 
+import { EngineError } from './engine-error.js';
 import type { EntityId, EntityRef, Position } from './types.js';
 import { asPosition } from './world-internal.js';
 import { assertWritable } from './world-strict-mode.js';
@@ -103,7 +104,7 @@ export abstract class WorldEntities<
   registerComponent<T>(key: string, options?: ComponentOptions): void;
   registerComponent(key: string, options?: ComponentOptions): void {
     if (this.componentStores.has(key)) {
-      throw new Error(`Component '${key}' is already registered`);
+      throw new EngineError('component_already_registered', `Component '${key}' is already registered`, { details: { key } });
     }
     this.componentStores.set(key, new ComponentStore<unknown>(options));
     if (options) {
@@ -182,7 +183,7 @@ export abstract class WorldEntities<
     this.assertAlive(entity);
     const current = this.getComponent(entity, key);
     if (current === undefined) {
-      throw new Error(`Entity ${entity} does not have component '${key}'`);
+      throw new EngineError('component_missing_on_entity', `Entity ${entity} does not have component '${key}'`, { details: { entity, key } });
     }
     const next = patch(current) ?? current;
     this.setComponent(entity, key, next);
