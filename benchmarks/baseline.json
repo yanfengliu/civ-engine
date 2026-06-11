@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "generatedWith": {
+    "engineVersion": "0.8.16",
+    "node": "v22.14.0",
+    "date": "2026-06-11"
+  },
+  "scenarios": {
+    "medium": {
+      "counters": {
+        "queryCalls": 40,
+        "queryResults": 40960,
+        "queryCacheHits": 40,
+        "queryCacheMisses": 0,
+        "membershipChecks": 0,
+        "explicitSyncs": 20480,
+        "diffBytes": 458076,
+        "pathCacheHitsSecondPass": 64,
+        "pathCacheMissesSecondPass": 0,
+        "occupancyBuildings": 192,
+        "occupancyResources": 384,
+        "occupancyUnits": 1024,
+        "occupancyBlockedHits": 52,
+        "occupancyCrowdedClaims": 32,
+        "occupancyCellStatusQueries": 512,
+        "occupancyCrowdedSlotChecks": 2048,
+        "occupancyBlockedQueries": 2040,
+        "occupancyClaimCellChecks": 0,
+        "subcellSlotChecks": 5712
+      },
+      "timeRatio": 13.021
+    },
+    "large": {
+      "counters": {
+        "queryCalls": 16,
+        "queryResults": 163840,
+        "queryCacheHits": 16,
+        "queryCacheMisses": 0,
+        "membershipChecks": 0,
+        "explicitSyncs": 81920,
+        "diffBytes": 2007226,
+        "pathCacheHitsSecondPass": 128,
+        "pathCacheMissesSecondPass": 0,
+        "occupancyBuildings": 256,
+        "occupancyResources": 512,
+        "occupancyUnits": 5120,
+        "occupancyBlockedHits": 30,
+        "occupancyCrowdedClaims": 40,
+        "occupancyCellStatusQueries": 2560,
+        "occupancyCrowdedSlotChecks": 10240,
+        "occupancyBlockedQueries": 10740,
+        "occupancyClaimCellChecks": 0,
+        "subcellSlotChecks": 29392
+      },
+      "timeRatio": 103.509
+    },
+    "churn": {
+      "counters": {
+        "queryCalls": 160,
+        "queryResults": 338000,
+        "queryCacheHits": 160,
+        "queryCacheMisses": 0,
+        "membershipChecks": 96000,
+        "explicitSyncs": 3000,
+        "diffBytes": 223169,
+        "churnCreated": 3000,
+        "churnDestroyed": 3000
+      },
+      "timeRatio": 4.99
+    }
+  }
+}

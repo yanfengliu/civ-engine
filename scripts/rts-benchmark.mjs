@@ -1,86 +1,158 @@
+// RTS-scale benchmark + regression gate entry point. Scenario/run logic lives
+// here; comparison, calibration, baseline schema, and markdown rendering live
+// in ./benchmark-gate.mjs. Design: docs/threads/done/benchmark-gate/DESIGN.md.
+//
+// Tier-1 determinism invariants every scenario MUST keep (the gate's exact
+// counters depend on them): no Math.random / Date.now / wall-clock control
+// flow (budgets are counts), integer-only component data, seeded WorldConfig.
+
 import { performance } from 'node:perf_hooks';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ENGINE_VERSION, World } from '../dist/index.js';
 import {
-  OccupancyBinding,
-  OccupancyGrid,
-  World,
-  createGridPathQueue,
-} from '../dist/index.js';
+  BASELINE_SCHEMA_VERSION,
+  DEFAULT_RATIO_MAX,
+  checkReport,
+  formatFailures,
+  renderMarkdown,
+  round,
+  runCalibration,
+  validateBaseline,
+} from './benchmark-gate.mjs';
+import {
+  benchmarkOccupancy,
+  benchmarkPaths,
+  createBenchmarkOccupancy,
+} from './benchmark-workloads.mjs';
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const BASELINE_PATH = join(REPO_ROOT, 'benchmarks', 'baseline.json');
+const MEASURED_RUNS = 3; // median for tier-2; identical-counter assert for tier-1
+
+const CHURN = {
+  width: 96, height: 96,
+  baseEntities: 4_000,
+  perTick: 150,
+  ticks: 20,
+  warmup: 3,
+};
 
 const args = parseArgs(process.argv.slice(2));
 const scenarios = [
-  {
-    name: 'medium',
-    width: 128,
-    height: 128,
-    entities: 1024,
-    ticks: 20,
-    pathRequests: 64,
-    pathBudget: 16,
-  },
-  {
-    name: 'large',
-    width: 512,
-    height: 512,
-    entities: 10_240,
-    ticks: 8,
-    pathRequests: 128,
-    pathBudget: 24,
-  },
+  { name: 'medium', kind: 'standard', width: 128, height: 128, entities: 1024, ticks: 20, pathRequests: 64, pathBudget: 16 },
+  { name: 'large', kind: 'standard', width: 512, height: 512, entities: 10_240, ticks: 8, pathRequests: 128, pathBudget: 24 },
+  { name: 'churn', kind: 'churn', width: CHURN.width, height: CHURN.height, entities: CHURN.baseEntities, ticks: CHURN.ticks },
 ];
 
 if (args.stress) {
-  scenarios.push({
-    name: 'stress',
-    width: 1024,
-    height: 1024,
-    entities: 50_000,
-    ticks: 4,
-    pathRequests: 256,
-    pathBudget: 32,
-  });
+  scenarios.push({ name: 'stress', kind: 'standard', width: 1024, height: 1024, entities: 50_000, ticks: 4, pathRequests: 256, pathBudget: 32 });
 }
 
-const report = {
-  command: 'npm run benchmark:rts',
-  format: args.format,
-  scenarios: scenarios.map(runScenario),
-};
+main();
 
-if (args.format === 'markdown') {
-  process.stdout.write(renderMarkdown(report));
-} else {
-  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+function main() {
+  const calibrationMs = runCalibration();
+  const results = scenarios.map((config) => measureScenario(config, calibrationMs));
+  const report = { command: 'npm run benchmark:rts', format: args.format, calibrationMs: round(calibrationMs), scenarios: results };
+
+  if (args.updateBaseline) {
+    writeBaseline(report);
+    process.stdout.write(`baseline written to ${BASELINE_PATH}\n`);
+    return;
+  }
+  if (args.check) {
+    runCheck(report);
+    return;
+  }
+  process.stdout.write(args.format === 'markdown' ? renderMarkdown(report) : `${JSON.stringify(report, null, 2)}\n`);
+}
+
+/** Run a scenario MEASURED_RUNS times: median wall time for tier 2, and an
+ *  identical-counters assertion across runs (free determinism self-check). */
+function measureScenario(config, calibrationMs) {
+  const runs = [];
+  for (let i = 0; i < MEASURED_RUNS; i++) {
+    const start = performance.now();
+    const result = config.kind === 'churn' ? runChurnScenario(config) : runScenario(config);
+    result.wallMs = performance.now() - start;
+    runs.push(result);
+  }
+  const first = JSON.stringify(runs[0].counters);
+  for (let i = 1; i < runs.length; i++) {
+    if (JSON.stringify(runs[i].counters) !== first) {
+      throw new Error(
+        `determinism violation in scenario '${config.name}': run 0 counters ${first} != run ${i} counters ${JSON.stringify(runs[i].counters)}`,
+      );
+    }
+  }
+  const sorted = runs.map((r) => r.wallMs).sort((a, b) => a - b);
+  const medianWall = sorted[Math.floor(sorted.length / 2)];
+  const chosen = runs[0];
+  chosen.timeRatio = round(medianWall / calibrationMs);
+  delete chosen.wallMs;
+  return chosen;
 }
 
 function runScenario(config) {
   const memoryBefore = process.memoryUsage().heapUsed;
   const world = createBenchmarkWorld(config);
 
-  for (let i = 0; i < 3; i++) {
-    world.step();
-  }
+  for (let i = 0; i < 3; i++) world.step();
 
   const tickDurations = [];
   const queryHits = [];
   const queryMisses = [];
   const explicitSyncs = [];
   const diffSizes = [];
+  const sums = { calls: 0, results: 0, cacheHits: 0, cacheMisses: 0, membershipChecks: 0, explicitSyncs: 0, diffBytes: 0 };
 
   for (let i = 0; i < config.ticks; i++) {
     world.step();
     const metrics = world.getMetrics();
     const diff = world.getDiff();
+    const diffBytes = Buffer.byteLength(JSON.stringify(diff), 'utf8');
     tickDurations.push(metrics.durationMs.total);
     queryHits.push(metrics.query.cacheHits);
     queryMisses.push(metrics.query.cacheMisses);
     explicitSyncs.push(metrics.spatial.explicitSyncs);
-    diffSizes.push(Buffer.byteLength(JSON.stringify(diff), 'utf8'));
+    diffSizes.push(diffBytes);
+    sums.calls += metrics.query.calls;
+    sums.results += metrics.query.results;
+    sums.cacheHits += metrics.query.cacheHits;
+    sums.cacheMisses += metrics.query.cacheMisses;
+    sums.membershipChecks += metrics.query.membershipChecks;
+    sums.explicitSyncs += metrics.spatial.explicitSyncs;
+    sums.diffBytes += diffBytes;
   }
 
   const occupancy = createBenchmarkOccupancy(config);
   const pathfinding = benchmarkPaths(config, occupancy);
   const occupancyCosts = benchmarkOccupancy(config);
   const memoryAfter = process.memoryUsage().heapUsed;
+
+  const counters = {
+    queryCalls: sums.calls,
+    queryResults: sums.results,
+    queryCacheHits: sums.cacheHits,
+    queryCacheMisses: sums.cacheMisses,
+    membershipChecks: sums.membershipChecks,
+    explicitSyncs: sums.explicitSyncs,
+    diffBytes: sums.diffBytes,
+    pathCacheHitsSecondPass: pathfinding.cacheHitsSecondPass,
+    pathCacheMissesSecondPass: pathfinding.cacheMissesSecondPass,
+    occupancyBuildings: occupancyCosts.buildings,
+    occupancyResources: occupancyCosts.resources,
+    occupancyUnits: occupancyCosts.units,
+    occupancyBlockedHits: occupancyCosts.blockedHits,
+    occupancyCrowdedClaims: occupancyCosts.crowdedClaimsObserved,
+    occupancyCellStatusQueries: occupancyCosts.bindingQueries.cellStatusQueries,
+    occupancyCrowdedSlotChecks: occupancyCosts.bindingQueries.crowdedSlotChecks,
+    occupancyBlockedQueries: occupancyCosts.occupancy.blockedQueries,
+    occupancyClaimCellChecks: occupancyCosts.occupancy.claimCellChecks,
+    subcellSlotChecks: occupancyCosts.crowding?.slotChecks ?? 0,
+  };
 
   return {
     name: config.name,
@@ -92,6 +164,7 @@ function runScenario(config) {
     queryCacheMisses: summarize(queryMisses),
     spatialExplicitSyncs: summarize(explicitSyncs),
     diffSizeBytes: summarize(diffSizes),
+    counters,
     pathfinding,
     occupancyCosts,
     memory: {
@@ -100,6 +173,159 @@ function runScenario(config) {
       deltaMB: round((memoryAfter - memoryBefore) / (1024 * 1024)),
     },
   };
+}
+
+/** Churn scenario (DESIGN §2): spawn/destroy waves under 8 populated cached
+ *  query shapes — measures query-cache membership maintenance, the first
+ *  RTS-scale wall identified by the 2026-06-10 full review. */
+function runChurnScenario(config) {
+  const markers = ['infantry', 'archer', 'cavalry', 'siege'];
+  const world = new World({ gridWidth: config.width, gridHeight: config.height, tps: 20, seed: 'bench:churn' });
+  for (const key of ['position', 'velocity', 'team', ...markers, 'projectile']) {
+    world.registerComponent(key);
+  }
+  for (let i = 0; i < config.entities; i++) {
+    const id = world.createEntity();
+    world.setPosition(id, { x: (i * 37) % config.width, y: (i * 53) % config.height });
+    world.addComponent(id, 'velocity', { dx: (i % 3) - 1 || 1, dy: ((i + 1) % 3) - 1 || -1 });
+    world.addComponent(id, 'team', { team: i % 4 });
+    world.addComponent(id, markers[i % markers.length], { tier: i % 3 });
+  }
+
+  // The 8 pinned cached shapes (movement, 4 markers, team, bare position,
+  // projectile) — iterated every tick so their cache arrays stay populated
+  // and every churned entity's signature change splices them.
+  let checksum = 0;
+  world.registerSystem({
+    name: 'shapes', phase: 'update',
+    execute: (w) => {
+      for (const id of w.query('position', 'velocity')) checksum += id;
+      for (const m of markers) for (const id of w.query('position', m)) checksum += id;
+      for (const id of w.query('position', 'team')) checksum += id;
+      for (const id of w.query('position')) checksum += id;
+      for (const id of w.query('position', 'projectile')) checksum += id;
+      if (checksum < 0) throw new Error('unreachable checksum guard');
+    },
+  });
+
+  const cohorts = [];
+  let created = 0;
+  let destroyed = 0;
+  let spawnSerial = 0;
+  world.registerSystem({
+    name: 'churn', phase: 'postUpdate',
+    execute: (w) => {
+      if (cohorts.length >= 2) {
+        for (const id of cohorts.shift()) {
+          w.destroyEntity(id);
+          destroyed++;
+        }
+      }
+      const cohort = [];
+      for (let i = 0; i < CHURN.perTick; i++) {
+        const id = w.createEntity();
+        const n = spawnSerial++;
+        w.setPosition(id, { x: (n * 7) % config.width, y: (n * 11) % config.height });
+        w.addComponent(id, 'velocity', { dx: 1, dy: 0 });
+        w.addComponent(id, 'projectile', { ttl: 2 });
+        cohort.push(id);
+        created++;
+      }
+      cohorts.push(cohort);
+    },
+  });
+
+  for (let i = 0; i < CHURN.warmup; i++) world.step();
+  created = 0;
+  destroyed = 0;
+
+  const tickDurations = [];
+  const sums = { calls: 0, results: 0, cacheHits: 0, cacheMisses: 0, membershipChecks: 0, explicitSyncs: 0, diffBytes: 0 };
+  for (let i = 0; i < config.ticks; i++) {
+    world.step();
+    const metrics = world.getMetrics();
+    const diffBytes = Buffer.byteLength(JSON.stringify(world.getDiff()), 'utf8');
+    tickDurations.push(metrics.durationMs.total);
+    sums.calls += metrics.query.calls;
+    sums.results += metrics.query.results;
+    sums.cacheHits += metrics.query.cacheHits;
+    sums.cacheMisses += metrics.query.cacheMisses;
+    sums.membershipChecks += metrics.query.membershipChecks;
+    sums.explicitSyncs += metrics.spatial.explicitSyncs;
+    sums.diffBytes += diffBytes;
+  }
+
+  return {
+    name: config.name,
+    grid: { width: config.width, height: config.height },
+    entities: config.entities,
+    ticksMeasured: config.ticks,
+    tickDurationMs: summarize(tickDurations),
+    churn: { created, destroyed, perTick: CHURN.perTick, cachedShapes: 8 },
+    counters: {
+      queryCalls: sums.calls,
+      queryResults: sums.results,
+      queryCacheHits: sums.cacheHits,
+      queryCacheMisses: sums.cacheMisses,
+      membershipChecks: sums.membershipChecks,
+      explicitSyncs: sums.explicitSyncs,
+      diffBytes: sums.diffBytes,
+      churnCreated: created,
+      churnDestroyed: destroyed,
+    },
+  };
+}
+
+function runCheck(report) {
+  let baselineRaw;
+  try {
+    baselineRaw = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8'));
+  } catch (e) {
+    process.stderr.write(`cannot read baseline at ${BASELINE_PATH}: ${e.message}\nrun: npm run benchmark:update-baseline\n`);
+    process.exit(1);
+  }
+  const valid = validateBaseline(baselineRaw);
+  if (!valid.ok) {
+    process.stderr.write(`baseline invalid:\n${valid.errors.map((x) => `  - ${x}`).join('\n')}\n`);
+    process.exit(1);
+  }
+  let ratioMax = DEFAULT_RATIO_MAX;
+  if (process.env.BENCH_RATIO_MAX !== undefined) {
+    ratioMax = Number(process.env.BENCH_RATIO_MAX);
+    if (!Number.isFinite(ratioMax) || ratioMax <= 0) {
+      process.stderr.write(`BENCH_RATIO_MAX must be a finite positive number (got ${process.env.BENCH_RATIO_MAX}); a malformed value would silently disable the time gate\n`);
+      process.exit(1);
+    }
+  }
+  const result = checkReport(baselineRaw, report, { ratioMax });
+  for (const scenario of report.scenarios) {
+    const base = baselineRaw.scenarios[scenario.name];
+    process.stdout.write(`${scenario.name}: timeRatio ${scenario.timeRatio} (baseline ${base ? base.timeRatio : 'n/a'}, allowed ×${ratioMax})\n`);
+  }
+  if (!result.ok) {
+    process.stderr.write(`BENCHMARK GATE FAILED (${result.failures.length} failure(s)):\n`);
+    for (const line of formatFailures(result.failures)) {
+      process.stderr.write(`  - ${line}\n`);
+    }
+    process.exit(1);
+  }
+  process.stdout.write('benchmark gate OK: all counters exact, time ratios within bound\n');
+}
+
+function writeBaseline(report) {
+  const baseline = {
+    schemaVersion: BASELINE_SCHEMA_VERSION,
+    generatedWith: {
+      engineVersion: ENGINE_VERSION,
+      node: process.version,
+      date: new Date().toISOString().slice(0, 10),
+    },
+    scenarios: Object.fromEntries(
+      report.scenarios.map((s) => [s.name, { counters: s.counters, timeRatio: s.timeRatio }]),
+    ),
+  };
+  mkdirSync(dirname(BASELINE_PATH), { recursive: true });
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
 }
 
 function createBenchmarkWorld(config) {
@@ -158,192 +384,6 @@ function createBenchmarkWorld(config) {
   return world;
 }
 
-function createBenchmarkOccupancy(config) {
-  const occupancy = new OccupancyGrid(config.width, config.height);
-  const spacing = Math.max(8, Math.floor(config.width / 24));
-
-  for (let x = spacing; x < config.width; x += spacing) {
-    for (let y = 0; y < config.height; y++) {
-      if (y % 11 === 0) continue;
-      occupancy.block([{ x, y }]);
-    }
-  }
-
-  for (let i = 0; i < Math.min(256, config.pathRequests); i++) {
-    const x = (i * 29 + 7) % config.width;
-    const y = (i * 31 + 5) % config.height;
-    if (!occupancy.isBlocked(x, y, { includeReservations: false })) {
-      occupancy.reserve(10_000 + i, [{ x, y }]);
-    }
-  }
-
-  return occupancy;
-}
-
-function benchmarkPaths(config, occupancy) {
-  const queue = createGridPathQueue({ occupancy });
-  const requests = [];
-
-  for (let i = 0; i < config.pathRequests; i++) {
-    requests.push({
-      start: findOpenCell(occupancy, config.width, config.height, i * 17),
-      goal: findOpenCell(
-        occupancy,
-        config.width,
-        config.height,
-        config.width * config.height - 1 - i * 19,
-      ),
-    });
-  }
-
-  const uncachedMs = processQueue(queue, requests, config.pathBudget);
-  const afterFirst = queue.getStats();
-  const cachedMs = processQueue(queue, requests, config.pathBudget);
-  const afterSecond = queue.getStats();
-
-  return {
-    requests: config.pathRequests,
-    budgetPerProcessCall: config.pathBudget,
-    uncachedDurationMs: round(uncachedMs),
-    cachedDurationMs: round(cachedMs),
-    uncachedMsPerRequest: round(uncachedMs / config.pathRequests),
-    cachedMsPerRequest: round(cachedMs / config.pathRequests),
-    cacheHitsSecondPass: afterSecond.cacheHits - afterFirst.cacheHits,
-    cacheMissesSecondPass: afterSecond.cacheMisses - afterFirst.cacheMisses,
-  };
-}
-
-function benchmarkOccupancy(config) {
-  const binding = new OccupancyBinding(config.width, config.height);
-  let nextEntityId = 1;
-
-  const buildingTarget = Math.max(192, Math.floor(config.width / 2));
-  const resourceTarget = buildingTarget * 2;
-  const unitTarget = Math.max(1024, Math.floor(config.entities / 2));
-
-  let buildings = 0;
-  for (let y = 2; y < config.height - 2 && buildings < buildingTarget; y += 6) {
-    for (let x = 2; x < config.width - 2 && buildings < buildingTarget; x += 6) {
-      if (
-        binding.occupy(
-          nextEntityId++,
-          { x, y, width: 2, height: 2 },
-          { metadata: { kind: 'building' } },
-        )
-      ) {
-        buildings++;
-      }
-    }
-  }
-
-  let resources = 0;
-  for (let y = 1; y < config.height && resources < resourceTarget; y += 3) {
-    const startX = y % 2 === 0 ? 1 : 3;
-    for (let x = startX; x < config.width && resources < resourceTarget; x += 5) {
-      if (binding.isBlocked(x, y, { includeReservations: false })) {
-        continue;
-      }
-      if (
-        binding.occupy(
-          nextEntityId++,
-          [{ x, y }],
-          { metadata: { kind: 'resource' } },
-        )
-      ) {
-        resources++;
-      }
-    }
-  }
-
-  let units = 0;
-  const unitPlacements = [];
-  for (let y = 0; y < config.height && units < unitTarget; y++) {
-    for (let x = 0; x < config.width && units < unitTarget; x++) {
-      if (binding.isBlocked(x, y, { includeReservations: false })) {
-        continue;
-      }
-      for (let slot = 0; slot < 4 && units < unitTarget; slot++) {
-        const entity = nextEntityId++;
-        const placement = binding.occupySubcell(entity, { x, y }, {
-          preferredSlot: slot,
-          metadata: { kind: 'unit' },
-        });
-        if (!placement) {
-          break;
-        }
-        unitPlacements.push({ entity, position: { x, y } });
-        units++;
-      }
-    }
-  }
-
-  binding.resetMetrics();
-
-  const queryCount = Math.min(
-    unitPlacements.length,
-    Math.max(512, Math.floor(unitTarget / 2)),
-  );
-  let blockedHits = 0;
-  let crowdedClaimsObserved = 0;
-  const start = performance.now();
-
-  for (let i = 0; i < queryCount; i++) {
-    const sample = unitPlacements[i % unitPlacements.length];
-    const inspectX = (i * 17 + 3) % config.width;
-    const inspectY = (i * 31 + 7) % config.height;
-
-    if (binding.isBlocked(inspectX, inspectY)) {
-      blockedHits++;
-    }
-
-    const status = binding.getCellStatus(inspectX, inspectY);
-    crowdedClaimsObserved += status.crowdedBy.length;
-    binding.neighborsWithSpace(sample.entity, sample.position);
-  }
-
-  const metrics = binding.getMetrics();
-  return {
-    buildings,
-    resources,
-    units,
-    queryCount,
-    blockedHits,
-    crowdedClaimsObserved,
-    durationMs: round(performance.now() - start),
-    bindingQueries: {
-      cellStatusQueries: metrics.cellStatusQueries,
-      crowdedSlotChecks: metrics.crowdedSlotChecks,
-    },
-    occupancy: metrics.occupancy,
-    crowding: metrics.crowding,
-  };
-}
-
-function processQueue(queue, requests, budget) {
-  for (const request of requests) {
-    queue.enqueue(request);
-  }
-
-  const start = performance.now();
-  while (queue.pendingCount > 0) {
-    queue.process(budget);
-  }
-  return performance.now() - start;
-}
-
-function findOpenCell(occupancy, width, height, seed) {
-  const total = width * height;
-  for (let i = 0; i < total; i++) {
-    const index = (seed + i * 97) % total;
-    const x = index % width;
-    const y = Math.floor(index / width);
-    if (!occupancy.isBlocked(x, y)) {
-      return { x, y };
-    }
-  }
-  throw new Error('No open cell available for benchmark path request');
-}
-
 function summarize(values) {
   return {
     min: round(Math.min(...values)),
@@ -352,76 +392,30 @@ function summarize(values) {
   };
 }
 
-function round(value) {
-  return Math.round(value * 1000) / 1000;
-}
-
 function parseArgs(argv) {
   let format = 'json';
   let stress = false;
+  let check = false;
+  let updateBaseline = false;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--stress') {
-      stress = true;
-      continue;
-    }
-    if (arg === '--format' && i + 1 < argv.length) {
-      format = argv[++i];
-      continue;
-    }
-    if (arg.startsWith('--format=')) {
-      format = arg.slice('--format='.length);
-    }
+    if (arg === '--stress') { stress = true; continue; }
+    if (arg === '--check') { check = true; continue; }
+    if (arg === '--update-baseline') { updateBaseline = true; continue; }
+    if (arg === '--format' && i + 1 < argv.length) { format = argv[++i]; continue; }
+    if (arg.startsWith('--format=')) { format = arg.slice('--format='.length); }
   }
 
   if (format !== 'json' && format !== 'markdown') {
     throw new Error("format must be 'json' or 'markdown'");
   }
-
-  return { format, stress };
-}
-
-function renderMarkdown(report) {
-  const lines = ['# RTS Benchmark', '', 'Command: `npm run benchmark:rts`', ''];
-  for (const scenario of report.scenarios) {
-    lines.push(`## ${scenario.name}`);
-    lines.push('');
-    lines.push(
-      `- Grid: ${scenario.grid.width}x${scenario.grid.height}, entities: ${scenario.entities}, ticks: ${scenario.ticksMeasured}`,
-    );
-    lines.push(
-      `- Tick duration ms (min/avg/max): ${scenario.tickDurationMs.min} / ${scenario.tickDurationMs.avg} / ${scenario.tickDurationMs.max}`,
-    );
-    lines.push(
-      `- Query cache hits (min/avg/max): ${scenario.queryCacheHits.min} / ${scenario.queryCacheHits.avg} / ${scenario.queryCacheHits.max}`,
-    );
-    lines.push(
-      `- Query cache misses (min/avg/max): ${scenario.queryCacheMisses.min} / ${scenario.queryCacheMisses.avg} / ${scenario.queryCacheMisses.max}`,
-    );
-    lines.push(
-      `- Spatial full scans (min/avg/max): ${scenario.spatialFullScans.min} / ${scenario.spatialFullScans.avg} / ${scenario.spatialFullScans.max}`,
-    );
-    lines.push(
-      `- Spatial scanned entities (min/avg/max): ${scenario.spatialScannedEntities.min} / ${scenario.spatialScannedEntities.avg} / ${scenario.spatialScannedEntities.max}`,
-    );
-    lines.push(
-      `- Diff size bytes (min/avg/max): ${scenario.diffSizeBytes.min} / ${scenario.diffSizeBytes.avg} / ${scenario.diffSizeBytes.max}`,
-    );
-    lines.push(
-      `- Path requests: ${scenario.pathfinding.requests}, uncached ms/request: ${scenario.pathfinding.uncachedMsPerRequest}, cached ms/request: ${scenario.pathfinding.cachedMsPerRequest}`,
-    );
-    lines.push(
-      `- Path cache hits on second pass: ${scenario.pathfinding.cacheHitsSecondPass}`,
-    );
-    lines.push(
-      `- Occupancy benchmark: ${scenario.occupancyCosts.buildings} buildings, ${scenario.occupancyCosts.resources} resources, ${scenario.occupancyCosts.units} units over ${scenario.occupancyCosts.queryCount} query rounds in ${scenario.occupancyCosts.durationMs} ms`,
-    );
-    lines.push(
-      `- Occupancy scans: blockedQueries=${scenario.occupancyCosts.occupancy.blockedQueries}, claimCellChecks=${scenario.occupancyCosts.occupancy.claimCellChecks}, cellStatusQueries=${scenario.occupancyCosts.bindingQueries.cellStatusQueries}, crowdedSlotChecks=${scenario.occupancyCosts.bindingQueries.crowdedSlotChecks}, subcellSlotChecks=${scenario.occupancyCosts.crowding?.slotChecks ?? 0}`,
-    );
-    lines.push(`- Memory delta MB: ${scenario.memory.deltaMB}`);
-    lines.push('');
+  if ((check || updateBaseline) && stress) {
+    throw new Error('--check/--update-baseline cover the default scenario set; --stress is not part of the committed baseline');
   }
-  return `${lines.join('\n')}\n`;
+  if (check && updateBaseline) {
+    throw new Error('--check and --update-baseline are mutually exclusive');
+  }
+
+  return { format, stress, check, updateBaseline };
 }

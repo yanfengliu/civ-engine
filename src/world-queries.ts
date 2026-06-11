@@ -203,6 +203,9 @@ export abstract class WorldQueries<
     previous: bigint,
     next: bigint,
   ): void {
+    if (this.activeMetrics) {
+      this.activeMetrics.query.membershipChecks += this.queryCache.size;
+    }
     for (const cache of this.queryCache.values()) {
       const didMatch = (previous & cache.mask) === cache.mask;
       const doesMatch = (next & cache.mask) === cache.mask;

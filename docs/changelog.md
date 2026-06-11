@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.17 - 2026-06-10
+
+Benchmark regression gate (objective `benchmark-gate`; first of the seven-objective improvement wave, full design + review pipeline — see `docs/threads/done/benchmark-gate/`).
+
+- **CI now gates on performance.** `node scripts/rts-benchmark.mjs --check` compares every run against the committed `benchmarks/baseline.json` in two tiers: **tier 1** — deterministic operation counters (query calls/results/cache hits+misses, the new `membershipChecks`, explicit syncs, diff bytes, path-cache second-pass hits, occupancy counters, churn totals) must match **exactly** (the engine's determinism makes them reproducible across machines and the Node 20/22 matrix; each scenario also runs 3× in-process and asserts identical counters as a free determinism self-check); **tier 2** — wall-clock per scenario, normalized by an in-process calibration workload, must stay within 3× of the baseline ratio (`BENCH_RATIO_MAX` overridable). Intended perf-relevant changes regenerate the baseline via `npm run benchmark:update-baseline` in the same commit, making them visible in review diffs.
+- **New `churn` benchmark scenario** measures the query-cache membership-maintenance wall identified by the 2026-06-10 full review: 150 projectile spawns + 150 destroys per tick under 8 pinned cached query shapes over a 4 000-entity world. The wall is now an exact number: 96 000 membership checks per 20-tick run in the committed baseline.
+- **New engine metric `WorldMetrics.query.membershipChecks`** (additive): cache entries examined by query-cache membership maintenance during in-tick signature changes. Gated tier-1, so maintenance regressions — and future optimizations — surface as exact, reviewed baseline changes.
+- **Fixed: `--format markdown` threw a `TypeError`** (the renderer read spatial-scan fields removed in the explicit-sync migration). The renderer moved to `scripts/benchmark-gate.mjs`, is unit-tested, and now reports explicit syncs, deterministic counters, time ratios, and churn lines.
+- New npm scripts `benchmark:check` / `benchmark:update-baseline` (both build first — a stale `dist` cannot mint a baseline); `--check`/`--update-baseline` refuse `--stress` (the committed baseline covers the default scenario set) and verify exact scenario-set equality.
+
+### Validation
+
+Sabotage-tested: deliberately doubling the membership counter produced `counter drift [churn.membershipChecks]: expected 96000, got 192000` and exit 1. All four gates pass (1115 passed + 2 todo; 12 new tests). Design reviewed in two iterations (Codex + Gemini + Claude; design-2 unanimous CONVERGED) and implementation multi-CLI reviewed per thread.
+
 ## 0.8.16 - 2026-06-10
 
 Full-codebase review hardening (first full review since v0.7.6). Three independent reviewers (Codex + two Claude lenses) swept the engine; every accepted finding is fixed here. The core tick/ECS/determinism machinery had zero defects — the real bugs clustered in session-recording/replay **error paths**. See `docs/threads/done/full/2026-06-10/` for the full synthesis.

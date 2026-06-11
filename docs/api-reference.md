@@ -196,7 +196,7 @@ interface WorldMetrics {
   simulation: { tps: number; tickBudgetMs: number };
   commandStats: { pendingBeforeTick: number; processed: number };
   systems: Array<{ name: string; phase: SystemPhase; durationMs: number }>;
-  query: { calls: number; cacheHits: number; cacheMisses: number; results: number };
+  query: { calls: number; cacheHits: number; cacheMisses: number; results: number; membershipChecks: number };
   spatial: { explicitSyncs: number };
   durationMs: {
     total: number;
@@ -4954,6 +4954,8 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug> {
 interface ReplayerConfig {
   worldFactory: (snapshot: WorldSnapshot) => World;  // part of determinism contract per ADR 4
 }
+```
+
 
 interface SelfCheckOptions {
   stopOnFirstDivergence?: boolean;   // default false

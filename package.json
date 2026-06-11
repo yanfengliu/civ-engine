@@ -1,6 +1,6 @@
 {
   "name": "civ-engine",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "Headless, AI-native 2D grid-based game engine: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies.",
   "keywords": [
     "game-engine",
@@ -52,6 +52,8 @@
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "npm test && npm run typecheck && npm run lint && npm run build",
     "benchmark:rts": "npm run build && node scripts/rts-benchmark.mjs",
+    "benchmark:check": "npm run build && node scripts/rts-benchmark.mjs --check",
+    "benchmark:update-baseline": "npm run build && node scripts/rts-benchmark.mjs --update-baseline",
     "debug:client": "npm run build && node scripts/serve-debug-client.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

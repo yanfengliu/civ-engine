@@ -42,6 +42,7 @@ export function createMetrics(
       cacheHits: 0,
       cacheMisses: 0,
       results: 0,
+      membershipChecks: 0,
     },
     spatial: {
       explicitSyncs: 0,

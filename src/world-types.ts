@@ -74,6 +74,11 @@ export interface WorldMetrics {
     cacheHits: number;
     cacheMisses: number;
     results: number;
+    /** Cache entries examined by query-cache membership maintenance during
+     *  in-tick signature changes (add/remove component, destroy). The exact
+     *  operation count behind the entity-churn scale wall — see
+     *  `docs/threads/done/benchmark-gate/DESIGN.md` §1. Added v0.8.17. */
+    membershipChecks: number;
   };
   spatial: {
     explicitSyncs: number;

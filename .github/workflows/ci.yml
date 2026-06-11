@@ -31,3 +31,4 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm pack --dry-run
+      - run: node scripts/rts-benchmark.mjs --check
