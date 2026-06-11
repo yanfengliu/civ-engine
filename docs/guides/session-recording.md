@@ -179,6 +179,7 @@ For replay to produce the same state as recording, user code MUST:
 7. **No environment-driven branching.** `process.env`, `globalThis` etc. inside a tick.
 8. **Registration order must match between recording and replay.** The `worldFactory` is part of the contract — it must reproduce the same registrations in the same order.
 9. **Replay determinism requires identical engine `b`-component AND Node major.** Engine cross-`b` throws `BundleVersionError`; cross-Node-major warns (transcendentals may diverge).
+10. **Sliced or deferred work state is simulation state.** Pending work items, cursors, next-ids, outcome-affecting caches, and active budget values must live in components / world state / resources — never in system closures, module scope, or non-serialized utility instances. Replay reconstructs worlds from the NEAREST snapshot (`openAt`, `forkAt`, `selfCheck` segments), so closure-held queues silently start empty on every snapshot-anchored segment even when rules 1–9 are followed. Pure CPU-only caches (results identical with or without the cache) are exempt; anything that changes WHEN effects land is state. See the "Amortizing heavy work" section of `systems-and-simulation.md`.
 
 The engine does NOT structurally enforce these obligations in v1. `selfCheck` is the verification mechanism.
 

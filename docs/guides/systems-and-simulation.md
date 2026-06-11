@@ -11,6 +11,8 @@ This guide covers system design, tick execution, real-time vs. deterministic ste
 5. [Real-Time Loop](#real-time-loop)
 6. [Speed Control](#speed-control)
 7. [System Design Patterns](#system-design-patterns)
+8. [Amortizing heavy work](#amortizing-heavy-work-v0821)
+9. [Strict mode](#strict-mode-v088)
 
 ---
 
@@ -340,6 +342,38 @@ function dailySystem(w: World): void {
 
 The manual form pays the call/return overhead every tick and shows up as a tracked entry with near-zero duration in `metrics.systems`. Prefer the `interval` field unless you genuinely need the cadence to vary at runtime.
 
+
+## Amortizing heavy work (v0.8.21)
+
+A tick is atomic — all systems run to completion or the tick fails — so a heavy frame (5 000 path requests after a big order, a cascading damage wave) must be *amortized* across ticks rather than time-boxed. The obvious tool is forbidden: **wall-clock-bounded slicing ("work until 8 ms elapsed") is nondeterministic by construction** and breaks recording, `selfCheck`, fork, and any future lockstep. Four binding rules make slicing determinism-safe (full rationale: `docs/threads/done/time-slicing/DESIGN.md`):
+
+1. **Budgets are counts, never milliseconds.** "Process 24 requests per tick" is deterministic; "process for 8 ms" is not.
+2. **Work order is deterministic.** Sliced work lives in FIFO queues (or sorted structures) whose drain order is a pure function of queue contents — never of timing.
+3. **Adaptive budgets flow through the command stream.** Adapting budgets to real performance is allowed — but the measurement is wall-clock, so the adjustment must enter the simulation as a command, submitted from OUTSIDE the tick (read `world.getMetrics().durationMs` between ticks, then `world.submit('setPathBudget', { value: 16 })`). Commands are recorded, so replay reproduces the same budget schedule on any machine; counterfactual forks can `replace` a budget command to ask "what if we had throttled earlier?". This is an application of determinism-contract items 1–2 and 5 (`session-recording.md`), not new doctrine: adaptation is input, not simulation.
+4. **Sliced-work state is simulation state** (determinism-contract item 10). Pending items, cursors, next-ids, and the active budget value live in components / world state — never in system closures. Replay reconstructs from the NEAREST snapshot, so closure state silently starts empty mid-bundle even when rules 1–3 are followed.
+
+The worked pattern — a cursor-in-component queue drained under a state-held budget:
+
+```typescript
+world.registerComponent<{ pending: number[] }>('buildQueue');
+world.setState('buildBudget', 8); // adapted via a command, never in-tick
+
+world.registerSystem({
+  name: 'processBuilds',
+  execute: (w) => {
+    const budget = (w.getState('buildBudget') as number) ?? 8;
+    for (const e of w.query('buildQueue')) {
+      const q = w.getComponent<{ pending: number[] }>(e, 'buildQueue')!;
+      const take = q.pending.slice(0, budget);
+      if (take.length === 0) continue;
+      for (const job of take) processJob(w, job);
+      w.setComponent(e, 'buildQueue', { pending: q.pending.slice(take.length) });
+    }
+  },
+});
+```
+
+Because `pending` is component data, it is automatically serialized, diffed, snapshot-round-tripped, and `selfCheck`-compared — zero hand-rolling. `PathRequestQueue.process(budget)` is the in-repo exemplar for rules 1–2 (count-budgeted deterministic FIFO), but note it is NOT itself snapshot-safe: its pending/head/nextId are private runtime state. It is replay-safe only when (a) filled and drained within the same tick — and provided the returned request ids do not escape into state or events, since `nextId` never resets — or (b) pending-across-ticks work is mirrored in component/state data and the queue is rebuilt from it. Pending work belongs in world state; the queue is transient machinery. A generic engine-level amortized-queue primitive is deliberately demand-gated (see the roadmap's Post-1.0 section): a plain array in a component already achieves ~80 % of it.
 
 ## Strict mode (v0.8.8+)
 

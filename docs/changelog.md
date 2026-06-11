@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.21 - 2026-06-11
+
+Intra-tick time-slicing — reviewed design + guide (objective `time-slicing`, 5/7 of the improvement wave; design-only by explicit gating, 2 review iterations — see `docs/threads/done/time-slicing/`). No engine code: the four slicing rules and the cursor-in-component pattern ARE the product until a consumer demonstrates the pain.
+
+- **New guide section** `docs/guides/systems-and-simulation.md` § "Amortizing heavy work": the four determinism-safe slicing rules (count budgets never milliseconds; deterministic work order; adaptive budgets flow through the command stream as recorded input; sliced-work state is simulation state), a worked cursor-in-component example, and the `PathRequestQueue` exemplar with its snapshot-safety caveat.
+- **Determinism contract item 10** (`docs/guides/session-recording.md`): sliced/deferred work state must live in components/state/resources — replay reconstructs from the NEAREST snapshot, so closure-held queues silently start empty mid-bundle even when items 1–9 are followed. Surfaced by design review as an engine-wide gap.
+- **Roadmap**: new "Post-1.0 / demand-gated" section; Spec 10 status **Drafted** with the explicit implementation trigger (sustained tick-budget overruns a consumer's cadence + game-side queues cannot absorb). The gated primitive is respecced as plain-data state + pure functions — never a class instance in a component (`serialize()` throws `json_incompatible` on non-plain prototypes at the first snapshot).
+
+### Validation
+
+Docs-only (no behavior change; suite unchanged at 1175 passed + 2 todo). Design reviewed in two iterations (design-2: Gemini + Claude CONVERGED with one factual parenthetical corrected; Codex quota-exhausted mid-review per the unreachable-CLI protocol).
+
 ## 0.8.20 - 2026-06-10
 
 Per-player filtered observation (objective `player-observation`, 4/7 of the improvement wave; 3 design iterations to unanimous CONVERGED — see `docs/threads/done/player-observation/`). The full-review missing-pillar finding: every observation surface was omniscient; a fog-of-war agent had no engine support.

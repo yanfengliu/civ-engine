@@ -1,0 +1,41 @@
+# Intra-tick time-slicing — DESIGN (design-first; implementation gated on demand)
+
+**Objective:** `time-slicing` · **Status:** v3 (design-2: Gemini + Claude CONVERGED — one factual parenthetical corrected; Codex quota-exhausted mid-review) · **Origin:** full-review 2026-06-10 missing-pillar finding ("no intra-tick time-slicing/budget story beyond system `interval`"). Wave objective 5/7. Per the repo's Spec-5 precedent, this objective ships a reviewed design + roadmap entry with an explicit implementation trigger; code lands only if review converges on a primitive that is low-risk *now*.
+
+## Problem
+
+A tick is atomic: all systems run to completion or the tick fails. A heavy frame — 5 000 path requests after a big order, a cascading damage wave — can blow the tick budget (100 ms at 10 TPS) with no engine-level relief beyond per-system `interval` cadence. Games need to *amortize* heavy work across ticks. The trap is that the obvious tool is forbidden: **wall-clock-bounded slicing ("work until 8 ms elapsed") is nondeterministic by construction** — identical inputs would do different amounts of work per tick on different machines, so recordings would not replay. Any engine story here must reconcile slicing with the determinism contract that everything else (recording, selfCheck, fork, the benchmark gate's tier 1) is built on.
+
+## The determinism-safe slicing model
+
+Four rules. The first three derive from what already works in the engine; the fourth was surfaced by design review (convergent finding: the first three can all be satisfied while still producing bundles that fail replay).
+
+1. **Budgets are counts, never milliseconds.** "Process 24 path requests per tick" is deterministic; "process for 8 ms" is not. The benchmark gate's tier-1 invariants document this for benchmark scenarios; this design promotes it to the engine-wide slicing rule.
+2. **Work order is deterministic.** Sliced work lives in FIFO queues (or sorted structures) whose drain order is a pure function of queue contents — never of timing.
+3. **Adaptive budgets flow through the command stream.** A game MAY adapt budgets to real performance (lower the path budget when ticks run hot) — but the *measurement* is wall-clock and therefore nondeterministic, so the adjustment must enter the simulation as a **command** (`submit('setPathBudget', { value: 16 })`). Commands are recorded in bundles; replay then reproduces the same budget schedule even on a machine where the measurement would have differed. The measuring/deciding loop lives OUTSIDE the tick (the same side of the boundary as the player), exactly like any other input — this is an *application* of recorded determinism-contract items 1–2 (input only via submit() from outside the tick) and 5 (no wall-clock inside systems), not new doctrine. This is the load-bearing insight: adaptation is input, not simulation.
+4. **Sliced-work state is simulation state.** Pending items, cursors/heads, next-ids, caches whose contents affect future *outcomes*, and the currently-active budget value must live in components / world state / resources (or in a primitive whose `getState()`/`fromState()` the game persists there) — never in system closures, module scope, or non-serialized utility instances. Rationale (design-1 convergent): `openAt`, `forkAt`, and `selfCheck` reconstruct worlds from the **nearest snapshot** — including mid-run interim snapshots — and replay recorded commands forward; anything outside `world.serialize()`'s purview silently starts empty on every snapshot-anchored segment, so a game can follow rules 1–3 perfectly and still desync its own recordings. The crisp boundary: a pure cache that only changes CPU cost (e.g. `PathCache` with a pure resolve) is exempt; anything that changes *when effects land* is state. The session-recording guide's determinism contract gains this as an explicit item (the gap is engine-wide; this objective surfaced it).
+
+Rule 3 composes with everything: `selfCheck` replays the recorded budget changes; counterfactual forks can `replace` a budget command to ask "what if we had throttled earlier?"; the agent playtester can drive budgets via `decide()`. Rule 3 is also forward-compatible with the `lockstep` thread: budget commands ride the `(playerId, localSequence)` relay channel unchanged.
+
+**Reference-implementation caveat (design-1 Claude):** `PathRequestQueue.process(budget)` is the in-repo exemplar for rules 1–2 (count-budgeted deterministic FIFO) but is NOT itself snapshot-safe — its pending/head/nextId are private runtime state with no `getState()`/`fromState()`. It is replay-safe only when (a) filled and drained within the same tick (the typical batching use — and provided the queue's returned request ids do not escape into state or events, since `nextId` never resets; Rule 4's next-id clause covers this), or (b) pending-across-ticks work is mirrored in component/state data and the queue is rebuilt from it. The guide section must state this explicitly: pending work belongs in world state; the queue is transient machinery.
+
+## Candidate primitives (evaluated, mostly rejected for v1)
+
+| Candidate | Verdict |
+|---|---|
+| **Amortized work queue** — count-budgeted FIFO generalizing `PathRequestQueue` minus path-specifics | **The only v1-plausible primitive, demand-gated — and respecced by design-1: plain-data state + pure functions (or the `Layer` pattern: game holds the instance, persists `getState()` into world state), NOT a serializable class stored in a component.** A class instance cannot usefully live in a component (`serialize()` asserts JSON-compatibility on every component value and throws `json_incompatible` for any non-plain-prototype object — a class instance survives at runtime but breaks loudly at the first snapshot, i.e. the moment recording connects), and a plain-array queue in a component is already automatically serialized, diffed, snapshot-round-tripped, and selfCheck-compared with zero hand-rolling. The marginal value is drain bookkeeping only (~80 % achievable with a plain array), which is why it stays gated. |
+| Engine-level system budgets (`SystemRegistration.budget` with the engine pausing/resuming a system mid-iteration) | Rejected: requires resumable system execution (generators or explicit cursors), a major contract change to "systems are plain functions"; cursor-in-component achieves it in game code today. |
+| Wall-clock budget hints surfaced by the engine (`world.getMetrics().durationMs` driving an engine-internal throttle) | Rejected outright: violates rule 3 inside the tick; metrics stay observational. |
+| Multi-frame tick splitting (one logical tick executed across N real frames) | Rejected: redefines the tick atomicity contract that poison semantics, diffs, and recording all assume; renderer-side smoothing (`GameLoop` already decouples via tps/speed) is the right home for frame pacing. |
+
+## Deliverables of this objective
+
+1. This reviewed design.
+2. An **"Amortizing heavy work"** section in `docs/guides/systems-and-simulation.md`: the four rules, a worked cursor-in-component example, the budget-as-command adaptation pattern with a recording/replay walkthrough (reading `getMetrics()` and submitting the budget command strictly *between* ticks), and `PathRequestQueue` as the rules-1–2 exemplar WITH the snapshot-safety caveat above.
+3. The session-recording guide's determinism contract gains the Rule-4 item.
+4. Roadmap entry (`docs/design/ai-first-dev-roadmap.md` gains a "Post-1.0 / demand-gated" section): status **Drafted**, implementation trigger = *aoe2 (or any consumer) demonstrates sustained tick-budget overruns that cadence + game-side queues cannot absorb, measured by the benchmark gate's tier-2 ratios or production metrics*.
+5. The amortized-queue primitive only on demand trigger (see candidate table); explicitly recorded as gated-not-rejected.
+
+## Test plan (conditional)
+
+Guide examples are compiled snippets (doc-only otherwise). If the queue primitive lands: determinism (drain order pure function of queue contents), budget semantics, state round-trip through `serialize()`/`applySnapshot()`, replay equivalence of a budget-as-command adaptation scenario, and the Rule-4 negative pin: a closure-held queue produces a selfCheck divergence where the state-held queue replays clean.
