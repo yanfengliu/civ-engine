@@ -9,10 +9,22 @@ import type { JsonValue } from './json.js';
  */
 export class SessionRecordingError extends Error {
   readonly details: JsonValue | undefined;
+  /** Read-side mirror of `details.code` (v1-surface §2, ADR 47): the
+   *  session family's machine-readable code as a first-class field, `null`
+   *  when the throw site carries none. The construction shape stays
+   *  `(message, details?)` — `details.code` remains the recorded wire-format
+   *  field forever; this mirror exists so agents branch one way across both
+   *  error families (see `getErrorCode` in engine-error.ts). */
+  readonly code: string | null;
   constructor(message: string, details?: JsonValue) {
     super(message);
     this.name = this.constructor.name;
     this.details = details;
+    const candidate =
+      details !== null && typeof details === 'object' && !Array.isArray(details)
+        ? (details as { code?: unknown }).code
+        : undefined;
+    this.code = typeof candidate === 'string' ? candidate : null;
   }
 }
 

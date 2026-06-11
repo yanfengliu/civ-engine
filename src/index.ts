@@ -1,28 +1,115 @@
-export * from './ai-contract.js';
-export * from './behavior-tree.js';
-export * from './cellular.js';
-export * from './client-adapter.js';
-export * from './command-transaction.js';
-export * from './diff.js';
-export * from './engine-error.js';
-export * from './history-recorder.js';
-export * from './layer.js';
-export * from './map-gen.js';
-export * from './noise.js';
-export * from './occupancy-grid.js';
-export * from './path-service.js';
-export * from './player-observer.js';
-export * from './pathfinding.js';
-export * from './random.js';
-export * from './render-adapter.js';
-export * from './resource-store.js';
-export * from './scenario-runner.js';
-export * from './serializer.js';
-export * from './spatial-grid.js';
-export * from './types.js';
-export * from './visibility-map.js';
-export * from './world.js';
-export * from './world-debugger.js';
+// Curated explicit export surface (v1-surface objective, v0.8.23).
+// No star-exports: every public name is listed here deliberately, pinned by
+// tests/public-surface.test.ts (runtime names + declared-name closure).
+// Additions are reviewed surface changes, not accidents.
+export {
+  CLIENT_PROTOCOL_VERSION, COMMAND_EXECUTION_SCHEMA_VERSION, COMMAND_RESULT_SCHEMA_VERSION,
+  SCENARIO_RESULT_SCHEMA_VERSION, TICK_FAILURE_SCHEMA_VERSION, WORLD_DEBUG_SCHEMA_VERSION,
+  WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION, WORLD_HISTORY_SCHEMA_VERSION,
+  WORLD_STEP_RESULT_SCHEMA_VERSION, getAiContractVersions, type AiContractVersions,
+} from './ai-contract.js';
+export {
+  BTNode, NodeStatus, clearRunningState, createBTState, createBehaviorTree, type BTState,
+  type TreeBuilder,
+} from './behavior-tree.js';
+export {
+  MOORE_OFFSETS, VON_NEUMANN_OFFSETS, createCellGrid, stepCellGrid, type CellGrid,
+  type CellRule,
+} from './cellular.js';
+export {
+  ClientAdapter, type ClientMessage, type GameEvent, type ServerMessage,
+} from './client-adapter.js';
+export {
+  CommandTransaction, FORBIDDEN_PRECONDITION_METHODS, type ReadOnlyTransactionWorld,
+  type TransactionPrecondition, type TransactionResult,
+} from './command-transaction.js';
+export {
+  type ResourcePool, type TickDiff,
+} from './diff.js';
+export {
+  EngineError, EngineRangeError, EngineTypeError, getErrorCode, isEngineError,
+  type EngineErrorOptions,
+} from './engine-error.js';
+export {
+  WorldHistoryRecorder, summarizeWorldHistoryRange, type WorldHistoryIssueSummary,
+  type WorldHistoryRangeSummary, type WorldHistoryState, type WorldHistoryTick,
+} from './history-recorder.js';
+export {
+  Layer, type LayerOptions, type LayerState,
+} from './layer.js';
+export {
+  createTileGrid, type MapGenerator,
+} from './map-gen.js';
+export {
+  createNoise2D, octaveNoise2D,
+} from './noise.js';
+export {
+  OccupancyBinding, OccupancyGrid, SubcellOccupancyGrid, type GridPassability,
+  type OccupancyArea, type OccupancyBindingClaimOptions, type OccupancyBindingMetrics,
+  type OccupancyBindingOptions, type OccupancyBindingSubcellOptions,
+  type OccupancyBindingWorldHooks, type OccupancyCellClaim, type OccupancyCellStatus,
+  type OccupancyClaimType, type OccupancyGridMetrics, type OccupancyGridState,
+  type OccupancyMetadata, type OccupancyQueryOptions, type OccupancyRect,
+  type SubcellNeighborOptions, type SubcellNeighborSpace, type SubcellOccupancyGridMetrics,
+  type SubcellOccupancyGridOptions, type SubcellOccupancyGridState,
+  type SubcellOccupancyOptions, type SubcellPlacement, type SubcellSlotOffset,
+} from './occupancy-grid.js';
+export {
+  PathCache, PathRequestQueue, createGridPathCacheKey, createGridPathQueue, findGridPath,
+  gridPathPassabilityVersion, type GridPathConfig, type GridPathRequest,
+  type PathRequestQueueEntry, type PathRequestQueueOptions, type PathRequestQueueStats,
+} from './path-service.js';
+export {
+  PlayerObserver, type ObservedEntity, type ObservedEntityUpdate, type PlayerObservation,
+  type PlayerObserverConfig, type PlayerTickObservation,
+} from './player-observer.js';
+export {
+  findPath, type PathConfig, type PathResult,
+} from './pathfinding.js';
+export {
+  DeterministicRandom, type RandomState,
+} from './random.js';
+export {
+  RenderAdapter, type RenderDebugCapture, type RenderDiff, type RenderEntity,
+  type RenderEntityChange, type RenderProjector, type RenderServerMessage, type RenderSnapshot,
+} from './render-adapter.js';
+export {
+  ResourceStore, type ResourceMax, type ResourceStoreState, type Transfer,
+} from './resource-store.js';
+export {
+  runScenario, type ScenarioCapture, type ScenarioCheck, type ScenarioCheckOutcome,
+  type ScenarioCheckResult, type ScenarioConfig, type ScenarioContext, type ScenarioFailure,
+  type ScenarioResult, type ScenarioStepUntilResult,
+} from './scenario-runner.js';
+export {
+  type WorldSnapshot, type WorldSnapshotV1, type WorldSnapshotV2, type WorldSnapshotV3,
+  type WorldSnapshotV4, type WorldSnapshotV5,
+} from './serializer.js';
+export {
+  ALL_DIRECTIONS, DIAGONAL, ORTHOGONAL, SpatialGrid, type SpatialGridView,
+} from './spatial-grid.js';
+export {
+  type EntityId, type InstrumentationProfile, type Position, type WorldConfig,
+} from './types.js';
+export {
+  VisibilityMap, type VisibilityMapState, type VisibilityPlayerId, type VisionSource,
+  type VisionSourceId,
+} from './visibility-map.js';
+export {
+  SYSTEM_PHASES, World, WorldTickFailureError, type CommandExecutionResult,
+  type CommandSubmissionResult, type CommandValidationRejection, type CommandValidationResult,
+  type ComponentOptions, type ComponentRegistry, type LooseSystem, type LooseSystemRegistration,
+  type System, type SystemPhase, type SystemRegistration, type TickFailure,
+  type TickFailurePhase, type TickMetricsProfile, type WorldMetrics, type WorldStepResult,
+} from './world.js';
+export {
+  WorldDebugger, createOccupancyDebugProbe, createPathQueueDebugProbe,
+  createVisibilityDebugProbe, type DebugComponentSummary, type DebugDiffSummary,
+  type DebugEventSummary, type DebugIssue, type DebugProbe, type DebugResourceSummary,
+  type DebugSeverity, type DebugSpatialCell, type DebugSpatialSummary, type DebugWarning,
+  type OccupancyDebugSnapshot, type VisibilityDebugSnapshot, type VisibilityPlayerDebugSnapshot,
+  type WorldDebugSnapshot,
+} from './world-debugger.js';
 
 // Session-recording subsystem (T1+; see docs/threads/done/session-recording/DESIGN.md)
 export {

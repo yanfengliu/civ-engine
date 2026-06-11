@@ -6,6 +6,8 @@
 // error-code table. Unification is a v1-surface question.
 
 import type { JsonValue } from './json.js';
+import { SessionRecordingError } from './session-errors.js';
+import { StrictModeViolationError } from './world-strict-mode.js';
 
 export interface EngineErrorOptions {
   details?: JsonValue;
@@ -104,4 +106,27 @@ export function isEngineError(
     e instanceof EngineRangeError ||
     e instanceof EngineTypeError
   );
+}
+
+/**
+ * Cross-family branch key (v1-surface §2, ADR 47): the machine-readable code
+ * from ANY engine error family — core (`EngineError` and subclasses, code
+ * first-class), session (`SessionRecordingError` subclasses, code mirrored
+ * from `details.code`), or strict-mode (`StrictModeViolationError`) — and
+ * `null` for plain/foreign errors. instanceof over the families, so
+ * errno-style duck types stay excluded. (world-strict-mode has zero runtime
+ * imports, so this import is cycle-free — verified.)
+ */
+export function getErrorCode(e: unknown): string | null {
+  if (isEngineError(e)) return e.code;
+  if (e instanceof SessionRecordingError) return e.code;
+  if (e instanceof StrictModeViolationError) return e.code;
+  return null;
+}
+
+/** Internal (module-level, deliberately not in the package surface):
+ *  JSON-sanitizes non-core families' details for the TickFailure path —
+ *  the same boundary invariant EngineError enforces at construction. */
+export function sanitizeForeignDetails(details: JsonValue | undefined): JsonValue | null {
+  return sanitizeDetails(details);
 }

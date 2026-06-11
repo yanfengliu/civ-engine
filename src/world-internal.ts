@@ -1,4 +1,4 @@
-import { EngineError, EngineRangeError, isEngineError } from './engine-error.js';
+import { EngineError, EngineRangeError, getErrorCode, isEngineError, sanitizeForeignDetails } from './engine-error.js';
 import type { EntityId, InstrumentationProfile, Position, WorldConfig } from './types.js';
 import type { TickDiff } from './diff.js';
 import { assertJsonCompatible, type JsonValue } from './json.js';
@@ -167,6 +167,22 @@ export function createErrorDetails(error: unknown): {
       stack: error.stack ?? null,
       code: error.code,
       ...(error.details === null ? {} : { details: error.details }),
+    };
+  }
+
+  // Session/strict families (ADR 47 read-side mirror): same pass-through.
+  // Their construction does NOT sanitize details, so sanitize here — the
+  // TickFailure path JSON-asserts whatever lands in it (objective-C HIGH).
+  const code = getErrorCode(error);
+  if (code !== null && error instanceof Error) {
+    const foreign = (error as { details?: JsonValue }).details;
+    const details = sanitizeForeignDetails(foreign);
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+      code,
+      ...(details === null ? {} : { details }),
     };
   }
 

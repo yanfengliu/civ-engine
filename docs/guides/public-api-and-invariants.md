@@ -118,3 +118,14 @@ const adapter = new ClientAdapter({
 `WorldConfig.strict?: boolean` (default `false`) is an opt-in invariant. When `true`, 22 mutation methods on `World` (createEntity, destroyEntity, setComponent et al., setPosition, all resource methods, setState/deleteState, addTag/removeTag, setMeta/deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a system phase / setup window / `runMaintenance(fn)` callback. Registration calls (`registerComponent`/`registerSystem`/etc.), `submit`/`submitWithResult`, `step`/`stepWithResult`, listener add/remove, and read methods are NOT gated.
 
 `applySnapshot` and `deserialize` work at any phase regardless of strict mode. See `docs/guides/strict-mode.md` for escape hatches (`endSetup`, `runMaintenance`), the depth-counted reentrant maintenance contract, and the submit-time callback caller-phase semantics.
+
+## Surface curation and deprecation policy (v0.8.23+)
+
+The package's public surface is **explicitly curated**: `src/index.ts` contains no star-exports, every public name (values AND types) is listed deliberately, and `tests/public-surface.test.ts` pins the full sorted name list against `tests/fixtures/public-surface.json` at two levels (runtime export names + declared names including type-only exports). Adding or removing a public name is therefore always a reviewed diff against the fixture, never an accident of what a module happens to export. The pin gates names, not signatures — signature and type-shape changes are gated by the typecheck, the test suite, and api-reference review.
+
+**Deprecation policy:**
+
+- **Pre-1.0 (now):** there is no deprecation grace. Anything slated for removal is removed before the 1.0 freeze; `b`-bumps may break, and the changelog is the migration record.
+- **Post-1.0:** deprecation happens in a **minor** release — `@deprecated` TSDoc on the symbol, a changelog callout, and a migration note in the owning guide. Removal happens in the **next major**, never sooner. Deprecated APIs keep their tests until removal.
+
+The 1.0 decision menu (strict default, snapshot v6, trim list, freeze list) lives in `docs/design/v1-checklist.md`.

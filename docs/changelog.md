@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.23 - 2026-06-11
+
+1.0 surface groundwork (objective `v1-surface`, 7/7 — final objective of the improvement wave; see `docs/threads/done/v1-surface/`). Ships every NON-breaking part of the reviewed 1.0 proposal now; the breaking decisions are packaged as a human menu in `docs/design/v1-checklist.md`.
+
+- **Explicit export curation**: `src/index.ts`'s 25 star-exports replaced with curated named lists (runtime surface verified byte-identical before/after: 106→106 exports; `export type` hygiene throughout). New `tests/public-surface.test.ts` pins the full sorted name list — runtime AND declared/type-only — against `tests/fixtures/public-surface.json`, plus a no-star-export invariant and a guard on the load-bearing `session-internals` side-effect import. Surface changes are now reviewed fixture diffs, never accidents.
+- **Cross-family error-code read-side mirror (ADR 47, supersedes ADR 45's deferral)**: `SessionRecordingError` gains `readonly code: string | null` extracted from `details.code` (construction shape unchanged; `details.code` stays the wire format forever). New public `getErrorCode(e): string | null` returns the machine-readable code from ANY engine error family — core, session, and strict-mode (`StrictModeViolationError` gains the same first-class mirror) — and `null` for foreign errors; agents branch one way everywhere. Session/strict errors thrown in-tick now surface their code as `TickFailure.error.code` (details sanitized at the boundary).
+- **Deprecation policy** documented in `docs/guides/public-api-and-invariants.md`: pre-1.0 no grace (remove before freeze); post-1.0 deprecate-in-minor, remove-in-next-major, tests kept until removal.
+- **`docs/design/v1-checklist.md`**: the 7-item breaking-decision menu (strict default flip WITH the legacy-snapshot compatibility clause; snapshot v6 inspection-only poison carry with opt-in restore; 4 trim candidates with `clearRunningState` pre-marked bless) + the 1.0 freeze list (Node>=20, ESM-only, zero runtime deps as policy, type hygiene).
+
+### Validation
+
+7 new tests (3 surface-pin + 4 mirror/cross-family incl. the in-tick TickFailure pass-through). Full suite green with the runtime surface proven byte-identical; all four gates + benchmark gate pass.
+
 ## 0.8.22 - 2026-06-11
 
 Lockstep multiplayer — reviewed design (objective `lockstep`, 6/7 of the improvement wave; design-only by explicit gating — no code until a real networked consumer exists; 2 review iterations + docs round — see `docs/threads/done/lockstep/`).

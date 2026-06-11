@@ -86,6 +86,51 @@ describe('EngineError classes', () => {
   });
 });
 
+describe('cross-family read-side code unification (v1-surface §2, ADR 47)', () => {
+  it('SessionRecordingError mirrors details.code as first-class code (null when absent)', async () => {
+    const { SessionRecordingError, BundleIntegrityError } = await import('../src/session-errors.js');
+    const coded = new BundleIntegrityError('mismatch', { code: 'registration_mismatch', extra: 1 });
+    expect(coded.code).toBe('registration_mismatch');
+    expect((coded.details as { code: string }).code).toBe('registration_mismatch'); // wire field intact
+    const uncoded = new SessionRecordingError('plain session failure');
+    expect(uncoded.code).toBeNull();
+    const nonStringCode = new SessionRecordingError('odd', { code: 42 });
+    expect(nonStringCode.code).toBeNull();
+  });
+
+  it('getErrorCode reads all three families and returns null for foreign errors', async () => {
+    const { getErrorCode } = await import('../src/engine-error.js');
+    const { BundleVersionError } = await import('../src/session-errors.js');
+    const { StrictModeViolationError } = await import('../src/world-strict-mode.js');
+    expect(getErrorCode(new EngineError('entity_not_alive', 'm'))).toBe('entity_not_alive');
+    expect(getErrorCode(new EngineRangeError('config_invalid', 'm'))).toBe('config_invalid');
+    expect(getErrorCode(new BundleVersionError('skew', { code: 'engine_version_mismatch' }))).toBe(
+      'engine_version_mismatch',
+    );
+    expect(getErrorCode(new StrictModeViolationError('setComponent', 'between-ticks', 'wrap it'))).toBe(
+      'strict_mode_violation',
+    );
+    expect(getErrorCode(new Error('plain'))).toBeNull();
+    expect(getErrorCode(Object.assign(new Error('e'), { code: 'ENOENT' }))).toBeNull();
+    expect(getErrorCode(null)).toBeNull();
+  });
+
+  it('TickFailure.error carries codes for session/strict-family errors thrown in-tick (G impl-1)', async () => {
+    const { SinkWriteError } = await import('../src/session-errors.js');
+    const world = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    world.registerSystem({
+      name: 'boom',
+      execute: () => {
+        throw new SinkWriteError('sink exploded', { code: 'sink_write_failed', sink: 'file' });
+      },
+    });
+    const result = world.stepWithResult();
+    expect(result.ok).toBe(false);
+    expect(result.failure?.error?.code).toBe('sink_write_failed');
+    expect(result.failure?.error?.details).toEqual({ code: 'sink_write_failed', sink: 'file' });
+  });
+});
+
 describe('migrated sites: unchanged message + (class, code, details) per domain', () => {
   const makeWorld = () => new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
 

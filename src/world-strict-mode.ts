@@ -16,6 +16,9 @@ export interface StrictModeViolationDetails {
 
 export class StrictModeViolationError extends Error {
   readonly details: StrictModeViolationDetails;
+  /** First-class mirror of `details.code` (always 'strict_mode_violation');
+   *  read uniformly across error families via `getErrorCode` (ADR 47). */
+  readonly code = 'strict_mode_violation' as const;
   constructor(method: string, phase: StrictModePhase, advice: string) {
     super(`strict-mode violation: ${method} called during phase '${phase}'. ${advice}`);
     this.name = 'StrictModeViolationError';

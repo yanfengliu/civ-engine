@@ -1,6 +1,7 @@
 # Devlog Summary
 
 - 2026-06-11: Intra-tick time-slicing design + guide (v0.8.21) - 4 determinism-safe slicing rules, Amortizing-heavy-work guide section, determinism-contract item 10, roadmap Post-1.0 section; amortized-queue primitive demand-gated.
+- 2026-06-11: 1.0 surface groundwork (v0.8.23) - star-exports -> curated explicit lists with two-level surface-pin test; cross-family getErrorCode + read-side code mirrors (ADR 47); deprecation policy; v1-checklist breaking-decision menu. Incident: gemini plan-mode reviewers wrote to the working tree - detected, excised, hardened in AGENTS.md.
 - 2026-06-11: Lockstep multiplayer design (v0.8.22) - design-only Spec 11: LockstepSession + stateDigest specced through 2 review iterations + docs round; implementation gated on a real networked consumer.
 - 2026-06-11: Per-player filtered observation (v0.8.20) - PlayerObserver standalone utility (fog-of-war projection with entered/updated/exited semantics, honest destroyed-vs-fog attribution, generation-aware identity) + World.getStateKeys/getMetaEntries. 3 design + 2 impl review iterations; Gemini caught a same-tick id-recycling HIGH while Codex/Claude CLIs were quota-limited.
 - 2026-06-10: Coded engine errors (v0.8.19) - EngineError/EngineRangeError/EngineTypeError with first-class code + JSON-sanitized details across all 130 core throw sites (messages byte-identical), TickFailure error.code/details pass-through, completeness-gate scan test, ~60-code api-reference table. 3 impl review iterations (sanitization HIGH from Codex repro; system_threw doc fix).
