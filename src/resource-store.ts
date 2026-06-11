@@ -34,6 +34,12 @@ export class ResourceStore {
   private dirtyPools = new Map<string, Set<EntityId>>();
   private removedPools = new Map<string, Set<EntityId>>();
 
+  /** Sorted copy of the registered resource keys. Used by
+   *  `World.getRegistrationManifest()` (registration-manifest objective). */
+  getRegisteredKeys(): string[] {
+    return [...this.registeredKeys.keys()].sort();
+  }
+
   register(key: string, options?: { defaultMax?: ResourceMax }): void {
     if (this.registeredKeys.has(key)) {
       throw new Error(`Resource '${key}' is already registered`);

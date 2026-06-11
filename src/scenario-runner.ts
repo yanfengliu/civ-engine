@@ -15,6 +15,7 @@ import type {
   World,
   WorldMetrics,
 } from './world.js';
+import type { RegistrationManifest } from './session-bundle.js';
 
 type ScenarioEvent<
   TEventMap extends Record<keyof TEventMap, unknown>,
@@ -60,6 +61,10 @@ export interface ScenarioCapture<
   metrics: WorldMetrics | null;
   diff: TickDiff | null;
   events: Array<ScenarioEvent<TEventMap>>;
+  /** Connect-time-style registration fingerprint captured from the live
+   *  world; `scenarioResultToBundle` copies it into bundle metadata
+   *  (registration-manifest objective). */
+  registration?: RegistrationManifest;
 }
 
 export interface ScenarioStepUntilResult {
@@ -369,6 +374,7 @@ function captureScenarioState<
     metrics: world.getMetrics(),
     diff,
     events,
+    registration: world.getRegistrationManifest(),
   };
 }
 

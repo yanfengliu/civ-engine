@@ -27,6 +27,7 @@ export {
   SESSION_BUNDLE_SCHEMA_VERSION,
   type SessionBundle,
   type SessionMetadata,
+  type RegistrationManifest,
   type SessionTickEntry,
   type SessionSnapshotEntry,
   type AttachmentDescriptor,

@@ -517,7 +517,7 @@ describe('CommandTransaction', () => {
         'getState', 'hasState',
         'hasTag', 'getByTag', 'getTags',
         'getMeta', 'getByMeta',
-        'getSpeed', 'isPaused', 'hasCommandHandler',
+        'getSpeed', 'isPaused', 'hasCommandHandler', 'getRegistrationManifest',
         'getAliveEntities', 'getResourceEntities', 'tick',
         // Strict-mode read-only getters (Spec 6, v0.8.8)
         'isStrict', 'isInTick', 'isInSetup', 'isInMaintenance',

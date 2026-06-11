@@ -81,6 +81,7 @@ export class BundleViewer<
   readonly markerIndex: ReadonlyMap<string, Marker>;
 
   private readonly _worldFactory: ReplayerConfig<TEventMap, TCommandMap>['worldFactory'] | undefined;
+  private readonly _skipRegistrationCheck: boolean;
   private readonly _eventsByTick: Map<number, readonly RecordedTickFrameEvent<TEventMap>[]>;
   private readonly _commandsByTick: Map<number, readonly RecordedCommand<TCommandMap>[]>;
   private readonly _executionsByTick: Map<number, readonly CommandExecutionResult<keyof TCommandMap>[]>;
@@ -107,6 +108,7 @@ export class BundleViewer<
     this.bundle = bundle;
     this.metadata = bundle.metadata;
     this._worldFactory = options?.worldFactory;
+    this._skipRegistrationCheck = options?.skipRegistrationCheck === true;
 
     const markerIndex = new Map<string, Marker>();
     for (const marker of bundle.markers) {
@@ -323,7 +325,10 @@ export class BundleViewer<
     }
     this._replayer = SessionReplayer.fromBundle<TEventMap, TCommandMap, TDebug>(
       this.bundle,
-      { worldFactory: this._worldFactory },
+      {
+        worldFactory: this._worldFactory,
+        ...(this._skipRegistrationCheck ? { skipRegistrationCheck: true } : {}),
+      },
     );
     return this._replayer;
   }

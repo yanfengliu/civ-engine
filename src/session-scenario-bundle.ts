@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { cloneJsonValue } from './json.js';
+import type { RegistrationManifest } from './session-bundle.js';
 import type { ScenarioResult } from './scenario-runner.js';
 import type {
   Marker,
@@ -17,6 +18,10 @@ export interface ScenarioResultToBundleOptions {
   sourceLabel?: string;
   /** Override `metadata.nodeVersion`. Defaults to `process.version`. */
   nodeVersion?: string;
+  /** Override `metadata.registration`. Defaults to `result.registration`
+   *  (captured by `runScenario`); omit both and the bundle has no manifest,
+   *  as before the registration-manifest objective. */
+  registration?: RegistrationManifest;
 }
 
 /**
@@ -79,6 +84,17 @@ export function scenarioResultToBundle<
     durationTicks: endTick - startTick,
     sourceKind: 'scenario',
     sourceLabel: options?.sourceLabel ?? result.name,
+    ...((options?.registration ?? result.registration)
+      ? {
+          // Deep-clone: result.registration / the override are caller-owned;
+          // the bundle's replay contract must not be mutable through them
+          // (impl-review-1 Codex MEDIUM).
+          registration: cloneJsonValue(
+            (options?.registration ?? result.registration) as unknown as Parameters<typeof cloneJsonValue>[0],
+            'scenario registration manifest',
+          ) as SessionMetadata['registration'],
+        }
+      : {}),
     ...(failedTicks.length > 0 ? { failedTicks } : {}),
   };
 

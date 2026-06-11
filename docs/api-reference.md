@@ -2325,6 +2325,14 @@ const metrics = world.getMetrics();
 console.log(metrics?.query.cacheHits, metrics?.durationMs.total);
 ```
 
+#### `getRegistrationManifest()`
+
+```typescript
+getRegistrationManifest(): RegistrationManifest
+```
+
+Snapshot of everything registered on the world: components (registration order, with `ComponentStoreOptions`), systems (registration order — execution-relevant — with phase/interval/intervalOffset/before/after), handler keys (sorted), validators (key + count, sorted), resource keys (sorted), and the destroy-callback count. `SessionRecorder.connect()` stamps it into `SessionMetadata.registration` for fail-fast replay verification (v0.8.18+); it is also useful directly for registration introspection by agents. Returns fresh arrays; safe to retain.
+
 #### `getInstrumentationProfile()`
 
 ```typescript
@@ -4698,10 +4706,27 @@ interface SessionMetadata {
   incomplete?: true;          // set when recorder did not reach disconnect cleanly
   failedTicks?: number[];     // ticks at-or-after which replay refuses (TickFailure spans)
   policySeed?: number;        // populated only when sourceKind === 'synthetic' (added in v0.8.0)
+  registration?: RegistrationManifest;  // connect-time registration fingerprint (v0.8.18+)
 }
 ```
 
 `endTick` is the live world tick at finalization regardless of persistence success; `persistedEndTick` is the upper bound for incomplete-bundle replay (per spec §5.2 manifest cadence).
+
+### `RegistrationManifest`
+
+```typescript
+interface RegistrationManifest {
+  schemaVersion: 1;
+  components: Array<{ key: string; options?: ComponentStoreOptions }>;  // registration order
+  systems: Array<{ name: string; phase: SystemPhase; interval: number; intervalOffset: number; before: string[]; after: string[] }>;  // registration order (execution-relevant)
+  handlers: string[];                                  // sorted
+  validators: Array<{ key: string; count: number }>;   // sorted by key
+  resources: string[];                                 // sorted; capture-only
+  destroyCallbackCount: number;
+}
+```
+
+Connect-time registration fingerprint recorded into `SessionMetadata.registration` (v0.8.18+) and returned by `World.getRegistrationManifest()`. Replay verification compares only the factory-owned categories — systems / handlers / validators / `destroyCallbackCount` (plus `positionKey` against the snapshot config, and components extras-only); component options and resources are capture-only because `applySnapshot` heals them from the snapshot (ADR 44).
 
 ### `Marker`
 
@@ -4731,7 +4756,7 @@ interface Marker {
 }
 ```
 
-`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()`; recorder-added markers always get `provenance: 'game'`. Since v0.8.16 the adapter also populates `metadata.failedTicks` from the recorded history, so scenario bundles get the same replay guards (`openAt` `replay_across_failure` rejection, `selfCheck` failure-segment skip, `forkAt` preconditions) as recorder bundles.
+`MarkerProvenance.engine` is reserved for `scenarioResultToBundle()`; recorder-added markers always get `provenance: 'game'`. Since v0.8.16 the adapter also populates `metadata.failedTicks` from the recorded history, so scenario bundles get the same replay guards (`openAt` `replay_across_failure` rejection, `selfCheck` failure-segment skip, `forkAt` preconditions) as recorder bundles. Since v0.8.18 `runScenario` captures `ScenarioResult.registration` (a `RegistrationManifest`) from the live world and the adapter copies it into `metadata.registration` (override via `options.registration`), so scenario bundles get fail-fast registration verification too.
 
 ### `RecordedCommand`
 
@@ -4953,9 +4978,14 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug> {
 
 interface ReplayerConfig {
   worldFactory: (snapshot: WorldSnapshot) => World;  // part of determinism contract per ADR 4
+  skipRegistrationCheck?: boolean;                   // default false; v0.8.18+
 }
 ```
 
+**Registration verification (v0.8.18+).** When a bundle's metadata carries a `RegistrationManifest` (recorded automatically since v0.8.18), every factory construction — `openAt`, `selfCheck` segments, `forkAt`, viewer materialization — verifies the factory-owned registration surface against it and throws `BundleIntegrityError` with `details.code: 'registration_mismatch'` **before any stepping** on drift. Compared strictly: systems (ordered tuples), handlers, validators (key + count), destroy-callback count, and `positionKey` vs `snapshot.config.positionKey`. Compared extras-only: components not present in the manifest or the construction snapshot's keys. Never compared (snapshot-healed by `applySnapshot`): component options and resources. Details include `missingSystems` / `extraSystems` / `recordedSystemOrder` / `actualSystemOrder` / per-index `systemDetailMismatches` / `extraComponents` / `missingHandlers` / `extraHandlers` / `validatorCountMismatches` / `destroyCallbackCountMismatch` / `positionKeyMismatch` — enough for an agent to correct its factory without diffing snapshots. Bundles without the field (pre-v0.8.18) skip the check; `skipRegistrationCheck: true` opts out for deliberately instrumented replay (extra observer systems), with `selfCheck` as the remaining backstop. Note the precedence change: a factory missing a handler now fails this eager check on new bundles; the lazy `ReplayHandlerMissingError` still guards legacy bundles and skipped checks.
+
+```ts
+// (continued)
 
 interface SelfCheckOptions {
   stopOnFirstDivergence?: boolean;   // default false
@@ -4976,7 +5006,7 @@ interface SelfCheckResult {
 function deepEqualWithPath(a: unknown, b: unknown, path?: string): { equal: boolean; firstDifferingPath?: string };
 ```
 
-Range checks per spec §9.1: `< startTick` or `> endTick` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. Missing handler in factory throws `ReplayHandlerMissingError`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
+Range checks per spec §9.1: `< startTick` or `> endTick` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
 
 `selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
 
@@ -4991,6 +5021,7 @@ function scenarioResultToBundle(
 interface ScenarioResultToBundleOptions {
   sourceLabel?: string;       // default: result.name
   nodeVersion?: string;        // default: process.version
+  registration?: RegistrationManifest;  // override metadata.registration (defaults to result.registration; v0.8.18+)
 }
 ```
 
@@ -5441,10 +5472,11 @@ class BundleViewer<
 ```ts
 interface BundleViewerOptions<TEventMap, TCommandMap> {
   worldFactory?: ReplayerConfig<TEventMap, TCommandMap>['worldFactory'];
+  skipRegistrationCheck?: boolean;  // forwarded to the internal replayer; v0.8.18+
 }
 ```
 
-Required for `frame.state()`, `frame.snapshot()`, snapshot-fallback `frame.diffSince()`, and `viewer.replayer()`. Pure-metadata navigation works without it.
+Required for `frame.state()`, `frame.snapshot()`, snapshot-fallback `frame.diffSince()`, and `viewer.replayer()`. Pure-metadata navigation works without it (and never triggers registration verification — no world is constructed).
 
 ### `TickFrame`
 

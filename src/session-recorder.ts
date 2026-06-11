@@ -144,6 +144,7 @@ export class SessionRecorder<
       persistedEndTick: this._startTick,
       durationTicks: 0,
       sourceKind: this._sourceKind ?? 'session',
+      registration: this._world.getRegistrationManifest(),
       ...(this._sourceLabel ? { sourceLabel: this._sourceLabel } : {}),
       ...(this._policySeed !== undefined ? { policySeed: this._policySeed } : {}),
     };

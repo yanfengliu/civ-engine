@@ -399,3 +399,5 @@ for (const [t, delta] of diff.perTickDeltas) {
 **Performance.** Each `.run()` replays the source bundle from `metadata.startTick` to `targetTick` (intrinsic cost). Chained forks compound this — for high-volume what-if exploration, batch substitutions through one builder rather than chaining many small forks.
 
 See `docs/api-reference.md` § "Counterfactual Replay / Fork (v0.8.12+)" for the full type surface, and `docs/guides/session-recording.md` § "Counterfactual replay" for storage and corpus integration.
+
+`world.getRegistrationManifest()` (v0.8.18+) gives agents a JSON snapshot of everything registered on a world — components with options, systems in execution-relevant order, handlers, validators, resources — both for direct introspection and as the basis of replay's fail-fast factory verification (see the session-recording guide).

@@ -408,3 +408,36 @@ describe('manifest attachment-id safety (full-review 2026-06-10 H2)', () => {
     expectCorpusError(() => readManifest(join(dir, 'manifest.json')), 'manifest_invalid');
   });
 });
+
+describe('registration manifest pass-through (registration-manifest objective)', () => {
+  it('entry.metadata.registration survives indexing', () => {
+    const dir = tempRoot();
+    const md = metadata('with-registration');
+    writeBundle(dir, {
+      ...md,
+      registration: {
+        schemaVersion: 1,
+        components: [{ key: 'position' }],
+        systems: [],
+        handlers: ['spawn'],
+        validators: [],
+        resources: [],
+        destroyCallbackCount: 0,
+      },
+    });
+    const corpus = new BundleCorpus(dir, { scanDepth: 'root' });
+    const entry = corpus.entries()[0];
+    expect(entry.metadata.registration).toBeDefined();
+    expect(entry.metadata.registration!.handlers).toEqual(['spawn']);
+  });
+
+  it('malformed registration in a manifest is rejected as manifest_invalid', () => {
+    const dir = tempRoot();
+    writeRawManifest(dir, JSON.stringify({
+      schemaVersion: SESSION_BUNDLE_SCHEMA_VERSION,
+      metadata: { ...metadata('bad-registration'), registration: 'bogus' },
+      attachments: [],
+    }));
+    expectCorpusError(() => readManifest(join(dir, 'manifest.json')), 'manifest_invalid');
+  });
+});

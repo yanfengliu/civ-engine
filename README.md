@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-0.8.17-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
+![version](https://img.shields.io/badge/version-0.8.18-blue) ![status](https://img.shields.io/badge/status-pre--release%20alpha-orange)
 
 > **Pre-release alpha - unverified.** This engine is under active development. The public API surface is still shifting (see `docs/changelog.md` for the recent breaking-change cadence - `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`), invariants are still being hardened through mandatory multi-CLI reviews, and no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - do **not** depend on it for shipped products yet.
 
@@ -148,7 +148,7 @@ The root package centers on a few primary entry points:
 - `World` for simulation, commands, events, serialization, diffs, resources, and atomic transactions (`world.transaction()`)
 - `ClientAdapter` and `RenderAdapter` for external clients and render transports
 - `WorldDebugger`, `WorldHistoryRecorder`, and `runScenario()` for AI/debug workflows
-- `SessionRecorder`, `SessionReplayer`, `SessionBundle`, `MemorySink`/`FileSink`, `Marker`, `RecordedCommand`, `scenarioResultToBundle()` for session capture/replay (`docs/guides/session-recording.md`)
+- `SessionRecorder`, `SessionReplayer`, `SessionBundle`, `MemorySink`/`FileSink`, `Marker`, `RecordedCommand`, `scenarioResultToBundle()`, `RegistrationManifest` + `World.getRegistrationManifest()` (fail-fast replay verification of worldFactory registration, v0.8.18+) for session capture/replay (`docs/guides/session-recording.md`)
 - `runSynthPlaytest`, `noopPolicy`, `randomPolicy`, `scriptedPolicy` for the synthetic playtest harness (Tier-1 of the AI-first feedback loop; `docs/guides/synthetic-playtest.md`)
 - `BundleCorpus`, `BundleQuery`, `BundleCorpusEntry`, `BundleCorpusMetadata`, `CorpusIndexError`, `CorpusIndexErrorCode`, and `InvalidCorpusEntry` for manifest-first disk corpus listing, filtering, and lazy FileSink-backed bundle loading (Tier-2 of the AI-first feedback loop; `docs/guides/bundle-corpus-index.md`)
 - `runMetrics`, `compareMetricsResults`, plus 11 metric factories (`bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) for behavioral metrics over a corpus (Tier-2 of the AI-first feedback loop; `docs/guides/behavioral-metrics.md`)

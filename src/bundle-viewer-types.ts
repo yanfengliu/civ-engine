@@ -72,6 +72,12 @@ export interface BundleViewerOptions<
   TCommandMap extends Record<keyof TCommandMap, unknown>,
 > {
   worldFactory?: ReplayerConfig<TEventMap, TCommandMap>['worldFactory'];
+  /**
+   * Forwarded to the internal `SessionReplayer` (registration-manifest
+   * objective): skip registration verification for deliberately
+   * instrumented replay. Default false.
+   */
+  skipRegistrationCheck?: boolean;
 }
 
 export interface RecordedTickFrameEvent<TEventMap> {

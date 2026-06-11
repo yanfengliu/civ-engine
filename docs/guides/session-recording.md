@@ -160,6 +160,12 @@ result.skippedSegments;     // [{ fromTick, toTick, reason: 'failure_in_segment'
 
 `selfCheck` returns `ok: true, checkedSegments: 0` (with a `console.warn`) on bundles without command payloads — diagnostic-only bundles can't be replayed. Bundles that crossed a recorded `TickFailure` get those segments skipped (replay-across-failure is out of scope per spec §2 / future spec).
 
+## Fail-fast factory verification (v0.8.18+)
+
+Every new bundle records a `RegistrationManifest` (components, systems in registration order, handlers, validators, resources, destroy-callback count) into `metadata.registration` at `SessionRecorder.connect()`. On replay, every factory construction verifies the factory-owned categories — systems / handlers / validators / destroy-callback count / `positionKey` — and throws a structured `BundleIntegrityError` (`details.code: 'registration_mismatch'`, with named missing/extra/ordered lists) **before any stepping**, instead of the tick-N state divergence factory drift used to produce. Components are checked extras-only (an extra factory component changes `serialize()` output); component options and resources are never compared — `applySnapshot` heals them from the snapshot, which is also why missing components/resources in your factory replay cleanly.
+
+Limitations: the manifest is the **connect-time** contract for recorder bundles; scenario bundles capture it at result time (end of run) — identical within the contract, opposite direction for out-of-contract mid-run registration. (Mid-recording registration is not captured — it was already outside ADR 4's reproducibility assumption); validator within-key order and function bodies are not fingerprintable (count only); strict ordered-tuple system comparison flags a cross-phase registration reorder even when phase-sorting would yield identical execution order — deliberate ADR-4 "same order" enforcement. For deliberately instrumented replay (extra observer systems, debug components), pass `skipRegistrationCheck: true` on `ReplayerConfig` or `BundleViewerOptions`; `selfCheck()` remains the backstop. Old bundles without the field behave exactly as before.
+
 ## Determinism contract
 
 For replay to produce the same state as recording, user code MUST:

@@ -8,6 +8,38 @@ import type {
   TickFailure,
   WorldMetrics,
 } from './world.js';
+import type { ComponentStoreOptions } from './component-store.js';
+import type { SystemPhase } from './world-internal.js';
+
+/**
+ * Connect-time registration fingerprint recorded into bundle metadata
+ * (registration-manifest objective). Replay verification compares only the
+ * factory-owned categories (systems / handlers / validators /
+ * destroyCallbackCount); components/options/resources are capture-only —
+ * `applySnapshot` heals them from the snapshot. See
+ * `docs/threads/done/registration-manifest/DESIGN.md` §1.
+ */
+export interface RegistrationManifest {
+  schemaVersion: 1;
+  /** Registration order preserved (execution-relevant for systems;
+   *  informational for components). */
+  components: Array<{ key: string; options?: ComponentStoreOptions }>;
+  systems: Array<{
+    name: string;
+    phase: SystemPhase;
+    interval: number;
+    intervalOffset: number;
+    before: string[];
+    after: string[];
+  }>;
+  /** Sorted. */
+  handlers: string[];
+  /** Sorted by key; within-key order is not fingerprintable. */
+  validators: Array<{ key: string; count: number }>;
+  /** Sorted; capture-only (snapshot-healed). */
+  resources: string[];
+  destroyCallbackCount: number;
+}
 
 export const SESSION_BUNDLE_SCHEMA_VERSION = 1 as const;
 
@@ -104,6 +136,12 @@ export interface SessionMetadata {
    * Spec 3 §5.4.
    */
   policySeed?: number;
+  /**
+   * Connect-time registration fingerprint (registration-manifest objective,
+   * v0.8.18+). Absent on older bundles and scenario bundles built without it
+   * — replay verification then skips, exactly as before.
+   */
+  registration?: RegistrationManifest;
 }
 
 export interface SessionBundle<

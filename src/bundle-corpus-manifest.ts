@@ -117,6 +117,25 @@ function validateMetadata(value: unknown, path: string): SessionMetadata {
   if (value.policySeed !== undefined) {
     metadata.policySeed = assertInteger(value.policySeed, 'policySeed', path);
   }
+  if (value.registration !== undefined) {
+    // Light shape check + verbatim copy: the corpus index stays a faithful
+    // projection of bundle metadata; deep structure belongs to the replayer
+    // (registration-manifest objective; the validator otherwise strips
+    // unknown fields).
+    const registration = value.registration as { schemaVersion?: unknown };
+    if (
+      registration === null ||
+      typeof registration !== 'object' ||
+      registration.schemaVersion !== 1
+    ) {
+      throw corpusError('metadata.registration must be a RegistrationManifest (schemaVersion 1)', {
+        code: 'manifest_invalid',
+        path,
+        message: 'registration',
+      });
+    }
+    metadata.registration = value.registration as SessionMetadata['registration'];
+  }
   return metadata;
 }
 

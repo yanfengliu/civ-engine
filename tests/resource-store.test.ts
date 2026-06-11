@@ -277,3 +277,16 @@ describe('ResourceStore', () => {
     expect(restored.getDirty()).toEqual({});
   });
 });
+
+describe('getRegisteredKeys (registration-manifest objective)', () => {
+  it('returns sorted registered resource keys as a copy', () => {
+    const store = new ResourceStore();
+    store.register('wood');
+    store.register('gold', { defaultMax: 100 });
+    store.register('food');
+    const keys = store.getRegisteredKeys();
+    expect(keys).toEqual(['food', 'gold', 'wood']);
+    keys.push('mutated');
+    expect(store.getRegisteredKeys()).toEqual(['food', 'gold', 'wood']);
+  });
+});

@@ -104,21 +104,26 @@ describe('SessionReplayer', () => {
     expect(() => replayer.openAt(999)).toThrow(/too_high|above/);
   });
 
-  it('openAt: missing handler in factory throws ReplayHandlerMissingError', () => {
+  it('openAt: missing handler — registration check fires first; ReplayHandlerMissingError remains the backstop under skip', () => {
     const { bundle } = recordSession(2);
-    const replayer = SessionReplayer.fromBundle(bundle, {
-      worldFactory: (snap) => {
-        const w = new World<Record<string, never>, Cmds>(mkConfig());
-        // Intentionally do NOT register the spawn handler
-        w.applySnapshot(snap);
-        return w;
-      },
+    const factory = (snap: Parameters<typeof World.deserialize>[0]) => {
+      const w = new World<Record<string, never>, Cmds>(mkConfig());
+      // Intentionally do NOT register the spawn handler
+      w.applySnapshot(snap);
+      return w;
+    };
+    // New bundles carry metadata.registration: the eager fail-fast check
+    // reports the missing handler structurally before any replay stepping
+    // (registration-manifest objective; documented precedence).
+    const eager = SessionReplayer.fromBundle(bundle, { worldFactory: factory });
+    expect(() => eager.openAt(1)).toThrow(/registration mismatch/);
+    // Under skipRegistrationCheck (and for legacy bundles without the field),
+    // the original lazy guard still fires mid-replay.
+    const lazy = SessionReplayer.fromBundle(bundle, {
+      worldFactory: factory,
+      skipRegistrationCheck: true,
     });
-    // openAt(1) forces replay from the initial snapshot through tick 0's
-    // commands (a spawn at submissionTick=0 from recordSession), which hits
-    // the missing-handler check. openAt(2) would land on the terminal
-    // snapshot directly without replaying.
-    expect(() => replayer.openAt(1)).toThrow(/handler_missing|handler/);
+    expect(() => lazy.openAt(1)).toThrow(/handler_missing|handler/);
   });
 
   it('cross-b engineVersion throws BundleVersionError on construction', () => {

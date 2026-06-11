@@ -1,0 +1,5 @@
+# registration-manifest — implementation review iteration 2 (verification)
+
+**Reviewers:** Codex `gpt-5.5` xhigh + Claude `claude-fable-5[1m]` max.
+
+**Result: both CONVERGED, no new findings.** Every iteration-1 fix verified against the live tree (Claude re-ran the 7 touched suites: 154 passed). The HIGH's fix was additionally proven safe in both directions: ordered name-array equality is implied by the old set criterion on faithful inputs (so it can only be stricter on drift, never reject a faithful factory — both manifests build from the append-only registration array with identical normalization, and `applySnapshot` never touches systems), and the duplicate-system regression pins the formerly-blind case with `missingSystems: []` as documented evidence. Adapter deep-clone, all five doc surfaces, the four coverage fixtures, counts, the cross-phase stability fixture, and the guide qualifier all verified. Sub-threshold wording nit on the changelog's "3 pre-existing tests" phrasing recorded here, not acted on. Objective closes.

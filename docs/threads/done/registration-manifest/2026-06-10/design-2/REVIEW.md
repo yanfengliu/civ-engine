@@ -1,0 +1,7 @@
+# registration-manifest — design review iteration 2 (confirmation)
+
+**Artifact:** DESIGN.md v2. **Reviewers:** Codex `gpt-5.5` xhigh, Gemini `gemini-3.1-pro-preview`, Claude `claude-fable-5[1m]` max.
+
+**Result: all three CONVERGED.** Every design-1 finding confirmed correctly adopted. Claude additionally proved the two questions the round was asked: (a) the extras-only component rule is sound across snapshots at different ticks — `serialize()` writes every registered key including empty stores, so the manifest∪snapshot union is tick-invariant within the connect-time contract, faithful factories can never be flagged at any tick, and flagged extras are true positives (they survive the merge-back and corrupt `serialize()` output today); (b) per-construction verification cannot newly reject a faithful factory at later snapshots (strict categories are snapshot-independent; the component union only grows; `positionKey` is constant across a recording) — the only behavior change is that drifted factories now throw a structured error precisely where they previously produced opaque divergences, with `_checkSegment`'s existing `ReplayHandlerMissingError` throw as precedent.
+
+Residue (adopted inline before PLAN execution): pin "opening snapshot" to the per-construction snapshot; qualify call-order independence as within-contract; rename the accessor to `getRegisteredKeys()` (private-field name collision); guide sentence acknowledging cross-phase-reorder strictness as deliberate ADR-4 enforcement. Design ACCEPTED → implementation.

@@ -16,6 +16,7 @@ import type {
   TickFailure,
   WorldMetrics,
 } from './world-types.js';
+import type { RegistrationManifest } from './session-bundle.js';
 import { WorldEntities } from './world-entities.js';
 
 export abstract class WorldObservers<
@@ -24,6 +25,39 @@ export abstract class WorldObservers<
   TComponents extends ComponentRegistry = Record<string, unknown>,
   TState extends Record<string, unknown> = Record<string, unknown>,
 > extends WorldEntities<TEventMap, TCommandMap, TComponents, TState> {
+  /**
+   * Connect-time-style snapshot of everything registered on this world:
+   * components (registration order, with options), systems (registration
+   * order — execution-relevant), handlers, validators (key + count),
+   * resources, and the destroy-callback count. Used by `SessionRecorder`
+   * to stamp bundle metadata for fail-fast replay verification, and useful
+   * to agents directly for registration introspection. Returns fresh
+   * arrays; safe to retain.
+   */
+  getRegistrationManifest(): RegistrationManifest {
+    return {
+      schemaVersion: 1,
+      components: [...this.componentStores.keys()].map((key) => {
+        const options = this.componentOptions.get(key);
+        return options ? { key, options: { ...options } } : { key };
+      }),
+      systems: this.systems.map((s) => ({
+        name: s.name,
+        phase: s.phase,
+        interval: s.interval,
+        intervalOffset: s.intervalOffset,
+        before: [...s.before],
+        after: [...s.after],
+      })),
+      handlers: [...this.handlers.keys()].map(String).sort(),
+      validators: [...this.validators.entries()]
+        .map(([key, fns]) => ({ key: String(key), count: fns.length }))
+        .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+      resources: this.resourceStore.getRegisteredKeys(),
+      destroyCallbackCount: this.destroyCallbacks.length,
+    };
+  }
+
   emit<K extends keyof TEventMap>(type: K, data: TEventMap[K]): void {
     assertWritable(this, 'emit');
     this.eventBus.emit(type, data);

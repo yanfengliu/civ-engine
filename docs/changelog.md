@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.18 - 2026-06-10
+
+worldFactory registration manifest — fail-fast replay verification (objective `registration-manifest`, 2/7 of the improvement wave; the full review called this "the single highest-leverage AI-native improvement available"). Full design pipeline: 2 design iterations to unanimous CONVERGED, including a design-1 HIGH that reshaped the comparison semantics (see ADR 44).
+
+- **Every new bundle records a `RegistrationManifest`** (`metadata.registration`): components with options (registration order), systems (registration order — execution-relevant — with phase/interval/offset/before/after), handler keys, validators (key + count), resource keys, destroy-callback count. Captured at `SessionRecorder.connect()`; synthetic/agent playtests and fork bundles inherit automatically; `runScenario` captures `ScenarioResult.registration` and `scenarioResultToBundle` copies it (override via `options.registration`).
+- **Replay fails fast on factory drift.** Every factory construction (`openAt`, `selfCheck` segments, `forkAt`, viewer materialization — one shared internal path) verifies the factory-owned categories and throws `BundleIntegrityError` with `details.code: 'registration_mismatch'` **before any stepping**: named missing/extra lists, full recorded/actual system order arrays, per-index detail mismatches — instead of the tick-N state divergence that ADR 16 admitted was indistinguishable from an engine determinism bug. Compared strictly: systems / handlers / validators / destroy-callback count / `positionKey`; components extras-only; options + resources never (they are healed from the snapshot by `applySnapshot` — comparing them yields dead checks or false positives; ADR 44).
+- **New public `World.getRegistrationManifest()`** for direct registration introspection by agents. New `ResourceStore.getRegisteredKeys()`.
+- **Escape hatch:** `skipRegistrationCheck` on `ReplayerConfig` and `BundleViewerOptions` for deliberately instrumented replay; `selfCheck` remains the backstop. Old bundles without the field behave exactly as before.
+- **Behavior changes:** a factory missing a handler now fails the eager check on new bundles (`ReplayHandlerMissingError` still guards legacy bundles and skipped checks); deliberately divergent factories that previously surfaced as selfCheck divergences now throw the structured error at construction. The corpus manifest validator now validates + preserves the `registration` field (it previously stripped unknown metadata).
+- Internal: replayer config/result types extracted to `session-replayer-types.ts`; comparison logic in new `session-registration.ts` (LOC budget).
+
+### Validation
+
+23 new tests, all failing-first (plus 3 pre-existing tests updated to the documented precedence): manifest construction/stability/isolation, all capture points incl. fork inheritance, every strict mismatch class with details assertions, snapshot-healing non-false-positives, call-order independence, escape hatches, legacy skip, corpus pass-through + malformed rejection. All four gates + benchmark gate pass. Design threads: `docs/threads/done/registration-manifest/`.
+
 ## 0.8.17 - 2026-06-10
 
 Benchmark regression gate (objective `benchmark-gate`; first of the seven-objective improvement wave, full design + review pipeline — see `docs/threads/done/benchmark-gate/`).

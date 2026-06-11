@@ -42,7 +42,11 @@ function recordWith(setup: (w: World<Record<string, never>, Cmds>) => void, step
   return { bundle: rec.toBundle() as unknown as Bundle };
 }
 
-function replayWith(bundle: Bundle, setup: (w: World<Record<string, never>, Cmds>) => void): {
+function replayWith(
+  bundle: Bundle,
+  setup: (w: World<Record<string, never>, Cmds>) => void,
+  options?: { skipRegistrationCheck?: boolean },
+): {
   ok: boolean;
   stateDivergences: number;
   eventDivergences: number;
@@ -56,6 +60,7 @@ function replayWith(bundle: Bundle, setup: (w: World<Record<string, never>, Cmds
       w.applySnapshot(snap);
       return w;
     },
+    ...(options?.skipRegistrationCheck ? { skipRegistrationCheck: true } : {}),
   });
   const result = replayer.selfCheck();
   return {
@@ -200,7 +205,12 @@ describe('Determinism contract — paired tests per spec §11.1', () => {
       });
     };
     const { bundle } = recordWith(setupRec, 2);
-    const result = replayWith(bundle, setupReplay);
+    // Since the registration-manifest objective, the order swap is caught
+    // eagerly at construction with a structured error (the better diagnostic);
+    // selfCheck's divergence detection - clause 8's original subject - is
+    // proven under skipRegistrationCheck, which is the backstop contract.
+    expect(() => replayWith(bundle, setupReplay)).toThrow(/registration mismatch/);
+    const result = replayWith(bundle, setupReplay, { skipRegistrationCheck: true });
     expect(result.ok).toBe(false);
     expect(result.stateDivergences).toBeGreaterThan(0);
   });

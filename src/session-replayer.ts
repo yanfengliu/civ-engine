@@ -21,68 +21,27 @@ import { ENGINE_VERSION } from './version.js';
 import type { CommandExecutionResult, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
 import { createForkBuilder, type ForkBuilder } from './session-fork.js';
+import { compareRegistration } from './session-registration.js';
+import type {
+  EventDivergence,
+  ExecutionDivergence,
+  MarkerValidationResult,
+  ReplayerConfig,
+  SelfCheckOptions,
+  SelfCheckResult,
+  StateDivergence,
+} from './session-replayer-types.js';
 
-export interface ReplayerConfig<
-  TEventMap extends Record<keyof TEventMap, unknown>,
-  TCommandMap extends Record<keyof TCommandMap, unknown>,
-> {
-  /**
-   * Constructs a paused `World` from a snapshot. Per ADR 4 (spec §15),
-   * this factory is part of the determinism contract: it must reproduce
-   * the recording-time component / handler / validator / system
-   * registration, in the same order, and apply the snapshot in-place
-   * (e.g. `World.applySnapshot`) to avoid `registerComponent` /
-   * `registerHandler` duplicate-throws.
-   */
-  worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap>;
-}
-
-export interface SelfCheckOptions {
-  stopOnFirstDivergence?: boolean;     // default false
-  checkState?: boolean;                // default true
-  checkEvents?: boolean;               // default true
-  checkExecutions?: boolean;           // default true
-}
-
-export interface StateDivergence {
-  fromTick: number;
-  toTick: number;
-  expected: WorldSnapshot;
-  actual: WorldSnapshot;
-  firstDifferingPath?: string;
-}
-
-export interface EventDivergence {
-  tick: number;
-  expected: Array<{ type: PropertyKey; data: unknown }>;
-  actual: Array<{ type: PropertyKey; data: unknown }>;
-}
-
-export interface ExecutionDivergence {
-  tick: number;
-  expected: CommandExecutionResult[];
-  actual: CommandExecutionResult[];
-}
-
-export interface SkippedSegment {
-  fromTick: number;
-  toTick: number;
-  reason: 'failure_in_segment';
-}
-
-export interface SelfCheckResult {
-  ok: boolean;
-  checkedSegments: number;
-  stateDivergences: StateDivergence[];
-  eventDivergences: EventDivergence[];
-  executionDivergences: ExecutionDivergence[];
-  skippedSegments: SkippedSegment[];
-}
-
-export interface MarkerValidationResult {
-  ok: boolean;
-  invalidMarkers: Array<{ markerId: string; reason: string }>;
-}
+export type {
+  EventDivergence,
+  ExecutionDivergence,
+  MarkerValidationResult,
+  ReplayerConfig,
+  SelfCheckOptions,
+  SelfCheckResult,
+  SkippedSegment,
+  StateDivergence,
+} from './session-replayer-types.js';
 
 /**
  * Loads a `SessionBundle` (or `SessionSource`) and exposes replay /
@@ -134,6 +93,27 @@ export class SessionReplayer<
       if (list) list.push(exec);
       else this._executionsByTick.set(exec.tick, [exec]);
     }
+  }
+
+  /**
+   * The single factory-invocation path (registration-manifest objective):
+   * both `openAt` and `_checkSegment` construct replay worlds here, and the
+   * recorded registration manifest — when present and not skipped — is
+   * verified on EVERY construction, before any stepping.
+   */
+  private _constructReplayWorld(snapshot: WorldSnapshot): World<TEventMap, TCommandMap> {
+    const world = this._config.worldFactory(snapshot);
+    const recorded = this._bundle.metadata.registration;
+    if (recorded && this._config.skipRegistrationCheck !== true) {
+      const details = compareRegistration(recorded, world, snapshot);
+      if (details) {
+        throw new BundleIntegrityError(
+          'worldFactory registration mismatch: the factory does not reproduce the recorded registration (see details; pass skipRegistrationCheck: true for deliberately instrumented replay)',
+          details,
+        );
+      }
+    }
+    return world;
   }
 
   static fromBundle<
@@ -240,7 +220,7 @@ export class SessionReplayer<
     for (const s of all) {
       if (s.tick <= targetTick && s.tick >= start.tick) start = s;
     }
-    const world = this._config.worldFactory(start.snapshot);
+    const world = this._constructReplayWorld(start.snapshot);
 
     for (let t = start.tick; t < targetTick; t++) {
       const tickCommands = this._commandsByTick.get(t) ?? [];
@@ -368,7 +348,7 @@ export class SessionReplayer<
     const stateDivs: StateDivergence[] = [];
     const eventDivs: EventDivergence[] = [];
     const execDivs: ExecutionDivergence[] = [];
-    const world = this._config.worldFactory(a.snapshot);
+    const world = this._constructReplayWorld(a.snapshot);
 
     // Accumulate replay-side executions via listener
     const replayExecs: CommandExecutionResult[] = [];
