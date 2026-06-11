@@ -1,6 +1,7 @@
 # Devlog Summary
 
 - 2026-06-11: Intra-tick time-slicing design + guide (v0.8.21) - 4 determinism-safe slicing rules, Amortizing-heavy-work guide section, determinism-contract item 10, roadmap Post-1.0 section; amortized-queue primitive demand-gated.
+- 2026-06-11: CI audit fix (v0.8.24) - vitest CRITICAL + vite HIGH advisories in the dev tree resolved via lockfile (vitest 3.2.6 / vite 7.3.5); CI had been red on the audit step since the advisories published. Gates re-validated on the upgraded runner.
 - 2026-06-11: 1.0 surface groundwork (v0.8.23) - star-exports -> curated explicit lists with two-level surface-pin test; cross-family getErrorCode + read-side code mirrors (ADR 47); deprecation policy; v1-checklist breaking-decision menu. Incident: gemini plan-mode reviewers wrote to the working tree - detected, excised, hardened in AGENTS.md.
 - 2026-06-11: Lockstep multiplayer design (v0.8.22) - design-only Spec 11: LockstepSession + stateDigest specced through 2 review iterations + docs round; implementation gated on a real networked consumer.
 - 2026-06-11: Per-player filtered observation (v0.8.20) - PlayerObserver standalone utility (fog-of-war projection with entered/updated/exited semantics, honest destroyed-vs-fog attribution, generation-aware identity) + World.getStateKeys/getMetaEntries. 3 design + 2 impl review iterations; Gemini caught a same-tick id-recycling HIGH while Codex/Claude CLIs were quota-limited.

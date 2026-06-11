@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.24 - 2026-06-11
+
+CI/dev-tooling security fix — no engine code, API, or behavior change.
+
+- **CI was red on `npm audit --audit-level=high`**: vitest <3.2.6 (CRITICAL advisory GHSA-5xrq-8626-4rwp) and vite 7.0.0–7.3.1 (HIGH, path traversal + fs.deny bypass) in the dev tree. Lockfile re-resolved via `npm audit fix` to vitest 3.2.6 / vite 7.3.5 (existing `^3.0.0` range; package.json unchanged). The engine itself has zero runtime dependencies — `npm audit --omit=dev` was and remains clean.
+- Full suite re-validated on the upgraded test runner: 1181 passed + 2 todo; lint/typecheck/build/benchmark green.
+
 ## 0.8.23 - 2026-06-11
 
 1.0 surface groundwork (objective `v1-surface`, 7/7 — final objective of the improvement wave; see `docs/threads/done/v1-surface/`). Ships every NON-breaking part of the reviewed 1.0 proposal now; the breaking decisions are packaged as a human menu in `docs/design/v1-checklist.md`.
