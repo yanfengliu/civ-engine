@@ -234,6 +234,13 @@ export abstract class WorldObservers<
     return this.stateStore.get(key);
   }
 
+  /** All world-state keys, sorted lexicographically (stable contract for
+   *  observation determinism — the store Map's order is program-dependent).
+   *  Added v0.8.20 for PlayerObserver; independently useful introspection. */
+  getStateKeys(): string[] {
+    return [...this.stateStore.keys()].sort();
+  }
+
   deleteState<K extends keyof TState & string>(key: K): void;
   deleteState(key: string): void;
   deleteState(key: string): void {

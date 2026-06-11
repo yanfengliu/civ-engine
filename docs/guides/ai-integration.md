@@ -137,6 +137,10 @@ The most recent runtime failure is also available through `world.getLastTickFail
 
 Every error the core engine throws is an `EngineError` / `EngineRangeError` / `EngineTypeError` carrying a stable `code` and structured `details` — agents must branch on `code`, never on message prose (messages are human-facing and may be reworded; codes are contract). Direct calls: `try { world.addComponent(id, 'hp', hp) } catch (e) { if (isEngineError(e) && e.code === 'entity_not_alive') refreshEntityList(e.details) }`. Inside a tick, the same code survives into the failure surface as `failure.error.code` — note the two levels: `failure.code` classifies the failure (`'system_threw'`), `failure.error.code` is the thrown engine error (`'entity_not_alive'`). The full code table lives in the api-reference Engine Errors section; the session stack keeps its own `details.code` family on `SessionRecordingError` subclasses.
 
+### Honest fog-of-war agents (v0.8.20)
+
+An AI playtester that should only "see" what its player sees holds a `PlayerObserver` over `ctx.world` and acts on observations instead of raw world reads: construct it once with the player's `VisibilityMap`, call `observeTick()` after each step, and branch on `entered` / `updated` / `exited` — entities entering view arrive with full data, entities leaving view produce an explicit exit notice with honest `'fog'`-vs-`'destroyed'` attribution. Defaults leak nothing (positionless entities, world state, and events are all opt-in). For networked clients, the same projection works per-`ClientAdapter`-client: send `observeTick()` output as the per-client tick message in place of the omniscient diff. Full surface: api-reference § "PlayerObserver".
+
 ## Runtime Profiles
 
 Keep AI loops on the default `instrumentationProfile: 'full'`.

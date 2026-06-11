@@ -61,6 +61,16 @@ export abstract class WorldTagsMeta<
     return this.entityMeta.get(entity)?.get(key);
   }
 
+  /** Full metadata map for an alive entity as a fresh plain object ({} when
+   *  none). Added v0.8.20 for PlayerObserver (entities entering view need
+   *  full current meta; getMeta is per-key and the diff only covers
+   *  changed-this-tick entities); independently useful introspection. */
+  getMetaEntries(entity: EntityId): Record<string, string | number> {
+    this.assertAlive(entity);
+    const map = this.entityMeta.get(entity);
+    return map ? Object.fromEntries(map) : {};
+  }
+
   deleteMeta(entity: EntityId, key: string): void {
     assertWritable(this, 'deleteMeta');
     this.assertAlive(entity);

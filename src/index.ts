@@ -11,6 +11,7 @@ export * from './map-gen.js';
 export * from './noise.js';
 export * from './occupancy-grid.js';
 export * from './path-service.js';
+export * from './player-observer.js';
 export * from './pathfinding.js';
 export * from './random.js';
 export * from './render-adapter.js';

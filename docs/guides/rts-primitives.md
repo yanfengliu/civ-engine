@@ -166,7 +166,7 @@ If you use custom cost or blocked callbacks, provide an explicit `cacheKey` and 
 
 ## Fog and Visibility
 
-Use `VisibilityMap` for per-player visible and explored cells.
+Use `VisibilityMap` for per-player visible and explored cells. To project the world's observation surfaces (snapshot, per-tick changes, events, world state) through that visibility — so a fog-of-war agent or client sees only what its player sees — compose it with `PlayerObserver` (v0.8.20, `docs/api-reference.md` § "PlayerObserver"): one observer per player, `observeTick()` after each step, with explicit entered/updated/exited transition semantics that raw diff filtering cannot express.
 
 ```typescript
 import { VisibilityMap } from 'civ-engine';

@@ -221,6 +221,7 @@ The engine ships several standalone data structures that game code instantiates 
 - **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing
 - **`createNoise2D` / `octaveNoise2D` / `stepCellGrid`** — map-generation primitives
 - **`createBehaviorTree` / `BTState`** — behavior-tree framework
+- **`PlayerObserver`** — per-player fog-of-war observation: filtered snapshot + per-tick entered/updated/exited feed keyed by a `VisibilityMap`. See `docs/api-reference.md` § "PlayerObserver".
 - **`SessionRecorder` / `SessionReplayer` / `SessionBundle` / `SessionSink` / `SessionSource` / `MemorySink` / `FileSink` / `Marker` / `RecordedCommand`** — capture deterministic, replayable bundles of any World run; load + replay + selfCheck; companion adapter `scenarioResultToBundle()`. See `docs/guides/session-recording.md`.
 - **`BundleCorpus`** - manifest-first listing, filtering, and lazy loading over closed `FileSink` bundle directories. See `docs/guides/bundle-corpus-index.md`.
 - **`BundleViewer` / `diffSnapshots`** — programmatic agent-driver API over a `SessionBundle`: marker-anchored navigation, per-tick frames with selective runtime freezing, lazy memoized `SessionReplayer`, two-path `frame.diffSince` (folded TickDiffs vs snapshot-via-`diffSnapshots`), `BundleCorpusEntry.openViewer()` integration. See `docs/guides/bundle-viewer.md`.

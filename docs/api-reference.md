@@ -47,6 +47,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Bundle Corpus Index](#bundle-corpus-index-v083)
 - [Behavioral Metrics](#behavioral-metrics-v082)
 - [Engine Errors](#engine-errors-v0819)
+- [PlayerObserver](#playerobserver-v0820)
 
 ---
 
@@ -2063,6 +2064,14 @@ Retrieves a world-level state value by key, or `undefined` if the key does not e
 const turn = world.getState('turnNumber'); // 1
 ```
 
+#### `getStateKeys()` (v0.8.20)
+
+```typescript
+getStateKeys(): string[]
+```
+
+All world-state keys, sorted lexicographically (fresh array; stable contract for observation determinism). Added for `PlayerObserver`; independently useful introspection.
+
 #### `deleteState(key)`
 
 ```typescript
@@ -2182,6 +2191,14 @@ Returns the metadata value for the given entity and key, or `undefined` if not s
 ```typescript
 const owner = world.getMeta(unit, 'owner'); // 'player1'
 ```
+
+#### `getMetaEntries(entity)` (v0.8.20)
+
+```typescript
+getMetaEntries(entity: EntityId): Record<string, string | number>
+```
+
+Full metadata map for an alive entity as a fresh plain object (`{}` when none); throws `entity_not_alive` for dead entities. Added for `PlayerObserver` (entities entering view need full current meta; `getMeta` is per-key and the diff only covers changed-this-tick entities); independently useful introspection.
 
 #### `deleteMeta(entity, key)`
 
@@ -5954,3 +5971,66 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
 
 The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.
+
+## PlayerObserver (v0.8.20)
+
+```typescript
+// src/player-observer.ts
+class PlayerObserver<TEventMap, TComponents> {
+  constructor(config: PlayerObserverConfig<TEventMap, TComponents>);
+  snapshot(): PlayerObservation<TComponents>;        // full filtered view; PRIMES the observer
+  observeTick(): PlayerTickObservation<TEventMap, TComponents>; // once per successful step
+  reset(): void;                                     // re-prime after timeline changes
+  isVisible(x: number, y: number): boolean;          // total: false out-of-grid / non-integer
+}
+
+interface PlayerObserverConfig<TEventMap, TComponents> {
+  world: World<TEventMap, any, TComponents, any>;
+  visibility: VisibilityMap;
+  playerId: VisibilityPlayerId;
+  positionless?: 'hidden' | 'visible';               // default 'hidden'
+  worldState?: 'none' | 'all' | ((key: string) => boolean); // default 'none'
+  events?: 'none' | 'all' | ((event, isVisible) => boolean); // default 'none'
+}
+
+interface ObservedEntity<TComponents> {
+  ref: EntityRef;                       // generation-aware identity
+  components: Partial<TComponents>;
+  resources: Record<string, ResourcePool>;
+  tags: string[];                       // sorted
+  meta: Record<string, string | number>;
+}
+
+interface PlayerTickObservation<TEventMap, TComponents> {
+  tick: number;
+  entered: Array<ObservedEntity<TComponents>>;        // newly visible: FULL data
+  updated: Array<{                                    // visible last tick and this tick
+    ref: EntityRef;
+    components: Partial<TComponents>;
+    componentsRemoved: string[];
+    resources: Record<string, ResourcePool>;
+    resourcesRemoved: string[];
+    tags?: string[];                                  // full set, only when changed
+    meta?: Record<string, string | number>;           // full map, only when changed
+  }>;
+  exited: Array<{ ref: EntityRef; reason: 'fog' | 'destroyed' }>;
+  events: Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+  worldState: { set: Record<string, unknown>; removed: string[] };
+}
+```
+
+Per-player fog-of-war observation: projects the world's omniscient observation surfaces through a `VisibilityMap` so an agent or client sees only what its player sees. Standalone and read-side-only (zero impact on simulation, recording, or replay). The load-bearing feature is **visibility-transition semantics**: an entity moving into view (or fog receding over it) arrives in `entered` with its FULL current data even though nothing changed that tick; leaving view produces an explicit `exited` notice — raw diff filtering can express neither.
+
+**Lifecycle contract.** Construction primes the observer (construction ≡ implicit `reset()`); call `observeTick()` exactly once after each successful `world.step()`, AFTER updating the `VisibilityMap` for the tick (the observer reads visibility at call time). Violations throw coded `EngineError`s: `player_observer_world_poisoned` (failed tick — listener-phase failures look sequential, so the poison check is load-bearing), `player_observer_tick_already_observed`, `player_observer_tick_skipped`. After `world.recover()` or `applySnapshot()`, call `reset()` — that call is the contract; gap detection is a backstop that cannot catch a same-tick snapshot swap. `snapshot()` also re-primes (documented side effect).
+
+**Honest destroyed-vs-fog attribution.** `exited.reason` is `'destroyed'` only when the entity died this tick AND its last *observed* position is visible under post-tick visibility; otherwise `'fog'`. The engine diff carries no positions for destroyed entities, so a same-tick move-then-die can be mis-attributed as `'destroyed'` — this is the honest reading of what the player could know, pinned by test. (Capturing true death positions via `onDestroy` was rejected: registering a destroy callback mutates the `destroyCallbackCount` the v0.8.18 registration manifest verifies — an observer must stay read-side.)
+
+**Diff scope caveat.** `updated` / `exited`-reasons / `worldState` project the world's own `TickDiff`, which covers mutations made DURING the tick (commands/systems/listeners) — between-tick maintenance mutations never appear in any diff and therefore not in these channels either. Enter/exit detection reads positional truth live and is unaffected.
+
+**Safe defaults.** `positionless: 'hidden'`, `worldState: 'none'`, `events: 'none'` — positionless entities and world state are common homes for omniscient director/economy state; the primitive exists to not leak, so globals are opted in explicitly. Event filtering takes a resolver receiving the observer's bound `isVisible`, which is total (returns false for out-of-grid AND non-integer coordinates — event payloads are arbitrary).
+
+**Determinism.** All outputs are deterministically ordered (entities ascending by id, tags/state keys sorted) and deep-cloned (mutating an observation never writes through). Identical (world, visibility) streams produce deep-equal observation streams, making filtered-observation agents replayable.
+
+**Engine prerequisites shipped with this feature:** `World.getStateKeys(): string[]` (sorted; see World State) and `World.getMetaEntries(entity)` (fresh full meta map; see Tags & Metadata) — both independently useful introspection.
+
+**Composition.** AI playtester: construct a `PlayerObserver` over `ctx.world` in `decide(ctx)` and act only on observations — the engine-supported honest-agent pattern. ClientAdapter: one observer per connected client; send `observeTick()` output as the per-client tick message in place of the omniscient diff.

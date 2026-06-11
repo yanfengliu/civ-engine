@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.20 - 2026-06-10
+
+Per-player filtered observation (objective `player-observation`, 4/7 of the improvement wave; 3 design iterations to unanimous CONVERGED — see `docs/threads/done/player-observation/`). The full-review missing-pillar finding: every observation surface was omniscient; a fog-of-war agent had no engine support.
+
+- **New standalone `PlayerObserver` utility**: projects snapshot + per-tick changes + events + world state through a `VisibilityMap` per player. The load-bearing feature is visibility-transition semantics raw diff filtering cannot express: `entered` (full current data when an entity becomes visible), `updated` (per-entity diff projection across components/resources/tags/meta including removals), `exited` with honest `'fog'`-vs-`'destroyed'` attribution (destroyed only when the death is at the last OBSERVED position under post-tick visibility — the documented same-tick move-then-die mis-attribution is the honest reading of what the player could know, pinned by test).
+- **Lifecycle contract**: construction primes; `observeTick()` exactly once per successful step (after updating the VisibilityMap); coded throws `player_observer_world_poisoned` / `player_observer_tick_already_observed` / `player_observer_tick_skipped`; `reset()` after `recover()`/`applySnapshot()`.
+- **Safe defaults**: `positionless: 'hidden'`, `worldState: 'none'`, `events: 'none'` — omniscient globals are opted in explicitly. Event resolvers receive a TOTAL `isVisible` (false for out-of-grid and non-integer coordinates).
+- **Deterministic + isolated**: outputs ordered (ids ascending, keys sorted) and deep-cloned; identical (world, visibility) streams produce deep-equal observation streams.
+- **New `World.getStateKeys(): string[]`** (sorted) and **`World.getMetaEntries(entity)`** (fresh full meta map; throws `entity_not_alive`) — engine prerequisites, independently useful introspection.
+- Read-side-only: zero impact on simulation state, recording, replay, or the registration manifest (an `onDestroy`-based attribution design was rejected for exactly that reason).
+
+### Validation
+
+23 tests across `tests/player-observer.test.ts` + `tests/player-observer-modes.test.ts` (prerequisites, snapshot, enter/exit/update incl. removals and position-removal, attribution honesty pin, positionless/worldState/events modes, total-isVisible, lifecycle incl. poisoned-world, isolation across every returned surface, determinism). All four gates + benchmark gate pass.
+
 ## 0.8.19 - 2026-06-10
 
 Coded engine errors (objective `engine-error-codes`, 3/7 of the improvement wave; full design pipeline — 2 design iterations, see `docs/threads/done/engine-error-codes/`). The core engine's entire throw surface — 130 sites across 31 files — now carries stable machine-readable codes.

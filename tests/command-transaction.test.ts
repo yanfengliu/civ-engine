@@ -514,9 +514,9 @@ describe('CommandTransaction', () => {
         'isPoisoned', 'getEvents', 'getDiff', 'getMetrics',
         'getInstrumentationProfile', 'getLastTickFailure',
         'getResource', 'getProduction', 'getConsumption', 'getTransfers',
-        'getState', 'hasState',
+        'getState', 'hasState', 'getStateKeys',
         'hasTag', 'getByTag', 'getTags',
-        'getMeta', 'getByMeta',
+        'getMeta', 'getByMeta', 'getMetaEntries',
         'getSpeed', 'isPaused', 'hasCommandHandler', 'getRegistrationManifest',
         'getAliveEntities', 'getResourceEntities', 'tick',
         // Strict-mode read-only getters (Spec 6, v0.8.8)

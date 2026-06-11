@@ -32,6 +32,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | Pathfinding    | `src/pathfinding.ts`     | Generic A* pathfinding, graph-agnostic with user-defined callbacks          |
 | Path Service   | `src/path-service.ts`    | Grid path helper, deterministic path queue, and cache for batched request handling     |
 | RenderAdapter  | `src/render-adapter.ts`  | Projects world state into renderer-facing snapshots and diffs with generation-aware refs |
+| PlayerObserver | `src/player-observer.ts` | Per-player fog-of-war projection of snapshot/diff/events/state through a VisibilityMap; read-side-only with entered/updated/exited transition semantics |
 | ScenarioRunner | `src/scenario-runner.ts` | Headless setup/run/check harness built on World, WorldDebugger, and WorldHistoryRecorder |
 | VisibilityMap  | `src/visibility-map.ts`  | Per-player visible/explored cell tracking for fog-of-war style mechanics               |
 | WorldDebugger  | `src/world-debugger.ts` (+ `src/world-debug-probes.ts`) | Structured debug snapshots, warnings, and probe helpers for engine and standalone utilities |
