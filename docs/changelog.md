@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.22 - 2026-06-11
+
+Lockstep multiplayer — reviewed design (objective `lockstep`, 6/7 of the improvement wave; design-only by explicit gating — no code until a real networked consumer exists; 2 review iterations + docs round — see `docs/threads/done/lockstep/`).
+
+- **Architecture specced and frozen for the trigger**: deterministic lockstep-with-relay; `LockstepSession` coordinator (per-tick `InputFrame`s with mandatory empty frames; epoch-versioned relay-declared membership with a half-open `effectiveTick` contract covering joins AND leaves/timeouts; `(playerId, localSequence)` cross-peer ordering bound to the engine's verified submission-order-is-execution-order FIFO substrate; session-owns-submission with the direct-`world.submit()` footgun called out); join handshake = snapshot + registration manifest + version envelope (engineVersion under the replayer's reject policy, plus Node + V8 exact runtime fingerprint owned as a deliberate tightening of the warn-only precedent).
+- **One engine gap identified**: `world.stateDigest()` — component-key-sorted canonical FNV hash over serialized state for cheap online desync probes (in-repo precedents: `jsonFingerprint`, `seedToUint32`); desync post-mortem composes with the existing replay stack unchanged (per-peer bundles + `diffBundles` over the overlapping tick range).
+- **Rollback explicitly rejected** on engine-specific grounds: this engine's operators are AI agents that do not perceive a 2–5 tick input delay (rollback's entire benefit is void), and resimulation would force speculation-awareness onto every observer surface including the recorder.
+- Roadmap Spec 11 row (**Drafted**) under Post-1.0 / demand-gated.
+
+### Validation
+
+Docs-only (no behavior change; suite unchanged at 1175 passed + 2 todo). Design reviewed in two iterations (design-2: Codex 2 IMPORTANT wording-contract fixes adopted; Gemini + Claude CONVERGED) plus the shared docs round (two independent Gemini lenses, both CONVERGED).
+
 ## 0.8.21 - 2026-06-11
 
 Intra-tick time-slicing — reviewed design + guide (objective `time-slicing`, 5/7 of the improvement wave; design-only by explicit gating, 2 review iterations — see `docs/threads/done/time-slicing/`). No engine code: the four slicing rules and the cursor-in-component pattern ARE the product until a consumer demonstrates the pain.

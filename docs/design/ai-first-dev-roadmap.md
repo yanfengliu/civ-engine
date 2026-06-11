@@ -166,6 +166,7 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 | 9    | AI Playtester Agent                  | **Implemented** (v0.8.9, extended v0.8.11) | `docs/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/threads/done/ai-playtester/PLAN.md` (v1). v0.8.11 extension reviews: `docs/threads/done/spec-9-1/2026-04-29/`. |
 
 | 10   | Intra-tick time-slicing (amortized work) | **Drafted** (design-only, v0.8.21) | `docs/threads/done/time-slicing/DESIGN.md` (v3, 2 review iterations). Rules shipped in `docs/guides/systems-and-simulation.md` § "Amortizing heavy work" + determinism-contract item 10. |
+| 11   | Lockstep multiplayer                 | **Drafted** (design-only, v0.8.22) | `docs/threads/done/lockstep/DESIGN.md` (v3, 2 review iterations). LockstepSession + stateDigest specced; no code until a networked consumer exists. |
 
 Update this row as specs are drafted, accepted, implemented, and merged.
 
@@ -174,3 +175,4 @@ Update this row as specs are drafted, accepted, implemented, and merged.
 Specs 10–11 are deliberately design-first: each ships a fully reviewed architecture with an explicit implementation trigger, and code lands only when the trigger fires. This is the same gating that kept Spec 5 (fork) lean — building netcode or slicing primitives before a consumer demonstrates the pain produces speculative API surface.
 
 - **Spec 10 — intra-tick time-slicing.** Trigger: aoe2 (or any consumer) demonstrates sustained tick-budget overruns that per-system `interval` cadence + game-side cursor-in-component queues cannot absorb, measured by the benchmark gate's tier-2 ratios or production metrics. Until then the four slicing rules + the guide pattern ARE the product; the gated primitive is an amortized work queue specced as plain-data state + pure functions (never a class instance stored in a component).
+- **Spec 11 — lockstep multiplayer.** Trigger: a consumer commits to networked multiplayer (a second simulating peer outside tests). Work list when fired: `world.stateDigest()` (component-key-sorted canonical hash; independently useful as a selfCheck pre-filter), `LockstepSession` + `LockstepTransport` (transport-agnostic, in-memory-testable), guide. Desync post-mortem already exists today: per-peer `SessionRecorder` bundles + `diffBundles`.
