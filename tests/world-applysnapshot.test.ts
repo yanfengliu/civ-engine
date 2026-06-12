@@ -124,3 +124,31 @@ describe('event buffer across applySnapshot (full-review 2026-06-10 L2)', () => 
     expect(world.getEvents()).toEqual([]);
   });
 });
+
+describe('cross-registration in-place apply (pre-1.0 full review F1)', () => {
+  it('a registered store absent from the snapshot keeps its REGISTRATION but not its DATA', () => {
+    const source = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    source.registerComponent<{ v: number }>('shared');
+    const s0 = source.createEntity();
+    source.addComponent(s0, 'shared', { v: 1 });
+    const snapshot = source.serialize();
+
+    const target = new World({ gridWidth: 4, gridHeight: 4, tps: 60 });
+    target.registerComponent<{ v: number }>('shared');
+    target.registerComponent<{ hp: number }>('extra'); // not in snapshot
+    const t0 = target.createEntity();
+    target.addComponent(t0, 'extra', { hp: 9 });
+
+    target.applySnapshot(snapshot);
+
+    // Registration survives (the documented merge contract)...
+    expect(() => [...target.query('extra')]).not.toThrow();
+    // ...but the old timeline's data must NOT leak onto recycled ids.
+    expect(target.getComponent(0, 'extra')).toBeUndefined();
+    expect([...target.query('extra')]).toEqual([]);
+    // And the world must round-trip its own snapshot (no ghost dead-entity
+    // entries exported by serialize).
+    const roundTrip = target.serialize();
+    expect(() => World.deserialize(roundTrip)).not.toThrow();
+  });
+});

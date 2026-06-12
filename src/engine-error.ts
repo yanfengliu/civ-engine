@@ -33,16 +33,23 @@ function sanitizeDetailsValue(value: unknown, seen: WeakSet<object>): JsonValue 
     case 'object': {
       if (seen.has(value)) return '[Circular]';
       seen.add(value);
+      // Un-mark after visiting (mirrors assertJsonCompatible): `seen` must
+      // detect CYCLES only — a shared non-cyclic reference (DAG) is legal
+      // JSON and must expand at every site (pre-1.0 full review F2).
+      let result: JsonValue;
       if (Array.isArray(value)) {
         // Array.from, not .map: .map skips sparse holes and preserves them,
         // and a surviving hole reads as undefined downstream (impl-2 review).
-        return Array.from(value, (v) => (v === undefined ? null : sanitizeDetailsValue(v, seen)));
+        result = Array.from(value, (v) => (v === undefined ? null : sanitizeDetailsValue(v, seen)));
+      } else {
+        const out: Record<string, JsonValue> = {};
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+          if (v !== undefined) out[k] = sanitizeDetailsValue(v, seen);
+        }
+        result = out;
       }
-      const out: Record<string, JsonValue> = {};
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        if (v !== undefined) out[k] = sanitizeDetailsValue(v, seen);
-      }
-      return out;
+      seen.delete(value);
+      return result;
     }
     default:
       // undefined, function, symbol, bigint
@@ -116,6 +123,13 @@ export function isEngineError(
  * `null` for plain/foreign errors. instanceof over the families, so
  * errno-style duck types stay excluded. (world-strict-mode has zero runtime
  * imports, so this import is cycle-free — verified.)
+ *
+ * DELIBERATE EXCEPTION: `WorldTickFailureError` returns `null`. It is a
+ * wrapper, not a coded error — its `failure.code` classifies the TICK
+ * failure and `failure.error.code` carries the underlying engine error;
+ * mirroring either here would conflate the two levels agents must
+ * distinguish (api-reference § TickFailure). Catch it and read
+ * `e.failure.code` / `e.failure.error?.code` directly (pre-1.0 review F5).
  */
 export function getErrorCode(e: unknown): string | null {
   if (isEngineError(e)) return e.code;

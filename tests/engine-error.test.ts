@@ -72,6 +72,12 @@ describe('EngineError classes', () => {
     circular.self = circular;
     const c = new EngineError('x', 'm', { details: circular as never });
     expect(c.details).toEqual({ a: 1, self: '[Circular]' });
+
+    // Shared non-cyclic references (DAGs) are legal JSON and must expand at
+    // every site — only true cycles become '[Circular]' (full review F2).
+    const shared = { v: 1 };
+    const dag = new EngineError('x', 'm', { details: { a: shared, b: shared } });
+    expect(dag.details).toEqual({ a: { v: 1 }, b: { v: 1 } });
   });
 
   it('isEngineError is instanceof-based: matches all three classes, rejects errno-style duck types', () => {

@@ -234,3 +234,25 @@ describe('isolation and determinism', () => {
     expect(run()).toEqual(run());
   });
 });
+
+describe('pre-1.0 full review F3 hardening', () => {
+  it('construction rejects a visibility map whose dimensions differ from the world grid', () => {
+    const { world } = makeWorld();
+    const tooBig = new VisibilityMap(16, 16);
+    tooBig.setSource('1', 'eye', { x: 1, y: 1, radius: 2 });
+    expectCode(
+      () => new PlayerObserver<Events, Components>({ world: world as never, visibility: tooBig, playerId: '1' }),
+      'player_observer_grid_mismatch',
+    );
+  });
+
+  it('snapshot() refuses a poisoned world like observeTick does', () => {
+    const { world } = makeWorld();
+    const { observer } = makeObserver(world);
+    world.onDiff(() => {
+      throw new Error('listener boom');
+    });
+    expect(world.stepWithResult().ok).toBe(false);
+    expectCode(() => observer.snapshot(), 'player_observer_world_poisoned');
+  });
+});

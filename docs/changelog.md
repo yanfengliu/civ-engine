@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.25 - 2026-06-11
+
+Pre-1.0 full-review hardening (full review 2026-06-11, correctness lens; thread `docs/threads/done/full/2026-06-11/`). One repro-confirmed MEDIUM and four LOWs, all fixed.
+
+- **Fixed (MEDIUM): `applySnapshot` leaked old-timeline component data.** A component store registered on the target world but absent from the incoming snapshot kept its live entries through the in-place apply — old data surfaced on recycled entity ids, and ghost dead-entity rows made `serialize()` output un-loadable (`snapshot_dead_entity`). Preserved registrations now get fresh empty stores; the snapshot is the complete data truth for the new timeline. Factory replay and same-registration applies were never affected.
+- **Fixed: `EngineError` details sanitizer treated shared non-cyclic references as cycles** — a DAG (`{ a: o, b: o }`) now expands at every site, matching `assertJsonCompatible`; only true cycles become `'[Circular]'`.
+- **PlayerObserver hardening:** construction now rejects a visibility map whose dimensions differ from the world grid (`player_observer_grid_mismatch`) instead of failing ticks later with a misattributed bounds error; `snapshot()` now refuses a poisoned world (`player_observer_world_poisoned`) like `observeTick()` — a failed tick's torn state must not become an observation baseline. **Behavior callout:** code that snapshotted a poisoned world or constructed observers over mismatched maps now throws coded errors.
+- **PlayerObserver performance:** the registration manifest is built once per `snapshot()`/`observeTick()` call instead of once per visible entity; the redundant per-event re-clone is dropped (`getEvents()` already deep-clones).
+- **`getErrorCode` documented exception:** `WorldTickFailureError` deliberately returns `null` — it is a wrapper whose `failure.code` classifies the tick failure and `failure.error.code` carries the underlying error; collapsing either into one code would conflate the two levels (JSDoc + api-reference).
+
+### Validation
+
+3 new tests (cross-registration apply round-trip, grid-mismatch construction, poisoned-snapshot guard) plus DAG assertions in the existing sanitization test. Full suite green; all four gates + benchmark gate pass.
+
 ## 0.8.24 - 2026-06-11
 
 CI/dev-tooling security fix — no engine code, API, or behavior change.

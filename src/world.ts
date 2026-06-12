@@ -357,15 +357,21 @@ export class World<
     // --- Entities ---
     this.entityManager = other.entityManager;
     // --- Components: merge to preserve user pre-registrations not in `other`. ---
-    const preservedComponentStores = new Map(this.componentStores);
+    // REGISTRATION survives; DATA must not (pre-1.0 full review F1): the
+    // incoming snapshot is the complete data truth for the new timeline, so
+    // preserved keys get FRESH empty stores with their preserved options.
+    // Re-attaching the live store leaked old-timeline entries onto recycled
+    // ids and exported ghost dead-entity rows that broke serialize
+    // round-trips.
+    const preservedComponentKeys = new Set(this.componentStores.keys());
     const preservedComponentOptions = new Map(this.componentOptions);
     const preservedComponentBits = new Map(this.componentBits);
     this.componentStores = new Map(other.componentStores);
     this.componentOptions = new Map(other.componentOptions);
-    for (const [key, store] of preservedComponentStores) {
+    for (const key of preservedComponentKeys) {
       if (!this.componentStores.has(key)) {
-        this.componentStores.set(key, store);
         const opts = preservedComponentOptions.get(key);
+        this.componentStores.set(key, new ComponentStore(opts ?? {}));
         if (opts) this.componentOptions.set(key, opts);
       }
     }

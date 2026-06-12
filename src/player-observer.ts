@@ -124,6 +124,26 @@ export class PlayerObserver<
   private lastObservedTick = 0;
 
   constructor(config: PlayerObserverConfig<TEventMap, TComponents>) {
+    if (
+      config.visibility.width !== config.world.grid.width ||
+      config.visibility.height !== config.world.grid.height
+    ) {
+      // Fail at construction with the actual defect named; without this, a
+      // LARGER visibility map surfaces ticks later as a raw
+      // position_out_of_bounds from the sweep (pre-1.0 full review F3).
+      throw new EngineError(
+        'player_observer_grid_mismatch',
+        `PlayerObserver visibility map (${config.visibility.width}x${config.visibility.height}) must match the world grid (${config.world.grid.width}x${config.world.grid.height})`,
+        {
+          details: {
+            visibilityWidth: config.visibility.width,
+            visibilityHeight: config.visibility.height,
+            gridWidth: config.world.grid.width,
+            gridHeight: config.world.grid.height,
+          },
+        },
+      );
+    }
     this.world = config.world;
     this.visibility = config.visibility;
     this.playerId = config.playerId;
@@ -146,10 +166,21 @@ export class PlayerObserver<
    *  the captured visible set becomes the baseline for the next
    *  observeTick() (documented side effect). */
   snapshot(): PlayerObservation<TComponents> {
+    if (this.world.isPoisoned()) {
+      // Same honesty rule as observeTick: a poisoned world's state is the
+      // torn output of a failed tick — returning (and re-priming from) it
+      // would be observation of garbage (pre-1.0 full review F3 polish).
+      throw new EngineError(
+        'player_observer_world_poisoned',
+        'PlayerObserver.snapshot: world is poisoned; recover() the world and reset() the observer',
+        { details: { tick: this.world.tick } },
+      );
+    }
     const visible = this.computeVisible();
+    const manifest = this.world.getRegistrationManifest();
     const entities = [...visible.keys()]
       .sort((a, b) => a - b)
-      .map((id) => this.buildObserved(id));
+      .map((id) => this.buildObserved(id, manifest));
     const worldState: Record<string, unknown> = {};
     if (this.worldStateMode !== 'none') {
       for (const key of this.world.getStateKeys()) {
@@ -215,9 +246,10 @@ export class PlayerObserver<
         tracked.ref.generation === current.generation;
     };
 
+    const manifest = this.world.getRegistrationManifest();
     const entered: Array<ObservedEntity<TComponents>> = [];
     for (const id of [...visible.keys()].sort((a, b) => a - b)) {
-      if (!continuing(id)) entered.push(this.buildObserved(id));
+      if (!continuing(id)) entered.push(this.buildObserved(id, manifest));
     }
 
     const exited: Array<{ ref: EntityRef; reason: 'fog' | 'destroyed' }> = [];
@@ -273,8 +305,10 @@ export class PlayerObserver<
     return out;
   }
 
-  private buildObserved(id: EntityId): ObservedEntity<TComponents> {
-    const manifest = this.world.getRegistrationManifest();
+  private buildObserved(
+    id: EntityId,
+    manifest: ReturnType<ObservableWorld<TEventMap, TComponents>['getRegistrationManifest']>,
+  ): ObservedEntity<TComponents> {
     const components: Record<string, unknown> = {};
     for (const { key } of manifest.components) {
       const data = this.world.getComponent(id, key);
@@ -346,12 +380,11 @@ export class PlayerObserver<
   private filterEvents(): Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }> {
     if (this.eventsMode === 'none') return [];
     const all = this.world.getEvents();
+    // getEvents() deep-clones per call (event-bus getEvents), so entries are
+    // already isolated — no re-clone (pre-1.0 full review F4).
     const kept =
       this.eventsMode === 'all' ? [...all] : all.filter((e) => (this.eventsMode as Exclude<typeof this.eventsMode, 'none' | 'all' | undefined>)(e, this.isVisible));
-    return kept.map((e) => ({
-      type: e.type,
-      data: cloneJsonValue(e.data, `event '${String(e.type)}'`),
-    }));
+    return kept.map((e) => ({ type: e.type, data: e.data }));
   }
 
   private filterWorldState(
