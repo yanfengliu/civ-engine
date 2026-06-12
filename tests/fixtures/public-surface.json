@@ -102,6 +102,7 @@
     "scenarioResultToBundle",
     "scriptedPolicy",
     "sessionLengthStats",
+    "snapshotAtTick",
     "stepCellGrid",
     "summarizeWorldHistoryRange"
   ],
@@ -349,6 +350,7 @@
     "VON_NEUMANN_OFFSETS",
     "VisibilityDebugSnapshot",
     "VisibilityMap",
+    "VisibilityMapMetrics",
     "VisibilityMapState",
     "VisibilityPlayerDebugSnapshot",
     "VisibilityPlayerId",
@@ -419,6 +421,7 @@
     "scenarioResultToBundle",
     "scriptedPolicy",
     "sessionLengthStats",
+    "snapshotAtTick",
     "stepCellGrid",
     "summarizeWorldHistoryRange"
   ]

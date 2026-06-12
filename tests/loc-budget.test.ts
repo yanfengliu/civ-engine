@@ -52,6 +52,8 @@ function tsFilesRecursive(dir: string, relativeTo: string): string[] {
 
 const srcDir = path.join(process.cwd(), 'src');
 const testsDir = path.join(process.cwd(), 'tests');
+// The MCP subpackage (1.1.0) lives under the same 500-line rule.
+const mcpSrcDir = path.join(process.cwd(), 'mcp', 'src');
 
 describe('LOC budget', () => {
   test('every src/*.ts file is within the 500-line budget', () => {
@@ -60,6 +62,14 @@ describe('LOC budget', () => {
       .filter((file) => file.lines > MAX_LINES)
       .map((file) => `${file.name} (${file.lines})`);
     expect(over, `src files over the ${MAX_LINES}-line budget: ${over.join(', ')}`).toEqual([]);
+  });
+
+  test('every mcp/src/*.ts file is within the 500-line budget', () => {
+    const over = tsFilesRecursive(mcpSrcDir, mcpSrcDir)
+      .map((name) => ({ name, lines: countLines(path.join(mcpSrcDir, name)) }))
+      .filter((file) => file.lines > MAX_LINES)
+      .map((file) => `${file.name} (${file.lines})`);
+    expect(over, `mcp/src files over the ${MAX_LINES}-line budget: ${over.join(', ')}`).toEqual([]);
   });
 
   test('every tests/*.ts file respects the budget or its ratchet pin', () => {

@@ -191,7 +191,7 @@ Update this row as specs are drafted, accepted, implemented, and merged.
 
 ### Track C — AI-native thesis (push-driven; the only speculative track)
 
-- **MCP server** (`civ-engine-mcp`, separate package — core stays zero-dep): expose the machine-readable surfaces (submit/observe, bundle corpus, viewer, metrics, hotspots) as MCP tools so any AI coding agent can operate a running engine or interrogate recorded games directly. `ai-integration.md` has anticipated exactly this layering since Tier 1. Highest-leverage thesis item; propose as the first post-1.0 objective alongside Track A intake.
+- **MCP server** (`civ-engine-mcp`, in-repo subpackage — core stays zero-dep): **SHIPPED v1 (engine 1.1.0, 2026-06-12)** — recorded-artifact interrogation (14 tools: corpus query/overview/refresh, summaries, hotspots, markers, snapshots incl. arbitrary-tick hydration, viewer frames/diffs, cross-bundle diffs, behavioral metrics), read-only with zero game code. Live-world operation remains the v2 trigger (needs a game-module loading story). `docs/guides/mcp-server.md`; thread `docs/threads/done/mcp-server/`.
 - **Determinism tripwire (dev mode)** — the contract's documented-but-unenforced clauses (unordered iteration, wall-clock reads) get a cheap dev-loop harness: dual-seeded short-run digest comparison (piggybacks on Spec 11's `stateDigest`). Catches violations at author time instead of at selfCheck time.
 - **1.x release engineering** — npm publish cadence + provenance on top of the existing pack/audit CI; semver enforced by the deprecation policy + surface-pin fixture (additions = minor; removals = major-only).
 

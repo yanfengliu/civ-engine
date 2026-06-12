@@ -4,6 +4,22 @@ import type { Position } from './types.js';
 export type VisibilityPlayerId = number | string;
 export type VisionSourceId = number | string;
 
+/** Deterministic operation counters (1.1.0; metrics parity with
+ *  OccupancyGrid — pre-1.0 review carry-over). No wall-clock fields:
+ *  counters stay benchmark-gate-compatible. */
+export interface VisibilityMapMetrics {
+  /** Per-player visibility recomputations performed by update()/ensureUpdated(). */
+  recomputes: number;
+  /** Total visible cells produced across recomputes. */
+  computedCells: number;
+  /** isVisible/isExplored point queries answered. */
+  visibilityQueries: number;
+}
+
+function createVisibilityMapMetrics(): VisibilityMapMetrics {
+  return { recomputes: 0, computedCells: 0, visibilityQueries: 0 };
+}
+
 export interface VisionSource {
   x: number;
   y: number;
@@ -34,6 +50,7 @@ export class VisibilityMap {
   readonly width: number;
   readonly height: number;
   private players = new Map<VisibilityPlayerId, PlayerVisibilityState>();
+  private metrics = createVisibilityMapMetrics();
   private dirtyPlayers = new Set<VisibilityPlayerId>();
 
   constructor(width: number, height: number) {
@@ -93,6 +110,8 @@ export class VisibilityMap {
       }
 
       const visible = this.computeVisible(player.sources);
+      this.metrics.recomputes++;
+      this.metrics.computedCells += visible.size;
       player.visible = visible;
       for (const cell of visible) {
         player.explored.add(cell);
@@ -101,11 +120,21 @@ export class VisibilityMap {
     }
   }
 
+  getMetrics(): VisibilityMapMetrics {
+    return { ...this.metrics };
+  }
+
+  resetMetrics(): void {
+    this.metrics = createVisibilityMapMetrics();
+  }
+
   isVisible(playerId: VisibilityPlayerId, x: number, y: number): boolean {
+    this.metrics.visibilityQueries++;
     return this.ensureUpdated(playerId).visible.has(this.toIndex(x, y));
   }
 
   isExplored(playerId: VisibilityPlayerId, x: number, y: number): boolean {
+    this.metrics.visibilityQueries++;
     return this.ensureUpdated(playerId).explored.has(this.toIndex(x, y));
   }
 

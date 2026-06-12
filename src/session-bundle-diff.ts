@@ -14,6 +14,7 @@ import type {
 import type { TickDiff } from './diff.js';
 import type { CommandSequenceMap } from './session-fork.js';
 import { applyTickDiff } from './apply-tick-diff.js';
+import { BundleIntegrityError, BundleRangeError } from './session-errors.js';
 import { diffSnapshots } from './snapshot-diff.js';
 import type { WorldSnapshot } from './serializer.js';
 import {
@@ -347,6 +348,63 @@ function stateDiffNonEmpty(d: TickDiff): boolean {
 /** Hydrate the world's snapshot at the given submission-tick by walking the
  *  bundle's snapshots[] (closest preceding snapshot wins) and folding any
  *  TickDiffs from that snapshot up to (entryTick === submissionTick + 1). */
+/**
+ * Public state materialization (1.1.0; mcp-server design-1 H1): the world
+ * snapshot at submission-tick `tick` (i.e. BEFORE stepping `tick`), folded
+ * from the nearest recorded snapshot + TickDiffs with ZERO World
+ * construction. Carries diffSince's failure-crossing guard: folding across
+ * a recorded TickFailure is meaningless and throws `replay_across_failure`.
+ */
+export function snapshotAtTick<TEventMap, TCommandMap>(
+  bundle: SessionBundle<TEventMap, TCommandMap>,
+  tick: number,
+): WorldSnapshot {
+  const md = bundle.metadata;
+  const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+  if (tick < md.startTick) {
+    throw new BundleRangeError(
+      `tick ${tick} below startTick ${md.startTick}`,
+      { code: 'too_low', requested: tick, startTick: md.startTick },
+    );
+  }
+  if (tick > upper) {
+    throw new BundleRangeError(
+      `tick ${tick} above upper bound ${upper}` + (md.incomplete ? ' (incomplete bundle uses persistedEndTick)' : ''),
+      { code: 'too_high', requested: tick, upper, incomplete: md.incomplete ?? false },
+    );
+  }
+  const failed = (md.failedTicks ?? []).filter((ft) => ft <= tick).sort((a, b) => a - b);
+  if (failed.length > 0) {
+    throw new BundleIntegrityError(
+      `cannot hydrate state at tick ${tick}: recorded TickFailure(s) at ${failed.join(', ')} precede it — inspect the terminal snapshot directly (bundle.snapshots) or hydrate a tick below the first failure`,
+      { code: 'replay_across_failure', failedTicks: failed, requested: tick },
+    );
+  }
+  // Continuity check (1.1.0 review m9): recorder-produced bundles only gap
+  // where a failure was recorded (caught above), but a tampered/truncated
+  // bundle body must yield a coded error, not silently wrong state.
+  const all = [
+    { tick: md.startTick, snapshot: bundle.initialSnapshot },
+    ...bundle.snapshots,
+  ];
+  let base = all[0];
+  for (const sn of all) {
+    if (sn.tick <= tick && sn.tick > base.tick) base = sn;
+  }
+  const present = new Set(bundle.ticks.map((te) => te.tick));
+  const missing: number[] = [];
+  for (let t = base.tick + 1; t <= tick; t++) {
+    if (!present.has(t)) missing.push(t);
+  }
+  if (missing.length > 0) {
+    throw new BundleIntegrityError(
+      `cannot hydrate state at tick ${tick}: tick entries missing in (${base.tick}, ${tick}] — the bundle body is gapped (truncated or tampered): ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ', …' : ''}`,
+      { code: 'missing_tick_entries', missing: missing.slice(0, 50), fromSnapshotTick: base.tick, requested: tick },
+    );
+  }
+  return hydrateAtTick(bundle, tick);
+}
+
 function hydrateAtTick<TEventMap, TCommandMap>(
   bundle: SessionBundle<TEventMap, TCommandMap>,
   submissionTick: number,

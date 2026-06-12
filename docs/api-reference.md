@@ -48,6 +48,8 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Behavioral Metrics](#behavioral-metrics-v082)
 - [Engine Errors](#engine-errors-v0819)
 - [PlayerObserver](#playerobserver-v0820)
+- [snapshotAtTick](#snapshotattick-v110)
+- [VisibilityMap metrics](#visibilitymap-metrics-v110)
 
 ---
 
@@ -6044,3 +6046,26 @@ Per-player fog-of-war observation: projects the world's omniscient observation s
 **Engine prerequisites shipped with this feature:** `World.getStateKeys(): string[]` (sorted; see World State) and `World.getMetaEntries(entity)` (fresh full meta map; see Tags & Metadata) — both independently useful introspection.
 
 **Composition.** AI playtester: construct a `PlayerObserver` over `ctx.world` in `decide(ctx)` and act only on observations — the engine-supported honest-agent pattern. ClientAdapter: one observer per connected client; send `observeTick()` output as the per-client tick message in place of the omniscient diff.
+
+## snapshotAtTick (v1.1.0)
+
+```typescript
+// src/session-bundle-diff.ts
+function snapshotAtTick(bundle: SessionBundle, tick: number): WorldSnapshot
+```
+
+Pure-data state materialization: the world snapshot at submission-tick `tick` (i.e. BEFORE stepping `tick`), folded from the bundle's nearest recorded snapshot plus `TickDiff`s — **zero World construction, no `worldFactory`**. Throws `BundleRangeError` (`too_low`/`too_high`) outside `[startTick, endTick]` (incomplete bundles use `persistedEndTick`), `BundleIntegrityError` `replay_across_failure` when any recorded failed tick precedes or equals the requested tick (folding across a failure is meaningless — inspect the terminal snapshot directly instead), and `missing_tick_entries` when the fold range has gapped tick entries (a truncated/tampered bundle body must error, not yield silently wrong state). Powers the MCP server's state tools (`docs/guides/mcp-server.md`) and `BundleViewer.diffSince`-style comparisons without game code.
+
+## VisibilityMap metrics (v1.1.0)
+
+```typescript
+interface VisibilityMapMetrics {
+  recomputes: number;        // per-player visibility recomputations
+  computedCells: number;     // visible cells produced across recomputes
+  visibilityQueries: number; // isVisible/isExplored point queries
+}
+getMetrics(): VisibilityMapMetrics  // fresh copy
+resetMetrics(): void
+```
+
+Deterministic operation counters (no wall-clock fields — benchmark-gate-compatible), bringing `VisibilityMap` to metrics parity with `OccupancyGrid`.

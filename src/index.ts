@@ -92,7 +92,7 @@ export {
   type EntityId, type InstrumentationProfile, type Position, type WorldConfig,
 } from './types.js';
 export {
-  VisibilityMap, type VisibilityMapState, type VisibilityPlayerId, type VisionSource,
+  VisibilityMap, type VisibilityMapMetrics, type VisibilityMapState, type VisibilityPlayerId, type VisionSource,
   type VisionSourceId,
 } from './visibility-map.js';
 export {
@@ -209,6 +209,7 @@ export {
 } from './session-fork.js';
 export {
   diffBundles,
+  snapshotAtTick,
   type DiffBundlesOptions,
   type BundleDiff,
   type BundleTickDelta,

@@ -71,3 +71,23 @@ describe('VisibilityMap', () => {
     ]);
   });
 });
+
+describe('metrics parity (1.1.0)', () => {
+  it('counts recomputes, computed cells, and point queries; reset zeroes', () => {
+    const vis = new VisibilityMap(8, 8);
+    vis.setSource('p', 'eye', { x: 2, y: 2, radius: 1 });
+    expect(vis.getMetrics()).toEqual({ recomputes: 0, computedCells: 0, visibilityQueries: 0 });
+    vis.isVisible('p', 2, 2); // triggers lazy recompute + one query
+    vis.isVisible('p', 7, 7);
+    const m = vis.getMetrics();
+    expect(m.recomputes).toBe(1);
+    expect(m.computedCells).toBeGreaterThan(0);
+    expect(m.visibilityQueries).toBe(2);
+    vis.resetMetrics();
+    expect(vis.getMetrics()).toEqual({ recomputes: 0, computedCells: 0, visibilityQueries: 0 });
+    // returned object is a copy
+    const snap = vis.getMetrics();
+    snap.recomputes = 99;
+    expect(vis.getMetrics().recomputes).toBe(0);
+  });
+});

@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 - 2026-06-12
+
+MCP server + the additive engine surface it stands on (objective `mcp-server`, post-1.0 roadmap Track C; design reviewed in 2 iterations — see `docs/threads/done/mcp-server/`).
+
+### civ-engine-mcp 0.1.0 (new in-repo subpackage, unpublished)
+
+A read-only MCP (Model Context Protocol) server over a recorded-bundle corpus: any MCP-capable agent can interrogate recorded games conversationally — 14 tools spanning corpus query/overview/refresh, `bundle_summary`, hotspots, markers, snapshots (incl. arbitrary-tick hydration and the v6 `poisoned` terminal-state field), viewer frames and range diffs, cross-bundle diffs (summary-first), and the 11 behavioral metrics with baseline/current comparison. Output discipline: every list takes a `limit` and reports `total` + `truncated` (no silent caps); every tool error carries the engine code via `getErrorCode`. The server never constructs Worlds and never writes files; corrupt manifests are skipped and surfaced, not fatal. The core package keeps zero runtime dependencies — the subpackage owns the MCP SDK. Run: `node mcp/dist/cli.js --corpus <dir>` (`docs/guides/mcp-server.md`). Live-world operation is deferred to a future version (needs a game-module loading story).
+
+### Engine additions
+
+- **`snapshotAtTick(bundle, tick)`** — pure-data state materialization at any in-range tick (nearest snapshot + folded TickDiffs; zero World construction). Coded errors: `BundleRangeError` out of range, `replay_across_failure` when a recorded failure precedes the tick, `missing_tick_entries` on gapped bundle bodies. This closes the gap where `BundleViewer.diffSince`'s snapshot fallback — triggered by the NORMAL created-then-destroyed-in-range case — required `worldFactory`.
+- **`VisibilityMap.getMetrics()` / `resetMetrics()`** (+ `VisibilityMapMetrics` type) — deterministic counters (recomputes, computedCells, visibilityQueries); metrics parity with OccupancyGrid.
+
+### Validation
+
+7 engine tests (snapshotAtTick semantics incl. failure-crossing, below-failure forensics, non-tautological fold-vs-recorded agreement, and the gapped-body `missing_tick_entries` guard) + 1 VisibilityMap metrics test + 18 MCP in-process round-trips over the SDK's InMemoryTransport against a real recorded fixture corpus (incl. the corrupt-manifest skip, truncation honesty, engine-error code mapping, and the fold-bail snapshot fallback). CI gains the mcp steps (own lockfile, audit, build, test) sequenced after the root build.
+
 ## 1.0.2 - 2026-06-12
 
 Patch batch: the pre-1.0 review carry-overs.

@@ -1,6 +1,7 @@
 # Devlog Summary
 
 - 2026-06-11: Intra-tick time-slicing design + guide (v0.8.21) - 4 determinism-safe slicing rules, Amortizing-heavy-work guide section, determinism-contract item 10, roadmap Post-1.0 section; amortized-queue primitive demand-gated.
+- 2026-06-12: MCP server (engine 1.1.0 + civ-engine-mcp 0.1.0) - 14 read-only tools over bundle corpora via the MCP SDK; engine gains snapshotAtTick (pure-data hydration) + VisibilityMap metrics. 2 design + 1 impl review iterations; core stays zero-dep.
 - 2026-06-12: 1.x small-items batch (v1.0.2) - offDestroy Set, PlayerObserver.reset dim re-assert, recorder marker-validation extraction (LOC headroom), AGENTS versioning -> post-1.0 semver.
 - 2026-06-12: Replayer error-quality audit (v1.0.1) - two SILENT failure modes fixed (forgetful-factory applySnapshot incl. tick-0 fingerprints; poisoned factory worlds), bundle_malformed shape guard, coded until_tick_invalid, actionable messages throughout. 11 new tests.
 - 2026-06-11: 1.0.0 RELEASE - strict-by-default (+legacy-snapshot clause), snapshot v6 (inspection-only poison carry, restorePoison opt-in), surface trims, blesses, freeze list; same-major cross-b replay gate relaxed to warn under the freeze. 2 review iterations; d.ts diff owner-reviewed in-conversation. 1194 tests.

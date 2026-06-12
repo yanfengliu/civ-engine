@@ -1,6 +1,6 @@
 {
   "name": "civ-engine",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Headless, AI-native 2D grid-based game engine: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies.",
   "keywords": [
     "game-engine",
@@ -57,7 +57,7 @@
     "debug:client": "npm run build && node scripts/serve-debug-client.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint src tests --no-error-on-unmatched-pattern",
+    "lint": "eslint src tests mcp/src mcp/tests --no-error-on-unmatched-pattern",
     "typecheck": "tsc"
   },
   "devDependencies": {

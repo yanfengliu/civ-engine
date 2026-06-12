@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mcp/package-lock.json
       - run: npm ci
       - run: npm audit --audit-level=high
       - run: npm test
@@ -32,3 +35,13 @@ jobs:
       - run: npm run build
       - run: npm pack --dry-run
       - run: node scripts/rts-benchmark.mjs --check
+      # MCP subpackage (sequenced after the root build: its file:.. dep
+      # resolves against dist/)
+      - run: npm ci
+        working-directory: mcp
+      - run: npm audit --audit-level=high
+        working-directory: mcp
+      - run: npm run build
+        working-directory: mcp
+      - run: npm test
+        working-directory: mcp

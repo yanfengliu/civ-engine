@@ -20,6 +20,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 ## Guides
 
 - [AI Integration](guides/ai-integration.md)
+- [MCP Server](guides/mcp-server.md)
 - [Scenario Runner](guides/scenario-runner.md)
 - [Entities & Components](guides/entities-and-components.md)
 - [Systems & Simulation](guides/systems-and-simulation.md)
