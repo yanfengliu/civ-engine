@@ -9,6 +9,9 @@ import {
 
 const mkConfig = (): WorldConfig => ({
   gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position',
+  // 1.0: this suite deliberately exercises non-strict flows (incl. the
+  // clause-1 VIOLATION demo, which must diverge rather than throw).
+  strict: false,
 });
 
 interface Cmds { tick: Record<string, never> }

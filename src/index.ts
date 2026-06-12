@@ -20,7 +20,7 @@ export {
   ClientAdapter, type ClientMessage, type GameEvent, type ServerMessage,
 } from './client-adapter.js';
 export {
-  CommandTransaction, FORBIDDEN_PRECONDITION_METHODS, type ReadOnlyTransactionWorld,
+  CommandTransaction, type ReadOnlyTransactionWorld,
   type TransactionPrecondition, type TransactionResult,
 } from './command-transaction.js';
 export {
@@ -56,7 +56,7 @@ export {
 } from './occupancy-grid.js';
 export {
   PathCache, PathRequestQueue, createGridPathCacheKey, createGridPathQueue, findGridPath,
-  gridPathPassabilityVersion, type GridPathConfig, type GridPathRequest,
+  type GridPathConfig, type GridPathRequest,
   type PathRequestQueueEntry, type PathRequestQueueOptions, type PathRequestQueueStats,
 } from './path-service.js';
 export {
@@ -83,7 +83,7 @@ export {
 } from './scenario-runner.js';
 export {
   type WorldSnapshot, type WorldSnapshotV1, type WorldSnapshotV2, type WorldSnapshotV3,
-  type WorldSnapshotV4, type WorldSnapshotV5,
+  type WorldSnapshotV4, type WorldSnapshotV5, type WorldSnapshotV6,
 } from './serializer.js';
 export {
   ALL_DIRECTIONS, DIAGONAL, ORTHOGONAL, SpatialGrid, type SpatialGridView,

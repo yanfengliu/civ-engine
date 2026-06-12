@@ -355,7 +355,7 @@ See `docs/guides/bundle-viewer.md` for the full surface, including the `worldFac
 
 ## Strict mode (v0.8.8+, Spec 6)
 
-For agents that want determinism violations to throw at the source rather than surface as replay divergences, opt into `WorldConfig.strict: true`. The flag rejects 22 mutation methods called outside system phases / setup window / `runMaintenance(fn)` callbacks with `StrictModeViolationError` (Tier-3 of the AI-first roadmap). Default is off. See `docs/guides/strict-mode.md`.
+Determinism violations throw at the source rather than surfacing as replay divergences: `WorldConfig.strict` is **ON by default since 1.0**, rejecting 22 mutation methods called outside system phases / setup window / `runMaintenance(fn)` callbacks with `StrictModeViolationError` (Tier-3 of the AI-first roadmap). Pass `strict: false` to opt out. See `docs/guides/strict-mode.md`.
 
 
 ## Counterfactual replay (v0.8.12+, Spec 5)

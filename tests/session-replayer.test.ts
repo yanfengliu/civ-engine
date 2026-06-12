@@ -126,22 +126,31 @@ describe('SessionReplayer', () => {
     expect(() => lazy.openAt(1)).toThrow(/handler_missing|handler/);
   });
 
-  it('cross-b engineVersion throws BundleVersionError on construction', () => {
+  it('cross-b engineVersion WARNS but constructs (1.0 policy: b is the additive axis)', () => {
     const { bundle } = recordSession(1);
-    bundle.metadata.engineVersion = '0.6.0';  // simulate cross-b
-    expect(() => SessionReplayer.fromBundle(bundle, {
-      worldFactory: (snap) => {
-        const w = new World<Record<string, never>, Cmds>(mkConfig());
-        setupWorld(w);
-        w.applySnapshot(snap);
-        return w;
-      },
-    })).toThrow(/cross_b|cross-b/);
+    bundle.metadata.engineVersion = '1.6.0';  // same major as the 1.x runtime
+    const warnings: string[] = [];
+    const orig = console.warn;
+    console.warn = (msg: string) => { warnings.push(String(msg)); };
+    try {
+      const replayer = SessionReplayer.fromBundle(bundle, {
+        worldFactory: (snap) => {
+          const w = new World<Record<string, never>, Cmds>(mkConfig());
+          setupWorld(w);
+          w.applySnapshot(snap);
+          return w;
+        },
+      });
+      expect(replayer).toBeTruthy();
+    } finally {
+      console.warn = orig;
+    }
+    expect(warnings.some((w) => /cross-b \(same major\)/.test(w))).toBe(true);
   });
 
   it('cross-major (a-component) engineVersion throws BundleVersionError', () => {
     const { bundle } = recordSession(1);
-    bundle.metadata.engineVersion = '1.0.0';
+    bundle.metadata.engineVersion = '2.0.0';
     expect(() => SessionReplayer.fromBundle(bundle, {
       worldFactory: (snap) => {
         const w = new World<Record<string, never>, Cmds>(mkConfig());

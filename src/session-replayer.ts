@@ -445,12 +445,16 @@ export class SessionReplayer<
       );
     }
     if (bb !== rb) {
-      throw new BundleVersionError(
-        `engineVersion cross-b: bundle ${md.engineVersion} vs runtime ${ENGINE_VERSION} (b-component differs; pre-1.0 breaking-change axis per AGENTS.md)`,
-        { code: 'cross_b', bundleVersion: md.engineVersion, runtimeVersion: ENGINE_VERSION },
+      // 1.0 policy change (release review C-M3, ADR 48): under the semver
+      // freeze the b-component is the ADDITIVE axis, so same-major cross-b
+      // bundles WARN instead of throwing — a fatal gate here would orphan
+      // every recorded corpus at every minor release, against the AI-first
+      // corpus thesis. selfCheck remains the divergence backstop. (Pre-1.0,
+      // b was the breaking axis and this gate was fatal by design.)
+      console.warn(
+        `[SessionReplayer] engineVersion cross-b (same major): bundle ${md.engineVersion} vs runtime ${ENGINE_VERSION} — additive axis under the 1.0 freeze; selfCheck will surface real divergences`,
       );
-    }
-    if (md.engineVersion !== ENGINE_VERSION) {
+    } else if (md.engineVersion !== ENGINE_VERSION) {
       console.warn(
         `[SessionReplayer] within-b engineVersion mismatch: bundle ${md.engineVersion} vs runtime ${ENGINE_VERSION}`,
       );

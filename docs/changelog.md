@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.0 - 2026-06-11
+
+**The 1.0 release.** The public surface freezes under semver: the surface fixture (104 runtime / 315 declared names) (`tests/fixtures/public-surface.json`) is the contract — additions are minors, removals happen only in majors via the deprecation policy (`docs/guides/public-api-and-invariants.md`). Decisions and rationale: `docs/design/v1-checklist.md` (all 8 items owner-approved); pre-release gate: the converged 2026-06-11 full review.
+
+### BREAKING — `strict` defaults to `true`
+
+The mutation gate is now on by default: out-of-phase mutations throw `StrictModeViolationError` at the call site. **Migration:** pass `strict: false` to opt out, or (preferred) move between-tick mutations into systems / `runMaintenance(fn)`. **Pre-1.0 SNAPSHOTS (save files) are unaffected:** version ≤ 5 snapshots without an explicit `config.strict` deserialize as NON-strict (the compatibility clause, ADR 48). **Pre-1.0 BUNDLES are a different story and always were:** the replayer's version policy rejects cross-`a` (and rejected cross-`b` throughout 0.x) at construction with `BundleVersionError` — bundle replay is same-engine-version tooling by design, so replay 0.x bundles with 0.x tooling. The clause exists for the snapshot-loading path (`World.deserialize` / `applySnapshot`), which is version-tolerant. The setup window is unchanged — construct-and-populate code keeps working without modification.
+
+### BREAKING-lite — snapshot v6
+
+`serialize()` now emits version 6: adds `poisoned: TickFailure | null` (the terminal failure, carried for INSPECTION — a poisoned world's snapshot finally says so) and always writes `config.strict` explicitly. Load paths accept versions 1–6, keep CLEARING live poison by default, and gain `{ restorePoison: true }` (the ≤v5 strict clause applies to `deserialize` — `applySnapshot` never transfers strictness; the target world keeps its own) for terminal-state-fidelity tooling (restored worlds behave exactly like the original poisoned one; `recover()` clears). `diffSnapshots` / `applyTickDiff` accept v5 and v6 (`poisoned` excluded from diff semantics; `applyTickDiff` emits the input's version with `poisoned: null` — an applied successful diff is a healthy state by definition).
+
+### BREAKING — surface trims
+
+Removed from the package surface (still engine-internal): `FORBIDDEN_PRECONDITION_METHODS` (test-support constant; the precondition denylist remains documented prose) and `gridPathPassabilityVersion` (PathCache internal; `createGridPathQueue` wires it automatically, `createGridPathCacheKey` remains the public keying surface).
+
+### Replay version policy under the freeze
+
+`SessionReplayer` now **warns** (instead of throwing) on same-major cross-`b` bundles: under the 1.0 semver freeze the `b`-component is the additive axis, and a fatal gate would orphan every recorded corpus at every minor release. Cross-`a` remains fatal (`BundleVersionError`, `cross_a`); `selfCheck` remains the divergence backstop for cross-minor replays. (Pre-1.0 the fatal cross-`b` gate was correct — `b` was the breaking axis.)
+
+### Blessed (explicit non-changes)
+
+The `create*DebugProbe` factories (the documented bridge for attaching game-owned utilities to `WorldDebugger`) and `clearRunningState` (the documented BT imperative-interrupt) stay. Constructor-shape convention: pure-grid primitives take positional `(width, height)`; option-rich utilities take options objects (decision 8).
+
+### Freeze list (now policy, not just fact)
+
+Node >= 20; ESM-only; **zero runtime dependencies**; `export type` hygiene + no star-exports (pinned by test); JSON-only data discipline; the determinism contract (items 1–10); schema-version markers; the layered World internals stay non-public.
+
+### Validation
+
+10 new tests (`tests/v1-release.test.ts`: strict default + legacy clause + v6 round-trip both ways; v6 poison carry/inspection/restore/recover; mixed-version diffSnapshots with poison excluded; applyTickDiff v6; trim assertions). Measured strict-flip blast radius: 11 pre-existing tests across 7 files deliberately exercising non-strict flows got explicit `strict: false`; everything else passes unchanged under the new default (the setup window absorbs construct-and-populate). Full suite 1194 passed + 2 todo; all four gates + benchmark gate green. The `dist/index.d.ts` diff vs v0.8.25 (4 declaration files changed, all expected) was generated from a pinned worktree build and reviewed by the owner in-conversation; regeneration steps live in `docs/threads/done/v1-release/PLAN.md` step 7 (raw diff deliberately not committed — diff snapshots are barred from docs).
+
 ## 0.8.25 - 2026-06-11
 
 Pre-1.0 full-review hardening (full review 2026-06-11, correctness lens; thread `docs/threads/done/full/2026-06-11/`). One repro-confirmed MEDIUM and four LOWs, all fixed.

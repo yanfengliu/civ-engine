@@ -28,13 +28,13 @@ export function diffSnapshots(
   b: WorldSnapshot,
   opts?: { tick?: number },
 ): TickDiff {
-  // Engine currently produces v5 snapshots only. Older versions in the
+  // Accepts v5 and v6 snapshots (v6's `poisoned` and config are excluded from diff semantics). Older versions in the
   // WorldSnapshot union exist for migration purposes; diffSnapshots is
   // explicitly v5-only — fail fast so callers don't get silently truncated
   // results from missing fields (state/tags/metadata are v4+, etc.).
-  if (a.version !== 5 || b.version !== 5) {
+  if ((a.version !== 5 && a.version !== 6) || (b.version !== 5 && b.version !== 6)) {
     throw new EngineError('snapshot_unsupported_version',
-      `diffSnapshots requires WorldSnapshotV5; got versions ${a.version} and ${b.version}`,
+      `diffSnapshots requires WorldSnapshotV5 or V6; got versions ${a.version} and ${b.version}`,
       { details: { a: a.version, b: b.version } },
     );
   }

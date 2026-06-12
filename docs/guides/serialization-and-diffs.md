@@ -50,7 +50,8 @@ Components must already be JSON-compatible plain data. `serialize()` rejects non
 
 ```typescript
 interface WorldSnapshot {
-  version: 5;                    // format version (current write format)
+  version: 6;                    // format version (current write format; v6 adds `poisoned` + explicit `config.strict`)
+  poisoned: TickFailure | null;  // v6: terminal failure, inspection-only (restorePoison opts into restoring it)
   config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, sync options,
                                  //   plus maxTicksPerFrame and instrumentationProfile when non-default
   tick: number;                  // current tick count
@@ -71,7 +72,7 @@ interface WorldSnapshot {
 }
 ```
 
-`World.deserialize()` accepts versions 1–5. Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
+`World.deserialize()` accepts versions 1–6 (and takes `options?: { restorePoison?: boolean }` for v6 snapshots that carry a terminal failure). Older snapshots without `componentOptions` deserialize each component store with default options (strict mode). Both `serialize()` and `deserialize()` `structuredClone` component data and state values, so mutating a snapshot object cannot write through to live engine state.
 
 Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both fields are silently ignored on read in 0.5.0+ since in-place mutation auto-detection has been removed.
 

@@ -19,8 +19,8 @@ describe('Serialization', () => {
 
     const snapshot = world.serialize();
 
-    expect(snapshot.version).toBe(5);
-    expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position' });
+    expect(snapshot.version).toBe(6);
+    expect(snapshot.config).toEqual({ gridWidth: 16, gridHeight: 16, tps: 30, positionKey: 'position', strict: true });
     expect(snapshot.tick).toBe(2);
     expect(snapshot.entities.alive).toEqual([true, true]);
     expect(snapshot.entities.generations).toEqual([0, 0]);
@@ -32,7 +32,7 @@ describe('Serialization', () => {
     expect(snapshot.components['health']).toEqual([
       [0, { hp: 100 }],
     ]);
-    if (snapshot.version !== 5) throw new Error('Expected version 5 snapshot');
+    if (snapshot.version !== 6) throw new Error('Expected version 6 snapshot');
     expect(snapshot.resources).toEqual({
       registered: [],
       pools: {},
@@ -96,7 +96,7 @@ describe('Serialization', () => {
     world.step();
 
     const snapshot = world.serialize();
-    if (snapshot.version !== 5) throw new Error('Expected v5');
+    if (snapshot.version !== 6) throw new Error('Expected v6');
     expect(snapshot.componentOptions?.position).toEqual({ diffMode: 'semantic' });
     // strict (default) options either omitted or explicitly strict; both acceptable
     const healthOpts = snapshot.componentOptions?.health;
@@ -411,7 +411,7 @@ describe('Serialization', () => {
       world.setState('terrain', { biome: 'grass' });
 
       const snapshot = world.serialize();
-      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      if (snapshot.version !== 6) throw new Error('Expected version 6');
 
       const positionEntries = snapshot.components['position'];
       const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
@@ -432,7 +432,7 @@ describe('Serialization', () => {
       const snapshot = world.serialize();
       const restored = World.deserialize(snapshot);
 
-      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      if (snapshot.version !== 6) throw new Error('Expected version 6');
       const positionEntries = snapshot.components['position'];
       const [, posData] = positionEntries[0] as [number, { x: number; y: number }];
       posData.x = 999;
@@ -453,7 +453,7 @@ describe('Serialization', () => {
       world.destroyEntity(b);
 
       const snapshot = world.serialize();
-      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      if (snapshot.version !== 6) throw new Error('Expected version 6');
       // Manually corrupt: tag a dead entity id
       const deadId = b;
       snapshot.tags[deadId] = ['ghost'];
@@ -467,7 +467,7 @@ describe('Serialization', () => {
       world.setMeta(a, 'level', 1);
 
       const snapshot = world.serialize();
-      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      if (snapshot.version !== 6) throw new Error('Expected version 6');
       // Manually corrupt: meta on a non-existent entity id
       snapshot.metadata[999] = { level: 99 };
 
@@ -543,7 +543,7 @@ describe('Serialization', () => {
       world.addComponent(e, 'health', { hp: 50 });
 
       const snapshot = world.serialize();
-      if (snapshot.version !== 5) throw new Error('Expected version 5');
+      if (snapshot.version !== 6) throw new Error('Expected version 6');
       const opts = snapshot.componentOptions ?? {};
       opts['health'] = {
         ...(opts['health'] ?? {}),

@@ -125,7 +125,7 @@ const issuesForUnit42 = replayer.markersByEntity({ id: 42, generation: 0 });
 
 The `worldFactory` is part of the determinism contract (per ADR 4 in the design spec). It must:
 
-1. Construct a fresh `World` with the same registrations (components, handlers, validators, systems) as the recording.
+1. Construct a fresh `World` with the same registrations (components, handlers, validators, systems) AND the same `WorldConfig` as the recording — including `strict`, which v6 snapshots always serialize: a factory config that differs from the recorder's surfaces as a `config.*` stateDivergence in selfCheck (a config mismatch, not a determinism bug).
 2. Call `world.applySnapshot(snap)` to load the snapshot's state in-place. **Do NOT** use `World.deserialize(snap)` followed by re-registration — the deserialize path returns a fresh world with component stores already populated from the snapshot, and subsequent `registerComponent` calls would throw on duplicates.
 
 ```ts
@@ -178,7 +178,7 @@ For replay to produce the same state as recording, user code MUST:
 6. **Iterate ordered collections only.** `Map` insertion order is safe; unordered `Set` driving simulation is not.
 7. **No environment-driven branching.** `process.env`, `globalThis` etc. inside a tick.
 8. **Registration order must match between recording and replay.** The `worldFactory` is part of the contract — it must reproduce the same registrations in the same order.
-9. **Replay determinism requires identical engine `b`-component AND Node major.** Engine cross-`b` throws `BundleVersionError`; cross-Node-major warns (transcendentals may diverge).
+9. **Replay determinism is strongest on the identical engine version.** Cross-`a` (major) throws `BundleVersionError`; same-major cross-`b` WARNS as of 1.0 (the additive axis under the freeze — selfCheck backstops); cross-Node-major warns (transcendentals may diverge).
 10. **Sliced or deferred work state is simulation state.** Pending work items, cursors, next-ids, outcome-affecting caches, and active budget values must live in components / world state / resources — never in system closures, module scope, or non-serialized utility instances. Replay reconstructs worlds from the NEAREST snapshot (`openAt`, `forkAt`, `selfCheck` segments), so closure-held queues silently start empty on every snapshot-anchored segment even when rules 1–9 are followed. Pure CPU-only caches (results identical with or without the cache) are exempt; anything that changes WHEN effects land is state. See the "Amortizing heavy work" section of `systems-and-simulation.md`.
 
 The engine does NOT structurally enforce these obligations in v1. `selfCheck` is the verification mechanism.
@@ -218,7 +218,7 @@ Replay treats synthetic bundles like organic recordings: `SessionReplayer.fromBu
 ## Limitations (v1)
 
 - **Single payload-capturing recorder per world.** A `SessionRecorder` and a `WorldHistoryRecorder({ captureCommandPayloads: true })` cannot both attach to the same world. Default-config `WorldHistoryRecorder` (no payload capture) is unrestricted.
-- **Replay across recorded `TickFailure` is out of scope.** `WorldSnapshotV5` doesn't carry poison state; future spec extends to v6.
+- **Replay across recorded `TickFailure` is out of scope.** Snapshot v6 (1.0) now CARRIES poison state for inspection (`poisoned` field; `{ restorePoison: true }` restores it on load), but replay still does not resume THROUGH a failure — the recorded failure terminates the segment as before.
 - **Sinks are synchronous.** Composes with `World.onDiff`'s synchronous listener invariant. Async/streaming sinks revisit when synthetic playtest needs them.
 
 

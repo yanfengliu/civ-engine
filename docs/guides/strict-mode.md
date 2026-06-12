@@ -1,8 +1,7 @@
 # Strict Mode
 
-Strict mode is an opt-in `World` flag (Spec 6, v0.8.8+) that rejects content mutations called outside the well-defined writable phases. It complements `SessionReplayer.selfCheck` — selfCheck verifies determinism after the fact; strict mode throws at the call site.
+Strict mode is the `World` mutation gate (Spec 6, v0.8.8+; **default ON since 1.0**) that rejects content mutations called outside the well-defined writable phases. Opt out with `strict: false` for sandbox/tutorial use. **1.0 migration:** pre-1.0 code that mutated between ticks either moves those mutations into systems / `runMaintenance(fn)` (preferred) or passes `strict: false`; pre-1.0 SNAPSHOTS are unaffected — snapshots without an explicit `strict` flag deserialize as non-strict (ADR 48). (Pre-1.0 BUNDLES are out of scope regardless: the replayer has always rejected cross-version bundles at construction — replay 0.x bundles with 0.x tooling.) It complements `SessionReplayer.selfCheck` — selfCheck verifies determinism after the fact; strict mode throws at the call site.
 
-Default is **off**; existing code is unaffected unless you opt in.
 
 ## Quickstart
 

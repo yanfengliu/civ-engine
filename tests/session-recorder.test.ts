@@ -8,6 +8,7 @@ import {
 
 const mkConfig = (): WorldConfig => ({
   gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position',
+  strict: false, // 1.0: suite pins recorder behavior over non-strict flows
 });
 
 interface Cmds { spawn: { x: number; y: number; phase?: string } }

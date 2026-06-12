@@ -284,4 +284,4 @@ The engine provides infrastructure. Game-specific logic (what units do, how comb
 
 ## Strict Mode (v0.8.8+)
 
-Optional `WorldConfig.strict` flag rejects mutations called outside the writable phases (system execution / setup window / `runMaintenance(fn)` callback). Default false. See `docs/guides/strict-mode.md`.
+The `WorldConfig.strict` mutation gate rejects mutations called outside the writable phases (system execution / setup window / `runMaintenance(fn)` callback). **Default TRUE as of 1.0** — pass `strict: false` to opt out; pre-1.0 snapshots without the flag load as non-strict. See `docs/guides/strict-mode.md`.

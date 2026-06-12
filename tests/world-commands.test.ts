@@ -663,7 +663,7 @@ describe('World commands', () => {
       expect(() => world.step()).toThrow(WorldTickFailureError);
 
       const snapshot = world.serialize();
-      expect(snapshot.version).toBe(5);
+      expect(snapshot.version).toBe(6);
       expect(warnSpy).toHaveBeenCalled();
     });
 

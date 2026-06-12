@@ -230,7 +230,7 @@ describe('World', () => {
   });
 
   it('updates spatial grid when position changes via setPosition between ticks', () => {
-    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, strict: false });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
     world.addComponent(id, 'position', { x: 3, y: 3 });
@@ -244,7 +244,7 @@ describe('World', () => {
   });
 
   it('cleans up grid and components on destroyEntity', () => {
-    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, strict: false });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
     world.addComponent(id, 'position', { x: 5, y: 5 });
@@ -325,7 +325,7 @@ describe('World', () => {
     const world = new World({
       gridWidth: 10,
       gridHeight: 10,
-      tps: 60,
+      tps: 60, strict: false,
     });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
@@ -366,7 +366,7 @@ describe('World', () => {
   });
 
   it('removes entity from grid on destroy even if position was mutated since last sync', () => {
-    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60 });
+    const world = new World({ gridWidth: 10, gridHeight: 10, tps: 60, strict: false });
     world.registerComponent<{ x: number; y: number }>('position');
     const id = world.createEntity();
     world.addComponent(id, 'position', { x: 3, y: 3 });

@@ -11,7 +11,7 @@ import {
   type WorldConfig,
 } from '../src/index.js';
 
-const mkConfig = (): WorldConfig => ({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position' });
+const mkConfig = (): WorldConfig => ({ gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position', strict: false });
 
 interface Cmds { spawn: { id: number } }
 

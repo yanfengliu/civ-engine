@@ -15,6 +15,7 @@
 
 import { EngineError } from './engine-error.js';
 import type { WorldSnapshot } from './serializer.js';
+import type { TickFailure } from './world-types.js';
 import type { EntityId } from './types.js';
 import { EntityManager } from './entity-manager.js';
 import { ComponentStore } from './component-store.js';
@@ -22,6 +23,7 @@ import type { ComponentStoreOptions } from './component-store.js';
 import { DEFAULT_MAX_TICKS_PER_FRAME } from './game-loop.js';
 import { ResourceStore } from './resource-store.js';
 import { assertJsonCompatible } from './json.js';
+import { cloneTickFailure } from './world-internal.js';
 import { DeterministicRandom } from './random.js';
 import { CommandQueue } from './command-queue.js';
 import type { WorldConfig } from './types.js';
@@ -97,11 +99,10 @@ export class World<
     if (this.instrumentationProfile !== 'full') {
       config.instrumentationProfile = this.instrumentationProfile;
     }
-    if (this.strict) {
-      // Spec 6 (v0.8.8): preserve strict flag across serialize/deserialize so
-      // a fresh world from World.deserialize(snap) keeps the same enforcement.
-      config.strict = true;
-    }
+    // v6 (1.0): strict is ALWAYS written explicitly — the strict-default
+    // compatibility clause (ADR 48) keys off its absence to identify
+    // pre-flip snapshots, so v6 snapshots must never omit it.
+    config.strict = this.strict;
 
     const componentOptions: Record<string, ComponentStoreOptions> = {};
     for (const [key, opts] of this.componentOptions) {
@@ -135,7 +136,7 @@ export class World<
     }
 
     return {
-      version: 5,
+      version: 6,
       config,
       tick: snapshotTick,
       entities: this.entityManager.getState(),
@@ -146,6 +147,9 @@ export class World<
       state,
       tags,
       metadata,
+      // Terminal poison state, carried for inspection (1.0 decision 2):
+      // load paths keep clearing live poison unless restorePoison opts in.
+      poisoned: this.poisoned ? cloneTickFailure(this.poisoned) : null,
     };
   }
 
@@ -161,9 +165,10 @@ export class World<
       | SystemRegistration<TEventMap, TCommandMap, TComponents, TState>
       | LooseSystem | LooseSystemRegistration
     >,
+    options?: { restorePoison?: boolean },
   ): World<TEventMap, TCommandMap, TComponents, TState> {
     const version = (snapshot as { version: number }).version;
-    if (version < 1 || version > 5) {
+    if (version < 1 || version > 6) {
       throw new EngineError('snapshot_unsupported_version', `Unsupported snapshot version: ${version}`, { details: { version } });
     }
 
@@ -186,7 +191,16 @@ export class World<
         ? snapshot.componentOptions
         : {};
 
-    const world = new World<TEventMap, TCommandMap, TComponents, TState>(snapshot.config);
+    // Strict-default compatibility clause (1.0 decision 1, ADR 48):
+    // pre-flip snapshots (version <= 5) omit `strict` when it was false-by-
+    // default — loading them under the flipped default must NOT silently
+    // promote them to strict, or every legacy bundle replay breaks. v6
+    // snapshots always carry strict explicitly.
+    const config =
+      version <= 5 && snapshot.config.strict === undefined
+        ? { ...snapshot.config, strict: false }
+        : snapshot.config;
+    const world = new World<TEventMap, TCommandMap, TComponents, TState>(config);
     world.entityManager = EntityManager.fromState(snapshot.entities);
 
     const assertEntityIdAlive = (rawId: unknown, ctx: string): EntityId => {
@@ -306,6 +320,16 @@ export class World<
       }
     }
 
+    if (options?.restorePoison && version >= 6 && (snapshot as { poisoned?: unknown }).poisoned) {
+      // 1.0 decision 2 (ADR 48): poison is carried for inspection; restoring
+      // it is the explicit opt-in for terminal-state-fidelity tooling. The
+      // restored world behaves exactly like the original poisoned one:
+      // step() throws, stepWithResult() returns world_poisoned, recover()
+      // clears.
+      const failure = cloneTickFailure((snapshot as { poisoned: TickFailure }).poisoned);
+      world.poisoned = failure;
+      world.lastTickFailure = failure;
+    }
     return world;
   }
 
@@ -321,7 +345,7 @@ export class World<
    * `docs/threads/done/session-recording/DESIGN.md` §2).
    * `applySnapshot` clears any current `lastTickFailure` / poison state.
    */
-  applySnapshot(snapshot: WorldSnapshot): void {
+  applySnapshot(snapshot: WorldSnapshot, options?: { restorePoison?: boolean }): void {
     // Spec 6 (v0.8.8): increment maintenance depth for forward-compat. Today's
     // implementation uses internal-only paths (`_replaceStateFrom`) that bypass
     // the public mutation gate; the increment makes a future refactor that
@@ -331,9 +355,16 @@ export class World<
       if (this.isPoisoned()) {
         this.recover();
       }
-      const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot);
+      const fresh = World.deserialize<TEventMap, TCommandMap, TComponents, TState>(snapshot, undefined, options);
       this._replaceStateFrom(fresh);
       this.gameLoop.setTick(snapshot.tick);
+      if (options?.restorePoison && fresh.poisoned) {
+        // `fresh` is discarded, so adopt its clone directly — and keep
+        // poisoned/lastTickFailure as ONE reference, matching the
+        // finalizeTickFailure invariant (release review G4).
+        this.poisoned = fresh.poisoned;
+        this.lastTickFailure = fresh.poisoned;
+      }
     } finally {
       this._maintenanceDepth--;
     }

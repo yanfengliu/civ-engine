@@ -10,6 +10,9 @@ function makeWorld() {
     gridWidth: 8,
     gridHeight: 8,
     tps: 60,
+    // 1.0: several tests mutate between ticks by design (the observer reads
+    // positional truth live); they pin non-strict-compatible behavior.
+    strict: false,
   });
   world.registerComponent<Pos>('position');
   world.registerComponent<{ v: number }>('hp');

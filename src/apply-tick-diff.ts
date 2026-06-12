@@ -17,12 +17,12 @@
 
 import { EngineError } from './engine-error.js';
 import type { TickDiff } from './diff.js';
-import type { WorldSnapshot, WorldSnapshotV5 } from './serializer.js';
+import type { WorldSnapshot, WorldSnapshotV5, WorldSnapshotV6 } from './serializer.js';
 import type { EntityId } from './types.js';
 
 export function applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSnapshot {
-  if (snapshot.version !== 5) {
-    throw new EngineError('snapshot_unsupported_version', `applyTickDiff requires WorldSnapshotV5; got version ${snapshot.version}`, { details: { version: snapshot.version } });
+  if (snapshot.version !== 5 && snapshot.version !== 6) {
+    throw new EngineError('snapshot_unsupported_version', `applyTickDiff requires WorldSnapshotV5 or V6; got version ${snapshot.version}`, { details: { version: snapshot.version } });
   }
   const v5 = snapshot;
 
@@ -122,8 +122,9 @@ export function applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSna
     }
   }
 
-  const out: WorldSnapshotV5 = {
-    version: 5,
+  // v6 in -> v6 out, with poisoned reset to null: applying a successful
+  // tick's diff yields a healthy progressed state by definition (1.0).
+  const base = {
     config: v5.config,
     tick: diff.tick,
     entities: { alive, generations, freeList },
@@ -135,5 +136,9 @@ export function applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSna
     tags,
     metadata,
   };
+  const out: WorldSnapshotV5 | WorldSnapshotV6 =
+    snapshot.version === 6
+      ? { version: 6, poisoned: null, ...base }
+      : { version: 5, ...base };
   return out;
 }

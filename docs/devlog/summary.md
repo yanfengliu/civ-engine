@@ -1,6 +1,7 @@
 # Devlog Summary
 
 - 2026-06-11: Intra-tick time-slicing design + guide (v0.8.21) - 4 determinism-safe slicing rules, Amortizing-heavy-work guide section, determinism-contract item 10, roadmap Post-1.0 section; amortized-queue primitive demand-gated.
+- 2026-06-11: 1.0.0 RELEASE - strict-by-default (+legacy-snapshot clause), snapshot v6 (inspection-only poison carry, restorePoison opt-in), surface trims, blesses, freeze list; same-major cross-b replay gate relaxed to warn under the freeze. 2 review iterations; d.ts diff owner-reviewed in-conversation. 1194 tests.
 - 2026-06-11: Pre-1.0 full review closed + hardening (v0.8.25) - 4-lens review converged at iter 2; fixed applySnapshot cross-timeline data leak (MEDIUM, repro-confirmed), sanitizer DAG bug, PlayerObserver dimension/poison guards + perf, getErrorCode exception documented. Surface judged ready to freeze.
 - 2026-06-11: CI audit fix (v0.8.24) - vitest CRITICAL + vite HIGH advisories in the dev tree resolved via lockfile (vitest 3.2.6 / vite 7.3.5); CI had been red on the audit step since the advisories published. Gates re-validated on the upgraded runner.
 - 2026-06-11: 1.0 surface groundwork (v0.8.23) - star-exports -> curated explicit lists with two-level surface-pin test; cross-family getErrorCode + read-side code mirrors (ADR 47); deprecation policy; v1-checklist breaking-decision menu. Incident: gemini plan-mode reviewers wrote to the working tree - detected, excised, hardened in AGENTS.md.

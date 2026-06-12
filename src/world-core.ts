@@ -143,7 +143,7 @@ export abstract class WorldCore<
         this.gameLoop.pause();
       },
     });
-    this.strict = config.strict === true;
+    this.strict = config.strict !== false;
     if (this.strict) this._inSetup = true;
   }
 

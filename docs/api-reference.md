@@ -372,7 +372,8 @@ When a command handler throws (or its handler is missing), every command queued 
 ```typescript
 // src/serializer.ts
 interface WorldSnapshot {
-  version: 5;
+  version: 6;
+  poisoned: TickFailure | null;  // v6: terminal failure carried for inspection
   config: WorldConfig; // includes maxTicksPerFrame and instrumentationProfile when non-default
   tick: number;
   entities: {
@@ -390,7 +391,7 @@ interface WorldSnapshot {
 }
 ```
 
-JSON-serializable snapshot of the entire world state, deep-cloned at both serialize and deserialize boundaries so callers cannot mutate live engine state through it. Used by `serialize()` and `World.deserialize()`. Version 5 adds `componentOptions` (per-component `diffMode` round-trip) and serializes `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options. Systems, validators, handlers, and event listeners are not included (they are functions, not data). Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both are silently ignored on read in 0.5.0+.
+JSON-serializable snapshot of the entire world state, deep-cloned at both serialize and deserialize boundaries so callers cannot mutate live engine state through it. Used by `serialize()` and `World.deserialize()`. Version 6 (1.0, current write format) adds `poisoned: TickFailure | null` — the terminal failure carried for inspection (cleared on load unless `{ restorePoison: true }`) — and always writes `config.strict` explicitly. Version 5 added `componentOptions` (per-component `diffMode` round-trip) and serialized `WorldConfig.maxTicksPerFrame` / `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 includes deterministic RNG state so a saved simulation resumes the same random sequence. Version 2 includes resource registrations, pools, rates, transfers, and the next transfer ID. Versions 1–5 are still accepted by `World.deserialize()` for backward compatibility — older snapshots without `componentOptions` deserialize each component store with default options, and version ≤ 5 snapshots without `config.strict` load as NON-strict (the 1.0 compatibility clause). Systems, validators, handlers, and event listeners are not included (they are functions, not data). Pre-0.5.0 snapshots may include `config.detectInPlacePositionMutations` and `componentOptions[*].detectInPlaceMutations`; both are silently ignored on read in 0.5.0+.
 
 ### `TickDiff`
 
@@ -2278,7 +2279,7 @@ const snapshot = world.serialize();
 const json = JSON.stringify(snapshot);
 ```
 
-#### `World.deserialize(snapshot, systems?)`
+#### `World.deserialize(snapshot, systems?, options?)`
 
 ```typescript
 static deserialize<TEventMap, TCommandMap, TComponents, TState>(
@@ -2289,6 +2290,7 @@ static deserialize<TEventMap, TCommandMap, TComponents, TState>(
     | LooseSystem
     | LooseSystemRegistration
   >,
+  options?: { restorePoison?: boolean },  // v6 snapshots only (1.0)
 ): World<TEventMap, TCommandMap, TComponents, TState>
 ```
 
@@ -2299,8 +2301,10 @@ Restores a world from a snapshot. Optionally accepts systems to re-register. Aft
 
 Component data and state values are `structuredClone`d on read so the input snapshot stays isolated from the live world.
 
+**Poison handling (1.0):** live poison is always CLEARED on load — a restored world steps normally. v6 snapshots carry the terminal failure for inspection in `snapshot.poisoned`; pass `{ restorePoison: true }` to restore it (the world then behaves exactly like the original poisoned one: `step()` throws, `stepWithResult()` returns `world_poisoned`, `recover()` clears). **Strict compatibility clause:** version ≤ 5 snapshots without `config.strict` deserialize as NON-strict, so pre-1.0 save files load unchanged under the 1.0 strict default (ADR 48). (Bundle REPLAY is unaffected by the clause for a different reason: the replayer rejects cross-engine-version bundles at construction, as it always has.)
+
 **Throws:**
-- `Error` if `snapshot.version` is not `1`, `2`, `3`, `4`, or `5`
+- `snapshot_unsupported_version` if `snapshot.version` is not `1`–`6`
 - `Error` if entity state arrays have mismatched lengths
 - `Error` if `snapshot.tags` or `snapshot.metadata` references a dead entity id
 
@@ -2313,6 +2317,15 @@ restored.registerHandler('moveUnit', handler);
 ```
 
 ### State Diffs
+
+
+#### `applySnapshot(snapshot, options?)`
+
+```typescript
+applySnapshot(snapshot: WorldSnapshot, options?: { restorePoison?: boolean }): void
+```
+
+In-place variant of `deserialize`: loads the snapshot's state into THIS world, preserving registrations (systems, handlers, validators, destroy callbacks — plus component registrations not present in the snapshot, which keep their registration but get fresh empty stores). Clears any current poison before loading; the same `restorePoison` opt-in applies. **Strictness is NOT transferred:** this world keeps its own `strict` setting (like it keeps its registrations) — the ≤ v5 compatibility clause governs `deserialize`, i.e. worlds CONSTRUCTED from snapshots. Strict-mode-safe at any phase (ADR 37).
 
 #### `getDiff()`
 
@@ -3149,7 +3162,6 @@ import {
   createGridPathCacheKey,
   createGridPathQueue,
   findGridPath,
-  gridPathPassabilityVersion,
   type GridPathConfig,
   type GridPathRequest,
   type PathRequestQueueEntry,
@@ -3290,14 +3302,6 @@ createGridPathCacheKey(request: GridPathRequest): string | undefined
 ```
 
 Builds the default cache key used by `createGridPathQueue()`. The generated key includes `movingEntity` so ignore-self passability queries do not reuse another entity's cached route. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
-
-### `gridPathPassabilityVersion(request)`
-
-```typescript
-gridPathPassabilityVersion(request: GridPathRequest): number
-```
-
-Returns the passability version used for cache invalidation. Defaults to `request.passabilityVersion`, then `request.occupancy?.version`, then `0`.
 
 ---
 
@@ -3472,9 +3476,9 @@ A predicate receives a **read-only façade** of the world and must return one of
 - `false` — fail (rejection reason: `"precondition returned false"`)
 - a `string` — fail (rejection reason: the string)
 
-`ReadOnlyTransactionWorld` is `Omit<World, K>` where `K` is the exhaustive `FORBIDDEN_PRECONDITION_METHODS` array. Every public mutation, lifecycle, listener-subscription, RNG, and sub-engine method on `World` is excluded — including `random` (because it advances `DeterministicRandom.state`), `setProduction` / `setConsumption` / `setResourceMax`, `start` / `stop` / `pause` / `resume` / `setSpeed`, every `on*` / `off*` listener subscription, and `warnIfPoisoned` (consumes the warn-once latch). Predicates may freely call read methods (`getComponent`, `hasResource`, `getState`, `getInRadius`, `findNearest`, `getByTag`, etc.). Three structurally-different mechanisms enforce side-effect freedom:
+`ReadOnlyTransactionWorld` is `Omit<World, K>` where `K` is the engine's exhaustive forbidden-method denylist (internal as of 1.0 — no longer a package export). Every public mutation, lifecycle, listener-subscription, RNG, and sub-engine method on `World` is excluded — including `random` (because it advances `DeterministicRandom.state`), `setProduction` / `setConsumption` / `setResourceMax`, `start` / `stop` / `pause` / `resume` / `setSpeed`, every `on*` / `off*` listener subscription, and `warnIfPoisoned` (consumes the warn-once latch). Predicates may freely call read methods (`getComponent`, `hasResource`, `getState`, `getInRadius`, `findNearest`, `getByTag`, etc.). Three structurally-different mechanisms enforce side-effect freedom:
 
-1. **Method-name denylist.** Calling a forbidden method fails to typecheck; if the type is cast away, the runtime proxy throws `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. A property-based meta-test cross-checks `FORBIDDEN_PRECONDITION_METHODS` against `Object.getOwnPropertyNames(World.prototype)` so future World additions can't slip past silently.
+1. **Method-name denylist.** Calling a forbidden method fails to typecheck; if the type is cast away, the runtime proxy throws `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. A property-based meta-test cross-checks the denylist against `Object.getOwnPropertyNames(World.prototype)` so future World additions can't slip past silently.
 2. **Clone-on-read for live-reference returns.** `getComponent`, `getComponents`, `getState`, `getResource`, `getTags`, `getByTag`, and `getEvents` return values that point into engine-owned storage. The proxy `structuredClone`s their results before the predicate sees them, so a predicate that mutates a returned object — e.g. `w.getComponent(e, 'hp')!.current = 0` — operates on a defensive copy and the live state stays untouched.
 3. **Frozen sub-objects.** `world.grid` is the only public field that is a sub-object rather than a prototype method. It is `Object.freeze`d in the constructor, so monkey-patching `w.grid.getAt = () => null` from inside a predicate throws `TypeError` in strict mode.
 

@@ -28,7 +28,7 @@ export interface WorldConfig {
    * setResourceMax, emit, destroyEntity, createEntity, random) throw
    * `StrictModeViolationError` when called outside a system phase, the
    * construction-time setup window, or an explicit `runMaintenance(fn)`
-   * callback. Default false. Registration methods (registerComponent,
+   * callback. Default TRUE as of 1.0 (decision 1): pass `strict: false` to opt out for sandbox/tutorial use. Pre-1.0 snapshots without the flag deserialize as non-strict (ADR 48). Registration methods (registerComponent,
    * registerSystem, registerHandler, registerValidator, registerResource)
    * remain allowed at any time. See Spec 6 in
    * `docs/threads/done/strict-mode/DESIGN.md`.

@@ -98,7 +98,7 @@ world.getResource(city, 'food'); // { current: 50, max: null }
 
 Resource amounts, rates, finite maxima, and transfer rates must be non-negative finite numbers.
 
-Snapshot version 5 (current) round-trips per-component `diffMode`, `maxTicksPerFrame`, and `instrumentationProfile` in addition to everything in earlier versions. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state. Version 2 added resource registrations, pools, rates, and transfers. Versions 1–4 are still accepted by `World.deserialize()` for backward compatibility. After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks.
+Snapshot version 6 (current, 1.0) carries terminal poison state for inspection (`poisoned: TickFailure | null` — load paths keep clearing live poison unless `{ restorePoison: true }` opts in) and always writes `config.strict` explicitly. Version 5 added per-component `diffMode`, `maxTicksPerFrame`, and `instrumentationProfile` round-tripping. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state. Version 2 added resource registrations, pools, rates, and transfers. Versions 1–5 are still accepted by `World.deserialize()` for backward compatibility; version ≤ 5 snapshots without `config.strict` deserialize as NON-strict (the 1.0 strict-default compatibility clause, ADR 48). After loading, re-register functions: systems, command validators, command handlers, event listeners, diff listeners, and destroy callbacks.
 
 ## Client Adapter
 
@@ -115,7 +115,7 @@ const adapter = new ClientAdapter({
 
 ## Strict Mode (v0.8.8+)
 
-`WorldConfig.strict?: boolean` (default `false`) is an opt-in invariant. When `true`, 22 mutation methods on `World` (createEntity, destroyEntity, setComponent et al., setPosition, all resource methods, setState/deleteState, addTag/removeTag, setMeta/deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a system phase / setup window / `runMaintenance(fn)` callback. Registration calls (`registerComponent`/`registerSystem`/etc.), `submit`/`submitWithResult`, `step`/`stepWithResult`, listener add/remove, and read methods are NOT gated.
+`WorldConfig.strict?: boolean` (**default `true` as of 1.0**; pass `strict: false` to opt out) is the mutation-gate invariant. When `true`, 22 mutation methods on `World` (createEntity, destroyEntity, setComponent et al., setPosition, all resource methods, setState/deleteState, addTag/removeTag, setMeta/deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a system phase / setup window / `runMaintenance(fn)` callback. Registration calls (`registerComponent`/`registerSystem`/etc.), `submit`/`submitWithResult`, `step`/`stepWithResult`, listener add/remove, and read methods are NOT gated.
 
 `applySnapshot` and `deserialize` work at any phase regardless of strict mode. See `docs/guides/strict-mode.md` for escape hatches (`endSetup`, `runMaintenance`), the depth-counted reentrant maintenance contract, and the submit-time callback caller-phase semantics.
 
@@ -127,5 +127,7 @@ The package's public surface is **explicitly curated**: `src/index.ts` contains 
 
 - **Pre-1.0 (now):** there is no deprecation grace. Anything slated for removal is removed before the 1.0 freeze; `b`-bumps may break, and the changelog is the migration record.
 - **Post-1.0:** deprecation happens in a **minor** release — `@deprecated` TSDoc on the symbol, a changelog callout, and a migration note in the owning guide. Removal happens in the **next major**, never sooner. Deprecated APIs keep their tests until removal.
+
+**Constructor-shape convention (1.0 decision 8):** pure-grid primitives (`SpatialGrid`, `OccupancyGrid`, `SubcellOccupancyGrid`, `VisibilityMap`) take positional `(width, height)` constructors; utilities with genuine option sets (`Layer`, `World`) take options objects. Blessed deliberately at 1.0 — two integers do not warrant an options bag, and symmetry-for-its-own-sake would have broken four constructors.
 
 The 1.0 decision menu (strict default, snapshot v6, trim list, freeze list) lives in `docs/design/v1-checklist.md`.
