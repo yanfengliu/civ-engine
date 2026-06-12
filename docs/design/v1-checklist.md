@@ -13,6 +13,7 @@ Produced by the `v1-surface` objective (v0.8.23; design + reviews in `docs/threa
 | 5 | **Trim: `gridPathPassabilityVersion`** | Remove from public surface — **APPROVED by owner 2026-06-11** | PathCache internal; `createGridPathCacheKey` is the public surface for cache keying. |
 | 6 | **Trim: `clearRunningState`** | **Bless (keep)** — **APPROVED (bless) by owner 2026-06-11** | Guide-documented BT escape hatch — cutting it is a real documented-API break with known use cases (design-1 reclassification). Keep unless usage data says otherwise. |
 | 7 | **Declare 1.0.0** | After 1–6 are decided and landed — **APPROVED by owner 2026-06-11, gated on a pre-1.0 full-codebase review (owner-requested) + the 1.0 work landing** | Includes the human `dist/index.d.ts` diff review step (the name pin does not gate signatures/shapes). |
+| 8 | **Constructor-shape convention for spatial utilities** *(added by the 2026-06-11 pre-1.0 review)* | **Bless positional `(width, height)`** for pure-grid primitives (SpatialGrid, OccupancyGrid, VisibilityMap, SubcellOccupancyGrid) | The alternative — migrating them to options objects for symmetry with `Layer`/`WorldConfig` — is a breaking constructor change across four utilities for cosmetic gain. `Layer` takes options because it HAS many options; pure grids take two integers. Blessing documents the convention in the public-api guide; 1.0 is the last free chance to choose the other path, which is why it is surfaced. |
 
 ## Freeze list (1.0 declares as policy, not just current fact)
 

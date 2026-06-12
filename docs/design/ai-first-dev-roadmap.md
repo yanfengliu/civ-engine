@@ -170,9 +170,38 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 
 Update this row as specs are drafted, accepted, implemented, and merged.
 
-## Post-1.0 / demand-gated
+## Post-1.0 roadmap (PROPOSAL v1, 2026-06-11 — owner review pending)
 
-Specs 10–11 are deliberately design-first: each ships a fully reviewed architecture with an explicit implementation trigger, and code lands only when the trigger fires. This is the same gating that kept Spec 5 (fork) lean — building netcode or slicing primitives before a consumer demonstrates the pain produces speculative API surface.
+**Organizing principle: pull over push.** Pre-1.0 the roadmap was push-driven — build the AI-native pillars (Specs 1–9) before any consumer demanded them. Post-1.0 the engine flips to demand-driven: the live consumer (aoe2) and any future one generate the pull, and the wave built the instrumentation to HEAR that pull honestly (benchmark gate tier-2 ratios, behavioral metrics over corpus, bundle hotspots). Only Track C below remains push-driven, because it serves the AI-native thesis itself rather than any single game.
 
-- **Spec 10 — intra-tick time-slicing.** Trigger: aoe2 (or any consumer) demonstrates sustained tick-budget overruns that per-system `interval` cadence + game-side cursor-in-component queues cannot absorb, measured by the benchmark gate's tier-2 ratios or production metrics. Until then the four slicing rules + the guide pattern ARE the product; the gated primitive is an amortized work queue specced as plain-data state + pure functions (never a class instance stored in a component).
-- **Spec 11 — lockstep multiplayer.** Trigger: a consumer commits to networked multiplayer (a second simulating peer outside tests). Work list when fired: `world.stateDigest()` (component-key-sorted canonical hash; independently useful as a selfCheck pre-filter), `LockstepSession` + `LockstepTransport` (transport-agnostic, in-memory-testable), guide. Desync post-mortem already exists today: per-peer `SessionRecorder` bundles + `diffBundles`.
+### Track A — Consumer pull (standing, highest priority)
+
+- **aoe2 feedback intake.** Every engine-relevant friction from the sister project lands as an objective with the full design/review pipeline. Trigger discipline: tier-2 benchmark ratios or production metrics, never vibes.
+- **Churn-wall optimization** — the first named candidate. Query-cache membership maintenance is a measured wall (96 000 membershipChecks in the committed churn baseline; re-derived independently by the 2026-06-11 pre-1.0 review: O(N) splice per matched cache entry on signature change). Gated on a consumer profile showing it dominates a real workload; the tier-1 exact counters keep any optimization honest — the improvement must land as a reviewed baseline diff.
+
+### Track B — Demand-gated specs (each with an explicit trigger; no code before the trigger fires)
+
+| Spec | What | Trigger |
+| ---- | ---- | ------- |
+| 10 | Intra-tick time-slicing primitive (amortized work queue as plain-data + pure functions) | A consumer demonstrates sustained tick-budget overruns that cadence + game-side cursor-in-component queues cannot absorb (`docs/threads/done/time-slicing/DESIGN.md` v3) |
+| 11 | Lockstep multiplayer (`LockstepSession` + `world.stateDigest()`) | A consumer commits to networked multiplayer — a second simulating peer outside tests (`docs/threads/done/lockstep/DESIGN.md` v3). `stateDigest` may land earlier on its own if selfCheck profiling wants a cheap pre-filter |
+| 12 *(new)* | **Per-player bundle filtering** (`filterBundleForPlayer`) — PlayerObserver's recorded-history sibling: project a recorded omniscient bundle through a per-player visibility timeline so agents can be trained/evaluated on honest observations of past games | An agent-training or evaluation workflow over corpus bundles materializes (e.g., aoe2 playtesting at scale) |
+| 13 *(new)* | **Ghost memory** — last-seen-state layer atop PlayerObserver (classic RTS fog memory: remembered stale enemy positions) | A second consumer hand-rolls what aoe2 hand-rolled, or aoe2's implementation proves general; until then it stays game-level policy per the player-observation design |
+| 14 *(new)* | **Corpus anomaly aggregation** — `bundleHotspots` is per-bundle; aggregate recurring failure signatures and metric drift across a corpus, e.g. between agent versions | The corpus outgrows human triage (≳100 bundles per iteration loop) |
+
+### Track C — AI-native thesis (push-driven; the only speculative track)
+
+- **MCP server** (`civ-engine-mcp`, separate package — core stays zero-dep): expose the machine-readable surfaces (submit/observe, bundle corpus, viewer, metrics, hotspots) as MCP tools so any AI coding agent can operate a running engine or interrogate recorded games directly. `ai-integration.md` has anticipated exactly this layering since Tier 1. Highest-leverage thesis item; propose as the first post-1.0 objective alongside Track A intake.
+- **Determinism tripwire (dev mode)** — the contract's documented-but-unenforced clauses (unordered iteration, wall-clock reads) get a cheap dev-loop harness: dual-seeded short-run digest comparison (piggybacks on Spec 11's `stateDigest`). Catches violations at author time instead of at selfCheck time.
+- **1.x release engineering** — npm publish cadence + provenance on top of the existing pack/audit CI; semver enforced by the deprecation policy + surface-pin fixture (additions = minor; removals = major-only).
+
+### Carried-over small items (from the 2026-06-11 pre-1.0 review; non-breaking, any 1.x)
+
+- `VisibilityMap.getMetrics()/resetMetrics()` parity with OccupancyGrid (or a documented "too cheap to meter" stance).
+- `session-recorder.ts` headroom extraction (sits exactly at the 500-LOC cap).
+- `offDestroy` O(N) array removal → Set, for registry-management parity.
+
+### Governance
+
+The 1.0 freeze list applies (`docs/design/v1-checklist.md`): surface fixture is the semver contract, deprecation policy governs removals, zero runtime deps stays policy. Spec numbering continues from the pre-1.0 tracker above; every spec lands through the standard design → multi-CLI review → TDD → review pipeline.
+
