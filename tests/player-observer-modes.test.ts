@@ -256,3 +256,13 @@ describe('pre-1.0 full review F3 hardening', () => {
     expectCode(() => observer.snapshot(), 'player_observer_world_poisoned');
   });
 });
+
+describe('1.0.2 carry-overs', () => {
+  it('reset() re-asserts grid dimensions after an applySnapshot grid resize', () => {
+    const { world } = makeWorld();
+    const { observer } = makeObserver(world);
+    const bigger = new World({ gridWidth: 16, gridHeight: 16, tps: 60, strict: false });
+    world.applySnapshot(bigger.serialize());
+    expectCode(() => observer.reset(), 'player_observer_grid_mismatch');
+  });
+});

@@ -89,9 +89,11 @@ export abstract class WorldCore<
     (result: CommandExecutionResult<keyof TCommandMap>) => void
   >();
   protected tickFailureListeners = new Set<(failure: TickFailure) => void>();
-  protected destroyCallbacks: Array<
+  // Set since 1.0.2 (registry parity; O(1) offDestroy). Iteration is
+  // insertion-ordered, matching the previous array semantics exactly.
+  protected destroyCallbacks: Set<
     (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
-  > = [];
+  > = new Set();
   protected stateStore = new Map<string, unknown>();
   protected stateDirtyKeys = new Set<string>();
   protected stateRemovedKeys = new Set<string>();

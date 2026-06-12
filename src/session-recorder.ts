@@ -12,11 +12,11 @@ import type {
   SessionTickEntry,
 } from './session-bundle.js';
 import {
-  MarkerValidationError,
   RecorderClosedError,
   SessionRecordingError,
   SinkWriteError,
 } from './session-errors.js';
+import { validateNewMarker } from './session-marker-validation.js';
 import './session-internals.js';
 import { MemorySink, type SessionSink, type SessionSource } from './session-sink.js';
 import { ENGINE_VERSION } from './version.js';
@@ -274,69 +274,9 @@ export class SessionRecorder<
 
   addMarker(input: NewMarker): string {
     this._assertOperational('addMarker');
-    const tick = input.tick ?? this._world.tick;
-    if (tick < 0) {
-      throw new MarkerValidationError(`marker.tick must be >= 0 (got ${tick})`,
-        { field: 'tick', value: tick }, '6.1.tick_negative');
-    }
-    if (tick > this._world.tick) {
-      throw new MarkerValidationError(
-        `marker.tick (${tick}) must not exceed current world tick (${this._world.tick})`,
-        { field: 'tick', value: tick }, '6.1.tick_future');
-    }
-    // Validate refs (live-tick path: full check; retroactive: lenient + validated:false)
+    // §6.1 validation lives in session-marker-validation.ts (1.0.2 LOC split).
+    const tick = validateNewMarker(input, this._world, this._registeredAttachmentIds);
     const isLive = tick === this._world.tick;
-    if (input.refs?.entities) {
-      if (isLive) {
-        for (const ref of input.refs.entities) {
-          if (!this._world.isCurrent(ref)) {
-            throw new MarkerValidationError(
-              `marker.refs.entities references a non-live entity { id: ${ref.id}, generation: ${ref.generation} }`,
-              { field: 'refs.entities', ref: { id: ref.id, generation: ref.generation } },
-              '6.1.entity_liveness',
-            );
-          }
-        }
-      }
-      // Retroactive: skip liveness check; mark as not validated below.
-    }
-    if (input.refs?.tickRange) {
-      const { from, to } = input.refs.tickRange;
-      if (from < 0 || to < 0 || from > to) {
-        throw new MarkerValidationError(
-          `marker.refs.tickRange invalid: { from: ${from}, to: ${to} }`,
-          { field: 'refs.tickRange', from, to }, '6.1.tickrange_shape',
-        );
-      }
-    }
-    if (input.refs?.cells) {
-      // Validate cells against world bounds. Out-of-bounds cells are rejected
-      // per spec §6.1. Iter-1 code review fix.
-      const w = this._world.grid.width;
-      const h = this._world.grid.height;
-      for (const cell of input.refs.cells) {
-        if (cell.x < 0 || cell.x >= w || cell.y < 0 || cell.y >= h) {
-          throw new MarkerValidationError(
-            `marker.refs.cells contains out-of-bounds cell { x: ${cell.x}, y: ${cell.y} } (world is ${w}×${h})`,
-            { field: 'refs.cells', x: cell.x, y: cell.y, gridWidth: w, gridHeight: h },
-            '6.1.cell_bounds',
-          );
-        }
-      }
-    }
-    if (input.attachments) {
-      // Validate that each referenced attachment id was actually registered
-      // via attach(). Iter-1 code review fix.
-      for (const attId of input.attachments) {
-        if (!this._registeredAttachmentIds.has(attId)) {
-          throw new MarkerValidationError(
-            `marker.attachments references unknown attachment id "${attId}" — call recorder.attach() first`,
-            { field: 'attachments', id: attId },
-            '6.1.attachment_unknown',
-          );
-        }
-      }
-    }
     // Clone refs/data/attachments arrays to detach from caller-owned references.
     // Otherwise post-call mutation by user code would corrupt the recorded
     // bundle. Iter-1 code review fix (Codex H3 / memory aliasing).

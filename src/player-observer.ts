@@ -197,6 +197,27 @@ export class PlayerObserver<
    *  reconnect). Construction primes the same way, so observeTick() is valid
    *  from the first post-construction tick without a snapshot() call. */
   reset(): void {
+    if (
+      this.visibility.width !== this.world.grid.width ||
+      this.visibility.height !== this.world.grid.height
+    ) {
+      // applySnapshot can resize the world grid under a live observer; the
+      // construction-time dimension contract is re-asserted at the reset
+      // boundary the lifecycle already mandates after timeline changes
+      // (pre-1.0 review carry-over).
+      throw new EngineError(
+        'player_observer_grid_mismatch',
+        `PlayerObserver.reset: visibility map (${this.visibility.width}x${this.visibility.height}) no longer matches the world grid (${this.world.grid.width}x${this.world.grid.height}); construct a new observer with a matching map`,
+        {
+          details: {
+            visibilityWidth: this.visibility.width,
+            visibilityHeight: this.visibility.height,
+            gridWidth: this.world.grid.width,
+            gridHeight: this.world.grid.height,
+          },
+        },
+      );
+    }
     this.prime();
   }
 

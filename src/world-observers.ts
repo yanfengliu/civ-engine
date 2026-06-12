@@ -54,7 +54,7 @@ export abstract class WorldObservers<
         .map(([key, fns]) => ({ key: String(key), count: fns.length }))
         .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
       resources: this.resourceStore.getRegisteredKeys(),
-      destroyCallbackCount: this.destroyCallbacks.length,
+      destroyCallbackCount: this.destroyCallbacks.size,
     };
   }
 

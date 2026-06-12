@@ -84,16 +84,13 @@ export abstract class WorldEntities<
   onDestroy(
     callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
-    this.destroyCallbacks.push(callback);
+    this.destroyCallbacks.add(callback);
   }
 
   offDestroy(
     callback: (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void,
   ): void {
-    const index = this.destroyCallbacks.indexOf(callback);
-    if (index !== -1) {
-      this.destroyCallbacks.splice(index, 1);
-    }
+    this.destroyCallbacks.delete(callback);
   }
 
   registerComponent<K extends keyof TComponents & string>(

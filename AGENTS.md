@@ -185,10 +185,11 @@ Code changes are not done until the docs match. Before declaring any task comple
 
 ### Versioning
 
-- Maintain a version number `a.b.c`:
-  - Only bump `a` when the human says so.
-  - Whenever you introduce a breaking change, bump `b` and reset `c`.
-  - Whenever you introduce a non-breaking change, bump `c`.
+- Maintain a version number `a.b.c` under **semver (post-1.0 rules, since 2026-06-12)**:
+  - `a` (major): breaking changes ONLY, and only when the human says so. Removals go through the deprecation policy (deprecate in a minor, remove in the next major) — see `docs/guides/public-api-and-invariants.md`.
+  - `b` (minor): additive surface (new exports, new methods, new options). The surface-pin fixture diff is the review artifact.
+  - `c` (patch): fixes, docs, internal changes — no surface additions.
+  - (Pre-1.0 history used `b` as the breaking axis; entries before 1.0.0 in the changelog follow the old convention.)
 - **One version bump per coherent shipped change.** Three independent features land as three commits on `main`, each with its own version bump (e.g., 0.5.9 → 0.5.10 → 0.5.11). Do not roll multiple unrelated features into a single version. A single feature that needs iter-1 + iter-2 fix commits stays on the same version — the fixes are folded into the original commit's version, not new bumps.
 - Maintain `docs/changelog.md` with one entry per version. Check `docs/devlog/` for context.
 - Update the README version badge.

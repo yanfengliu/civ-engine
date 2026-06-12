@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.2 - 2026-06-12
+
+Patch batch: the pre-1.0 review carry-overs.
+
+- **`offDestroy` is O(1)**: the destroy-callback registry is a `Set` (insertion-ordered like the previous array; registry parity with every other listener surface). Behavior note: registering the same function reference twice is now a no-op (previously fired twice and counted twice in `destroyCallbackCount`) — a bundle recorded under a duplicate-registering factory would now replay to a `registration_mismatch`; realistic blast radius ~zero since inline closures are distinct references.
+- **`PlayerObserver.reset()` re-asserts grid dimensions** — an `applySnapshot` that resizes the world grid under a live observer now surfaces as `player_observer_grid_mismatch` at the reset boundary the lifecycle already mandates, instead of a later misattributed bounds error.
+- **`session-recorder.ts` headroom**: §6.1 marker validation extracted to `src/session-marker-validation.ts` (behavior and rule ids unchanged; the recorder sat exactly at the 500-line cap).
+- Process: AGENTS.md versioning section updated to post-1.0 semver (major = breaking/human-gated via the deprecation policy; minor = additive; patch = fixes).
+
+### Validation
+
+1 new test (reset dimension re-assert); marker-validation behavior pinned by the existing recorder suite (rule ids unchanged). Full suite green; all gates pass.
+
 ## 1.0.1 - 2026-06-12
 
 Replayer error-quality audit (owner-asked: "when the replayer doesn't work, does it give the right error message?"). Empirical answer: mostly yes — but two failure modes were SILENT and one was misleading. All fixed; every replay failure now names the actual defect with a stable code and actionable guidance.
