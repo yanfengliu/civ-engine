@@ -474,16 +474,16 @@ describe('Spec 5 / Step 5 — ForkBuilder.run() substitution mechanism', () => {
     expect(() => builder.run({ untilTick: bundle.metadata.persistedEndTick })).toThrow(BuilderConsumedError);
   });
 
-  it('(g) run({ untilTick: targetTick }) throws RangeError; untilTick < targetTick also throws', () => {
+  it('(g) run({ untilTick: targetTick }) throws coded ForkBuilderConflictError; untilTick < targetTick also throws', () => {
     const bundle = recordSession(10);
     const replayer = makeReplayer(bundle);
     {
       const builder = replayer.forkAt(5);
-      expect(() => builder.run({ untilTick: 5 })).toThrow(RangeError);
+      expect(() => builder.run({ untilTick: 5 })).toThrow(/untilTick > targetTick/);
     }
     {
       const builder = replayer.forkAt(5);
-      expect(() => builder.run({ untilTick: 4 })).toThrow(RangeError);
+      expect(() => builder.run({ untilTick: 4 })).toThrow(/untilTick > targetTick/);
     }
   });
 

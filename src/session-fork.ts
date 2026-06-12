@@ -32,13 +32,16 @@ export class ForkSubstitutionError extends SessionRecordingError {
 export type ForkBuilderConflictCode =
   | 'duplicate_replace'
   | 'duplicate_drop'
-  | 'replace_drop_conflict';
+  | 'replace_drop_conflict'
+  | 'until_tick_invalid';
 
-export interface ForkBuilderConflictErrorDetails {
-  readonly code: ForkBuilderConflictCode;
-  readonly sequence: number;
-  readonly tick: number;
-}
+/** Discriminated union (1.0.1): original codes keep REQUIRED sequence/tick
+ *  (frozen shape unchanged); until_tick_invalid is typed precisely. */
+export type ForkBuilderConflictErrorDetails =
+  | { readonly code: 'duplicate_replace' | 'duplicate_drop' | 'replace_drop_conflict';
+      readonly sequence: number; readonly tick: number }
+  | { readonly code: 'until_tick_invalid';
+      readonly untilTick: number; readonly targetTick: number };
 
 export class ForkBuilderConflictError extends SessionRecordingError {
   constructor(message: string, details: ForkBuilderConflictErrorDetails) {
@@ -271,9 +274,10 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
     this._assertNotConsumed();
     const { untilTick } = config;
     if (untilTick <= this._targetTick) {
-      throw new RangeError(
+      // Coded since 1.0.1 (was the session family's last bare throw).
+      throw new ForkBuilderConflictError(
         `forkBuilder.run({ untilTick: ${untilTick} }) requires untilTick > targetTick (${this._targetTick})`,
-      );
+        { code: 'until_tick_invalid', untilTick, targetTick: this._targetTick });
     }
     this._consumed = true; // mark consumed BEFORE potentially-throwing work, per PLAN.md note
 

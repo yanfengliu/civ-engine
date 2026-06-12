@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.1 - 2026-06-12
+
+Replayer error-quality audit (owner-asked: "when the replayer doesn't work, does it give the right error message?"). Empirical answer: mostly yes — but two failure modes were SILENT and one was misleading. All fixed; every replay failure now names the actual defect with a stable code and actionable guidance.
+
+- **Fixed (silent → coded): a `worldFactory` that forgets `applySnapshot`.** `openAt` used to return a tick-0 world with NO error — silently wrong replay output. Now throws `BundleIntegrityError` `factory_snapshot_not_applied` at construction — detected via tick equality plus structural fingerprints (alive entities, state keys, component entry counts), so the tick-0 case is caught too; a tick-0 snapshot structurally identical to a fresh world is the documented residual blind spot (rng/resource state may differ).
+- **Fixed (silent → coded): a factory returning a poisoned world** (e.g. a listener that throws during construction stepping — invisible to the registration manifest). Now throws `factory_world_poisoned` with the underlying `failureCode`/`failureTick`.
+- **Fixed (misleading → precise): non-bundle input.** `fromBundle({...garbage})` used to say "unsupported bundle schemaVersion: undefined" (or crash later on a raw TypeError). Now throws `bundle_malformed` listing exactly which required fields are missing, before any version gate.
+- **Coded the family's last builtin-class throw:** `forkBuilder.run({ untilTick })` validation is now `ForkBuilderConflictError` with code `until_tick_invalid` (was a plain `RangeError`) — closes the legacy gap documented since v0.8.19.
+- **Message actionability:** `replay_across_failure` now says what TO do (openAt below the first failure, or inspect the terminal v6 snapshot via `restorePoison`); `no_replay_payloads` names the likely cause; `cross_a` names the remedy (matching-major tooling); the two `handler_missing` messages are harmonized.
+- Internal: guards live in new `src/session-replayer-guards.ts` (LOC budget); `ForkBuilderConflictErrorDetails` fields are now per-code optional.
+
+### Validation
+
+11 new tests (`tests/session-replayer-errors.test.ts`) pinning each guard, code, and message contract — including regression pins on the two formerly-silent failures, the tick-0 fingerprint case, null/primitive inputs, selfCheck-path protection, and an interim-snapshot no-false-positive proof. One pre-existing test repinned to the coded fork error. Full suite 1200 passed + 2 todo; all gates + benchmark green.
+
 ## 1.0.0 - 2026-06-11
 
 **The 1.0 release.** The public surface freezes under semver: the surface fixture (104 runtime / 315 declared names) (`tests/fixtures/public-surface.json`) is the contract — additions are minors, removals happen only in majors via the deprecation policy (`docs/guides/public-api-and-invariants.md`). Decisions and rationale: `docs/design/v1-checklist.md` (all 8 items owner-approved); pre-release gate: the converged 2026-06-11 full review.

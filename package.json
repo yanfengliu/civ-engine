@@ -1,6 +1,6 @@
 {
   "name": "civ-engine",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Headless, AI-native 2D grid-based game engine: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies.",
   "keywords": [
     "game-engine",

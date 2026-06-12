@@ -22,6 +22,7 @@ import type { CommandExecutionResult, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
 import { createForkBuilder, type ForkBuilder } from './session-fork.js';
 import { compareRegistration } from './session-registration.js';
+import { assertBundleShape, assertFactoryContract } from './session-replayer-guards.js';
 import type {
   EventDivergence,
   ExecutionDivergence,
@@ -113,6 +114,9 @@ export class SessionReplayer<
         );
       }
     }
+    // Factory-contract guards (error-quality audit 1.0.1) — see
+    // session-replayer-guards for the silent-failure history.
+    assertFactoryContract(world, snapshot);
     return world;
   }
 
@@ -200,13 +204,13 @@ export class SessionReplayer<
     }
     if (md.failedTicks?.some((ft) => targetTick >= ft)) {
       throw new BundleIntegrityError(
-        'replay across recorded TickFailure is out of scope',
+        `replay across a recorded TickFailure is out of scope: openAt a tick below the first failure (failedTicks in details), or inspect the terminal state directly — v6 snapshots carry the failure and World.deserialize(snapshot, undefined, { restorePoison: true }) restores it`,
         { code: 'replay_across_failure', failedTicks: md.failedTicks, requested: targetTick },
       );
     }
     if (targetTick > md.startTick && this._bundle.commands.length === 0) {
       throw new BundleIntegrityError(
-        'bundle has no command payloads; replay forward is impossible',
+        'bundle has no command payloads; replay forward is impossible (the bundle was recorded without payload capture or its commands were stripped — only snapshot ticks are reachable: pass a tick that has a recorded snapshot)',
         { code: 'no_replay_payloads', requested: targetTick },
       );
     }
@@ -363,7 +367,7 @@ export class SessionReplayer<
         for (const rc of tickCommands) {
           if (!world.hasCommandHandler(rc.type as keyof TCommandMap)) {
             throw new ReplayHandlerMissingError(
-              `replay needs handler for command type "${String(rc.type)}"`,
+              `replay needs handler for command type "${String(rc.type)}", not registered in worldFactory's world`,
               { code: 'handler_missing', commandType: String(rc.type), tick: t },
             );
           }
@@ -426,7 +430,11 @@ export class SessionReplayer<
   }
 
   private _verifyVersionCompat(): void {
+    // Shape guard FIRST (error-quality audit 1.0.1) — see session-replayer-guards.
+    // No property reads before it: fromBundle(null) must say "not a bundle".
+    assertBundleShape(this._bundle);
     const md = this._bundle.metadata;
+
     // Schema version check before engine-version check. Iter-1 code review fix.
     if (this._bundle.schemaVersion !== 1) {
       throw new BundleVersionError(
@@ -440,7 +448,7 @@ export class SessionReplayer<
     const [ra, rb] = runtimeParts;
     if (ba !== ra) {
       throw new BundleVersionError(
-        `engineVersion cross-major: bundle ${md.engineVersion} vs runtime ${ENGINE_VERSION}`,
+        `engineVersion cross-major: bundle ${md.engineVersion} vs runtime ${ENGINE_VERSION} — bundle replay is same-major tooling; replay this bundle with a matching ${md.engineVersion.split('.')[0]}.x engine`,
         { code: 'cross_a', bundleVersion: md.engineVersion, runtimeVersion: ENGINE_VERSION },
       );
     }

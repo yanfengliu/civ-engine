@@ -126,7 +126,7 @@ const issuesForUnit42 = replayer.markersByEntity({ id: 42, generation: 0 });
 The `worldFactory` is part of the determinism contract (per ADR 4 in the design spec). It must:
 
 1. Construct a fresh `World` with the same registrations (components, handlers, validators, systems) AND the same `WorldConfig` as the recording — including `strict`, which v6 snapshots always serialize: a factory config that differs from the recorder's surfaces as a `config.*` stateDivergence in selfCheck (a config mismatch, not a determinism bug).
-2. Call `world.applySnapshot(snap)` to load the snapshot's state in-place. **Do NOT** use `World.deserialize(snap)` followed by re-registration — the deserialize path returns a fresh world with component stores already populated from the snapshot, and subsequent `registerComponent` calls would throw on duplicates.
+2. Call `world.applySnapshot(snap)` to load the snapshot's state in-place — then do not step, and return an unpoisoned world. All three are enforced at construction since 1.0.1 (`factory_snapshot_not_applied` via tick + structural fingerprints; `factory_world_poisoned`). **Do NOT** use `World.deserialize(snap)` followed by re-registration — the deserialize path returns a fresh world with component stores already populated from the snapshot, and subsequent `registerComponent` calls would throw on duplicates.
 
 ```ts
 function setupBehavior(world: World): void {

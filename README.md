@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-1.0.0-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
+![version](https://img.shields.io/badge/version-1.0.1-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
 
 > **Pre-release alpha - unverified.** This engine is under active development. The public API surface is still shifting (see `docs/changelog.md` for the recent breaking-change cadence - `0.5.0`, `0.6.0`, `0.7.0`, `0.8.0`), invariants are still being hardened through mandatory multi-CLI reviews, and no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - do **not** depend on it for shipped products yet.
 
