@@ -16,6 +16,18 @@ Pointer: devlog entry, file, or test that illustrates it.
 
 ---
 
+## A new method on an exported class is additive PUBLIC SURFACE (minor), even when intended internal — and the name-level surface fixture won't catch it — 2026-06-13
+
+| Field | Value |
+|---|---|
+| Surfaced by | `docs/threads/done/full/2026-06-13/4/REVIEW.md` (full-review iter-4) |
+| Reviewer findings | Codex iter-4 MEDIUM ("getAtRaw is a public additive API method, cannot ship as patch 1.1.3"), Claude iter-4 NIT (same; "tag @internal or bump minor") |
+| Fix commit | d077e52 (reverted `getAtRaw`; `findNearest` keeps the sorted-copy `getAt`) |
+| Test added | n/a — process lesson. `tests/public-surface.test.ts` pins exported *names* + a no-star-export invariant; it explicitly defers method-signature changes to "a d.ts diff review step at the freeze", so a new method on an already-exported class passes it silently — that gap IS the lesson |
+| Behavior delta | Before: a perf-only `SpatialGrid.getAtRaw` (added to skip a sorted-copy alloc in `findNearest`) would have shipped in patch `1.1.3` — `SpatialGrid` is exported, declarations ship (`types: ./dist/index.d.ts`, no `stripInternal`), so the method is in the consumer-facing `.d.ts`. Post-1.0 semver puts additive surface on the MINOR axis. After: reverted (the perf cost is benchmark-tolerable and both reviewers agreed), keeping the full-review batch a pure patch with the 1.0 surface frozen |
+
+The trap: the surface-pin test gives false confidence that "the fixture is green ⇒ no surface change." It guards top-level *names*, not method additions to exported classes. When adding ANY method/property/overload to an exported class in a patch, check the `.d.ts` impact manually (or `@internal` + `stripInternal` to keep it package-internal). Corollary: don't grow public surface to dodge a benchmark-tolerable perf cost — accept the cost or use a truly-internal mechanism. Also from this review: Codex caught a real state-loss regression (the L3 terminal-snapshot skip) in a fix Claude had APPROVED the same iteration — concrete proof the multi-reviewer mandate earns its keep on re-reviews, not just first passes.
+
 ## Fan-out audits miss cross-surface duplication — grep ALL copies of a fact before claiming a fix is complete — 2026-06-13
 
 | Field | Value |
