@@ -201,6 +201,7 @@ The map tracks:
 - Persistent explored state
 - Multiple players independently
 - Serializable state via `getState()` / `fromState()`
+- Deterministic metrics via `getMetrics()` / `resetMetrics()` (recomputes, computed cells, visibility queries — parity with `OccupancyGrid`)
 
 ## Benchmarking
 
@@ -220,8 +221,8 @@ npm run benchmark:rts -- --stress
 The benchmark emits deterministic scenarios and reports:
 
 - Tick duration
-- Query cache hits and misses
-- Spatial sync scan counts
+- Query cache hits, misses, and membership checks (`query.membershipChecks` — a tier-1 exact counter, stressed hardest by the churn scenario)
+- Spatial explicit sync counts (`spatial.explicitSyncs`)
 - Diff size
 - Path request cost
 - Occupancy benchmark counts for buildings, resources, and units

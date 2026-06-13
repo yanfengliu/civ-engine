@@ -220,6 +220,9 @@ Last-tick instrumentation returned by `world.getMetrics()`. In `instrumentationP
 // src/ai-contract.ts
 function getAiContractVersions(): {
   commandResult: number;
+  commandExecution: number;
+  tickFailure: number;
+  worldStepResult: number;
   worldDebug: number;
   worldHistory: number;
   worldHistoryRangeSummary: number;
@@ -228,7 +231,7 @@ function getAiContractVersions(): {
 }
 ```
 
-Returns the current version markers for the engine's machine-facing AI contracts.
+Returns the current version markers for the engine's machine-facing AI contracts. Each field is also exported individually as a top-level constant (`COMMAND_RESULT_SCHEMA_VERSION`, `COMMAND_EXECUTION_SCHEMA_VERSION`, `TICK_FAILURE_SCHEMA_VERSION`, `WORLD_STEP_RESULT_SCHEMA_VERSION`, `WORLD_DEBUG_SCHEMA_VERSION`, `WORLD_HISTORY_SCHEMA_VERSION`, `WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION`, `SCENARIO_RESULT_SCHEMA_VERSION`, `CLIENT_PROTOCOL_VERSION`) for consumers that pin a single contract.
 
 ### `CommandValidationRejection`
 
@@ -1390,7 +1393,7 @@ registerSystem(
 ): void
 ```
 
-Adds a system to the pipeline. Bare functions run in the `update` phase. Registration objects can name systems for metrics and assign a phase. Systems run in this phase order: `input`, `preUpdate`, `update`, `postUpdate`, `output`; registration order is preserved within each phase.
+Adds a system to the pipeline. Bare functions run in the `update` phase. Registration objects can name systems for metrics and assign a phase. Systems run in this phase order: `input`, `preUpdate`, `update`, `postUpdate`, `output`; registration order is preserved within each phase. The phase order is also exported as the readonly `SYSTEM_PHASES` array (`['input', 'preUpdate', 'update', 'postUpdate', 'output']`) for code that needs to iterate phases programmatically.
 
 The overload accepting `LooseSystem | LooseSystemRegistration` allows systems typed against `World<any, any>` to be registered without casts, which is useful for generic utility systems.
 
@@ -1470,8 +1473,8 @@ Each tick executes in this order:
 5. Process resource rates and transfers
 6. Build diff (collect dirty state into `TickDiff`)
 7. Update metrics
-8. Notify diff listeners
-9. Increment tick counter
+8. Increment tick counter (`world.tick` advances to the just-executed tick)
+9. Notify diff listeners (`world.tick === diff.tick` while they run)
 
 The spatial grid is updated lock-step with every position write (`setPosition`, `setComponent` on the configured position key) — there is no separate sync phase.
 

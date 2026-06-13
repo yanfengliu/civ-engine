@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-06-13: Doc-accuracy pass (/doc-review, v1.1.1) - architecture trio caught up to 1.1.0 MCP (Component Map/Boundaries/drift-log + ADR 49/50); fixed tick-lifecycle increment/notify order (concepts + ARCHITECTURE); getAiContractVersions 6→9 fields; stale benchmark field; README MCP version + post-1.0 banner; roadmap small-items marked shipped. Multi-CLI reviewed.
 - 2026-06-11: Intra-tick time-slicing design + guide (v0.8.21) - 4 determinism-safe slicing rules, Amortizing-heavy-work guide section, determinism-contract item 10, roadmap Post-1.0 section; amortized-queue primitive demand-gated.
 - 2026-06-12: MCP server (engine 1.1.0 + civ-engine-mcp 0.1.0) - 14 read-only tools over bundle corpora via the MCP SDK; engine gains snapshotAtTick (pure-data hydration) + VisibilityMap metrics. 2 design + 1 impl review iterations; core stays zero-dep.
 - 2026-06-12: 1.x small-items batch (v1.0.2) - offDestroy Set, PlayerObserver.reset dim re-assert, recorder marker-validation extraction (LOC headroom), AGENTS versioning -> post-1.0 semver.

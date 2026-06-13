@@ -83,8 +83,8 @@ Each `step()` call executes one tick in this exact sequence:
 11. resourceStore.processTick()  — production, consumption, transfers
 12. buildDiff()                  — collect all changes into TickDiff
 13. metrics update               — collect timing/query/explicit-sync metrics
-14. notify diffListeners         — push TickDiff to subscribers
-15. tick++                       — increment counter
+14. tick++                       — increment counter (world.tick now equals diff.tick)
+15. notify diffListeners         — push TickDiff to subscribers
 ```
 
 The spatial grid is in sync at all times — every `setPosition`/`setComponent` write updates the grid in the same call. There is no separate per-tick sync phase.

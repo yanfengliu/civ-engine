@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1 - 2026-06-13
+
+Documentation-accuracy pass (`/doc-review`) — no API or behavior change; `ENGINE_VERSION` tracks the patch. A four-surface audit (README, api-reference, architecture, guides) against the live code brought every canonical doc up to date with the 1.1.0 MCP-server release and fixed pre-existing drift.
+
+- **Architecture docs caught up to 1.1.0:** Component Map + Boundaries gain the MCP server subsystem (in-repo `civ-engine-mcp` subpackage; sole owner of the MCP SDK; core stays zero-dep); drift-log gains the 1.1.0 row; `decisions.md` gains ADR 49 (MCP read-only / no-World-construction scope + the `snapshotAtTick` prerequisite) and ADR 50 (SDK isolation in a private subpackage).
+- **Fixed (doc correctness): tick-lifecycle ordering.** Four current docs showed "notify diff listeners" before "increment tick counter"; the engine increments first (`gameLoop.advance()` precedes the listener loop) precisely so `world.tick === diff.tick` holds during listeners. Order corrected in all four (`concepts.md`, ARCHITECTURE.md Data Flow, the api-reference `step()` docs, and `systems-and-simulation.md`).
+- **Fixed (stale signature): `getAiContractVersions()`** in api-reference listed 6 of its 9 return fields (missing `commandExecution`, `tickFailure`, `worldStepResult`); now complete. The `SYSTEM_PHASES` constant is now documented.
+- **Fixed (stale benchmark field):** `rts-primitives.md` advertised the "Spatial sync scan counts" benchmark field that v0.8.17 stopped emitting (the underlying scan metrics were removed back in v0.5.0); now "Spatial explicit sync counts" + the `query.membershipChecks` counter. `VisibilityMap.getMetrics()/resetMetrics()` (1.1.0) added to its tracked-surface list.
+- **README + roadmap:** the MCP subpackage version is corrected (`civ-engine-mcp` is 0.1.0, shipped alongside engine 1.1.0 — not "v1.1.0+"); the pre-1.0 alpha banner is refreshed for the post-1.0 surface freeze; the roadmap's three "carried-over small items" are marked shipped (VisibilityMap metrics → 1.1.0; recorder headroom + `offDestroy` Set → 1.0.2).
+
+### Validation
+
+Doc-only diff plus the version-tracking constant and a version-only lockfile sync; all four gates (`npm test` 1215 + 2 todo, `npm run typecheck`, `npm run lint`, `npm run build`) + benchmark gate green; mcp suite 18 passed; runtime `npm audit --omit=dev` 0 high/critical (zero runtime deps). Multi-CLI review (Codex + Claude; Gemini unreachable this session) with the codebase-grounding directive caught one incompleteness — two further current copies of the tick-lifecycle order (`api-reference.md` `step()` docs + `systems-and-simulation.md`) still showed the old order — fixed before commit. A pre-existing dev-only audit advisory set (esbuild via vite/vitest, 5 HIGH; shipped surface unaffected) is flagged for a separate vitest-4 follow-up.
+
 ## 1.1.0 - 2026-06-12
 
 MCP server + the additive engine surface it stands on (objective `mcp-server`, post-1.0 roadmap Track C; design reviewed in 2 iterations — see `docs/threads/done/mcp-server/`).

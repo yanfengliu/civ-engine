@@ -195,11 +195,11 @@ Update this row as specs are drafted, accepted, implemented, and merged.
 - **Determinism tripwire (dev mode)** — the contract's documented-but-unenforced clauses (unordered iteration, wall-clock reads) get a cheap dev-loop harness: dual-seeded short-run digest comparison (piggybacks on Spec 11's `stateDigest`). Catches violations at author time instead of at selfCheck time.
 - **1.x release engineering** — npm publish cadence + provenance on top of the existing pack/audit CI; semver enforced by the deprecation policy + surface-pin fixture (additions = minor; removals = major-only).
 
-### Carried-over small items (from the 2026-06-11 pre-1.0 review; non-breaking, any 1.x)
+### Carried-over small items (from the 2026-06-11 pre-1.0 review) — all shipped
 
-- `VisibilityMap.getMetrics()/resetMetrics()` parity with OccupancyGrid (or a documented "too cheap to meter" stance).
-- `session-recorder.ts` headroom extraction (sits exactly at the 500-LOC cap).
-- `offDestroy` O(N) array removal → Set, for registry-management parity.
+- `VisibilityMap.getMetrics()/resetMetrics()` parity with OccupancyGrid — **shipped v1.1.0** (rode the mcp-server objective).
+- `session-recorder.ts` headroom extraction (was at the 500-LOC cap) — **shipped v1.0.2** (`§6.1` marker validation extracted to `src/session-marker-validation.ts`).
+- `offDestroy` O(N) array removal → `Set` — **shipped v1.0.2** (registry parity; duplicate-reference registration is now a no-op).
 
 ### Governance
 
