@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.2 - 2026-06-13
+
+Dev-tooling security upgrade — no runtime, API, or behavior change. Clears the 5 HIGH advisories the 1.1.1 lockfile sync surfaced.
+
+- **vitest 3 → 4.1.8** in both the root and the `mcp` subpackage. The advisory chain was `esbuild 0.17–0.28` (GHSA-gv7w-rqvm-qjhr, GHSA-g7r4-m6w7-qqqr) pulled transitively via `vite` via `vitest`; vitest 4.1.8 / `vite 8` no longer install esbuild at all — vite 8 bundles via `rolldown` and lists esbuild only as an optional peer — so the vulnerable package is **absent** from both resolved dev trees (`npm ls esbuild` is empty); that absence by removal, not an esbuild upgrade, is what clears the advisory. Drop-in: both test suites pass unchanged (root 1215 + 2 todo, mcp 18) with **no config or test edits** — both configs use only the stable `test.include` / `testTimeout` options. Both lockfiles re-resolved (and the mcp lock's previously-stale `file:..` parent ref is corrected as a side effect).
+- `npm audit --audit-level=high` is now **0** on both the full tree and `--omit=dev` (the engine remains zero-runtime-dependency).
+- **Dev-environment note:** vitest 4 requires Node `^20.19 || ^22.12 || >=24` to *run the test tooling*. This does **not** change the engine's own `engines` constraint (`node >=20`) — the published package is zero-dep and unaffected; only contributors running `npm test` need the newer dev Node. The CI matrix (`node-version: [20, 22]`, resolved to latest patches) already satisfies it.
+
+### Validation
+
+Both trees: `npm test` (root 1215 + 2 todo, mcp 18), `npm run typecheck`, `npm run lint`, `npm run build`, benchmark gate — all green. `npm audit --audit-level=high` 0 (full tree + `--omit=dev`). Multi-CLI review (Codex + Claude) on the dependency diff.
+
 ## 1.1.1 - 2026-06-13
 
 Documentation-accuracy pass (`/doc-review`) — no API or behavior change; `ENGINE_VERSION` tracks the patch. A four-surface audit (README, api-reference, architecture, guides) against the live code brought every canonical doc up to date with the 1.1.0 MCP-server release and fixed pre-existing drift.
