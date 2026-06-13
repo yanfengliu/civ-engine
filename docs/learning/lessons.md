@@ -16,6 +16,18 @@ Pointer: devlog entry, file, or test that illustrates it.
 
 ---
 
+## Fan-out audits miss cross-surface duplication — grep ALL copies of a fact before claiming a fix is complete — 2026-06-13
+
+| Field | Value |
+|---|---|
+| Surfaced by | `docs/threads/done/doc-accuracy-1x/2026-06-13/1/REVIEW.md` (doc-accuracy pass v1.1.1) |
+| Reviewer findings | Claude iter-1 HIGH — the tick-lifecycle reorder landed in 2 of the 4 current canonical copies, introducing a four-way self-contradiction. Codex (same diff) verified the engine fact but did NOT flag the missed copies. |
+| Fix commit | 579a3d1 (the 2 missed copies reordered after a full re-grep) |
+| Test added | n/a — process lesson |
+| Behavior delta | Before: the published docs would carry the tick-lifecycle list in two orders at once — `concepts.md`/`ARCHITECTURE.md` said "increment then notify" (correct: `world.tick === diff.tick` during listeners) while `api-reference.md` `step()` docs and `systems-and-simulation.md` still said "notify then increment", so a reader landing on the latter would conclude listeners fire at `world.tick === diff.tick - 1` — the opposite of reality. After: all four reordered; changelog/devlog say "all current copies", not "both". |
+
+The trap: when N parallel audit agents each own one doc surface, a fact duplicated across surfaces (a lifecycle list, a signature, a phase order, a version string) gets fixed only where the assigned agent looked — and a partial fix is worse than none because the corrected copies now *contradict* the missed ones. Before declaring a cross-cutting fact fixed, `grep` the WHOLE `docs/` tree (minus `superpowers/` + `threads/done/`, which are intentional history) for every copy and reconcile them together. The multi-CLI review caught this precisely because the reviewer read the whole diff against the whole tree, not one surface — which is why the review step is load-bearing even for "doc-only" changes.
+
 ## Code-review prompts: use the AGENTS.md baseline verbatim, then extract only the review — 2026-04-29
 Context: Spec 5 design iter-2 review. I wrote my own multi-paragraph prompt with verbose task context, and also captured Codex's full stdout (4800 lines / 351 KiB) which includes verbatim file dumps from every Read/cat the reviewer made while reasoning.
 Lesson: (1) Use the AGENTS.md "Code review" baseline prompt verbatim — it already includes the "Be concise but effective: keep the reasoning, impact, and file/line evidence needed to act without preserving transcripts, command chatter, or repetitive detail" line. Add only 2-3 lines of task-specific context after the baseline. Don't rewrite the prompt's tone or duplicate its instructions. (2) Codex CLI's exec mode dumps every file it reads into stdout as it reasons. The actual review is only the final ~20 lines (between the last "^codex$" marker and "^tokens used$"). Always extract just the review section before reading into context — feeding the full transcript wastes tokens and clutters context. Claude's CLI output is typically already concise; less filtering needed but still spot-check.
