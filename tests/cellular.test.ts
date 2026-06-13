@@ -117,4 +117,14 @@ describe('stepCellGrid', () => {
     expect(MOORE_OFFSETS).toHaveLength(8);
     expect(VON_NEUMANN_OFFSETS).toHaveLength(4);
   });
+
+  it('rejects non-integer / non-positive dimensions (full-review M5)', () => {
+    expect(() => createCellGrid(1.5, 2, () => 0)).toThrow(/positive integer/);
+    expect(() => createCellGrid(4, 0, () => 0)).toThrow(/positive integer/);
+    expect(() => createCellGrid(-1, 3, () => 0)).toThrow(/positive integer/);
+    // stepCellGrid rejects a hand-built grid whose cells.length disagrees with
+    // width*height, and non-integer dims.
+    expect(() => stepCellGrid({ width: 2, height: 2, cells: [0, 0, 0] }, () => 0)).toThrow(/does not match/);
+    expect(() => stepCellGrid({ width: 1.5, height: 2, cells: [0, 0, 0] }, () => 0)).toThrow(/positive integer/);
+  });
 });

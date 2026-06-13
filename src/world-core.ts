@@ -90,7 +90,9 @@ export abstract class WorldCore<
   >();
   protected tickFailureListeners = new Set<(failure: TickFailure) => void>();
   // Set since 1.0.2 (registry parity; O(1) offDestroy). Iteration is
-  // insertion-ordered, matching the previous array semantics exactly.
+  // insertion-ordered like the previous array, with one intentional difference:
+  // a duplicate onDestroy(fn) registration is deduped (the array fired it
+  // twice). Full-review 2026-06-13 L4.
   protected destroyCallbacks: Set<
     (id: EntityId, world: World<TEventMap, TCommandMap, TComponents, TState>) => void
   > = new Set();
@@ -125,10 +127,9 @@ export abstract class WorldCore<
     const gridView: SpatialGridView = {
       get width(): number { return getGrid().width; },
       get height(): number { return getGrid().height; },
-      getAt: (x: number, y: number) => {
-        const cell = getGrid().getAt(x, y);
-        return cell ? new Set(cell) : null;
-      },
+      // SpatialGrid.getAt already returns a fresh id-sorted copy (full-review
+      // H1), so the view forwards it directly — deterministic + non-aliasing.
+      getAt: (x: number, y: number) => getGrid().getAt(x, y),
       getNeighbors: (x, y, offsets) => getGrid().getNeighbors(x, y, offsets),
       getInRadius: (cx, cy, radius, metric) => getGrid().getInRadius(cx, cy, radius, metric),
     };

@@ -118,14 +118,27 @@ export class ComponentStore<T> {
   }
 
   clearDirty(): void {
-    this.dirtySet.clear();
-    this.removedSet.clear();
     if (this.diffMode === 'semantic') {
-      this.baseline.clear();
-      for (const [id, data] of this.entries()) {
-        this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
+      // Incremental baseline maintenance: only entities touched this tick (dirty
+      // or removed) can change their fingerprint, so re-fingerprinting EVERY
+      // live component each tick was wasted O(N) JSON.stringify regardless of
+      // churn (full-review 2026-06-13 M6). Non-dirty entries keep their
+      // still-valid baseline. Correct because all population goes through set()
+      // (which marks dirty), including fromEntries → clearDirty.
+      for (const id of this.dirtySet) {
+        const data = this.data[id];
+        if (data !== undefined) {
+          this.baseline.set(id, jsonFingerprint(data, `component ${id}`));
+        } else {
+          this.baseline.delete(id);
+        }
+      }
+      for (const id of this.removedSet) {
+        this.baseline.delete(id);
       }
     }
+    this.dirtySet.clear();
+    this.removedSet.clear();
   }
 
   static fromEntries<T>(

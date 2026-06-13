@@ -87,6 +87,10 @@ export abstract class WorldQueries<
 
     const consider = (x: number, y: number): void => {
       if (x < 0 || x >= w || y < 0 || y >= h) return;
+      // getAt() returns an id-sorted copy (H1). findNearest min-reduces by
+      // (distSq, id) so the sort is wasted here, but the per-cell copy cost is
+      // benchmark-tolerable (within the regression gate) and a public raw
+      // accessor would add API surface in a patch — deferred (full-review iter-4).
       const cell = this.spatialGrid.getAt(x, y);
       if (!cell) return;
       // Grid cells equal exact entity positions (lock-step sync), so the

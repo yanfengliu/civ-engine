@@ -90,4 +90,19 @@ describe('metrics parity (1.1.0)', () => {
     snap.recomputes = 99;
     expect(vis.getMetrics().recomputes).toBe(0);
   });
+
+  it('read APIs do not create phantom players (full-review M1)', () => {
+    const map = new VisibilityMap(16, 16);
+    map.setSource('p1', 'scout', { x: 5, y: 5, radius: 2 });
+    map.update();
+    // Pure reads for an UNKNOWN player return empty/false WITHOUT storing it.
+    expect(map.isVisible('ghost', 5, 5)).toBe(false);
+    expect(map.isExplored('ghost', 5, 5)).toBe(false);
+    expect(map.getVisibleCells('ghost')).toEqual([]);
+    expect(map.getExploredCells('ghost')).toEqual([]);
+    expect(map.getSources('ghost')).toEqual([]);
+    // getState() must not include the probed-but-absent player.
+    const playerIds = map.getState().players.map(([id]) => id);
+    expect(playerIds).toEqual(['p1']);
+  });
 });

@@ -9,6 +9,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { FileSink, SessionRecorder, World } from 'civ-engine';
 import { buildServer } from '../src/server.js';
+import { ok } from '../src/format.js';
 
 type Cmds = { bump: { n: number } };
 
@@ -135,10 +136,15 @@ describe('bundle tools', () => {
     expect(listing.recordedSnapshotTicks.length).toBeGreaterThan(0);
     const r = (await call('bundle_snapshots', { key: 'clean-a', tick: 2 })) as {
       recorded: boolean;
+      carriedForward?: string[];
       snapshot: { version: number; components: Record<string, Array<[number, { v: number }]>> };
     };
     expect(r.snapshot.version).toBe(6);
     expect(r.snapshot.components['hp'][0][1].v).toBe(2);
+    // Hydrated (folded) tick: flagged recorded:false with carriedForward so an
+    // agent does not read a stale rng/config as tick-accurate (full-review L2).
+    expect(r.recorded).toBe(false);
+    expect(r.carriedForward).toContain('rng');
 
     const failing = (await call('bundle_snapshots', { key: 'failing' })) as {
       failedTicks: number[];
@@ -160,8 +166,17 @@ describe('bundle tools', () => {
     expect(frame.commands).toHaveLength(1);
     const withState = (await call('viewer_frame', { key: 'clean-a', tick: 1, includeState: true })) as {
       state: { components: Record<string, unknown> };
+      carriedForward?: string[];
     };
     expect(withState.state.components).toHaveProperty('hp');
+    // tick 1 is hydrated (not a recorded snapshot) → carriedForward present, and
+    // it uses the SAME key as bundle_snapshots (full-review L2 iter-3).
+    expect(withState.carriedForward).toContain('rng');
+    // A RECORDED tick (startTick 0) returns verbatim state → NO over-claim.
+    const atStart = (await call('viewer_frame', { key: 'clean-a', tick: 0, includeState: true })) as {
+      carriedForward?: string[];
+    };
+    expect(atStart.carriedForward).toBeUndefined();
   });
 
   it('viewer_diff aggregates a range without game code', async () => {
@@ -313,5 +328,30 @@ describe('cross-bundle tools', () => {
       const payload = (e as { payload?: { error: { message: string } } }).payload;
       expect(payload?.error.message).toMatch(/unknown metric/);
     }
+  });
+
+  it('prototype-key metric names yield a clean "unknown metric" error (full-review L1)', async () => {
+    for (const bad of ['constructor', '__proto__', 'toString', 'valueOf']) {
+      try {
+        await call('run_metrics', { metrics: [bad] });
+        throw new Error(`expected tool error for ${bad}`);
+      } catch (e) {
+        const payload = (e as { payload?: { error: { message: string } } }).payload;
+        expect(payload?.error.message).toMatch(/unknown metric/);
+      }
+    }
+  });
+});
+
+describe('format output discipline', () => {
+  it('serializes non-finite numbers as strings, not null (full-review M4)', () => {
+    // compare_metrics intentionally returns ±Infinity for zero-baseline deltas;
+    // JSON.stringify would coerce those to null and drop the signal.
+    const text = ok({ delta: Infinity, neg: -Infinity, nan: NaN, normal: 5 }).content[0].text;
+    expect(text).toContain('"Infinity"');
+    expect(text).toContain('"-Infinity"');
+    expect(text).toContain('"NaN"');
+    expect(text).toContain('5');
+    expect(text).not.toContain('null');
   });
 });

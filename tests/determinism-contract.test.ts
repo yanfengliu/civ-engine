@@ -337,7 +337,37 @@ describe('Determinism contract — paired tests per spec §11.1', () => {
 
   // ----- Clause 6: iterate ordered collections only (no unordered Set driving simulation) -----
 
-  it.todo('clause 6: unordered Set drives simulation state — selfCheck divergence (test fixture requires construction of a Set whose iteration order differs between record and replay; hard to engineer without crossing into other clauses; deferred)');
+  it('clause 6: spatial query order is id-sorted and stable across serialize→deserialize (full-review H1)', () => {
+    // Build a cell whose LIVE insertion order is reverse-id: entity 2 enters
+    // (5,5) first, then 1, then 0 — a raw cell Set iterates [2,1,0] live, but
+    // rebuildSpatialIndex repopulates in position-store (id) order on
+    // deserialize. Without id-sorting the read methods the two timelines expose
+    // different spatial iteration order → silent divergence on
+    // openAt/forkAt/applySnapshot. The spatial grid IS the deferred clause-6
+    // "Set whose order differs between record and replay".
+    const w = new World<Record<string, never>, Cmds>(mkConfig());
+    w.registerComponent('position');
+    const e0 = w.createEntity();
+    const e1 = w.createEntity();
+    const e2 = w.createEntity();
+    w.setComponent(e2, 'position', { x: 5, y: 5 });
+    w.setComponent(e1, 'position', { x: 5, y: 5 });
+    w.setComponent(e0, 'position', { x: 5, y: 5 });
+
+    const liveInRadius = w.grid.getInRadius(5, 5, 0);
+    const liveAt = [...w.grid.getAt(5, 5)!];
+    const liveQuery = [...w.queryInRadius(5, 5, 0)];
+
+    const reloaded = World.deserialize(w.serialize());
+
+    // Deterministic id order, identical before and after reload.
+    expect(liveInRadius).toEqual([e0, e1, e2]);
+    expect(liveAt).toEqual([e0, e1, e2]);
+    expect(liveQuery).toEqual([e0, e1, e2]);
+    expect(reloaded.grid.getInRadius(5, 5, 0)).toEqual(liveInRadius);
+    expect([...reloaded.grid.getAt(5, 5)!]).toEqual(liveAt);
+    expect([...reloaded.queryInRadius(5, 5, 0)]).toEqual(liveQuery);
+  });
 
   // ----- Clause 7: no environment-driven branching inside ticks -----
 

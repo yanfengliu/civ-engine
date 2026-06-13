@@ -190,7 +190,10 @@ export class SessionRecorder<
       this._closed = true;
       return;
     }
-    // Optionally write terminal snapshot.
+    // Always write the terminal snapshot (capturing any post-snapshot mutation
+    // at this tick, e.g. a setup-window write before a no-step disconnect). Both
+    // sinks coalesce by tick (FileSink overwrites the file; MemorySink replaces
+    // in place — full-review 2026-06-13 L3), so this never duplicates a tick.
     if (this._terminalSnapshot && !this._terminated) {
       try {
         const terminal = this._world.serialize();

@@ -152,6 +152,19 @@ describe('SessionRecorder', () => {
     rec.disconnect();
   });
 
+  it('addMarker: rejects fractional tick / tickRange / cells (full-review M5)', () => {
+    const world = mkWorld();
+    world.step();
+    const rec = new SessionRecorder({ world });
+    rec.connect();
+    world.step();
+    // Fractional tick would otherwise be treated as retroactive and skip liveness.
+    expect(() => rec.addMarker({ kind: 'annotation', tick: 1.5 })).toThrow(/integer/);
+    expect(() => rec.addMarker({ kind: 'annotation', refs: { tickRange: { from: 0.5, to: 2 } } })).toThrow(/tickRange/);
+    expect(() => rec.addMarker({ kind: 'annotation', refs: { cells: [{ x: 1.5, y: 2 }] } })).toThrow(/non-integer|out-of-bounds/);
+    rec.disconnect();
+  });
+
   it('after sink failure (terminated state), addMarker / attach / takeSnapshot throw RecorderClosedError(code: recorder_terminated)', () => {
     // Iter-2 review L2 regression: previously these methods only checked
     // !_connected || _closed; after a sink failure flipped _terminated=true
@@ -212,7 +225,7 @@ describe('SessionRecorder', () => {
     expect([...recovered]).toEqual([1, 2, 3]);
   });
 
-  it('takeSnapshot writes a manual snapshot at current tick', () => {
+  it('takeSnapshot writes a manual snapshot at current tick; disconnect dedups the terminal (full-review L3)', () => {
     const world = mkWorld();
     const rec = new SessionRecorder({ world });
     rec.connect();
@@ -221,6 +234,27 @@ describe('SessionRecorder', () => {
     expect(entry.tick).toBe(1);
     rec.disconnect();
     expect(rec.snapshotCount).toBeGreaterThanOrEqual(2);
+    // The terminal snapshot at tick 1 coalesces with the manual one (MemorySink
+    // replaces in place, like FileSink overwrites), so snapshots[] has unique ticks.
+    const bundle = rec.toBundle();
+    const allTicks = [bundle.metadata.startTick, ...bundle.snapshots.map((s) => s.tick)];
+    expect(new Set(allTicks).size).toBe(allTicks.length);
+  });
+
+  it('terminal snapshot captures a post-snapshot same-tick mutation — no state loss (full-review L3 iter-2)', () => {
+    const world = mkWorld();
+    world.registerComponent('marker');
+    const rec = new SessionRecorder({ world });
+    rec.connect();
+    world.step();              // tick 1
+    rec.takeSnapshot();        // snapshot@1 (pre-mutation)
+    const e = world.createEntity();
+    world.setComponent(e, 'marker', { v: 42 });  // mutate AFTER snapshot@1, same tick
+    rec.disconnect();          // terminal@1 coalesces over snapshot@1, keeping the mutation
+    const bundle = rec.toBundle();
+    const allTicks = [bundle.metadata.startTick, ...bundle.snapshots.map((s) => s.tick)];
+    expect(new Set(allTicks).size).toBe(allTicks.length);   // unique ticks (coalesced)
+    expect(JSON.stringify(bundle)).toContain('"v":42');     // mutation preserved
   });
 
   it('terminalSnapshot defaults to true; bundle has at least (initial, terminal) segment', () => {

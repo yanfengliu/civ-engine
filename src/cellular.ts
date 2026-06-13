@@ -1,3 +1,5 @@
+import { EngineRangeError } from './engine-error.js';
+
 export type CellGrid = {
   readonly width: number;
   readonly height: number;
@@ -6,11 +8,26 @@ export type CellGrid = {
 
 export type CellRule = (current: number, neighbors: number[]) => number;
 
+function assertGridDim(value: number, name: string): void {
+  // Non-integer/non-positive dims corrupt the flat `y * width + x` model: a
+  // fractional width writes fractional array indices while length stays integer
+  // (full-review 2026-06-13 M5).
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new EngineRangeError(
+      'cell_grid_dim_invalid',
+      `CellGrid ${name} must be a positive integer (got ${value})`,
+      { details: { dim: name, value: Number.isFinite(value) ? value : null } },
+    );
+  }
+}
+
 export function createCellGrid(
   width: number,
   height: number,
   fill: (x: number, y: number) => number,
 ): CellGrid {
+  assertGridDim(width, 'width');
+  assertGridDim(height, 'height');
   const cells = new Array<number>(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -57,6 +74,15 @@ export function stepCellGrid(
   offsets: ReadonlyArray<[number, number]> = MOORE_OFFSETS,
 ): CellGrid {
   const { width, height, cells } = grid;
+  assertGridDim(width, 'width');
+  assertGridDim(height, 'height');
+  if (cells.length !== width * height) {
+    throw new EngineRangeError(
+      'cell_grid_shape_invalid',
+      `CellGrid cells.length ${cells.length} does not match width*height ${width * height}`,
+      { details: { cellsLength: cells.length, expected: width * height } },
+    );
+  }
   const next = new Array<number>(width * height);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {

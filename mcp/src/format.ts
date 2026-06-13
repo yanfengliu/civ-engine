@@ -25,11 +25,26 @@ export function mapToObject<V>(map: ReadonlyMap<number, V>): Record<string, V> {
   return out;
 }
 
+/**
+ * JSON replacer: non-finite numbers — which `JSON.stringify` would coerce to
+ * `null`, silently dropping the signal — become explicit strings. The
+ * behavioral metrics intentionally return ±Infinity for zero-baseline deltas
+ * ("baseline was zero and current changed"), which agents must be able to see
+ * (full-review 2026-06-13 M4). Matches the engine's EngineError details
+ * sanitizer convention.
+ */
+function nonFiniteSafe(_key: string, value: unknown): unknown {
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return value === Infinity ? 'Infinity' : value === -Infinity ? '-Infinity' : 'NaN';
+  }
+  return value;
+}
+
 /** MCP tool result: JSON payload as text content. */
 export function ok(payload: unknown): {
   content: Array<{ type: 'text'; text: string }>;
 } {
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+  return { content: [{ type: 'text', text: JSON.stringify(payload, nonFiniteSafe, 2) }] };
 }
 
 /** MCP tool error carrying the engine code when one exists. */
@@ -41,7 +56,7 @@ export function toolError(e: unknown): {
   const message = e instanceof Error ? e.message : String(e);
   const name = e instanceof Error ? e.name : 'Error';
   return {
-    content: [{ type: 'text', text: JSON.stringify({ error: { code, name, message } }, null, 2) }],
+    content: [{ type: 'text', text: JSON.stringify({ error: { code, name, message } }, nonFiniteSafe, 2) }],
     isError: true,
   };
 }

@@ -8,7 +8,7 @@ export type VisionSourceId = number | string;
  *  OccupancyGrid — pre-1.0 review carry-over). No wall-clock fields:
  *  counters stay benchmark-gate-compatible. */
 export interface VisibilityMapMetrics {
-  /** Per-player visibility recomputations performed by update()/ensureUpdated(). */
+  /** Per-player visibility recomputations performed by update()/peekUpdated(). */
   recomputes: number;
   /** Total visible cells produced across recomputes. */
   computedCells: number;
@@ -130,26 +130,29 @@ export class VisibilityMap {
 
   isVisible(playerId: VisibilityPlayerId, x: number, y: number): boolean {
     this.metrics.visibilityQueries++;
-    return this.ensureUpdated(playerId).visible.has(this.toIndex(x, y));
+    return this.peekUpdated(playerId)?.visible.has(this.toIndex(x, y)) ?? false;
   }
 
   isExplored(playerId: VisibilityPlayerId, x: number, y: number): boolean {
     this.metrics.visibilityQueries++;
-    return this.ensureUpdated(playerId).explored.has(this.toIndex(x, y));
+    return this.peekUpdated(playerId)?.explored.has(this.toIndex(x, y)) ?? false;
   }
 
   getVisibleCells(playerId: VisibilityPlayerId): Position[] {
-    return this.toPositions(this.ensureUpdated(playerId).visible);
+    const player = this.peekUpdated(playerId);
+    return player ? this.toPositions(player.visible) : [];
   }
 
   getExploredCells(playerId: VisibilityPlayerId): Position[] {
-    return this.toPositions(this.ensureUpdated(playerId).explored);
+    const player = this.peekUpdated(playerId);
+    return player ? this.toPositions(player.explored) : [];
   }
 
   getSources(
     playerId: VisibilityPlayerId,
   ): Array<[VisionSourceId, VisionSource]> {
-    const player = this.ensureUpdated(playerId);
+    const player = this.peekUpdated(playerId);
+    if (!player) return [];
     return [...player.sources.entries()]
       .sort(compareByNormalizedKey)
       .map(([sourceId, source]) => [sourceId, { ...source }]);
@@ -210,8 +213,12 @@ export class VisibilityMap {
     return player;
   }
 
-  private ensureUpdated(playerId: VisibilityPlayerId): PlayerVisibilityState {
-    const player = this.ensurePlayer(playerId);
+  // Read-side accessor: does NOT create the player. A pure query for an unknown
+  // id must not mutate canonical/serialized state or grow memory unbounded
+  // (full-review 2026-06-13 M1). Returns null for an absent player; updates if dirty.
+  private peekUpdated(playerId: VisibilityPlayerId): PlayerVisibilityState | null {
+    const player = this.players.get(playerId);
+    if (!player) return null;
     if (this.dirtyPlayers.has(playerId)) {
       this.update();
     }

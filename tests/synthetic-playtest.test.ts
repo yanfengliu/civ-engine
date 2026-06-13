@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MemorySink,
+  SessionRecorder,
   World,
   noopPolicy,
   randomPolicy,
@@ -352,5 +353,56 @@ describe('runSynthPlaytest — production-determinism', () => {
       return copy;
     };
     expect(stripVolatile(r1.bundle.metadata)).toEqual(stripVolatile(r2.bundle.metadata));
+  });
+});
+
+describe('runSynthPlaytest — recorder cleanup on throw (full-review H2)', () => {
+  // A fresh recorder can only attach if the previous one unwrapped
+  // world.submitWithResult and released the __payloadCapturingRecorder mutex.
+  const assertWorldClean = (world: ReturnType<typeof mkWorld>) => {
+    const rec = new SessionRecorder({ world, sink: new MemorySink() });
+    expect(() => rec.connect()).not.toThrow();
+    rec.disconnect();
+  };
+
+  it('a throwing stopWhen still unwraps the recorder (World left clean for the next recording)', () => {
+    const world = mkWorld();
+    expect(() => runSynthPlaytest({
+      world,
+      policies: [() => [{ type: 'spawn' as const, data: { id: 1 } }]],
+      maxTicks: 10,
+      stopWhen: () => { throw new Error('stopWhen-bug'); },
+    })).toThrow('stopWhen-bug');
+    assertWorldClean(world);
+  });
+
+  it('a submit that throws (validator throws) is classified policyError, not an unhandled throw, and unwraps the recorder', () => {
+    const world = mkWorld();
+    world.registerValidator('spawn', () => { throw new Error('validator-bug'); });
+    const result = runSynthPlaytest({
+      world,
+      policies: [() => [{ type: 'spawn' as const, data: { id: 1 } }]],
+      maxTicks: 5,
+    });
+    expect(result.stopReason).toBe('policyError');
+    expect(result.policyError?.error.message).toBe('validator-bug');
+    assertWorldClean(world);
+  });
+
+  it('a policy that throws null/undefined is still classified policyError, not a TypeError (full-review H2 iter-3)', () => {
+    // null/undefined are the actual crash path: the old `err as Error` then
+    // reading `.name`/`.message` threw a TypeError on these (a string/number
+    // auto-boxes and never crashed, so it would not pin the fix).
+    for (const bad of [null, undefined]) {
+      const world = mkWorld();
+      const result = runSynthPlaytest({
+        world,
+        policies: [() => { throw bad; }],
+        maxTicks: 5,
+      });
+      expect(result.stopReason).toBe('policyError');
+      expect(result.policyError?.error.message).toBe(String(bad));
+      assertWorldClean(world);
+    }
   });
 });

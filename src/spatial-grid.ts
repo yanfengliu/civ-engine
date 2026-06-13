@@ -87,7 +87,11 @@ export class SpatialGrid {
   }
 
   getAt(x: number, y: number): ReadonlySet<EntityId> | null {
-    return this.cells.get(this.key(x, y)) ?? null;
+    const cell = this.cells.get(this.key(x, y));
+    // Fresh id-sorted copy, not the live internal Set: deterministic order
+    // across serialize→deserialize (full-review 2026-06-13 H1) AND no caller
+    // write-through to the internal cell. Matches getNeighbors/getInRadius.
+    return cell ? new Set([...cell].sort((a, b) => a - b)) : null;
   }
 
   getNeighbors(
@@ -109,7 +113,13 @@ export class SpatialGrid {
         }
       }
     }
-    return result;
+    // Determinism contract: results are id-sorted, not cell-insertion-ordered.
+    // A cell Set's iteration order is move-into-cell order when built live but
+    // position-store order when rebuilt by `rebuildSpatialIndex` on
+    // deserialize/openAt/forkAt/applySnapshot — so raw order is NOT round-trip
+    // stable. Sorting by id makes spatial queries reproducible across reloads,
+    // matching World.query()'s id-sorted contract (full-review 2026-06-13 H1).
+    return result.sort((a, b) => a - b);
   }
 
   getInRadius(
@@ -147,7 +157,8 @@ export class SpatialGrid {
         }
       }
     }
-    return result;
+    // Id-sorted for round-trip determinism — see getNeighbors (full-review H1).
+    return result.sort((a, b) => a - b);
   }
 
   assertBounds(x: number, y: number): void {

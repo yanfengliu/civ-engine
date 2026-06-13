@@ -46,7 +46,11 @@ export function deepStructuralEqual(a: unknown, b: unknown): boolean {
     return true;
   }
   if (typeof a === 'object') {
-    if (typeof b !== 'object' || b === null) return false;
+    // `a` is a non-array object here (the array branch returned above). Reject
+    // `b` being an array so {} vs [] is false BOTH ways — it was asymmetric
+    // (`({},[])`→true but `([],{})`→false), matching the other deep-equal
+    // helpers (session-deep-equal, snapshot-diff). Full-review 2026-06-13 M3.
+    if (typeof b !== 'object' || b === null || Array.isArray(b)) return false;
     const ao = a as Record<string, unknown>;
     const bo = b as Record<string, unknown>;
     const aKeys = Object.keys(ao);

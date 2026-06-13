@@ -26,6 +26,13 @@ export function validateNewMarker(
   registeredAttachmentIds: ReadonlySet<string>,
 ): number {
   const tick = input.tick ?? world.tick;
+  if (!Number.isInteger(tick)) {
+    // A fractional tick (e.g. world.tick - 0.5) would pass the bounds checks
+    // below, be treated as retroactive, skip entity-liveness, and enter the
+    // bundle as a non-deterministic address (full-review 2026-06-13 M5).
+    throw new MarkerValidationError(`marker.tick must be an integer (got ${tick})`,
+      { field: 'tick', value: Number.isFinite(tick) ? tick : null }, '6.1.tick_not_integer');
+  }
   if (tick < 0) {
     throw new MarkerValidationError(`marker.tick must be >= 0 (got ${tick})`,
       { field: 'tick', value: tick }, '6.1.tick_negative');
@@ -49,10 +56,10 @@ export function validateNewMarker(
   }
   if (input.refs?.tickRange) {
     const { from, to } = input.refs.tickRange;
-    if (from < 0 || to < 0 || from > to) {
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from > to) {
       throw new MarkerValidationError(
-        `marker.refs.tickRange invalid: { from: ${from}, to: ${to} }`,
-        { field: 'refs.tickRange', from, to }, '6.1.tickrange_shape',
+        `marker.refs.tickRange invalid (must be ordered non-negative integers): { from: ${from}, to: ${to} }`,
+        { field: 'refs.tickRange', from: Number.isFinite(from) ? from : null, to: Number.isFinite(to) ? to : null }, '6.1.tickrange_shape',
       );
     }
   }
@@ -61,10 +68,10 @@ export function validateNewMarker(
     const w = world.grid.width;
     const h = world.grid.height;
     for (const cell of input.refs.cells) {
-      if (cell.x < 0 || cell.x >= w || cell.y < 0 || cell.y >= h) {
+      if (!Number.isInteger(cell.x) || !Number.isInteger(cell.y) || cell.x < 0 || cell.x >= w || cell.y < 0 || cell.y >= h) {
         throw new MarkerValidationError(
-          `marker.refs.cells contains out-of-bounds cell { x: ${cell.x}, y: ${cell.y} } (world is ${w}×${h})`,
-          { field: 'refs.cells', x: cell.x, y: cell.y, gridWidth: w, gridHeight: h },
+          `marker.refs.cells contains an out-of-bounds or non-integer cell { x: ${cell.x}, y: ${cell.y} } (world is ${w}×${h})`,
+          { field: 'refs.cells', x: Number.isFinite(cell.x) ? cell.x : null, y: Number.isFinite(cell.y) ? cell.y : null, gridWidth: w, gridHeight: h },
           '6.1.cell_bounds',
         );
       }

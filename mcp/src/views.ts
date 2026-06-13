@@ -19,8 +19,14 @@ import {
 import type { BundleCorpusEntry, BundleQuery } from 'civ-engine';
 import type { CorpusState } from './state.js';
 
-/** The 11 built-in behavioral metrics, selectable by name. */
-export const METRIC_FACTORIES: Record<string, () => unknown> = {
+/**
+ * The 11 built-in behavioral metrics, selectable by name. Null-prototype so a
+ * metric name like `constructor`/`__proto__`/`toString` can't resolve an
+ * inherited Object.prototype member past the `!factory` guard at the lookup
+ * sites — it returns undefined and yields the clean "unknown metric" error
+ * (full-review 2026-06-13 L1).
+ */
+export const METRIC_FACTORIES: Record<string, () => unknown> = Object.assign(Object.create(null) as Record<string, () => unknown>, {
   bundleCount,
   sessionLengthStats,
   commandRateStats,
@@ -32,7 +38,7 @@ export const METRIC_FACTORIES: Record<string, () => unknown> = {
   incompleteBundleRate,
   commandValidationAcceptanceRate,
   executionFailureRate,
-};
+});
 
 interface QueryInput {
   key?: string;
@@ -128,7 +134,7 @@ export function frameView(
   const viewer = state.viewer(key);
   const frame = viewer.atTick(tick);
   const failures = [...viewer.failures({ from: tick, to: tick })];
-  return {
+  const result: Record<string, unknown> = {
     tick: frame.tick,
     events: frame.events,
     commands: frame.commands,
@@ -136,6 +142,21 @@ export function frameView(
     markers: frame.markers,
     diff: frame.diff,
     failures,
-    ...(includeState ? { state: snapshotAtTick(state.loadBundle(key), tick) } : {}),
   };
+  if (includeState) {
+    const bundle = state.loadBundle(key);
+    result.state = snapshotAtTick(bundle, tick);
+    // Flag carry-forward ONLY for a HYDRATED (folded) tick: at a recorded
+    // snapshot tick (startTick / periodic / terminal) snapshotAtTick returns the
+    // snapshot verbatim, so rng/config/componentOptions ARE accurate, not carried
+    // forward (full-review 2026-06-13 L2 iter-3). Same `carriedForward` key as
+    // bundle_snapshots — one fact, one key across both MCP surfaces (lessons.md
+    // 2026-06-13 cross-surface duplication trap).
+    const recordedTick = tick === bundle.metadata.startTick
+      || bundle.snapshots.some((s) => s.tick === tick);
+    if (!recordedTick) {
+      result.carriedForward = ['rng', 'config', 'componentOptions'];
+    }
+  }
+  return result;
 }

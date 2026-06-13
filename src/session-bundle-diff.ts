@@ -359,6 +359,16 @@ export function snapshotAtTick<TEventMap, TCommandMap>(
   bundle: SessionBundle<TEventMap, TCommandMap>,
   tick: number,
 ): WorldSnapshot {
+  // Reject NaN/fractional up front: the engine's tick discipline is
+  // non-negative integers, and the range/failure/continuity checks below all
+  // pass for NaN (every comparison is false) — without this a NaN/2.5 tick
+  // would fold to a made-up state instead of erroring (full-review 2026-06-13 M5).
+  if (!Number.isInteger(tick)) {
+    throw new BundleRangeError(
+      `tick ${tick} must be a non-negative integer`,
+      { code: 'tick_not_integer', requested: Number.isFinite(tick) ? tick : null },
+    );
+  }
   const md = bundle.metadata;
   const upper = md.incomplete ? md.persistedEndTick : md.endTick;
   if (tick < md.startTick) {
@@ -376,7 +386,7 @@ export function snapshotAtTick<TEventMap, TCommandMap>(
   const failed = (md.failedTicks ?? []).filter((ft) => ft <= tick).sort((a, b) => a - b);
   if (failed.length > 0) {
     throw new BundleIntegrityError(
-      `cannot hydrate state at tick ${tick}: recorded TickFailure(s) at ${failed.join(', ')} precede it — inspect the terminal snapshot directly (bundle.snapshots) or hydrate a tick below the first failure`,
+      `cannot hydrate state at tick ${tick}: recorded TickFailure(s) at ${failed.join(', ')} (at or before it) — inspect the terminal snapshot directly (bundle.snapshots) or hydrate a tick below the first failure`,
       { code: 'replay_across_failure', failedTicks: failed, requested: tick },
     );
   }
@@ -402,7 +412,12 @@ export function snapshotAtTick<TEventMap, TCommandMap>(
       { code: 'missing_tick_entries', missing: missing.slice(0, 50), fromSnapshotTick: base.tick, requested: tick },
     );
   }
-  return hydrateAtTick(bundle, tick);
+  // Deep-clone: hydrateAtTick returns bundle.initialSnapshot / a snapshots entry
+  // BY REFERENCE when no diffs apply, and applyTickDiff reuses nested
+  // component/resource/state objects — a caller mutating the result would
+  // corrupt the source bundle (full-review 2026-06-13 M2). Defensive-copy
+  // discipline matches serialize()/applySnapshot().
+  return structuredClone(hydrateAtTick(bundle, tick));
 }
 
 function hydrateAtTick<TEventMap, TCommandMap>(

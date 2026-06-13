@@ -126,4 +126,26 @@ describe('snapshotAtTick', () => {
       }
     }
   });
+
+  it('rejects NaN/fractional/non-finite ticks with tick_not_integer (full-review M5)', () => {
+    const bundle = recordBundle();
+    for (const bad of [NaN, 2.5, Infinity, -0.5]) {
+      try {
+        snapshotAtTick(bundle, bad);
+        throw new Error('expected throw');
+      } catch (e) {
+        expect(e).toBeInstanceOf(BundleRangeError);
+        expect((e as BundleRangeError).code).toBe('tick_not_integer');
+      }
+    }
+  });
+
+  it('returns a deep clone, not the live bundle snapshot reference (full-review M2)', () => {
+    const bundle = recordBundle();
+    // At startTick the fold returns initialSnapshot; the result must be a CLONE
+    // — a caller mutating it must not corrupt the source bundle.
+    const snap = snapshotAtTick(bundle, bundle.metadata.startTick);
+    expect(snap).not.toBe(bundle.initialSnapshot);
+    expect(snap).toEqual(bundle.initialSnapshot);
+  });
 });

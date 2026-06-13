@@ -183,4 +183,15 @@ describe('SpatialGrid', () => {
       expect(result.sort()).toEqual([0, 1]);
     });
   });
+
+  it('getAt / getInRadius return id-sorted results, not insertion order (full-review H1)', () => {
+    const grid = new SpatialGrid(10, 10);
+    grid.insert(2, 5, 5);
+    grid.insert(0, 5, 5);
+    grid.insert(1, 5, 5);
+    expect([...grid.getAt(5, 5)!]).toEqual([0, 1, 2]);
+    expect(grid.getInRadius(5, 5, 0)).toEqual([0, 1, 2]);
+    // Fresh copy per call (not the live internal Set — no write-through).
+    expect(grid.getAt(5, 5)).not.toBe(grid.getAt(5, 5));
+  });
 });

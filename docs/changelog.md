@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.3 - 2026-06-13
+
+Full-codebase review hardening (4 review iterations to convergence; Codex + Claude — Gemini unreachable; thread `docs/threads/done/full/2026-06-13/`). The first full review since 1.0: the core tick/ECS/PRNG/query-cache machinery was re-confirmed defect-free, with fixes concentrated in determinism edges, read-side semantics, input validation, and the newest (MCP / `snapshotAtTick`) surfaces. **No public API surface change** (pure patch); behavior callouts below.
+
+### Fixed — determinism & correctness
+
+- **Spatial query order is now deterministic across reload (HIGH).** `world.grid.getAt` / `getNeighbors` / `getInRadius`, `world.queryInRadius`, and standalone `SpatialGrid` reads now return entities in ascending-id order. A cell's iteration order was previously move-into-cell order when built live but position-store order when rebuilt by `deserialize` / `openAt` / `forkAt` / `applySnapshot`, so a system reading spatial iteration order could diverge silently after a mid-stream reload (the deferred determinism-contract clause-6 case, now tested). **Behavior callout:** code relying on the old (unspecified, non-round-trip-stable) order now sees id order; `getAt` also returns a fresh copy (mutating it no longer affects the grid).
+- **`runSynthPlaytest` no longer leaks recorder state when a user callback throws (HIGH).** A throwing `world.submitWithResult` (bad command) or `stopWhen` predicate bypassed `recorder.disconnect()`, leaving the World submit-wrapped and the payload-capture mutex held — blocking the next recording on that World. Now wrapped in try/finally (mirrors the async `runAgentPlaytest`). **Behavior callout:** a bad command from a policy now ends the run with `stopReason: 'policyError'` instead of throwing.
+- **`VisibilityMap` read APIs no longer create phantom players (MEDIUM).** `isVisible` / `isExplored` / `getVisibleCells` / `getExploredCells` / `getSources` for an unknown player previously created + stored an empty player entry, mutating canonical (serialized) state and growing memory unbounded. Reads now return empty/false without storing.
+- **`snapshotAtTick` deep-clones its result (MEDIUM).** It could return bundle snapshot data by reference, so a caller mutating the returned `WorldSnapshot` corrupted the source `SessionBundle`. Now `structuredClone`d, matching `serialize()` / `applySnapshot` discipline.
+- **Fork/bundle divergence: `{}` vs `[]` is now symmetric (MEDIUM).** The internal structural-equality helper treated `({}, [])` as equal but `([], {})` as unequal, so a flipped object↔array payload could read as "equivalent" by argument order.
+
+### Fixed — input validation (fail-fast on out-of-contract input)
+
+- **`snapshotAtTick`** rejects NaN / fractional / non-finite ticks with `BundleRangeError` code `tick_not_integer` (was: returned a made-up state).
+- **`createCellGrid` / `stepCellGrid`** reject non-integer / non-positive dimensions and a `cells.length` that disagrees with `width*height` — a fractional width otherwise corrupted the flat `y*width+x` grid.
+- **Marker validation** rejects fractional marker ticks, tick-ranges, and cell coordinates (was: silently entered the bundle as non-deterministic addresses).
+
+### Fixed — MCP server & misc
+
+- **`run_metrics` / `compare_metrics` preserve `±Infinity` (MEDIUM).** Zero-baseline metric deltas (intentionally `±Infinity`) were serialized to `null` by `JSON.stringify`, dropping the signal; the MCP output now emits non-finite numbers as `"Infinity"` / `"-Infinity"` / `"NaN"` strings.
+- **Hydrated snapshots are flagged.** `bundle_snapshots` and `viewer_frame` stamp `carriedForward: ['rng','config','componentOptions']` on a hydrated (non-recorded) tick, where those fields reflect the nearest recorded snapshot, not the requested tick — so agents don't read a stale rng as tick-accurate. (At a recorded tick the state is verbatim and the flag is correctly absent.)
+- **MCP metric lookup is prototype-safe** — a metric named `constructor` / `__proto__` now yields a clean "unknown metric" error.
+- **MemorySink and FileSink agree on snapshots.** A terminal snapshot landing on an already-snapshotted tick is coalesced by tick in both sinks (MemorySink replace-in-place ↔ FileSink overwrite), so `bundle.snapshots` has unique ticks AND a same-tick post-snapshot mutation is preserved.
+- **`ComponentStore` semantic-diff baseline is incremental** — O(changed) per tick instead of re-fingerprinting every component; no behavior change.
+
+### Validation
+
+4 multi-CLI review iterations to unanimous convergence. Codex caught a real `MemorySink`/terminal-snapshot **state-loss regression** in an interim fix that Claude had approved (the multi-reviewer payoff); the interim `getAtRaw` perf accessor was reverted to keep this a pure patch with no surface addition. ~16 failing-first tests pin the fixes. All four gates + benchmark gate green (benchmark improved); `npm audit --audit-level=high` 0 (full tree + `--omit=dev`); public-surface fixture unchanged. Root suite 1228 passed + 1 todo (the deferred clause-6 todo became a real test); mcp 20.
+
 ## 1.1.2 - 2026-06-13
 
 Dev-tooling security upgrade — no runtime, API, or behavior change. Clears the 5 HIGH advisories the 1.1.1 lockfile sync surfaced.

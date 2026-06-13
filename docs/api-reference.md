@@ -2470,7 +2470,7 @@ import { SpatialGrid, ORTHOGONAL, DIAGONAL, ALL_DIRECTIONS } from 'civ-engine';
 getAt(x: number, y: number): ReadonlySet<EntityId> | null
 ```
 
-Returns the set of entities at a cell, or `null` if no entity is there. The returned set is read-only.
+Returns the set of entities at a cell, or `null` if no entity is there. The returned set is a fresh, read-only, **id-sorted** copy — iteration order is deterministic and stable across serialize→deserialize (so `openAt`/`forkAt`/`applySnapshot` reproduce it), and mutating it cannot affect the grid.
 
 **Throws:** `RangeError` if `(x, y)` is out of bounds.
 

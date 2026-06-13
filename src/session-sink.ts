@@ -154,7 +154,19 @@ export class MemorySink implements SessionSink, SessionSource {
   writeSnapshot(entry: SessionSnapshotEntry): void {
     this._assertOpen();
     assertJsonCompatible(entry, 'snapshot entry');
-    this._snapshots.push(entry);
+    // Coalesce by tick (last write wins), matching FileSink's
+    // snapshots/<tick>.json overwrite: a terminal snapshot that lands on an
+    // already-snapshotted tick UPDATES it in place rather than duplicating it,
+    // so both sinks yield a unique-tick snapshots[] AND the latest state is kept
+    // (full-review 2026-06-13 L3; replaces the earlier recorder-side skip that
+    // could drop a same-tick post-snapshot mutation, e.g. a setup-window write
+    // before a no-step disconnect — iter-2 regression).
+    const existing = this._snapshots.findIndex((s) => s.tick === entry.tick);
+    if (existing >= 0) {
+      this._snapshots[existing] = entry;
+    } else {
+      this._snapshots.push(entry);
+    }
     if (this._metadata) {
       this._metadata.persistedEndTick = entry.tick;
     }

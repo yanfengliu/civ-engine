@@ -220,50 +220,73 @@ export function runSynthPlaytest<
   let stopReason: SynthPlaytestResult<TEventMap, TCommandMap>['stopReason'] = 'maxTicks';
   let policyError: SynthPlaytestResult<TEventMap, TCommandMap>['policyError'];
 
-  outer: for (let i = 0; i < maxTicks; i++) {
-    const policyCtx: PolicyContext<TEventMap, TCommandMap, TComponents, TState> = {
-      world, tick: world.tick + 1, random,
+  const failPolicy = (p: number, tick: number, err: unknown): void => {
+    // Robust to non-Error throws (null/undefined/string/number): a policy or
+    // validator that throws a non-object must still classify as policyError,
+    // not crash failPolicy with a TypeError (full-review 2026-06-13 iter-2).
+    const e = (err ?? {}) as Partial<Error>;
+    stopReason = 'policyError';
+    policyError = {
+      policyIndex: p,
+      tick,
+      error: { name: e.name ?? 'Error', message: e.message ?? String(err), stack: e.stack ?? null },
     };
-    for (let p = 0; p < policies.length; p++) {
-      let cmds: PolicyCommand<TCommandMap>[];
-      try {
-        cmds = policies[p](policyCtx);
-      } catch (err) {
-        const e = err as Error;
-        stopReason = 'policyError';
-        policyError = {
-          policyIndex: p,
-          tick: policyCtx.tick,
-          error: { name: e.name ?? 'Error', message: e.message ?? String(e), stack: e.stack ?? null },
-        };
-        break outer;
-      }
-      for (const cmd of cmds) {
-        world.submitWithResult(cmd.type, cmd.data);
-      }
-    }
-    try {
-      world.step();
-    } catch {
-      stopReason = 'poisoned';
-      break;
-    }
-    if (recorder.lastError !== null) {
-      stopReason = 'sinkError';
-      break;
-    }
-    ticksRun++;
-    const stopCtx: StopContext<TEventMap, TCommandMap, TComponents, TState> = {
-      world, tick: world.tick, random,
-    };
-    if (config.stopWhen?.(stopCtx)) {
-      stopReason = 'stopWhen';
-      break;
-    }
-  }
+  };
 
-  // Step 5: disconnect + return.
-  try { recorder.disconnect(); } catch { /* best-effort */ }
+  // try/finally so a throw from world.submitWithResult (bad command payload) or
+  // a user stopWhen predicate cannot bypass recorder.disconnect() — which
+  // unwraps world.submitWithResult and releases the __payloadCapturingRecorder
+  // mutex. Without it a failed run leaves the World submit-wrapped and blocks the
+  // next recording on that World (full-review 2026-06-13 H2; mirrors the async
+  // runAgentPlaytest's try/finally).
+  try {
+    outer: for (let i = 0; i < maxTicks; i++) {
+      const policyCtx: PolicyContext<TEventMap, TCommandMap, TComponents, TState> = {
+        world, tick: world.tick + 1, random,
+      };
+      for (let p = 0; p < policies.length; p++) {
+        let cmds: PolicyCommand<TCommandMap>[];
+        try {
+          cmds = policies[p](policyCtx);
+        } catch (err) {
+          failPolicy(p, policyCtx.tick, err);
+          break outer;
+        }
+        try {
+          for (const cmd of cmds) {
+            world.submitWithResult(cmd.type, cmd.data);
+          }
+        } catch (err) {
+          // submitWithResult throws on a bad command (e.g. non-JSON payload);
+          // classify as policyError (the policy produced it) like the async
+          // sibling, not an unhandled throw.
+          failPolicy(p, policyCtx.tick, err);
+          break outer;
+        }
+      }
+      try {
+        world.step();
+      } catch {
+        stopReason = 'poisoned';
+        break;
+      }
+      if (recorder.lastError !== null) {
+        stopReason = 'sinkError';
+        break;
+      }
+      ticksRun++;
+      const stopCtx: StopContext<TEventMap, TCommandMap, TComponents, TState> = {
+        world, tick: world.tick, random,
+      };
+      if (config.stopWhen?.(stopCtx)) {
+        stopReason = 'stopWhen';
+        break;
+      }
+    }
+  } finally {
+    // Always unwrap the recorder, even if stopWhen (or an unexpected error) threw.
+    try { recorder.disconnect(); } catch { /* best-effort */ }
+  }
   // Tighten ok: also flips false if disconnect-time sink failure occurred.
   const ok = stopReason !== 'sinkError' && recorder.lastError === null;
   const bundle = recorder.toBundle() as unknown as SessionBundle<TEventMap, TCommandMap>;

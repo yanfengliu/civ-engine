@@ -117,7 +117,7 @@ export function buildServer(corpusRoot: string): McpServer {
 
   server.registerTool('bundle_snapshots', {
     description:
-      'Recorded snapshot ticks for one bundle; fetch one (or hydrate an arbitrary in-range tick via pure data folding — no game code). Surfaces the v6 poisoned field: this is the terminal-state inspection path the replay_across_failure error points at.',
+      'Recorded snapshot ticks for one bundle; fetch one (or hydrate an arbitrary in-range tick via pure data folding — no game code). Surfaces the v6 poisoned field: this is the terminal-state inspection path the replay_across_failure error points at. A hydrated (recorded:false) result lists `carriedForward` fields (rng/config/componentOptions) that reflect the nearest recorded snapshot, not the requested tick.',
     inputSchema: {
       key: z.string(),
       tick: z.number().int().optional()
@@ -150,12 +150,22 @@ export function buildServer(corpusRoot: string): McpServer {
     }
     const recorded = bundle.snapshots.find((sn) => sn.tick === tick);
     if (recorded) return { recorded: true, tick, snapshot: recorded.snapshot };
-    return { recorded: false, tick, snapshot: snapshotAtTick(bundle, tick) };
+    // Hydrated (folded) snapshot: entities/components/resources/state/tags/
+    // metadata are accurate at `tick`, but rng/config/componentOptions are
+    // CARRIED FORWARD from the nearest recorded snapshot (the TickDiff stream
+    // carries none of them) — flag that explicitly so an agent doesn't read a
+    // stale rng as tick-accurate (full-review 2026-06-13 L2).
+    return {
+      recorded: false,
+      tick,
+      carriedForward: ['rng', 'config', 'componentOptions'],
+      snapshot: snapshotAtTick(bundle, tick),
+    };
   }));
 
   server.registerTool('viewer_frame', {
     description:
-      "One tick's recorded activity: events, commands, executions, markers, that tick's TickDiff, and any failure at the tick. Set includeState for the full hydrated component state (can be large).",
+      "One tick's recorded activity: events, commands, executions, markers, that tick's TickDiff, and any failure at the tick. Set includeState for the full hydrated component state (can be large); for a hydrated (non-recorded) tick the result also lists `carriedForward` fields (rng/config/componentOptions) that reflect the nearest recorded snapshot, not the requested tick.",
     inputSchema: { key: z.string(), tick: z.number().int(), includeState: z.boolean().optional() },
   }, async ({ key, tick, includeState }) => guarded(() => frameView(state, key, tick, includeState === true)));
 
