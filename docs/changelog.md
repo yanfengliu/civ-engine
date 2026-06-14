@@ -27,7 +27,7 @@ Replay-bound finalization fix (surfaced by the aoe2 consumer's engine-feedback, 
 
 ### Validation
 
-`npm test` (1237 + 1 todo; nine new failing-first tests across the recorder, both sinks, replayer, viewer, `snapshotAtTick`, and corpus, plus two extended failure-path sink tests), `npm run typecheck`, `npm run lint`, `npm run build`, and `mcp` 22 (two new tests pinning the recovered `effectiveUpperBound`). `npm audit` 0 high/critical (full + omit-dev). Verified against the real `campaign-4` capture (`endTick: 0`, `persistedEndTick: 9000`): the recovered bound is `9000`. Multi-CLI reviewed (Codex + Gemini + Claude); iteration-1 caught the failure-path gap, the stale `ENGINE_VERSION`, and the two un-migrated MCP bound copies, all fixed here.
+`npm test` (1237 + 1 todo; nine new failing-first tests across the recorder, both sinks, replayer, viewer, `snapshotAtTick`, and corpus, plus two extended failure-path sink tests), `npm run typecheck`, `npm run lint`, `npm run build`, and `mcp` 22 (two new tests pinning the recovered `effectiveUpperBound`). `npm audit` 0 high/critical (full + omit-dev). Verified against the real `campaign-4` capture (`endTick: 0`, `persistedEndTick: 9000`): the recovered bound is `9000`. Multi-CLI reviewed (Codex + Gemini + Claude).
 
 ## 1.1.3 - 2026-06-13
 
