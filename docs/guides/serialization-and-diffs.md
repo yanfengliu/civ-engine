@@ -114,11 +114,11 @@ restored.onDestroy(cleanupCallback);
 
 `World.deserialize()` validates the snapshot:
 
-- Throws if `version` is not `1`, `2`, `3`, `4`, or `5`
+- Throws if `version` is not `1`, `2`, `3`, `4`, `5`, or `6`
 - Throws if entity state arrays have mismatched lengths
 - Throws if `tags` or `metadata` reference a dead entity id
 
-Version 5 (the current write format) round-trips per-component `ComponentStoreOptions.diffMode` plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state so restored worlds resume the same random sequence. Version 2 added resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store.
+Version 6 (the current write format, since 1.0) carries `poisoned` (the terminal `TickFailure`, for inspection — load paths clear live poison by default; `World.deserialize(snap, undefined, { restorePoison: true })` keeps it) and always writes `config.strict` explicitly. Version 5 round-trips per-component `ComponentStoreOptions.diffMode` plus `WorldConfig.maxTicksPerFrame` and `WorldConfig.instrumentationProfile` when non-default. Version 4 added world-level state, entity tags, and entity metadata. Version 3 added deterministic RNG state so restored worlds resume the same random sequence. Version 2 added resource registrations, pools, rates, transfers, and the next transfer ID. Version 1 snapshots still load for backward compatibility, but they restore with an empty resource store.
 
 ## What's Included and Excluded
 
@@ -227,9 +227,9 @@ interface TickDiff {
     set: Array<[EntityId, ResourcePool]>;  // added or changed pools
     removed: EntityId[];                    // removed pools
   }>;
-  state: Record<string, { set?: unknown; removed?: true }>;  // world-level state changes
-  tags: Record<string, { added: EntityId[]; removed: EntityId[] }>;  // tag changes
-  metadata: Record<string, { set: Array<[EntityId, string | number]>; removed: EntityId[] }>;  // metadata changes
+  state: { set: Record<string, unknown>; removed: string[] };  // world-state keys set / deleted this tick
+  tags: Array<{ entity: EntityId; tags: string[] }>;           // each touched entity's full current tag list ([] on clear)
+  metadata: Array<{ entity: EntityId; meta: Record<string, string | number> }>;  // each touched entity's full current metadata ({} on clear)
 }
 ```
 

@@ -164,6 +164,8 @@ const adapter = new RenderAdapter({
 });
 ```
 
+`projectEntity` also receives a third argument — `change: RenderEntityChange | null` — the specific component / position / lifecycle delta for that entity this tick (`null` on a full projection or initial sync). The example above ignores it and re-projects fully (correct, but more work than necessary on large worlds); use `change` to project only what moved, and add an optional `shouldProjectChange(change): boolean` to the projector to skip entities whose change you don't care about.
+
 This is the intended split:
 
 - engine: world state, projection transport, debugging helpers

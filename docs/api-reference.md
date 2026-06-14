@@ -416,15 +416,12 @@ interface TickDiff {
     set: Array<[EntityId, ResourcePool]>;
     removed: EntityId[];
   }>;
-  state: Record<string, { set?: unknown; removed?: true }>;
-  tags: Record<string, {
-    added: EntityId[];
-    removed: EntityId[];
-  }>;
-  metadata: Record<string, {
-    set: Array<[EntityId, string | number]>;
-    removed: EntityId[];
-  }>;
+  state: {
+    set: Record<string, unknown>;   // world-state keys set/changed this tick
+    removed: string[];               // world-state keys deleted this tick
+  };
+  tags: Array<{ entity: EntityId; tags: string[] }>;                          // each touched entity's full current tag list ([] on clear)
+  metadata: Array<{ entity: EntityId; meta: Record<string, string | number> }>;  // each touched entity's full current metadata ({} on clear)
 }
 ```
 
