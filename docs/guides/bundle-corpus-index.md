@@ -118,7 +118,7 @@ Strict mode throws on the first invalid manifest. With `{ skipInvalid: true }`, 
 
 `entry.materializedEndTick` describes the persisted-content horizon:
 
-- complete bundle: `metadata.endTick`
+- complete bundle: `max(metadata.endTick, metadata.persistedEndTick)` (the `max` recovers a legacy understated `endTick` — a pre-1.1.4 live-exported bundle that shipped `endTick: 0`)
 - incomplete bundle: `metadata.persistedEndTick`
 
 This is not a replay guarantee. Replay validity still depends on snapshots, failed ticks, command payloads, and the normal `SessionReplayer` range/integrity checks.

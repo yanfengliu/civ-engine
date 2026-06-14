@@ -165,7 +165,7 @@ describe('MemorySink', () => {
     expect(bundle.metadata.durationTicks).toBe(2);
   });
 
-  it('writeTickFailure populates metadata.failedTicks', () => {
+  it('writeTickFailure populates metadata.failedTicks and advances endTick (failed tick consumes its number)', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());
     sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
@@ -173,6 +173,10 @@ describe('MemorySink', () => {
     const bundle = sink.toBundle();
     expect(bundle.metadata.failedTicks).toEqual([5]);
     expect(bundle.failures).toHaveLength(1);
+    // The failed tick extends the recorded range, so openAt(5) reports
+    // replay_across_failure (the failedTicks guard) rather than too_high.
+    expect(bundle.metadata.endTick).toBe(5);
+    expect(bundle.metadata.durationTicks).toBe(5);
   });
 
   it('toBundle() is JSON-stringify-roundtrippable', () => {

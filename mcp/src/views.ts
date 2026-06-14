@@ -113,9 +113,11 @@ export function entrySummary(entry: BundleCorpusEntry): Record<string, unknown> 
     recordedAt: entry.metadata.recordedAt,
     startTick: entry.metadata.startTick,
     endTick: entry.metadata.endTick,
-    effectiveUpperBound: entry.metadata.incomplete
-      ? entry.metadata.persistedEndTick
-      : entry.metadata.endTick,
+    // Engine-computed reachable bound (BundleCorpusEntry.materializedEndTick →
+    // replayableUpperBound). Reading it rather than recomputing keeps the MCP in
+    // lockstep with snapshotAtTick / openAt, so a recovered legacy endTick:0
+    // bundle reports its true horizon. (Claude review 2026-06-13.)
+    effectiveUpperBound: entry.materializedEndTick,
     incomplete: entry.metadata.incomplete ?? false,
     hasFailures: entry.hasFailures,
     failedTickCount: entry.failedTickCount,

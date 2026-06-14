@@ -177,6 +177,23 @@ export class FileSink implements SessionSink, SessionSource {
     }
   }
 
+  /**
+   * Advance metadata.endTick / durationTicks to `tick` (monotonic max) in
+   * memory, mirroring persistedEndTick on writeSnapshot — so a same-process
+   * live toBundle() is consistent. Called for every recorded tick: a successful
+   * writeTick AND a failed writeTickFailure (a failed tick consumes its number,
+   * extending the recorded range). Unlike persistedEndTick this deliberately
+   * does NOT rewrite the manifest per tick — that cadence stays snapshot+close
+   * only (perf); the next writeSnapshot()/close() flushes endTick to disk.
+   * (aoe2 engine-feedback 2026-06-13.)
+   */
+  private _advanceEndTick(tick: number): void {
+    if (this._metadata && tick > this._metadata.endTick) {
+      this._metadata.endTick = tick;
+      this._metadata.durationTicks = tick - this._metadata.startTick;
+    }
+  }
+
   private _anyStreamHasData(): boolean {
     for (const f of [TICKS_FILE, COMMANDS_FILE, EXECUTIONS_FILE, FAILURES_FILE, MARKERS_FILE]) {
       const p = join(this._dir, f);
@@ -254,16 +271,7 @@ export class FileSink implements SessionSink, SessionSource {
     this._assertOpen();
     assertJsonCompatible(entry, 'session tick entry');
     this._appendJsonl(TICKS_FILE, entry);
-    // Finalize endTick/durationTicks in memory (mirrors persistedEndTick on
-    // writeSnapshot) so a same-process live toBundle() is consistent. Unlike
-    // persistedEndTick this deliberately does NOT rewrite the manifest per tick
-    // — that cadence stays snapshot+close only (perf). The next
-    // writeSnapshot()/close() flushes the updated endTick to disk.
-    // (aoe2 engine-feedback 2026-06-13.)
-    if (this._metadata && entry.tick > this._metadata.endTick) {
-      this._metadata.endTick = entry.tick;
-      this._metadata.durationTicks = entry.tick - this._metadata.startTick;
-    }
+    this._advanceEndTick(entry.tick);
   }
 
   writeCommand(record: RecordedCommand): void {
@@ -285,6 +293,7 @@ export class FileSink implements SessionSink, SessionSource {
     if (this._metadata) {
       this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
     }
+    this._advanceEndTick(failure.tick);
   }
 
   writeSnapshot(entry: SessionSnapshotEntry): void {

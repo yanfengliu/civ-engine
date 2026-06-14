@@ -125,9 +125,13 @@ export function buildServer(corpusRoot: string): McpServer {
     },
   }, async ({ key, tick }) => guarded(() => {
     const bundle = state.loadBundle(key);
-    const upper = bundle.metadata.incomplete
-      ? bundle.metadata.persistedEndTick
-      : bundle.metadata.endTick;
+    // effectiveUpperBound mirrors the engine's reachable bound exactly — read
+    // BundleCorpusEntry.materializedEndTick (computed via replayableUpperBound)
+    // instead of recomputing, so a recovered legacy endTick:0 bundle reports its
+    // true horizon (and stays consistent with the snapshotAtTick fall-through
+    // below). The entry always exists here — loadBundle just succeeded for the
+    // same key. (Claude review 2026-06-13.)
+    const upper = state.current.get(key)?.materializedEndTick ?? bundle.metadata.endTick;
     if (tick === undefined) {
       return {
         startTick: bundle.metadata.startTick,

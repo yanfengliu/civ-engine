@@ -124,19 +124,28 @@ export class MemorySink implements SessionSink, SessionSource {
     }
   }
 
+  /**
+   * Advance metadata.endTick / durationTicks to `tick` (monotonic max),
+   * mirroring persistedEndTick on writeSnapshot — so a toBundle() taken before
+   * close()/disconnect() (the live-export path, e.g. RecordingService.bundle())
+   * is internally consistent and stays replayable. Called for every recorded
+   * tick: a successful writeTick AND a failed writeTickFailure (a failed tick
+   * consumes its number, so it extends the recorded range too — otherwise
+   * openAt(failedTick) reports a misleading too_high instead of
+   * replay_across_failure). (aoe2 engine-feedback 2026-06-13.)
+   */
+  private _advanceEndTick(tick: number): void {
+    if (this._metadata && tick > this._metadata.endTick) {
+      this._metadata.endTick = tick;
+      this._metadata.durationTicks = tick - this._metadata.startTick;
+    }
+  }
+
   writeTick(entry: SessionTickEntry): void {
     this._assertOpen();
     assertJsonCompatible(entry, 'session tick entry');
     this._ticks.push(entry);
-    // Finalize endTick/durationTicks live, mirroring persistedEndTick on
-    // writeSnapshot — so a toBundle() taken before close()/disconnect() (the
-    // live-export path, e.g. RecordingService.bundle()) is internally
-    // consistent and stays replayable. Monotonic max guards against any
-    // out-of-order write. (aoe2 engine-feedback 2026-06-13.)
-    if (this._metadata && entry.tick > this._metadata.endTick) {
-      this._metadata.endTick = entry.tick;
-      this._metadata.durationTicks = entry.tick - this._metadata.startTick;
-    }
+    this._advanceEndTick(entry.tick);
   }
 
   writeCommand(record: RecordedCommand): void {
@@ -158,6 +167,7 @@ export class MemorySink implements SessionSink, SessionSource {
     if (this._metadata) {
       this._metadata.failedTicks = [...(this._metadata.failedTicks ?? []), failure.tick];
     }
+    this._advanceEndTick(failure.tick);
   }
 
   writeSnapshot(entry: SessionSnapshotEntry): void {

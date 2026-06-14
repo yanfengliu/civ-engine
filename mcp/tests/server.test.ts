@@ -1,7 +1,7 @@
 // In-process MCP round-trips (DESIGN §Testing): a fixture corpus recorded
 // with the real SessionRecorder + FileSink into a temp dir, exercised through
 // actual MCP tool calls over the SDK's linked InMemoryTransport pair.
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -340,6 +340,54 @@ describe('cross-bundle tools', () => {
         expect(payload?.error.message).toMatch(/unknown metric/);
       }
     }
+  });
+});
+
+describe('legacy understated-endTick recovery (effectiveUpperBound)', () => {
+  // A pre-1.1.4 live-exported bundle shipped endTick:0 while persistedEndTick
+  // stayed current. The MCP must report the recovered reachable bound (via the
+  // engine's BundleCorpusEntry.materializedEndTick), not 0 — otherwise an LLM
+  // agent is told a fully-recorded run ends at tick 0. (Claude review 2026-06-13.)
+  let lroot: string;
+  let lclient: Client;
+
+  beforeAll(async () => {
+    lroot = mkdtempSync(join(tmpdir(), 'civ-mcp-legacy-'));
+    recordInto(join(lroot, 'legacy'), { label: 'legacy' });
+    const mpath = join(lroot, 'legacy', 'manifest.json');
+    const m = JSON.parse(readFileSync(mpath, 'utf-8')) as { metadata: { endTick: number; persistedEndTick: number; durationTicks: number } };
+    expect(m.metadata.persistedEndTick).toBeGreaterThan(0);
+    m.metadata.endTick = 0;        // simulate the legacy live-export defect
+    m.metadata.durationTicks = 0;
+    writeFileSync(mpath, JSON.stringify(m));
+
+    const server = buildServer(lroot);
+    lclient = new Client({ name: 'legacy-client', version: '0.0.0' });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await server.connect(st);
+    await lclient.connect(ct);
+  });
+
+  afterAll(() => rmSync(lroot, { recursive: true, force: true }));
+
+  const lcall = async (name: string, args: Record<string, unknown> = {}): Promise<Record<string, unknown>> => {
+    const result = (await lclient.callTool({ name, arguments: args })) as { content: Array<{ text: string }> };
+    return JSON.parse(result.content[0].text) as Record<string, unknown>;
+  };
+
+  it('corpus_query.entrySummary reports the recovered effectiveUpperBound, not the raw endTick:0', async () => {
+    const page = await lcall('corpus_query') as { items: Array<{ key: string; endTick: number; effectiveUpperBound: number }> };
+    const entry = page.items.find((i) => i.key === 'legacy')!;
+    expect(entry.endTick).toBe(0);                  // raw metadata preserved
+    expect(entry.effectiveUpperBound).toBeGreaterThan(0); // recovered horizon
+  });
+
+  it('bundle_snapshots reports the recovered effectiveUpperBound consistent with its snapshot ticks', async () => {
+    const listing = await lcall('bundle_snapshots', { key: 'legacy' }) as {
+      endTick: number; effectiveUpperBound: number; recordedSnapshotTicks: number[];
+    };
+    expect(listing.endTick).toBe(0);
+    expect(listing.effectiveUpperBound).toBe(Math.max(...listing.recordedSnapshotTicks));
   });
 });
 

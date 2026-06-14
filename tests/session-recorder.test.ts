@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   MemorySink,
   SessionRecorder,
+  SessionReplayer,
   World,
+  type SessionBundle,
   type WorldConfig,
 } from '../src/index.js';
 
@@ -326,6 +328,31 @@ describe('SessionRecorder', () => {
     expect(bundle.metadata.persistedEndTick).toBe(6);
     expect(bundle.metadata.endTick).toBe(6);
     expect(bundle.metadata.durationTicks).toBe(6);
+  });
+
+  it('live toBundle() after a TickFailure extends endTick to the failed tick (openAt → replay_across_failure, not too_high)', () => {
+    // A failed tick consumes its tick number (world.tick advances past it before
+    // the failure is emitted), so even a live export — no disconnect — must
+    // include it. Otherwise openAt(failedTick) reports a misleading too_high
+    // instead of replay_across_failure. (Codex review 2026-06-13.)
+    const mkBoomWorld = () => {
+      const w = mkWorld();
+      w.registerSystem({ name: 'boom', execute: (wd) => { if (wd.tick + 1 === 3) throw new Error('planned failure'); } });
+      return w;
+    };
+    const world = mkBoomWorld();
+    const sink = new MemorySink();
+    const rec = new SessionRecorder({ world, sink });
+    rec.connect();
+    for (let i = 0; i < 5; i++) { if (!world.stepWithResult().ok) break; }
+    const bundle = rec.toBundle() as unknown as SessionBundle<Record<string, never>, Cmds>; // NO disconnect — live export
+    expect(bundle.metadata.failedTicks).toEqual([3]);
+    expect(bundle.metadata.endTick).toBe(3);        // failed tick consumed → range includes it
+    expect(bundle.metadata.durationTicks).toBe(3);
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => { const w = mkBoomWorld(); w.applySnapshot(snap); return w; },
+    });
+    expect(() => replayer.openAt(3)).toThrow(/replay_across_failure|recorded TickFailure/);
   });
 
   it('toBundle is JSON-serializable end-to-end', () => {

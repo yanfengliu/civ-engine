@@ -248,7 +248,7 @@ describe('FileSink', () => {
     expect(() => sink.toBundle()).toThrow(/snapshots/);
   });
 
-  it('writeTickFailure populates metadata.failedTicks', () => {
+  it('writeTickFailure populates metadata.failedTicks and advances endTick (failed tick consumes its number)', () => {
     const sink = new FileSink(bundleDir);
     sink.open(mkMetadata());
     sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
@@ -256,6 +256,8 @@ describe('FileSink', () => {
     sink.close();
     const m = JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8'));
     expect(m.metadata.failedTicks).toEqual([5]);
+    expect(m.metadata.endTick).toBe(5);
+    expect(m.metadata.durationTicks).toBe(5);
   });
 });
 

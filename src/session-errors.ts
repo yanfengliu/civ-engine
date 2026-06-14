@@ -73,8 +73,10 @@ export class BundleVersionError extends SessionRecordingError {}
 
 /**
  * A replayer query was called with a tick outside the bundle's valid range.
- * Complete bundles use `[metadata.startTick, metadata.endTick]`; incomplete
- * bundles use `[metadata.startTick, metadata.persistedEndTick]`.
+ * Complete bundles use `[metadata.startTick, max(metadata.endTick,
+ * metadata.persistedEndTick)]` (the `max` recovers a legacy understated
+ * `endTick`); incomplete bundles use `[metadata.startTick,
+ * metadata.persistedEndTick]`. See `replayableUpperBound` in session-bundle.ts.
  */
 export class BundleRangeError extends SessionRecordingError {}
 
