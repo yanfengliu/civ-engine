@@ -58,6 +58,22 @@ describe('FileSink', () => {
     sink.close();
   });
 
+  it('writeTick advances metadata.endTick/durationTicks in memory; manifest flushes on the next snapshot', () => {
+    const sink = new FileSink(bundleDir);
+    sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
+    sink.writeTick({ tick: 5, diff: { tick: 5 } as never, events: [], metrics: null, debug: null });
+    // Live (same-process) toBundle reflects the recorded tick immediately.
+    expect(sink.toBundle().metadata.endTick).toBe(5);
+    expect(sink.toBundle().metadata.durationTicks).toBe(5);
+    // Per-tick manifest rewrites are intentionally skipped (perf): the on-disk
+    // manifest keeps the open()-time endTick until the next snapshot/close.
+    expect(JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8')).metadata.endTick).toBe(0);
+    sink.writeSnapshot({ tick: 5, snapshot: mkSnapshot(5) });
+    expect(JSON.parse(readFileSync(join(bundleDir, 'manifest.json'), 'utf-8')).metadata.endTick).toBe(5);
+    sink.close();
+  });
+
   it('manifest atomic-rename: tmp file does not linger after writeSnapshot', () => {
     const sink = new FileSink(bundleDir);
     sink.open(mkMetadata());

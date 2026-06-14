@@ -88,8 +88,8 @@ Iteration ordering:
 
 `BundleViewer` exposes two ranges:
 
-- `recordedRange` — the metadata/content range. For complete bundles `recordedRange.end === metadata.endTick`. For incomplete bundles where the recorder terminated and the world advanced past termination, `recordedRange.end` is **content-bounded** to `min(metadata.endTick, max stream tick)` so the API never lies about ticks that have nothing recorded.
-- `replayableRange` — the `openAt(tick)`-able range. End equals `metadata.endTick` for complete bundles and `metadata.persistedEndTick` for incomplete bundles (matches `SessionReplayer.openAt`'s upper bound).
+- `recordedRange` — the content range. `recordedRange.end` is **content-bounded** to the highest tick with any recorded content (across the tick / command / execution / marker / failure streams), so the API never lies about ticks that have nothing recorded — whether `metadata.endTick` over-states it (recorder terminated and the world advanced past termination) or under-states it (a pre-1.1.4 live-exported bundle that shipped `endTick: 0`).
+- `replayableRange` — the `openAt(tick)`-able range. End equals `max(metadata.endTick, metadata.persistedEndTick)` for complete bundles and `metadata.persistedEndTick` for incomplete bundles (matches `SessionReplayer.openAt`'s upper bound). For a cleanly-recorded bundle `endTick ≥ persistedEndTick` so the end is just `endTick`; the `max` recovers a legacy understated `endTick`.
 
 `atTick(t)` accepts any `t` in `recordedRange`. State materialization (`frame.state()`, `frame.snapshot()`, snapshot-fallback `frame.diffSince()`) bubbles `BundleRangeError({ code: 'too_high' })` from `openAt` when `t` is in `recordedRange` but beyond `replayableRange.end`.
 

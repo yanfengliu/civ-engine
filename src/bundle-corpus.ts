@@ -2,6 +2,7 @@ import { existsSync, lstatSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import type { JsonValue } from './json.js';
 import { BundleViewer, type BundleViewerOptions } from './bundle-viewer.js';
+import { replayableUpperBound } from './session-bundle.js';
 import type { SessionBundle, SessionMetadata } from './session-bundle.js';
 import { FileSink } from './session-file-sink.js';
 import type { SessionSource } from './session-sink.js';
@@ -201,9 +202,10 @@ function makeEntry(dir: string, key: string, manifest: FileManifest): BundleCorp
   const attachmentMimes = Object.freeze(
     [...new Set(manifest.attachments.map((attachment) => attachment.mime))].sort(compareCodeUnit),
   );
-  const materializedEndTick = metadata.incomplete === true
-    ? metadata.persistedEndTick
-    : metadata.endTick;
+  // Persisted-content horizon. Shared reachable-upper-bound rule:
+  // max(endTick, persistedEndTick) for complete bundles also recovers a legacy
+  // understated endTick (live-export bug). (aoe2 engine-feedback 2026-06-13.)
+  const materializedEndTick = replayableUpperBound(metadata);
 
   const entry: BundleCorpusEntry = {
     key,

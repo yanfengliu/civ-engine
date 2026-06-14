@@ -104,6 +104,49 @@ describe('SessionReplayer', () => {
     expect(() => replayer.openAt(999)).toThrow(/too_high|above/);
   });
 
+  it('openAt accepts a live-exported (non-disconnected) bundle up to its recorded end', () => {
+    // End-to-end of the recorder live-export fix: a bundle finalized via toBundle()
+    // without disconnect() (RecordingService.bundle() / getRecorderBundle()) carries
+    // a correct endTick and replays to it.
+    const world = new World<Record<string, never>, Cmds>(mkConfig());
+    setupWorld(world);
+    const sink = new MemorySink();
+    const rec = new SessionRecorder({ world, sink, snapshotInterval: 2 });
+    rec.connect();
+    for (let i = 0; i < 6; i++) { world.submit('spawn', { x: i, y: i }); world.step(); }
+    const bundle = rec.toBundle() as unknown as SessionBundle<Record<string, never>, Cmds>; // no disconnect
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => {
+        const w = new World<Record<string, never>, Cmds>(mkConfig());
+        setupWorld(w);
+        w.applySnapshot(snap);
+        return w;
+      },
+    });
+    expect(replayer.openAt(bundle.metadata.endTick).tick).toBe(6);
+  });
+
+  it('openAt + tickEntriesBetween tolerate a legacy bundle whose endTick understates persistedEndTick', () => {
+    // Pre-1.1.4 live-exported bundles shipped endTick:0 while the sink kept
+    // persistedEndTick current. The replay surface honors max(endTick,
+    // persistedEndTick) for complete bundles so the recorded corpus stays
+    // inspectable without re-recording. (aoe2 engine-feedback 2026-06-13.)
+    const { bundle } = recordSession(4); // disconnects → terminal snapshot @ tick 4
+    expect(bundle.metadata.persistedEndTick).toBe(4);
+    bundle.metadata.endTick = 0; // simulate the legacy live-export defect
+    bundle.metadata.durationTicks = 0;
+    const replayer = SessionReplayer.fromBundle(bundle, {
+      worldFactory: (snap) => {
+        const w = new World<Record<string, never>, Cmds>(mkConfig());
+        setupWorld(w);
+        w.applySnapshot(snap);
+        return w;
+      },
+    });
+    expect(() => replayer.openAt(4)).not.toThrow();
+    expect(replayer.tickEntriesBetween(1, 4)).toHaveLength(4);
+  });
+
   it('openAt: missing handler — registration check fires first; ReplayHandlerMissingError remains the backstop under skip', () => {
     const { bundle } = recordSession(2);
     const factory = (snap: Parameters<typeof World.deserialize>[0]) => {

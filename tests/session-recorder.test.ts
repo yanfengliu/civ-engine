@@ -311,6 +311,23 @@ describe('SessionRecorder', () => {
     expect(bundle.metadata.durationTicks).toBe(5);
   });
 
+  it('live toBundle() before disconnect() finalizes endTick/durationTicks from recorded ticks', () => {
+    // RecordingService.bundle() / the aoe2 LLM harness's getRecorderBundle() export
+    // via toBundle() WITHOUT disconnect(); endTick/durationTicks must reflect the
+    // recorded range, not stay at startTick. (aoe2 engine-feedback 2026-06-13:
+    // campaign bundles shipped endTick:0 while persistedEndTick reached 9000, so
+    // SessionReplayer.openAt rejected every tick > 0.)
+    const world = mkWorld();
+    const sink = new MemorySink();
+    const rec = new SessionRecorder({ world, sink, snapshotInterval: 2 });
+    rec.connect();
+    for (let i = 0; i < 6; i++) { world.submit('spawn', { x: i, y: i }); world.step(); }
+    const bundle = rec.toBundle();   // NO disconnect — live export path
+    expect(bundle.metadata.persistedEndTick).toBe(6);
+    expect(bundle.metadata.endTick).toBe(6);
+    expect(bundle.metadata.durationTicks).toBe(6);
+  });
+
   it('toBundle is JSON-serializable end-to-end', () => {
     const world = mkWorld();
     const rec = new SessionRecorder({ world });

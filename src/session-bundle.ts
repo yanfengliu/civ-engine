@@ -144,6 +144,28 @@ export interface SessionMetadata {
   registration?: RegistrationManifest;
 }
 
+/**
+ * Highest tick a bundle can be replayed / inspected to.
+ *
+ * Complete bundle → `max(endTick, persistedEndTick)`. For a cleanly finalized
+ * bundle this equals `endTick` (`persistedEndTick` is the last *snapshot* tick,
+ * always ≤ the last recorded tick = `endTick`). The `max` recovers legacy
+ * bundles whose `endTick` was never finalized — exported via a live `toBundle()`
+ * before `disconnect()`, so it stayed at `startTick` while the sink kept
+ * `persistedEndTick` current (pre-1.1.4; see docs/learning/lessons.md). Since
+ * 1.1.4 the sinks finalize `endTick` on every `writeTick`, so new bundles need no
+ * recovery and `max` is a no-op for them. Incomplete (sink-failure) bundles
+ * intentionally cap at `persistedEndTick`, the last durable snapshot.
+ *
+ * Internal cross-module helper (SessionReplayer + BundleViewer); intentionally
+ * NOT part of the public `civ-engine` surface (absent from `src/index.ts`).
+ */
+export function replayableUpperBound(
+  md: Pick<SessionMetadata, 'incomplete' | 'endTick' | 'persistedEndTick'>,
+): number {
+  return md.incomplete ? md.persistedEndTick : Math.max(md.endTick, md.persistedEndTick);
+}
+
 export interface SessionBundle<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,

@@ -128,6 +128,15 @@ export class MemorySink implements SessionSink, SessionSource {
     this._assertOpen();
     assertJsonCompatible(entry, 'session tick entry');
     this._ticks.push(entry);
+    // Finalize endTick/durationTicks live, mirroring persistedEndTick on
+    // writeSnapshot — so a toBundle() taken before close()/disconnect() (the
+    // live-export path, e.g. RecordingService.bundle()) is internally
+    // consistent and stays replayable. Monotonic max guards against any
+    // out-of-order write. (aoe2 engine-feedback 2026-06-13.)
+    if (this._metadata && entry.tick > this._metadata.endTick) {
+      this._metadata.endTick = entry.tick;
+      this._metadata.durationTicks = entry.tick - this._metadata.startTick;
+    }
   }
 
   writeCommand(record: RecordedCommand): void {

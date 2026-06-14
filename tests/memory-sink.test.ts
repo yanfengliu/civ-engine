@@ -150,6 +150,21 @@ describe('MemorySink', () => {
     expect(bundle.metadata.persistedEndTick).toBe(200);
   });
 
+  it('writeTick advances metadata.endTick + durationTicks live (pre-close)', () => {
+    // Symmetric with persistedEndTick on writeSnapshot: a live toBundle() (no
+    // disconnect/close) must report endTick from the recorded ticks, not stay
+    // stuck at startTick. aoe2 engine-feedback 2026-06-13: campaign bundles were
+    // exported via a live toBundle() and shipped endTick:0 / persistedEndTick:9000.
+    const sink = new MemorySink();
+    sink.open(mkMetadata());
+    sink.writeSnapshot({ tick: 0, snapshot: mkSnapshot(0) });
+    sink.writeTick({ tick: 1, diff: { tick: 1 } as never, events: [], metrics: null, debug: null });
+    sink.writeTick({ tick: 2, diff: { tick: 2 } as never, events: [], metrics: null, debug: null });
+    const bundle = sink.toBundle();
+    expect(bundle.metadata.endTick).toBe(2);
+    expect(bundle.metadata.durationTicks).toBe(2);
+  });
+
   it('writeTickFailure populates metadata.failedTicks', () => {
     const sink = new MemorySink();
     sink.open(mkMetadata());

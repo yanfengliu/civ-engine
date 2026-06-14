@@ -254,6 +254,16 @@ export class FileSink implements SessionSink, SessionSource {
     this._assertOpen();
     assertJsonCompatible(entry, 'session tick entry');
     this._appendJsonl(TICKS_FILE, entry);
+    // Finalize endTick/durationTicks in memory (mirrors persistedEndTick on
+    // writeSnapshot) so a same-process live toBundle() is consistent. Unlike
+    // persistedEndTick this deliberately does NOT rewrite the manifest per tick
+    // — that cadence stays snapshot+close only (perf). The next
+    // writeSnapshot()/close() flushes the updated endTick to disk.
+    // (aoe2 engine-feedback 2026-06-13.)
+    if (this._metadata && entry.tick > this._metadata.endTick) {
+      this._metadata.endTick = entry.tick;
+      this._metadata.durationTicks = entry.tick - this._metadata.startTick;
+    }
   }
 
   writeCommand(record: RecordedCommand): void {

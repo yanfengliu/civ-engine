@@ -24,6 +24,7 @@ import {
   type TickRange,
 } from './bundle-viewer-types.js';
 import {
+  replayableUpperBound,
   SESSION_BUNDLE_SCHEMA_VERSION,
   type Marker,
   type MarkerKind,
@@ -153,13 +154,19 @@ export class BundleViewer<
     for (const e of bundle.executions) if (e.tick > contentMaxTick) contentMaxTick = e.tick;
     for (const m of bundle.markers) if (m.tick > contentMaxTick) contentMaxTick = m.tick;
     for (const f of bundle.failures) if (f.tick > contentMaxTick) contentMaxTick = f.tick;
+    // Content-bounded (the highest tick with any recorded content). Using
+    // contentMaxTick directly — not min(endTick, contentMaxTick) — keeps the
+    // range honest when endTick OVERSTATES (terminated-past-last-entry) AND
+    // when a legacy bundle UNDERSTATES it (live-export endTick:0 while content
+    // reaches the real end). For a clean bundle contentMaxTick <= endTick, so
+    // this is unchanged. (aoe2 engine-feedback 2026-06-13.)
     this.recordedRange = Object.freeze({
       start: md.startTick,
-      end: Math.min(md.endTick, contentMaxTick),
+      end: contentMaxTick,
     });
     this.replayableRange = Object.freeze({
       start: md.startTick,
-      end: md.incomplete ? md.persistedEndTick : md.endTick,
+      end: replayableUpperBound(md),
     });
   }
 

@@ -4729,7 +4729,7 @@ interface SessionMetadata {
   nodeVersion: string;        // process.version at recording time
   recordedAt: string;         // ISO 8601 timestamp
   startTick: number;          // tick at connect()
-  endTick: number;            // tick at disconnect() (live world.tick)
+  endTick: number;            // last recorded tick (advanced live per writeTick; re-confirmed at disconnect())
   persistedEndTick: number;   // tick of last successfully persisted snapshot
   durationTicks: number;      // endTick - startTick
   sourceKind: 'session' | 'scenario' | 'synthetic';  // 'synthetic' added in v0.8.0 (b-bump per ADR 20)
@@ -4741,7 +4741,7 @@ interface SessionMetadata {
 }
 ```
 
-`endTick` is the live world tick at finalization regardless of persistence success; `persistedEndTick` is the upper bound for incomplete-bundle replay (per spec §5.2 manifest cadence).
+`endTick` is finalized **live** — the sinks advance it (and `durationTicks`) on every `writeTick`, mirroring `persistedEndTick` on `writeSnapshot` — so a `toBundle()` taken before `disconnect()`/`close()` (a live export, e.g. a long playtest capture) is internally consistent. `disconnect()` re-confirms `endTick = world.tick`. `persistedEndTick` is the last persisted-snapshot tick (per spec §5.2 manifest cadence). The reachable replay upper bound is `metadata.incomplete ? persistedEndTick : max(endTick, persistedEndTick)`: for a clean bundle `endTick ≥ persistedEndTick` so it is just `endTick`; the `max` recovers pre-1.1.4 bundles whose `endTick` was never finalized (live-exported at `0`) so they stay replayable without re-recording.
 
 ### `RegistrationManifest`
 
@@ -5041,7 +5041,7 @@ interface SelfCheckResult {
 function deepEqualWithPath(a: unknown, b: unknown, path?: string): { equal: boolean; firstDifferingPath?: string };
 ```
 
-Range checks per spec §9.1: `< startTick` or `> endTick` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
+Range checks per spec §9.1: `< startTick` or `> max(endTick, persistedEndTick)` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. The `max` keeps a legacy bundle whose `endTick` was never finalized (pre-1.1.4 live export) replayable up to its last persisted snapshot. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
 
 `selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
 
@@ -5297,7 +5297,7 @@ type BundleCorpusMetadata = Readonly<Omit<SessionMetadata, 'failedTicks'>> & {
 
 `BundleCorpusEntry.metadata` is frozen at runtime and models `failedTicks` as a readonly nested array at the type level.
 
-`materializedEndTick` is a persisted-content horizon, not a replay guarantee. Complete bundles use `metadata.endTick`; incomplete bundles use `metadata.persistedEndTick`. Replay rules still belong to `SessionReplayer`, including failure-bounded replay refusal.
+`materializedEndTick` is a persisted-content horizon, not a replay guarantee. Complete bundles use `max(metadata.endTick, metadata.persistedEndTick)` (the `max` recovers a legacy understated `endTick`); incomplete bundles use `metadata.persistedEndTick`. Replay rules still belong to `SessionReplayer`, including failure-bounded replay refusal.
 
 `attachmentBytes` and `attachmentMimes` are derived from manifest descriptors. Sidecar bytes are not read or validated during listing or `loadBundle()`; call `entry.openSource().readSidecar(id)` when you need the actual bytes. Attachments explicitly embedded as `dataUrl` live inside `manifest.json`, so their bytes are part of manifest parse cost and are not a separate content index.
 
@@ -5500,7 +5500,7 @@ class BundleViewer<
 }
 ```
 
-`recordedRange.end = min(metadata.endTick, max stream tick)` is content-bounded. `replayableRange.end = metadata.incomplete ? metadata.persistedEndTick : metadata.endTick`. `atTick(t)` accepts `t in recordedRange`; `frame.state()` enforces `replayableRange` via `openAt`.
+`recordedRange.end = max stream tick` is content-bounded (the highest tick with any recorded content — honest whether `metadata.endTick` over- or under-states it). `replayableRange.end = metadata.incomplete ? metadata.persistedEndTick : max(metadata.endTick, metadata.persistedEndTick)`, matching `SessionReplayer.openAt`. `atTick(t)` accepts `t in recordedRange`; `frame.state()` enforces `replayableRange` via `openAt`.
 
 ### `BundleViewerOptions`
 
@@ -6057,7 +6057,7 @@ Per-player fog-of-war observation: projects the world's omniscient observation s
 function snapshotAtTick(bundle: SessionBundle, tick: number): WorldSnapshot
 ```
 
-Pure-data state materialization: the world snapshot at submission-tick `tick` (i.e. BEFORE stepping `tick`), folded from the bundle's nearest recorded snapshot plus `TickDiff`s — **zero World construction, no `worldFactory`**. Throws `BundleRangeError` (`too_low`/`too_high`) outside `[startTick, endTick]` (incomplete bundles use `persistedEndTick`), `BundleIntegrityError` `replay_across_failure` when any recorded failed tick precedes or equals the requested tick (folding across a failure is meaningless — inspect the terminal snapshot directly instead), and `missing_tick_entries` when the fold range has gapped tick entries (a truncated/tampered bundle body must error, not yield silently wrong state). Powers the MCP server's state tools (`docs/guides/mcp-server.md`) and `BundleViewer.diffSince`-style comparisons without game code.
+Pure-data state materialization: the world snapshot at submission-tick `tick` (i.e. BEFORE stepping `tick`), folded from the bundle's nearest recorded snapshot plus `TickDiff`s — **zero World construction, no `worldFactory`**. Throws `BundleRangeError` (`too_low`/`too_high`) outside `[startTick, max(endTick, persistedEndTick)]` (incomplete bundles use `persistedEndTick`; the `max` recovers a legacy understated `endTick`), `BundleIntegrityError` `replay_across_failure` when any recorded failed tick precedes or equals the requested tick (folding across a failure is meaningless — inspect the terminal snapshot directly instead), and `missing_tick_entries` when the fold range has gapped tick entries (a truncated/tampered bundle body must error, not yield silently wrong state). Powers the MCP server's state tools (`docs/guides/mcp-server.md`) and `BundleViewer.diffSince`-style comparisons without game code.
 
 ## VisibilityMap metrics (v1.1.0)
 

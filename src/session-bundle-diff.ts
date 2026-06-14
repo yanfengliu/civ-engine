@@ -11,6 +11,7 @@ import type {
   RecordedCommand,
   SessionBundle,
 } from './session-bundle.js';
+import { replayableUpperBound } from './session-bundle.js';
 import type { TickDiff } from './diff.js';
 import type { CommandSequenceMap } from './session-fork.js';
 import { applyTickDiff } from './apply-tick-diff.js';
@@ -370,7 +371,8 @@ export function snapshotAtTick<TEventMap, TCommandMap>(
     );
   }
   const md = bundle.metadata;
-  const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+  // Reachable-upper-bound rule shared with SessionReplayer.openAt (recovers a legacy understated endTick).
+  const upper = replayableUpperBound(md);
   if (tick < md.startTick) {
     throw new BundleRangeError(
       `tick ${tick} below startTick ${md.startTick}`,

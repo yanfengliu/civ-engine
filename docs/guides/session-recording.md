@@ -39,6 +39,8 @@ const inspectable = replayer.openAt(stuckTick);
 console.log(inspectable.tick, inspectable.getEvents());
 ```
 
+**Live export.** `toBundle()` works on a still-connected recorder — useful when a long capture is pulled out mid-run (a UI scrubber, or a playtest harness that exports before tearing down). The sinks finalize `metadata.endTick` / `durationTicks` on every recorded tick (mirroring `persistedEndTick` on each snapshot), so a live-exported bundle is internally consistent and `SessionReplayer.openAt` accepts ticks up to the last recorded one — no `disconnect()` required first. `disconnect()` remains the clean close (final terminal snapshot + listener teardown).
+
 ## Sinks
 
 Two built-in sinks; both implement `SessionSink & SessionSource`.

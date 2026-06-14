@@ -16,6 +16,7 @@ import {
   ReplayHandlerMissingError,
 } from './session-errors.js';
 import type { SessionSource } from './session-sink.js';
+import { replayableUpperBound } from './session-bundle.js';
 import { deepEqualOrdered, deepEqualWithPath } from './session-deep-equal.js';
 import { ENGINE_VERSION } from './version.js';
 import type { CommandExecutionResult, World } from './world.js';
@@ -188,7 +189,7 @@ export class SessionReplayer<
 
   openAt(targetTick: number): World<TEventMap, TCommandMap> {
     const md = this._bundle.metadata;
-    const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+    const upper = replayableUpperBound(md);
     if (targetTick < md.startTick) {
       throw new BundleRangeError(
         `tick ${targetTick} below startTick ${md.startTick}`,
@@ -248,8 +249,10 @@ export class SessionReplayer<
 
   tickEntriesBetween(fromTick: number, toTick: number): SessionTickEntry<TEventMap, TDebug>[] {
     const md = this._bundle.metadata;
-    // Use persistedEndTick for incomplete bundles. Iter-1 code review fix.
-    const upper = md.incomplete ? md.persistedEndTick : md.endTick;
+    // Shared reachable-upper-bound rule (persistedEndTick for incomplete
+    // bundles; max(endTick, persistedEndTick) recovers a legacy understated
+    // endTick for complete ones). Iter-1 code review fix + aoe2-feedback 2026-06-13.
+    const upper = replayableUpperBound(md);
     if (fromTick < md.startTick || toTick > upper || fromTick > toTick) {
       throw new BundleRangeError(
         `tick range [${fromTick}, ${toTick}] outside [${md.startTick}, ${upper}] or inverted`,

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.4 - 2026-06-13
+
+Replay-bound finalization fix (surfaced by the aoe2 consumer's engine-feedback, 2026-06-13). A bundle exported via a **live `toBundle()` before `disconnect()`** — the path used by long LLM-playtest captures — shipped `metadata.endTick: 0` / `durationTicks: 0` even though the run was fully recorded, because those fields were finalized only in `disconnect()`. `SessionReplayer.openAt` clamped its reachable upper bound to `endTick`, so every recorded run was rejected at `tick > 0` — the engine's own "what actually happened" replay-debugging path was unusable for those bundles. **No public API surface change** (pure patch); behavior callouts below.
+
+### Fixed
+
+- **`endTick` / `durationTicks` are now finalized live, on every recorded tick (HIGH).** Both `MemorySink` and `FileSink` advance `metadata.endTick` (and `durationTicks`) in `writeTick`, mirroring how `persistedEndTick` already advanced in `writeSnapshot`. A `toBundle()` taken at any point — before `disconnect()`/`close()` — now returns internally consistent metadata. **Behavior callout:** a live-exported bundle's `endTick` now reflects the last recorded tick instead of `startTick`; the `disconnect()`-finalized value is unchanged. `FileSink` keeps its manifest write cadence (on `open`/`writeSnapshot`/`close`, not per tick); the live `endTick` flushes to disk on the next snapshot or `close()`.
+- **The replay surface tolerates a legacy understated `endTick` (HIGH).** For complete bundles the reachable upper bound is now `max(endTick, persistedEndTick)` across `SessionReplayer.openAt` / `tickEntriesBetween`, `snapshotAtTick`, `BundleViewer.replayableRange`, and `BundleCorpusEntry.materializedEndTick`; `BundleViewer.recordedRange.end` is purely content-bounded. For any cleanly-recorded bundle `endTick ≥ persistedEndTick`, so this is a no-op; it only recovers bundles already on disk that were recorded by the buggy live-export path (so they need no re-recording). Incomplete (sink-failure) bundles still cap at `persistedEndTick`. **Behavior callout:** `openAt` on such a legacy bundle now replays (up to the last persisted snapshot) instead of throwing `BundleRangeError`.
+
+### Validation
+
+`npm test` (1236 + 1 todo, six new failing-first tests across the recorder, both sinks, replayer, viewer, `snapshotAtTick`, and corpus), `npm run typecheck`, `npm run lint`, `npm run build`, `mcp` 20. Verified against the real `campaign-4` capture (`endTick: 0`, `persistedEndTick: 9000`): the recovered bound is `9000`.
+
 ## 1.1.3 - 2026-06-13
 
 Full-codebase review hardening (4 review iterations to convergence; Codex + Claude — Gemini unreachable; thread `docs/threads/done/full/2026-06-13/`). The first full review since 1.0: the core tick/ECS/PRNG/query-cache machinery was re-confirmed defect-free, with fixes concentrated in determinism edges, read-side semantics, input validation, and the newest (MCP / `snapshotAtTick`) surfaces. **No public API surface change** (pure patch); behavior callouts below.

@@ -305,6 +305,16 @@ describe('BundleCorpus query and loading contracts', () => {
     expect(corpus.get('incomplete')!.metadata.failedTicks).toEqual([26, 27]);
   });
 
+  it('recovers materializedEndTick from persistedEndTick when a legacy bundle understates endTick', () => {
+    // Pre-1.1.4 live-exported bundles shipped endTick:0 (never finalized) while
+    // persistedEndTick stayed current. materializedEndTick — the persisted-content
+    // horizon — recovers via max(endTick, persistedEndTick). (aoe2 feedback 2026-06-13.)
+    const root = tempRoot();
+    writeBundle(join(root, 'legacy'), metadata('legacy', { endTick: 0, persistedEndTick: 30, durationTicks: 0 }));
+    const corpus = new BundleCorpus(root);
+    expect(corpus.get('legacy')?.materializedEndTick).toBe(30);
+  });
+
   it('rejects invalid query ranges and non-canonical recordedAt bounds', () => {
     const root = tempRoot();
     writeBundle(join(root, 'bundle'), metadata('bundle'));

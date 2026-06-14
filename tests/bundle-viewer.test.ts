@@ -406,6 +406,20 @@ describe('BundleViewer', () => {
       // replayableRange uses persistedEndTick for incomplete bundles.
       expect(viewer.replayableRange.end).toBe(50);
     });
+
+    it('recovers ranges from content/persistedEndTick when a legacy endTick understates', () => {
+      // Pre-1.1.4 live-exported bundles shipped endTick:0 (never finalized) while
+      // the sink kept persistedEndTick current. recordedRange must reflect actual
+      // content and replayableRange must honor max(endTick, persistedEndTick) for
+      // complete bundles, so the viewer stays usable on the legacy corpus.
+      const bundle = recordSimpleBundle(3); // disconnects → endTick 3, persistedEndTick 3
+      expect(bundle.metadata.persistedEndTick).toBe(3);
+      bundle.metadata.endTick = 0;
+      bundle.metadata.durationTicks = 0;
+      const viewer = new BundleViewer(bundle);
+      expect(viewer.recordedRange.end).toBe(3);   // content-bounded, not min(0, …)
+      expect(viewer.replayableRange.end).toBe(3); // max(endTick, persistedEndTick)
+    });
   });
 
   describe('exports', () => {

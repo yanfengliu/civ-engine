@@ -63,6 +63,20 @@ describe('snapshotAtTick', () => {
     expect(hpAt(snap)).toBe(0);
   });
 
+  it('tolerates a legacy bundle whose endTick understates persistedEndTick', () => {
+    // Pre-1.1.4 live-exported bundles shipped endTick:0 while persistedEndTick
+    // stayed current. snapshotAtTick honors max(endTick, persistedEndTick) for
+    // complete bundles, matching SessionReplayer.openAt, so pure-data hydration
+    // of the existing corpus works. (aoe2 engine-feedback 2026-06-13.)
+    const expected = snapshotAtTick(recordBundle(), 6);
+    const broken = recordBundle();
+    expect(broken.metadata.persistedEndTick).toBe(6);
+    broken.metadata.endTick = 0;
+    broken.metadata.durationTicks = 0;
+    expect(() => snapshotAtTick(broken, 6)).not.toThrow();
+    expect(snapshotAtTick(broken, 6)).toEqual(expected);
+  });
+
   it('folds tick diffs to the state BEFORE stepping the requested submission tick', () => {
     const bundle = recordBundle();
     // Stepping submission-tick 0 applied bump n=1, so state-at-3 (before
