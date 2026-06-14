@@ -237,7 +237,7 @@ const world = frame.state();           // paused World at that tick
 const delta = frame.diffSince(0);      // BundleStateDiff over [0, frame.tick]
 ```
 
-`viewer.replayer()` returns the lazily-constructed memoized `SessionReplayer` if you need direct `selfCheck()` or `openAt()` access. See `docs/guides/bundle-viewer.md` for the full surface (sparse-tick semantics, content-bounded `recordedRange` for incomplete bundles, layered freezing model, and BundleCorpus integration).
+`viewer.replayer()` returns the lazily-constructed memoized `SessionReplayer` if you need direct `selfCheck()` or `openAt()` access. See `docs/guides/bundle-viewer.md` for the full surface (sparse-tick semantics, content-bounded `recordedRange` for all bundles, layered freezing model, and BundleCorpus integration).
 
 
 ## Counterfactual replay (v0.8.12+)
