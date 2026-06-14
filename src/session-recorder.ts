@@ -23,6 +23,7 @@ import { ENGINE_VERSION } from './version.js';
 import type {
   CommandExecutionResult,
   CommandSubmissionResult,
+  ComponentRegistry,
   TickFailure,
   World,
 } from './world.js';
@@ -40,8 +41,14 @@ export interface SessionRecorderConfig<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   TDebug = JsonValue,
+  // TComponents/TState mirror World's generics so a component-typed world flows
+  // in without erasing its registry (recorder-generics objective). Appended
+  // after TDebug to keep existing explicit type arguments non-breaking; the
+  // typed path works via inference (call with no explicit type args).
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
-  world: World<TEventMap, TCommandMap>;
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
   /** Default: new MemorySink(). Sink must implement both write (SessionSink) and read (SessionSource) interfaces; both built-in sinks (MemorySink, FileSink) satisfy this. */
   sink?: SessionSink & SessionSource;
   /** Default: 1000. `null` disables periodic snapshots (only initial + terminal taken). */
@@ -68,9 +75,11 @@ export class SessionRecorder<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   TDebug = JsonValue,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   readonly sessionId: string;
-  private readonly _world: World<TEventMap, TCommandMap>;
+  private readonly _world: World<TEventMap, TCommandMap, TComponents, TState>;
   private readonly _sink: SessionSink & SessionSource;
   private readonly _snapshotInterval: number | null;
   private readonly _terminalSnapshot: boolean;
@@ -95,7 +104,7 @@ export class SessionRecorder<
   private _executionListener: ((r: CommandExecutionResult<keyof TCommandMap>) => void) | null = null;
   private _failureListener: ((f: TickFailure) => void) | null = null;
 
-  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug>) {
+  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug, TComponents, TState>) {
     this.sessionId = randomUUID();
     this._world = config.world;
     this._sink = config.sink ?? new MemorySink();
@@ -353,6 +362,11 @@ export class SessionRecorder<
     return entry;
   }
 
+  // Returns the sink's default-generic bundle (the bundle is the serialized JSON
+  // boundary). NOT parameterized with TComponents/TState/TEventMap — a typed
+  // return would break consumers that hold the result in a default-generic
+  // `SessionBundle` slot (verified against aoe2's runPlaytest). Component typing
+  // is reasserted on replay via ReplayerConfig.worldFactory's return type.
   toBundle(): SessionBundle {
     return this._sink.toBundle();
   }

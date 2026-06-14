@@ -4,11 +4,16 @@
 // unchanged.
 
 import type { WorldSnapshot } from './serializer.js';
-import type { CommandExecutionResult, World } from './world.js';
+import type { CommandExecutionResult, ComponentRegistry, World } from './world.js';
 
 export interface ReplayerConfig<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
+  // Mirror World's component/state generics so worldFactory can return a
+  // component-typed world and openAt hands it back typed (recorder-generics).
+  // Defaulted for back-compat; the typed path works via inference.
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   /**
    * Constructs a paused `World` from a snapshot. Per ADR 4 (spec §15),
@@ -18,7 +23,7 @@ export interface ReplayerConfig<
    * (e.g. `World.applySnapshot`) to avoid `registerComponent` /
    * `registerHandler` duplicate-throws.
    */
-  worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap>;
+  worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap, TComponents, TState>;
   /**
    * Skip the registration-manifest verification performed on every factory
    * construction (registration-manifest objective). For deliberately

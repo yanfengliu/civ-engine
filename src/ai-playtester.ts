@@ -156,8 +156,8 @@ export async function runAgentPlaytest<
   // pass `config.sink` are unaffected; this is strictly more permissive for
   // default-using callers (no shipping consumer relies on the throw).
   const sink: SessionSink & SessionSource = config.sink ?? new MemorySink({ allowSidecar: true });
-  const recorder = new SessionRecorder<TEventMap, TCommandMap>({
-    world: world as unknown as World<TEventMap, TCommandMap>,
+  const recorder = new SessionRecorder({
+    world,
     sink,
     sourceKind: 'synthetic',
     sourceLabel: sourceLabel ?? 'agent',

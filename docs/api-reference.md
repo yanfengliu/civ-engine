@@ -4946,8 +4946,8 @@ Manifest is rewritten on `open()`, on each `writeSnapshot()` (advancing `metadat
 ## Session Recording — SessionRecorder
 
 ```typescript
-class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
-  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug>);
+class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug, TComponents, TState>);
   readonly sessionId: string;
   readonly tickCount: number;
   readonly markerCount: number;
@@ -4960,11 +4960,11 @@ class SessionRecorder<TEventMap, TCommandMap, TDebug = JsonValue> {
   addMarker(marker: NewMarker): string;
   attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string;
   takeSnapshot(): SessionSnapshotEntry;
-  toBundle(): SessionBundle<TEventMap, TCommandMap, TDebug>;
+  toBundle(): SessionBundle;   // default-generic: the bundle is the serialized JSON middle (not parameterized — a typed return breaks consumers holding a default-generic SessionBundle slot)
 }
 
-interface SessionRecorderConfig {
-  world: World;
+interface SessionRecorderConfig<TEventMap, TCommandMap, TDebug = JsonValue, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
   sink?: SessionSink & SessionSource;       // default: new MemorySink()
   snapshotInterval?: number | null;          // default: 1000; null disables periodic
   terminalSnapshot?: boolean;                // default: true
@@ -4986,7 +4986,7 @@ type NewMarker = Omit<Marker, 'id' | 'createdAt' | 'provenance' | 'tick'> & { ti
 ## Session Recording — SessionReplayer
 
 ```typescript
-class SessionReplayer<TEventMap, TCommandMap, TDebug> {
+class SessionReplayer<TEventMap, TCommandMap, TDebug, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
   static fromBundle(bundle: SessionBundle, config: ReplayerConfig): SessionReplayer;
   static fromSource(source: SessionSource, config: ReplayerConfig): SessionReplayer;
   readonly metadata: SessionMetadata;
@@ -4998,7 +4998,7 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug> {
   markersByEntityId(id: number): Marker[];     // any generation
   snapshotTicks(): number[];
   ticks(): number[];
-  openAt(tick: number): World;
+  openAt(tick: number): World<TEventMap, TCommandMap, TComponents, TState>;
   stateAtTick(tick: number): WorldSnapshot;
   tickEntriesBetween(fromTick: number, toTick: number): SessionTickEntry[];  // inclusive both ends
   selfCheck(options?: SelfCheckOptions): SelfCheckResult;
@@ -5007,11 +5007,13 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug> {
   forkAt(targetTick: number): ForkBuilder<TEventMap, TCommandMap>;
 }
 
-interface ReplayerConfig {
-  worldFactory: (snapshot: WorldSnapshot) => World;  // part of determinism contract per ADR 4
+interface ReplayerConfig<TEventMap, TCommandMap, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap, TComponents, TState>;  // part of determinism contract per ADR 4
   skipRegistrationCheck?: boolean;                   // default false; v0.8.18+
 }
 ```
+
+**Component/state typing (v1.2.0).** `SessionRecorder` / `SessionReplayer` thread `TComponents` / `TState` (mirroring `World`'s, appended after `TDebug` so existing explicit type arguments are non-breaking), so a component-typed world records and replays without erasing its registry: `new SessionRecorder({ world: gameWorld })` takes a `World<E, C, GameComponents, GameState>` with no cast, and `replayer.openAt(t)` returns a world where `getComponent(id, 'position')` is `Position` (not `unknown`). The typed path works via **inference** — call with no explicit type arguments (TypeScript has no partial type-argument specification; writing `<E, C>` defaults `TComponents` to `Record<string, unknown>`, the unchanged back-compat path). The bundle in between stays default-generic (`toBundle(): SessionBundle`); component typing is reasserted by `worldFactory`'s return type. `ForkBuilder` / `BundleViewer` remain default-generic (a future minor can thread them).
 
 **Registration verification (v0.8.18+).** When a bundle's metadata carries a `RegistrationManifest` (recorded automatically since v0.8.18), every factory construction — `openAt`, `selfCheck` segments, `forkAt`, viewer materialization — verifies the factory-owned registration surface against it and throws `BundleIntegrityError` with `details.code: 'registration_mismatch'` **before any stepping** on drift. Compared strictly: systems (ordered tuples), handlers, validators (key + count), destroy-callback count, and `positionKey` vs `snapshot.config.positionKey`. Compared extras-only: components not present in the manifest or the construction snapshot's keys. Never compared (snapshot-healed by `applySnapshot`): component options and resources. Details include `missingSystems` / `extraSystems` / `recordedSystemOrder` / `actualSystemOrder` / per-index `systemDetailMismatches` / `extraComponents` / `missingHandlers` / `extraHandlers` / `validatorCountMismatches` / `destroyCallbackCountMismatch` / `positionKeyMismatch` — enough for an agent to correct its factory without diffing snapshots. Bundles without the field (pre-v0.8.18) skip the check; `skipRegistrationCheck: true` opts out for deliberately instrumented replay (extra observer systems), with `selfCheck` as the remaining backstop.
 

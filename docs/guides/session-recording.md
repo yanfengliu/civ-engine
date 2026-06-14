@@ -41,6 +41,8 @@ console.log(inspectable.tick, inspectable.getEvents());
 
 **Live export.** `toBundle()` works on a still-connected recorder — useful when a long capture is pulled out mid-run (a UI scrubber, or a playtest harness that exports before tearing down). The sinks finalize `metadata.endTick` / `durationTicks` on every recorded tick (mirroring `persistedEndTick` on each snapshot), so a live-exported bundle is internally consistent and `SessionReplayer.openAt` accepts ticks up to the last recorded one — no `disconnect()` required first. `disconnect()` remains the clean close (final terminal snapshot + listener teardown).
 
+**Typed components (v1.2.0).** If your world is typed against a component/state registry (`World<E, C, GameComponents, GameState>`), record and replay it without an `as unknown as` cast — `SessionRecorder` / `SessionReplayer` thread `TComponents` / `TState`, so `new SessionRecorder({ world })` accepts the typed world and `replayer.openAt(t)` returns one where `getComponent(id, 'position')` is `Position`, not `unknown`. Call with no explicit type arguments (the types flow by inference; the bundle itself stays default-generic and the component typing is reasserted by `worldFactory`'s return type on replay).
+
 ## Sinks
 
 Two built-in sinks; both implement `SessionSink & SessionSource`.

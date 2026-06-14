@@ -195,9 +195,8 @@ export function runSynthPlaytest<
   // Step 3: recorder attach. terminalSnapshot:true is hardcoded — every bundle gets the
   // (initial, terminal) segment so SessionReplayer.selfCheck has a non-empty segment to validate.
   const effectiveSink: SessionSink & SessionSource = sink ?? new MemorySink();
-  // SessionRecorder is 3-generic (no TComponents/TState); doesn't access them. Cast is structurally safe.
-  const recorder = new SessionRecorder<TEventMap, TCommandMap>({
-    world: world as unknown as World<TEventMap, TCommandMap>,
+  const recorder = new SessionRecorder({
+    world,
     sink: effectiveSink,
     snapshotInterval,
     terminalSnapshot: true,

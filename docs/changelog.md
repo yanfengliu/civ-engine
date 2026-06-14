@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.0 - 2026-06-13
+
+Component/state-typed session recording + replay (aoe2 engine-feedback, surfaced by v0.8.15). **Additive minor — fully back-compatible.**
+
+`SessionRecorder` / `SessionReplayer` previously hardcoded `World<TEventMap, TCommandMap>`, so a component-typed world (`World<E, C, GameComponents, GameState>`) — invariant in `TComponents` since v0.8.15's layer-chain split — could not flow through without an `as unknown as` cast that erased component-type safety at the recorder/replayer boundary (a component access returned `unknown`). aoe2 absorbed it with a `toEngineWorld` / `fromEngineWorld` cast seam.
+
+- **`SessionRecorder` / `SessionReplayer` (and `SessionRecorderConfig` / `ReplayerConfig`) now thread `TComponents` / `TState`** (mirroring `World`'s, with the same `ComponentRegistry` / `Record<string, unknown>` constraints + defaults), **appended after `TDebug`** so no existing explicit type argument changes meaning. `new SessionRecorder({ world })` accepts a fully-typed world with no cast; `replayer.openAt(t)` returns a world where `getComponent(id, 'position')` is `Position`, not `unknown`. Threading **sidesteps** the invariance (the caller's world is inferred, never narrowed) — World's layer chain is untouched.
+- **Internal cleanup:** `runAgentPlaytest` / `runSynthPlaytest` drop the `world as unknown as World<E, C>` casts their `TComponents`/`TState`-carrying configs previously erased.
+- **Out of scope (unchanged, default-generic):** `toBundle()` stays `SessionBundle` (the serialized JSON middle; a typed return breaks consumers holding a default-generic slot — verified against aoe2), `ForkBuilder`, and `BundleViewer`. A future minor can thread fork/viewer.
+
+**Usage note:** TypeScript has no partial type-argument specification, so the typed path works via inference — call with no explicit type arguments. Writing `<E, C>` defaults `TComponents` to `Record<string, unknown>` (the unchanged back-compat path).
+
+### Validation
+
+`npm test` 1238 + 1 todo (a new `session-generics` type+runtime test: a typed world records/replays with no cast and `getComponent` is registry-typed; failing-first against the un-threaded signatures), `npm run typecheck`/`lint`/`build`, `mcp` 22, `npm audit` 0 high/critical. **Back-compat proof:** the aoe2 consumer (which links `civ-engine` by symlink and still uses the cast seam) `typecheck`s green against the rebuilt engine with zero edits. Public-surface name-pin unchanged (generic-arity additions don't change export names). ADR 52. Multi-CLI reviewed.
+
 ## 1.1.4 - 2026-06-13
 
 Replay-bound finalization fix (surfaced by the aoe2 consumer's engine-feedback, 2026-06-13). A bundle exported via a **live `toBundle()` before `disconnect()`** — the path used by long LLM-playtest captures — shipped `metadata.endTick: 0` / `durationTicks: 0` even though the run was fully recorded, because those fields were finalized only in `disconnect()`. `SessionReplayer.openAt` clamped its reachable upper bound to `endTick`, so every recorded run was rejected at `tick > 0` — the engine's own "what actually happened" replay-debugging path was unusable for those bundles. **No public API surface change** (pure patch); behavior callouts below.

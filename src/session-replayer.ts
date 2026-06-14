@@ -19,7 +19,7 @@ import type { SessionSource } from './session-sink.js';
 import { replayableUpperBound } from './session-bundle.js';
 import { deepEqualOrdered, deepEqualWithPath } from './session-deep-equal.js';
 import { ENGINE_VERSION } from './version.js';
-import type { CommandExecutionResult, World } from './world.js';
+import type { CommandExecutionResult, ComponentRegistry, World } from './world.js';
 import type { WorldSnapshot } from './serializer.js';
 import { createForkBuilder, type ForkBuilder } from './session-fork.js';
 import { compareRegistration } from './session-registration.js';
@@ -55,9 +55,13 @@ export class SessionReplayer<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
   TDebug = JsonValue,
+  // Appended after TDebug (non-breaking) so worldFactory / openAt carry the
+  // game's component+state registry instead of erasing it (recorder-generics).
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   private readonly _bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
-  private readonly _config: ReplayerConfig<TEventMap, TCommandMap>;
+  private readonly _config: ReplayerConfig<TEventMap, TCommandMap, TComponents, TState>;
   // Pre-grouped per-tick indices for O(1) lookup during replay/selfCheck.
   // Iter-2 code review M1: previously filter/find over the full bundle once
   // per replayed tick → O(N·T) per segment, blocking spec §13.2 throughput
@@ -68,7 +72,7 @@ export class SessionReplayer<
 
   private constructor(
     bundle: SessionBundle<TEventMap, TCommandMap, TDebug>,
-    config: ReplayerConfig<TEventMap, TCommandMap>,
+    config: ReplayerConfig<TEventMap, TCommandMap, TComponents, TState>,
   ) {
     this._bundle = bundle;
     this._config = config;
@@ -103,7 +107,7 @@ export class SessionReplayer<
    * recorded registration manifest — when present and not skipped — is
    * verified on EVERY construction, before any stepping.
    */
-  private _constructReplayWorld(snapshot: WorldSnapshot): World<TEventMap, TCommandMap> {
+  private _constructReplayWorld(snapshot: WorldSnapshot): World<TEventMap, TCommandMap, TComponents, TState> {
     const world = this._config.worldFactory(snapshot);
     const recorded = this._bundle.metadata.registration;
     if (recorded && this._config.skipRegistrationCheck !== true) {
@@ -125,10 +129,12 @@ export class SessionReplayer<
     TEventMap extends Record<keyof TEventMap, unknown>,
     TCommandMap extends Record<keyof TCommandMap, unknown>,
     TDebug,
+    TComponents extends ComponentRegistry = Record<string, unknown>,
+    TState extends Record<string, unknown> = Record<string, unknown>,
   >(
     bundle: SessionBundle<TEventMap, TCommandMap, TDebug>,
-    config: ReplayerConfig<TEventMap, TCommandMap>,
-  ): SessionReplayer<TEventMap, TCommandMap, TDebug> {
+    config: ReplayerConfig<TEventMap, TCommandMap, TComponents, TState>,
+  ): SessionReplayer<TEventMap, TCommandMap, TDebug, TComponents, TState> {
     return new SessionReplayer(bundle, config);
   }
 
@@ -136,10 +142,12 @@ export class SessionReplayer<
     TEventMap extends Record<keyof TEventMap, unknown>,
     TCommandMap extends Record<keyof TCommandMap, unknown>,
     TDebug,
+    TComponents extends ComponentRegistry = Record<string, unknown>,
+    TState extends Record<string, unknown> = Record<string, unknown>,
   >(
     source: SessionSource,
-    config: ReplayerConfig<TEventMap, TCommandMap>,
-  ): SessionReplayer<TEventMap, TCommandMap, TDebug> {
+    config: ReplayerConfig<TEventMap, TCommandMap, TComponents, TState>,
+  ): SessionReplayer<TEventMap, TCommandMap, TDebug, TComponents, TState> {
     const bundle = source.toBundle() as unknown as SessionBundle<TEventMap, TCommandMap, TDebug>;
     return new SessionReplayer(bundle, config);
   }
@@ -180,14 +188,15 @@ export class SessionReplayer<
     const sourceCommandsAtTargetTick = new Map<number, RecordedCommand<TCommandMap>>();
     for (const rc of cmdsAtTarget) sourceCommandsAtTargetTick.set(rc.sequence, rc);
     return createForkBuilder<TEventMap, TCommandMap>({
-      world,
+      // ForkBuilder stays default-generic (recorder-generics scope) — drop the typed world here; runtime-identical.
+      world: world as unknown as World<TEventMap, TCommandMap>,
       sourceBundle: this._bundle as unknown as SessionBundle<TEventMap, TCommandMap>,
       sourceCommandsAtTargetTick,
       targetTick,
     });
   }
 
-  openAt(targetTick: number): World<TEventMap, TCommandMap> {
+  openAt(targetTick: number): World<TEventMap, TCommandMap, TComponents, TState> {
     const md = this._bundle.metadata;
     const upper = replayableUpperBound(md);
     if (targetTick < md.startTick) {
