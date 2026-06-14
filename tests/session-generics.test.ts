@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   MemorySink,
+  runAgentPlaytest,
   SessionRecorder,
   SessionReplayer,
   World,
+  type AgentDriver,
   type SessionBundle,
   type WorldConfig,
   type WorldSnapshot,
@@ -59,6 +61,17 @@ function _typeAssertions(typedBundle: SessionBundle<Events, Cmds>, id: number): 
   //     compiles by design; the typed RETURN is what threading restores.
   const h: Health | undefined = replayed.getComponent(id, 'health');
   void h;
+
+  // (e) the agent harness (runAgentPlaytest) delivers a registry-typed world to
+  //     decide()/stopWhen() — AgentDriverContext.world is typed, like PolicyContext.
+  const agent: AgentDriver<Events, Cmds, TestComponents, TestState> = {
+    decide: (ctx) => {
+      const h2: Health | undefined = ctx.world.getComponent(id, 'health');
+      void h2;
+      return [];
+    },
+  };
+  void runAgentPlaytest({ world: full, agent, maxTicks: 1 });
 
   // (d) back-compat: a default-generic world still flows in unchanged.
   const plain = new World<Events, Cmds>(mkConfig());

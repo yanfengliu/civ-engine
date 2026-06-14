@@ -5671,11 +5671,13 @@ Thrown by `assertWritable(this, 'methodName')` at the top of every gated mutatio
 
 Async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters. See `docs/guides/ai-playtester.md` for the full guide. v0.8.11 added in-flight marker emission via the context — see `addMarker` / `attach` below.
 
-### `AgentDriver<TEventMap, TCommandMap>`
+### `AgentDriver<TEventMap, TCommandMap, TComponents, TState>`
 
 ```ts
-interface AgentDriverContext<TEventMap, TCommandMap> {
-  readonly world: World<TEventMap, TCommandMap>;
+// TComponents/TState (v1.2.0) mirror World's, appended + defaulted, so the agent
+// sees a registry-typed ctx.world (parity with PolicyContext).
+interface AgentDriverContext<TEventMap, TCommandMap, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
   // ctx.tick semantics differ between callbacks:
   // - decide(ctx): pre-step. ctx.tick === world.tick + 1 (the tick about to run).
   //   Calling addMarker({ tick: ctx.tick, ... }) throws MarkerValidationError
@@ -5695,8 +5697,8 @@ interface AgentDriverContext<TEventMap, TCommandMap> {
   attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string;
 }
 
-interface AgentDriver<TEventMap, TCommandMap> {
-  decide(ctx: AgentDriverContext<TEventMap, TCommandMap>):
+interface AgentDriver<TEventMap, TCommandMap, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
+  decide(ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState>):
     Promise<readonly PolicyCommand<TCommandMap>[]> | readonly PolicyCommand<TCommandMap>[];
   report?(bundle: SessionBundle<TEventMap, TCommandMap>):
     Promise<unknown> | unknown;
@@ -5708,9 +5710,9 @@ interface AgentDriver<TEventMap, TCommandMap> {
 ```ts
 interface AgentPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
   world: World<TEventMap, TCommandMap, TComponents, TState>;
-  agent: AgentDriver<TEventMap, TCommandMap>;
+  agent: AgentDriver<TEventMap, TCommandMap, TComponents, TState>;
   maxTicks: number;
-  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
+  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState>): boolean | Promise<boolean>;
   // Default sink (when omitted) is MemorySink({ allowSidecar: true }) as of v0.8.11
   // so agent-emitted screenshots over the 64 KiB threshold route to sidecar
   // instead of throwing oversize_attachment.

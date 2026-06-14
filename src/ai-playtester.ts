@@ -24,10 +24,14 @@ export type { PolicyCommand } from './synthetic-playtest.js';
 export interface AgentDriverContext<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
+  // Mirror World's component/state generics (like PolicyContext) so the agent
+  // sees a registry-typed world (recorder-generics). Defaulted; appended.
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** Live world reference. Per Spec 3 ADR 2, the agent MUST NOT mutate it
    *  directly — return commands from `decide` instead. */
-  readonly world: World<TEventMap, TCommandMap>;
+  readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
   /** The tick about to be executed (the next call to `world.step()` will run this tick). */
   readonly tick: number;
   /** Tick number when the playtest started. */
@@ -50,10 +54,12 @@ export interface AgentDriverContext<
 export interface AgentDriver<
   TEventMap extends Record<keyof TEventMap, unknown> = Record<string, never>,
   TCommandMap extends Record<keyof TCommandMap, unknown> = Record<string, never>,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   /** Called once per tick. Return zero or more commands; sync or async. */
   decide(
-    ctx: AgentDriverContext<TEventMap, TCommandMap>,
+    ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState>,
   ): Promise<readonly PolicyCommand<TCommandMap>[]> | readonly PolicyCommand<TCommandMap>[];
   /** Optional. Called once after the playtest completes (any stop reason).
    *  Return value is captured into AgentPlaytestResult.report. Sync or async. */
@@ -71,10 +77,10 @@ export interface AgentPlaytestConfig<
   TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   world: World<TEventMap, TCommandMap, TComponents, TState>;
-  agent: AgentDriver<TEventMap, TCommandMap>;
+  agent: AgentDriver<TEventMap, TCommandMap, TComponents, TState>;
   maxTicks: number;
   /** Optional early-stop predicate. Called after each tick. Sync or async. */
-  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap>): boolean | Promise<boolean>;
+  stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState>): boolean | Promise<boolean>;
   sink?: SessionSink & SessionSource;
   sourceLabel?: string;
   snapshotInterval?: number | null;
@@ -180,8 +186,8 @@ export async function runAgentPlaytest<
 
   try {
     for (let tickIndex = 0; tickIndex < maxTicks; tickIndex++) {
-      const ctx: AgentDriverContext<TEventMap, TCommandMap> = {
-        world: world as unknown as World<TEventMap, TCommandMap>,
+      const ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState> = {
+        world,
         tick: world.tick + 1,
         startTick,
         tickIndex,
@@ -238,7 +244,7 @@ export async function runAgentPlaytest<
         // tick = world.tick after advance). A predicate `ctx.tick === N` stops
         // after tick N completes, matching the synth-playtest sibling. ADR 41
         // siblings produce consistent stopWhen semantics.
-        const ctxAfter: AgentDriverContext<TEventMap, TCommandMap> = {
+        const ctxAfter: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState> = {
           ...ctx,
           tick: world.tick,
           tickIndex: tickIndex + 1,

@@ -25,7 +25,7 @@ Threading **sidesteps** the invariance rather than fixing it: the caller's typed
 
 `fromBundle` / `fromSource` static factories thread the four+ params (inferred: `E`/`C`/`TDebug` from `bundle`, `TComponents`/`TState` from `config.worldFactory`'s return type). `_constructReplayWorld` returns the typed world. `stateAtTick` returns a `WorldSnapshot` (no world) — unchanged.
 
-De-cast the two harness construction sites: `runAgentPlaytest` (`ai-playtester.ts:159-160`) and `runSynthPlaytest` (`synthetic-playtest.ts:199-200`) drop `new SessionRecorder<E, C>({ world: world as unknown as ... })` → `new SessionRecorder({ world, ... })` (full inference).
+De-cast the two harness construction sites: `runAgentPlaytest` (`ai-playtester.ts`) and `runSynthPlaytest` (`synthetic-playtest.ts`) drop `new SessionRecorder<E, C>({ world: world as unknown as ... })` → `new SessionRecorder({ world, ... })` (full inference). `runSynthPlaytest`'s `PolicyContext` was already 4-generic, so its policy already sees a typed world; `runAgentPlaytest`'s `AgentDriverContext` / `AgentDriver` are only 2-generic, so thread them too (append `TComponents`/`TState`, drop the ctx-construction cast) — otherwise the runner still narrows the typed world before `decide(ctx)` and the de-cast is only half-real (review iter-1 Codex MEDIUM).
 
 ### Out of scope (deliberate)
 
@@ -42,9 +42,11 @@ TypeScript has no partial type-argument specification: `new SessionRecorder<E, C
 ## Testing
 
 Compile-only type assertions checked by the `typecheck` gate (no new tooling — there is no existing `expectTypeOf` harness):
-- positive: a `World<E, C, GameComponents, GameState>` flows into `new SessionRecorder({ world })` and `SessionReplayer.fromBundle(bundle, { worldFactory })` with no cast; `replayer.openAt(t)` is assignable to `World<E, C, GameComponents, GameState>` and `w.getComponent(id, 'position')` is typed;
-- negative: `// @ts-expect-error` on a bad component name through the replayed world;
+- positive: a `World<E, C, GameComponents, GameState>` flows into `new SessionRecorder({ world })` and `SessionReplayer.fromBundle(bundle, { worldFactory })` with no cast; `replayer.openAt(t)` is assignable to `World<E, C, GameComponents, GameState>` and `w.getComponent(id, 'position')` yields `Position`, not `unknown` (this assignment FAILS on the un-threaded signatures — the discriminator);
+- the agent harness: `runAgentPlaytest`'s `AgentDriverContext.world` is registry-typed inside `decide`;
 - back-compat: default-generic `new SessionRecorder({ world: new World() })` still compiles.
+
+Note: `getComponent`/`setComponent` keep an escape-hatch overload `<T>(key: string)`, so a component-NAME typo still compiles by design — the delivered safety is the typed RETURN for known keys, NOT typo rejection. Assertions claim only the former.
 
 Existing recorder/replayer/playtest suites prove zero runtime change.
 
