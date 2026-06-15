@@ -13,6 +13,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Publish a prebuilt tarball of the built engine so downstream consumers
+  # (e.g. the aoe2 game repo, which depends on civ-engine via `file:../civ-engine`)
+  # can fetch the dist in THEIR CI without rebuilding the engine — building it
+  # is this repo's CI's job, not theirs. Runs only on push to main, after the
+  # full `test` matrix passes, and refreshes the rolling `engine-dist` release.
+  publish-dist:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Pack the built engine to a stable asset name
+        run: |
+          npm pack
+          mv civ-engine-*.tgz civ-engine.tgz
+      - name: Refresh the rolling engine-dist release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create engine-dist \
+            --title "civ-engine prebuilt dist (rolling)" \
+            --notes "Prebuilt tarball of civ-engine \`main\` for downstream CI (e.g. aoe2). Refreshed on every push to main; consume with: gh release download engine-dist --repo ${{ github.repository }} --pattern civ-engine.tgz" \
+            --prerelease 2>/dev/null || true
+          gh release upload engine-dist civ-engine.tgz --clobber
+
   test:
     runs-on: ubuntu-latest
     strategy:
