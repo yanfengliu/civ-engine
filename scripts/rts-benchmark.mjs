@@ -39,11 +39,28 @@ const CHURN = {
   warmup: 3,
 };
 
+// Command/event/many-system tick load — the aoe2-shaped profile the occupancy
+// and churn scenarios under-weight (surfaced 2026-06-30 when aoe2 reported a
+// "sim-throughput regression" the gate never saw: a strict world driven by
+// per-tick external commands + in-tick event emission across many querying
+// systems over thousands of ticks). Guards the strict-gate, command-queue,
+// event-dispatch, and multi-system-per-tick paths against a future per-tick
+// regression. Deterministic: arithmetic placement, count-based budgets.
+const COMMANDS = {
+  width: 96, height: 96,
+  entities: 800,
+  querySystems: 12,
+  perTickCommands: 80,
+  ticks: 60,
+  warmup: 3,
+};
+
 const args = parseArgs(process.argv.slice(2));
 const scenarios = [
   { name: 'medium', kind: 'standard', width: 128, height: 128, entities: 1024, ticks: 20, pathRequests: 64, pathBudget: 16 },
   { name: 'large', kind: 'standard', width: 512, height: 512, entities: 10_240, ticks: 8, pathRequests: 128, pathBudget: 24 },
   { name: 'churn', kind: 'churn', width: CHURN.width, height: CHURN.height, entities: CHURN.baseEntities, ticks: CHURN.ticks },
+  { name: 'commands', kind: 'commands', width: COMMANDS.width, height: COMMANDS.height, entities: COMMANDS.entities, ticks: COMMANDS.ticks },
 ];
 
 if (args.stress) {
@@ -75,7 +92,10 @@ function measureScenario(config, calibrationMs) {
   const runs = [];
   for (let i = 0; i < MEASURED_RUNS; i++) {
     const start = performance.now();
-    const result = config.kind === 'churn' ? runChurnScenario(config) : runScenario(config);
+    const result =
+      config.kind === 'churn' ? runChurnScenario(config)
+      : config.kind === 'commands' ? runCommandScenario(config)
+      : runScenario(config);
     result.wallMs = performance.now() - start;
     runs.push(result);
   }
@@ -272,6 +292,166 @@ function runChurnScenario(config) {
       diffBytes: sums.diffBytes,
       churnCreated: created,
       churnDestroyed: destroyed,
+    },
+  };
+}
+
+/** Command/event/many-system scenario (COMMANDS): a STRICT world driven by
+ *  per-tick external commands (validated, accepted + rejected branches) whose
+ *  handlers mutate + emit, plus many querying systems and two in-tick writers/
+ *  emitters, over dozens of ticks. Exercises the strict mutation-gate, the
+ *  command queue, event dispatch, and multi-system-per-tick execution — the
+ *  aoe2-shaped load the occupancy/churn scenarios under-weight. Deterministic:
+ *  arithmetic ids/moves, count-based budgets, no wall-clock control flow. */
+function runCommandScenario(config) {
+  const roles = ['infantry', 'archer', 'cavalry', 'siege'];
+  const phases = ['input', 'preUpdate', 'update', 'postUpdate', 'output'];
+  const world = new World({
+    gridWidth: config.width,
+    gridHeight: config.height,
+    tps: 20,
+    seed: 'bench:commands',
+    strict: true,
+  });
+  for (const key of ['position', 'velocity', 'health', 'team', ...roles]) {
+    world.registerComponent(key);
+  }
+
+  // External command surface: a validator rejecting the no-op subset (exercises
+  // the reject branch) and handlers that mutate + emit inside the tick phase.
+  // `moveHandlerRuns` is an exact tier-1 counter that proves the accepted `move`
+  // handler actually RAN and mutated — a regression that drops/no-ops handler
+  // execution would zero it and fail the gate (a faster no-op can't hide behind
+  // the time-only tier-2 ratio).
+  let moveHandlerRuns = 0;
+  world.registerValidator('move', (data) =>
+    data.dx === 0 && data.dy === 0 ? { code: 'noop', message: 'zero move' } : true,
+  );
+  world.registerHandler('move', (data, w) => {
+    const pos = w.getComponent(data.id, 'position');
+    if (!pos) return;
+    w.setPosition(data.id, {
+      x: (pos.x + data.dx + config.width) % config.width,
+      y: (pos.y + data.dy + config.height) % config.height,
+    });
+    moveHandlerRuns++;
+  });
+  world.registerHandler('damage', (data, w) => {
+    const health = w.getComponent(data.id, 'health');
+    if (!health) return;
+    const next = health.hp - data.amount;
+    const hp = next <= 0 ? 40 + (data.id % 20) : next; // deterministic respawn HP
+    w.setComponent(data.id, 'health', { hp });
+    w.emit('damaged', { id: data.id, hp });
+  });
+
+  // In-tick event listener (aoe2 combat/econ event fan-in).
+  let eventsHandled = 0;
+  world.on('damaged', () => { eventsHandled++; });
+
+  for (let i = 0; i < config.entities; i++) {
+    const id = world.createEntity();
+    world.setPosition(id, { x: (i * 37) % config.width, y: (i * 53) % config.height });
+    world.addComponent(id, 'velocity', { dx: (i % 3) - 1 || 1, dy: ((i + 1) % 3) - 1 || -1 });
+    world.addComponent(id, 'health', { hp: 40 + (i % 20) });
+    world.addComponent(id, 'team', { team: i % 4 });
+    world.addComponent(id, roles[i % roles.length], { tier: i % 3 });
+  }
+
+  // Many querying systems spread across all five phases (aoe2 runs ~20).
+  let checksum = 0;
+  for (let s = 0; s < COMMANDS.querySystems; s++) {
+    const role = roles[s % roles.length];
+    world.registerSystem({
+      name: `query-${s}`, phase: phases[s % phases.length],
+      execute: (w) => {
+        for (const id of w.query('position', role)) checksum += id;
+        for (const id of w.query('position', 'team')) checksum += id % 7;
+        if (checksum < 0) throw new Error('unreachable checksum guard');
+      },
+    });
+  }
+  // Movement writer — in-tick setPosition under strict.
+  world.registerSystem({
+    name: 'movement', phase: 'update',
+    execute: (w) => {
+      for (const id of w.query('position', 'velocity')) {
+        const p = w.getComponent(id, 'position');
+        const v = w.getComponent(id, 'velocity');
+        w.setPosition(id, {
+          x: (p.x + v.dx + config.width) % config.width,
+          y: (p.y + v.dy + config.height) % config.height,
+        });
+      }
+    },
+  });
+  // Combat emitter — in-tick emit under strict on every 4th entity.
+  world.registerSystem({
+    name: 'combat', phase: 'postUpdate',
+    execute: (w) => {
+      for (const id of w.query('position', 'health')) {
+        if ((id & 3) === 0) w.emit('damaged', { id, hp: 0 });
+      }
+    },
+  });
+
+  for (let i = 0; i < COMMANDS.warmup; i++) world.step();
+
+  let commandsAccepted = 0;
+  let commandsRejected = 0;
+  let commandsProcessed = 0;
+  const tickDurations = [];
+  const sums = { calls: 0, results: 0, cacheHits: 0, cacheMisses: 0, membershipChecks: 0 };
+  for (let t = 0; t < config.ticks; t++) {
+    for (let k = 0; k < COMMANDS.perTickCommands; k++) {
+      // ids are 0-based (EntityManager.create() starts at 0), so target 0..entities-1.
+      const id = ((t * COMMANDS.perTickCommands + k) * 7) % config.entities;
+      // Every 5th command is a deterministic no-op (validator rejects it).
+      const noop = k % 5 === 0;
+      const dx = noop ? 0 : (k % 3) - 1 || 1;
+      const dy = noop ? 0 : ((k + 1) % 3) - 1 || -1;
+      if (world.submit('move', { id, dx, dy })) commandsAccepted++;
+      else commandsRejected++;
+      world.submit('damage', { id, amount: 5 });
+    }
+    world.step();
+    const metrics = world.getMetrics();
+    tickDurations.push(metrics.durationMs.total);
+    commandsProcessed += metrics.commandStats.processed;
+    sums.calls += metrics.query.calls;
+    sums.results += metrics.query.results;
+    sums.cacheHits += metrics.query.cacheHits;
+    sums.cacheMisses += metrics.query.cacheMisses;
+    sums.membershipChecks += metrics.query.membershipChecks;
+  }
+
+  return {
+    name: config.name,
+    grid: { width: config.width, height: config.height },
+    entities: config.entities,
+    ticksMeasured: config.ticks,
+    strict: true,
+    systems: COMMANDS.querySystems + 2,
+    tickDurationMs: summarize(tickDurations),
+    // Per tick: `perTickMoves` move submissions (accept + reject) + the same
+    // count of always-accepted `damage` submissions.
+    commands: {
+      accepted: commandsAccepted,
+      rejected: commandsRejected,
+      processed: commandsProcessed,
+      perTickMoves: COMMANDS.perTickCommands,
+    },
+    counters: {
+      queryCalls: sums.calls,
+      queryResults: sums.results,
+      queryCacheHits: sums.cacheHits,
+      queryCacheMisses: sums.cacheMisses,
+      membershipChecks: sums.membershipChecks,
+      commandsAccepted,
+      commandsRejected,
+      commandsProcessed, // engine-side: proves queued handlers executed
+      moveHandlerRuns, // handler-side: proves accepted move handlers ran + mutated
+      eventsHandled,
     },
   };
 }

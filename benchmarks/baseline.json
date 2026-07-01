@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "generatedWith": {
-    "engineVersion": "0.8.16",
-    "node": "v22.14.0",
-    "date": "2026-06-11"
+    "engineVersion": "1.2.0",
+    "node": "v25.2.1",
+    "date": "2026-07-01"
   },
   "scenarios": {
     "medium": {
@@ -28,7 +28,7 @@
         "occupancyClaimCellChecks": 0,
         "subcellSlotChecks": 5712
       },
-      "timeRatio": 13.021
+      "timeRatio": 20.17
     },
     "large": {
       "counters": {
@@ -52,7 +52,7 @@
         "occupancyClaimCellChecks": 0,
         "subcellSlotChecks": 29392
       },
-      "timeRatio": 103.509
+      "timeRatio": 152.348
     },
     "churn": {
       "counters": {
@@ -66,7 +66,22 @@
         "churnCreated": 3000,
         "churnDestroyed": 3000
       },
-      "timeRatio": 4.99
+      "timeRatio": 5.1
+    },
+    "commands": {
+      "counters": {
+        "queryCalls": 1560,
+        "queryResults": 816000,
+        "queryCacheHits": 1560,
+        "queryCacheMisses": 0,
+        "membershipChecks": 0,
+        "commandsAccepted": 3840,
+        "commandsRejected": 960,
+        "commandsProcessed": 8640,
+        "moveHandlerRuns": 3840,
+        "eventsHandled": 17400
+      },
+      "timeRatio": 10.231
     }
   }
 }
