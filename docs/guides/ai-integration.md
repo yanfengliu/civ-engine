@@ -281,6 +281,40 @@ const result = runSynthPlaytest({
 
 See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
 
+## Visual Playtest Harness (v1.3.0)
+
+Use `runVisualPlaytestLoop` when the agent should interact with a rendered game the way a player would: inspect screenshots, visible text, and available controls; choose click/key/type/wait actions; record findings; then repeat. This complements `runAgentPlaytest`, which drives a `World` through commands. The visual harness is engine-owned only at the contract level: game repos still provide the browser adapter, DOM/canvas control extraction, screenshots, and model/provider client.
+
+```typescript
+import {
+  buildVisualPlaytestPrompt,
+  runVisualPlaytestLoop,
+  type VisualPlaytestAgent,
+  type VisualPlaytestHost,
+} from 'civ-engine';
+
+const host: VisualPlaytestHost = {
+  observe: async () => ({
+    screenshot: await captureScreenshotDescriptor(),
+    visibleText: await readVisibleText(),
+    controls: await readAvailableControls(),
+    state: [
+      { label: 'selected unit', audience: 'agent', summary: selectedUnitSummary(), value: selectedUnitDebug() },
+      { label: 'path queue', audience: 'reviewer', summary: pathQueueSummary(), value: pathQueueDump() },
+    ],
+  }),
+  performAction: (action) => performPlayerAction(action),
+};
+
+const agent: VisualPlaytestAgent = {
+  decide: async (input) => callModel(buildVisualPlaytestPrompt({ observation: input.observation, mode: input.mode })),
+};
+
+const result = await runVisualPlaytestLoop({ host, agent, maxSteps: 20, promptMode: 'playerBlind' });
+```
+
+Hidden state is explicit and audience-labeled. `playerBlind` prompts omit it; `oracleAssisted` prompts include only channels marked `audience: 'agent'`. Sensitive state values and screenshot data URLs are redacted from safe traces by default. See `docs/guides/visual-playtest-harness.md` for adapter guidance for browser-game repos.
+
 ## Bundle Corpus Index (Tier 2)
 
 `BundleCorpus` is the Tier-2 disk-corpus query surface (Spec 7). It scans closed `FileSink` bundle directories, lists metadata without reading streams or sidecar bytes, filters by manifest-derived fields, and lazily opens matching bundles for replay or metrics.

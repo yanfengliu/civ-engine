@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.3.0 - 2026-07-07
+
+Reusable visual playtest harness contracts. **Additive minor - fully back-compatible.**
+
+`civ-engine` now exports a zero-runtime-dependency visual playtest surface for browser-game LLM harnesses. It standardizes the shared loop vocabulary that had started to repeat across game repos while leaving browser automation, screenshots, DOM/canvas control extraction, model/provider calls, cost tracking, and game-specific hidden-state serialization in those repos.
+
+- **New core visual loop contracts:** `VisualPlaytestObservation`, `VisualPlaytestStateChannel`, `VisualPlaytestControl`, `VisualPlaytestAction`, `VisualPlaytestDecision`, `VisualPlaytestFinding`, `VisualPlaytestHost`, `VisualPlaytestAgent`, `VisualPlaytestTraceEntry`, `VisualPlaytestLoopConfig`, and `VisualPlaytestLoopResult`.
+- **New runner and helpers:** `runVisualPlaytestLoop`, `buildVisualPlaytestPrompt`, `redactVisualPlaytestObservation`, `visualPlaytestFindingToMarker`, and `visualPlaytestFindingsFromMarkers`.
+- **Hidden state is explicit and audience-labeled.** `playerBlind` prompts omit hidden state. `oracleAssisted` prompts include only channels marked `audience: 'agent'`; `reviewer` and `traceOnly` channels stay out of acting-agent prompts. Safe traces redact screenshot data URLs and sensitive state values by default.
+- **Findings bridge into session bundles.** `visualPlaytestFindingToMarker` turns structured visual findings into normal `SessionRecorder` annotation markers, and `visualPlaytestFindingsFromMarkers` recovers them for reports/viewers.
+- **No existing engine behavior changes.** `runAgentPlaytest`, `runSynthPlaytest`, `SessionRecorder`, replay, bundle viewer, and world APIs are unchanged.
+
+### Validation
+
+New failing-first coverage in `tests/visual-playtest.test.ts` pins loop ordering, multi-action decisions, explicit stop, max-step stop, host/agent/action failures, coded invalid-`maxSteps` errors, player-blind vs oracle-assisted hidden-state prompts, explicit redaction metadata, safe vs full trace observation capture, nested action-result redaction, and marker round-trip through `SessionRecorder`. Public-surface fixture updated for the new exports. Full gates green: `npm test` (1249 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
 ## 1.2.0 - 2026-06-13
 
 Component/state-typed session recording + replay (aoe2 engine-feedback, surfaced by v0.8.15). **Additive minor — fully back-compatible.**

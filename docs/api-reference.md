@@ -44,8 +44,13 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Session Recording — SessionRecorder](#session-recording--sessionrecorder)
 - [Session Recording — SessionReplayer](#session-recording--sessionreplayer)
 - [Session Recording — scenarioResultToBundle](#session-recording--scenarioresulttobundle)
+- [Synthetic Playtest](#synthetic-playtest--policies-v0720)
 - [Bundle Corpus Index](#bundle-corpus-index-v083)
 - [Behavioral Metrics](#behavioral-metrics-v082)
+- [AI Playtester Agent](#ai-playtester-agent-v089-extended-v0811)
+- [Visual Playtest Harness](#visual-playtest-harness-v130)
+- [Counterfactual Replay / Fork](#counterfactual-replay--fork-v0812)
+- [Bundle Hotspots](#bundle-hotspots-v0813)
 - [Engine Errors](#engine-errors-v0819)
 - [PlayerObserver](#playerobserver-v0820)
 - [snapshotAtTick](#snapshotattick-v110)
@@ -5766,6 +5771,221 @@ function bundleSummary(bundle: SessionBundle): BundleSummary;
 
 Pure function. JSON-serializable result designed to fit a small LLM context window.
 
+## Visual Playtest Harness (v1.3.0)
+
+Zero-dependency contracts and helpers for browser-game LLM playtests that act through player-surface evidence. The engine owns the observation/action/finding/trace vocabulary and session-marker bridge; game repos own screenshots, DOM/canvas hit testing, browser automation, provider calls, and game-specific hidden-state adapters. See `docs/guides/visual-playtest-harness.md`.
+
+### Core observation and state types
+
+```ts
+type VisualPlaytestPromptMode = 'playerBlind' | 'oracleAssisted';
+type VisualPlaytestStateAudience = 'agent' | 'reviewer' | 'traceOnly';
+type VisualPlaytestActionKind = 'click' | 'hover' | 'drag' | 'key' | 'type' | 'wheel' | 'select' | 'wait' | 'viewport' | 'stop';
+
+interface VisualPlaytestPoint { x: number; y: number; }
+interface VisualPlaytestRect extends VisualPlaytestPoint { width: number; height: number; }
+interface VisualPlaytestViewport { width: number; height: number; deviceScaleFactor?: number; }
+
+interface VisualPlaytestScreenshot {
+  path?: string;
+  dataUrl?: string;
+  mime?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+}
+
+interface VisualPlaytestStateChannel {
+  label: string;
+  audience: VisualPlaytestStateAudience;
+  summary?: string;
+  value?: JsonValue;
+  sensitive?: boolean;
+  redaction?: 'value' | 'channel' | 'none';
+  redacted?: true;
+}
+
+interface VisualPlaytestControl {
+  id?: string;
+  label: string;
+  actionKinds?: readonly VisualPlaytestActionKind[];
+  target?: string;
+  bounds?: VisualPlaytestRect;
+  enabled?: boolean;
+  description?: string;
+}
+
+interface VisualPlaytestObservation {
+  screenshot?: VisualPlaytestScreenshot;
+  visibleText?: readonly string[];
+  controls?: readonly VisualPlaytestControl[];
+  state?: readonly VisualPlaytestStateChannel[];
+  metadata?: JsonValue;
+}
+```
+
+`playerBlind` prompts omit all hidden state. `oracleAssisted` prompts include only state channels marked `audience: 'agent'`; reviewer and trace-only channels stay out of the prompt. Safe traces redact screenshot data URLs by default. State channels use `redaction: 'value'` to keep label/summary but omit `value`, `redaction: 'channel'` to omit the channel from safe traces/prompts, and `redaction: 'none'` to keep the value even when `sensitive: true`.
+
+### Actions, decisions, and findings
+
+```ts
+type VisualPlaytestAction =
+  | { kind: 'click'; target?: string; point?: VisualPlaytestPoint; button?: 'left' | 'middle' | 'right'; clickCount?: number; reason?: string; label?: string }
+  | { kind: 'hover'; target?: string; point?: VisualPlaytestPoint; reason?: string; label?: string }
+  | { kind: 'drag'; from: VisualPlaytestPoint; to: VisualPlaytestPoint; durationMs?: number; reason?: string; label?: string }
+  | { kind: 'key'; key: string; modifiers?: readonly string[]; reason?: string; label?: string }
+  | { kind: 'type'; text: string; target?: string; reason?: string; label?: string }
+  | { kind: 'wheel'; deltaX?: number; deltaY?: number; point?: VisualPlaytestPoint; reason?: string; label?: string }
+  | { kind: 'select'; target: string; value: string; reason?: string; label?: string }
+  | { kind: 'wait'; durationMs?: number; reason?: string; label?: string }
+  | { kind: 'viewport'; viewport: VisualPlaytestViewport; reason?: string; label?: string }
+  | { kind: 'stop'; reason?: string; label?: string };
+
+type VisualPlaytestFindingSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
+type VisualPlaytestFindingCategory = 'visual' | 'usability' | 'rules' | 'performance' | 'accessibility' | 'regression' | 'bug' | 'opportunity';
+
+interface VisualPlaytestFindingEvidence {
+  step?: number;
+  tick?: number;
+  actionIndex?: number;
+  screenshotPath?: string;
+  stateLabels?: readonly string[];
+}
+
+interface VisualPlaytestFinding {
+  title: string;
+  severity: VisualPlaytestFindingSeverity;
+  category: VisualPlaytestFindingCategory;
+  observed: string;
+  expected?: string;
+  suggestion?: string;
+  area?: string;
+  evidence?: VisualPlaytestFindingEvidence;
+  refs?: MarkerRefs;
+  data?: JsonValue;
+}
+
+interface VisualPlaytestDecision {
+  rationale?: string;
+  action?: VisualPlaytestAction;
+  actions?: readonly VisualPlaytestAction[];
+  findings?: readonly VisualPlaytestFinding[];
+  stopReason?: string;
+}
+```
+
+An agent may return either `action` or `actions`; the runner preserves order and performs each through the host. A `stop` action ends the loop without calling `host.performAction`.
+
+### Host, agent, trace, and runner
+
+```ts
+interface VisualPlaytestObserveInput {
+  step: number;
+  previousActionResult?: VisualPlaytestActionResult;
+}
+
+interface VisualPlaytestAgentInput {
+  step: number;
+  maxSteps: number;
+  mode: VisualPlaytestPromptMode;
+  observation: VisualPlaytestObservation;
+  trace: readonly VisualPlaytestTraceEntry[];
+}
+
+interface VisualPlaytestActionContext {
+  step: number;
+  actionIndex: number;
+  observation: VisualPlaytestObservation;
+}
+
+interface VisualPlaytestAnnotationContext {
+  step: number;
+  observation: VisualPlaytestObservation;
+}
+
+interface VisualPlaytestHost {
+  observe(input: VisualPlaytestObserveInput): VisualPlaytestObservation | Promise<VisualPlaytestObservation>;
+  performAction(action: VisualPlaytestAction, ctx: VisualPlaytestActionContext): VisualPlaytestActionResult | void | Promise<VisualPlaytestActionResult | void>;
+  annotate?(finding: VisualPlaytestFinding, ctx: VisualPlaytestAnnotationContext): void | Promise<void>;
+}
+
+interface VisualPlaytestAgent {
+  decide(input: VisualPlaytestAgentInput): VisualPlaytestDecision | Promise<VisualPlaytestDecision>;
+}
+
+interface VisualPlaytestErrorShape {
+  name: string;
+  message: string;
+  stack: string | null;
+}
+
+interface VisualPlaytestActionResult {
+  ok: boolean;
+  action?: VisualPlaytestAction;
+  message?: string;
+  observation?: VisualPlaytestObservation;
+  error?: VisualPlaytestErrorShape;
+}
+
+type VisualPlaytestStopReason = 'maxSteps' | 'agentStop' | 'noActions' | 'actionFailed' | 'hostError' | 'agentError';
+
+interface VisualPlaytestTraceEntry {
+  step: number;
+  actionIndex: number;
+  observation: VisualPlaytestObservation;
+  action?: VisualPlaytestAction;
+  decision?: VisualPlaytestDecision;
+  result?: VisualPlaytestActionResult;
+  findings?: readonly VisualPlaytestFinding[];
+  error?: VisualPlaytestErrorShape;
+}
+
+interface VisualPlaytestLoopConfig {
+  host: VisualPlaytestHost;
+  agent: VisualPlaytestAgent;
+  maxSteps: number;
+  promptMode?: VisualPlaytestPromptMode;
+  traceObservation?: 'redacted' | 'full';
+}
+
+interface VisualPlaytestLoopResult {
+  ok: boolean;
+  stopReason: VisualPlaytestStopReason;
+  stepsRun: number;
+  trace: VisualPlaytestTraceEntry[];
+  findings: VisualPlaytestFinding[];
+  error?: VisualPlaytestErrorShape;
+}
+
+function runVisualPlaytestLoop(config: VisualPlaytestLoopConfig): Promise<VisualPlaytestLoopResult>;
+```
+
+`traceObservation` defaults to `'redacted'`. Host/agent errors are captured in the result instead of rejecting the returned promise; invalid `maxSteps` throws `EngineRangeError` code `visual_playtest_max_steps_invalid`.
+
+### Prompt, redaction, and marker helpers
+
+```ts
+interface VisualPlaytestPromptInput {
+  observation: VisualPlaytestObservation;
+  mode?: VisualPlaytestPromptMode;
+  objective?: string;
+  maxActions?: number;
+}
+
+interface VisualPlaytestRedactionOptions {
+  includeScreenshotDataUrl?: boolean;
+  includeSensitiveState?: boolean;
+  includeStateValues?: boolean;
+}
+
+function buildVisualPlaytestPrompt(input: VisualPlaytestPromptInput): string;
+function redactVisualPlaytestObservation(observation: VisualPlaytestObservation, options?: VisualPlaytestRedactionOptions): VisualPlaytestObservation;
+function visualPlaytestFindingToMarker(finding: VisualPlaytestFinding): NewMarker;
+function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPlaytestFinding[];
+```
+
+`visualPlaytestFindingToMarker` emits a `NewMarker` with `kind: 'annotation'`, text shaped as `[severity/category] title`, and structured data under `data.visualPlaytest`. `visualPlaytestFindingsFromMarkers` ignores unrelated markers and recovers only markers produced by the helper.
+
 ## Counterfactual Replay / Fork (v0.8.12+)
 
 Spec 5. Counterfactual primitive for "what if the agent had submitted X here instead?" experiments. `SessionReplayer.forkAt(targetTick)` opens a paused world at a chosen tick and returns a chainable builder; `.run({ untilTick })` materializes a fresh `SessionBundle` of the diverged timeline plus a `Divergence` summary. `diffBundles(a, b)` is a standalone utility for cross-bundle comparison.
@@ -5983,7 +6203,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `rng_state_invalid`, `rng_seed_invalid` | Random | Bad RNG state/seed | — (R) |
 | `resource_already_registered`, `resource_not_registered`, `resource_state_invalid`, `resource_value_invalid` | ResourceStore | Resource registry/state validation | `{ key }`, `{ id }`, `{ label }` per site (E) |
 | `scenario_failure_code_empty`, `scenario_steps_invalid` | ScenarioRunner | Scenario config validation | — (E) |
-| `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid` | synthetic playtest / AI playtester | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` (R) |
+| `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid`, `visual_playtest_max_steps_invalid` | synthetic playtest / AI playtester / visual playtest harness | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` / `{ maxSteps }` (R) |
 | `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
 
 The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.

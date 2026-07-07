@@ -281,6 +281,46 @@ export {
   type BundleSummary,
 } from './ai-playtester.js';
 
+// Visual Playtest Harness (v1.3.0+): zero-dependency player-surface loop
+// contracts for screenshot/control/state-channel based game playtesting.
+export {
+  buildVisualPlaytestPrompt,
+  redactVisualPlaytestObservation,
+  runVisualPlaytestLoop,
+  visualPlaytestFindingToMarker,
+  visualPlaytestFindingsFromMarkers,
+  type VisualPlaytestAction,
+  type VisualPlaytestActionContext,
+  type VisualPlaytestActionKind,
+  type VisualPlaytestActionResult,
+  type VisualPlaytestAgent,
+  type VisualPlaytestAgentInput,
+  type VisualPlaytestAnnotationContext,
+  type VisualPlaytestControl,
+  type VisualPlaytestDecision,
+  type VisualPlaytestErrorShape,
+  type VisualPlaytestFinding,
+  type VisualPlaytestFindingCategory,
+  type VisualPlaytestFindingEvidence,
+  type VisualPlaytestFindingSeverity,
+  type VisualPlaytestHost,
+  type VisualPlaytestLoopConfig,
+  type VisualPlaytestLoopResult,
+  type VisualPlaytestObservation,
+  type VisualPlaytestObserveInput,
+  type VisualPlaytestPoint,
+  type VisualPlaytestPromptInput,
+  type VisualPlaytestPromptMode,
+  type VisualPlaytestRect,
+  type VisualPlaytestRedactionOptions,
+  type VisualPlaytestScreenshot,
+  type VisualPlaytestStateAudience,
+  type VisualPlaytestStateChannel,
+  type VisualPlaytestStopReason,
+  type VisualPlaytestTraceEntry,
+  type VisualPlaytestViewport,
+} from './visual-playtest.js';
+
 // Strict-Mode Determinism — Spec 6 (v0.8.8+): opt-in `WorldConfig.strict` flag
 // rejects mutation methods called outside system phases / setup window /
 // runMaintenance callbacks. See docs/threads/done/strict-mode/DESIGN.md.

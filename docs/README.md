@@ -38,6 +38,7 @@ The API reference is the authoritative public surface. The root `README.md` is i
 - [Bundle Viewer](guides/bundle-viewer.md) — Tier-3 programmatic agent-driver API over a `SessionBundle` (marker-anchored navigation, two-path `diffSince`, `diffSnapshots` helper, `BundleCorpusEntry.openViewer` integration)
 - [Strict Mode](guides/strict-mode.md) — Tier-3 opt-in `WorldConfig.strict` mutation-gate enforcement (rejects out-of-tick mutations; `runMaintenance(fn)` escape hatch; `StrictModeViolationError` at the call site)
 - [AI Playtester Agent](guides/ai-playtester.md) — Tier-2 async sibling to `runSynthPlaytest` for LLM-driven playtesters; `AgentDriver` interface (sync or async `decide`); `bundleSummary` JSON-flat helper for LLM context
+- [Visual Playtest Harness](guides/visual-playtest-harness.md) - Zero-dependency screenshot/control/hidden-state loop contracts for browser-game LLM playtests
 - [Renderer Integration](guides/rendering.md)
 - [RTS Primitives](guides/rts-primitives.md)
 - [Map Generation](guides/map-generation.md)

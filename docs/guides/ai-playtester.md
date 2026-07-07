@@ -4,6 +4,8 @@ Spec 9 (v0.8.9+) ships the engine-side substrate for LLM-driven (or any other as
 
 LLM integration is intentionally out of scope. The engine ships the contract and the runner; consumers wire their own clients into the `AgentDriver` interface.
 
+For browser-game playtests where the agent should see screenshots, visible text, available controls, and optional audience-labeled hidden state, use the sibling [Visual Playtest Harness](visual-playtest-harness.md). `runAgentPlaytest` is for command-driving a `World`; `runVisualPlaytestLoop` is for player-surface UI/browser harnesses.
+
 ## Quickstart
 
 ```ts
