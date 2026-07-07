@@ -4,6 +4,16 @@ This guide covers the engine surfaces that matter for a text-based AI agent runn
 
 The core rule is simple: keep the semantics in the engine, not in an external wrapper. Docs and MCP can sit on top later, but the engine itself should already expose stable machine-readable outcomes.
 
+## Core Recursive Loop
+
+The engine's core AI-native usage case is a recursive improvement loop:
+
+```text
+run -> record -> find -> verify -> classify -> regress -> fix/propose -> review -> rerun -> compare -> learn
+```
+
+`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, and coded failure surfaces. The active cross-game design lives in [`docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`](../threads/current/agent-recursive-improvement-loop/DESIGN.md). That design is not yet a public API; it explains how game repos should compose today's engine primitives and what shared run-manifest, finding, evidence-reference, and ledger contracts should be extracted after a reference game proves the vertical slice.
+
 ## What Matters
 
 An AI agent needs four things from the engine:

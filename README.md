@@ -8,6 +8,8 @@ A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeS
 
 **AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces. The debugging tools should be easy for an AI to use in a closed implement-debug-iterate feedback loop without human intervention.
 
+The core AI-native usage case is the recursive improvement loop: agents run or playtest a game, record evidence, extract findings, verify claims against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from. The active cross-game design is [Agent Recursive Improvement Loop Design](docs/threads/current/agent-recursive-improvement-loop/DESIGN.md); until its shared run/finding contracts ship as public API, the existing playtest, replay, corpus, metrics, viewer, and visual-harness surfaces are the substrate and game repos own their adapters.
+
 The engine provides reusable infrastructure that game projects consume - it has no game-specific logic, rendering, or UI code.
 
 ## Quick Start
@@ -31,6 +33,7 @@ Requires Node.js 20+.
 - **[API Reference](docs/api-reference.md)** - Public types, methods, and standalone utilities
 - **[Architecture](docs/architecture/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
 - **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
+- **[Agent Recursive Improvement Loop Design](docs/threads/current/agent-recursive-improvement-loop/DESIGN.md)** - Active design for the cross-game self-improvement loop built from the engine's playtest, replay, corpus, and visual-harness primitives
 - **[Visual Playtest Harness](docs/guides/visual-playtest-harness.md)** - Reusable screenshot/control/hidden-state contracts for browser-game LLM playtests
 - **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
 - **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client

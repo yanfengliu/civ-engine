@@ -6,6 +6,8 @@
 
 A single recording-and-replay spec is the substrate. The full vision spans nine specs across three tiers; implemented thread-specific designs are tracked under `docs/threads/done/<objective>/DESIGN.md`, with implementation plans beside them as `PLAN.md`; cross-thread roadmap material stays in `docs/design/`.
 
+**Current culmination:** the roadmap's implemented primitives now point toward the recursive improvement loop: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn. The active cross-game design is `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`. It should guide near-term game integrations, but it does not add a public engine API until one real vertical slice proves the shared contract.
+
 ## Tier 1 — Foundational
 
 Without these, "AI-first" is aspirational. They are the irreducible substrate for autonomous feedback loops.
@@ -204,4 +206,3 @@ Update this row as specs are drafted, accepted, implemented, and merged.
 ### Governance
 
 The 1.0 freeze list applies (`docs/design/v1-checklist.md`): surface fixture is the semver contract, deprecation policy governs removals, zero runtime deps stays policy. Spec numbering continues from the pre-1.0 tracker above; every spec lands through the standard design → multi-CLI review → TDD → review pipeline.
-

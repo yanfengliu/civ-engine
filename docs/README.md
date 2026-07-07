@@ -6,6 +6,7 @@ This is the navigation hub for `civ-engine` documentation.
 
 - [Getting Started](guides/getting-started.md) - Minimal setup, core concepts, and first-world walkthrough
 - [Core Concepts](guides/concepts.md) - Headless ECS model, tick lifecycle, determinism, and engine boundaries
+- [AI Integration](guides/ai-integration.md) - Core AI-native surfaces and how they compose into the recursive improvement loop
 - [Building a Complete Game](guides/building-a-game.md) - End-to-end example using the engine as a game foundation
 
 ## Reference
@@ -51,7 +52,7 @@ Active work and review syntheses live under `threads/current/`; closed objective
 
 ### Active
 
-- No active threads at the moment. Re-open a focused plan only when benchmark data or a concrete game workload justifies it.
+- [Agent Recursive Improvement Loop](threads/current/agent-recursive-improvement-loop/DESIGN.md) - Active cross-game design for the engine's core AI-native usage case: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn.
 
 ### Implemented
 
