@@ -116,6 +116,29 @@ recorder.addMarker(marker);
 
 Use `visualPlaytestFindingsFromMarkers(bundle.markers)` when a report or viewer wants to recover the structured finding objects from recorded markers.
 
+For findings that are part of the recursive improvement loop, prefer `ImprovementFinding` plus `improvementFindingToMarker(finding)`. That helper records the same visual marker payload under `data.visualPlaytest` and also embeds the durable loop payload under `data.improvementLoop`:
+
+```ts
+import { improvementFindingToMarker, type ImprovementFinding } from 'civ-engine';
+
+const finding: ImprovementFinding = {
+  schemaVersion: 1,
+  id: 'aoe2-command-card-1',
+  title: 'ux-gap - command-card',
+  severity: 'medium',
+  category: 'usability',
+  observed: 'No visible command advances past Feudal.',
+  expected: 'The Town Center exposes a Castle Age research command.',
+  evidence: [{ kind: 'tick', tick: world.tick, screenshotPath: 'artifacts/step-4.png' }],
+  verificationStatus: 'unverified',
+  nextAction: 'proposalOnly',
+};
+
+recorder.addMarker(improvementFindingToMarker(finding));
+```
+
+Use `improvementFindingsFromMarkers(bundle.markers)` when a loop ledger or report wants only the shared improvement findings. Keep `visualPlaytestFindingsFromMarkers` for older visual-only reports and for findings that do not need loop verification status or next-action metadata.
+
 ## Reuse Pattern For Game Repos
 
 Each game repo should keep its local harness adapter and replace only the duplicated contract glue:

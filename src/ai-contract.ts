@@ -7,6 +7,7 @@ export const WORLD_HISTORY_SCHEMA_VERSION = 1;
 export const WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION = 1;
 export const SCENARIO_RESULT_SCHEMA_VERSION = 1;
 export const CLIENT_PROTOCOL_VERSION = 1;
+export const IMPROVEMENT_FINDING_SCHEMA_VERSION = 1;
 
 export interface AiContractVersions {
   commandResult: typeof COMMAND_RESULT_SCHEMA_VERSION;
@@ -18,6 +19,7 @@ export interface AiContractVersions {
   worldHistoryRangeSummary: typeof WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION;
   scenarioResult: typeof SCENARIO_RESULT_SCHEMA_VERSION;
   clientProtocol: typeof CLIENT_PROTOCOL_VERSION;
+  improvementFinding: typeof IMPROVEMENT_FINDING_SCHEMA_VERSION;
 }
 
 export function getAiContractVersions(): AiContractVersions {
@@ -31,5 +33,6 @@ export function getAiContractVersions(): AiContractVersions {
     worldHistoryRangeSummary: WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION,
     scenarioResult: SCENARIO_RESULT_SCHEMA_VERSION,
     clientProtocol: CLIENT_PROTOCOL_VERSION,
+    improvementFinding: IMPROVEMENT_FINDING_SCHEMA_VERSION,
   };
 }

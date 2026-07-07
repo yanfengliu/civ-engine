@@ -49,6 +49,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Behavioral Metrics](#behavioral-metrics-v082)
 - [AI Playtester Agent](#ai-playtester-agent-v089-extended-v0811)
 - [Visual Playtest Harness](#visual-playtest-harness-v130)
+- [Improvement Loop Finding Contracts](#improvement-loop-finding-contracts-v140)
 - [Counterfactual Replay / Fork](#counterfactual-replay--fork-v0812)
 - [Bundle Hotspots](#bundle-hotspots-v0813)
 - [Engine Errors](#engine-errors-v0819)
@@ -233,10 +234,11 @@ function getAiContractVersions(): {
   worldHistoryRangeSummary: number;
   scenarioResult: number;
   clientProtocol: number;
+  improvementFinding: number;
 }
 ```
 
-Returns the current version markers for the engine's machine-facing AI contracts. Each field is also exported individually as a top-level constant (`COMMAND_RESULT_SCHEMA_VERSION`, `COMMAND_EXECUTION_SCHEMA_VERSION`, `TICK_FAILURE_SCHEMA_VERSION`, `WORLD_STEP_RESULT_SCHEMA_VERSION`, `WORLD_DEBUG_SCHEMA_VERSION`, `WORLD_HISTORY_SCHEMA_VERSION`, `WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION`, `SCENARIO_RESULT_SCHEMA_VERSION`, `CLIENT_PROTOCOL_VERSION`) for consumers that pin a single contract.
+Returns the current version markers for the engine's machine-facing AI contracts. Each field is also exported individually as a top-level constant (`COMMAND_RESULT_SCHEMA_VERSION`, `COMMAND_EXECUTION_SCHEMA_VERSION`, `TICK_FAILURE_SCHEMA_VERSION`, `WORLD_STEP_RESULT_SCHEMA_VERSION`, `WORLD_DEBUG_SCHEMA_VERSION`, `WORLD_HISTORY_SCHEMA_VERSION`, `WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION`, `SCENARIO_RESULT_SCHEMA_VERSION`, `CLIENT_PROTOCOL_VERSION`, `IMPROVEMENT_FINDING_SCHEMA_VERSION`) for consumers that pin a single contract.
 
 ### `CommandValidationRejection`
 
@@ -5985,6 +5987,76 @@ function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPl
 ```
 
 `visualPlaytestFindingToMarker` emits a `NewMarker` with `kind: 'annotation'`, text shaped as `[severity/category] title`, and structured data under `data.visualPlaytest`. `visualPlaytestFindingsFromMarkers` ignores unrelated markers and recovers only markers produced by the helper.
+
+## Improvement Loop Finding Contracts (v1.4.0)
+
+Shared, zero-dependency finding and evidence contracts for the recursive improvement loop. These types are the first public API slice from `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`: game repos can now record the same verified-finding payload while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
+
+```ts
+type ImprovementVerificationStatus = 'unverified' | 'verified' | 'falsePositive' | 'fixed' | 'regressed';
+type ImprovementNextAction = 'proposalOnly' | 'autoFix' | 'manualFix' | 'observeMore' | 'none';
+type ImprovementDisposition = 'candidate' | 'accepted' | 'rejected' | 'deferred' | 'wontFix';
+
+interface ImprovementEvidenceRef {
+  kind: 'tick' | 'step' | 'screenshot' | 'marker' | 'trace' | 'bundle' | 'metric' | 'text';
+  tick?: number;
+  step?: number;
+  actionIndex?: number;
+  screenshotPath?: string;
+  markerId?: string;
+  bundleId?: string;
+  sessionId?: string;
+  label?: string;
+  value?: string;
+  stateLabels?: readonly string[];
+  data?: JsonValue;
+}
+
+interface ImprovementRunManifest {
+  schemaVersion: 1;
+  id: string;
+  gameId?: string;
+  objective?: string;
+  startedAt?: string;
+  completedAt?: string;
+  bundleId?: string;
+  sessionId?: string;
+  tags?: readonly string[];
+  data?: JsonValue;
+}
+
+interface ImprovementFinding {
+  schemaVersion: typeof IMPROVEMENT_FINDING_SCHEMA_VERSION;
+  id: string;
+  title: string;
+  severity: VisualPlaytestFindingSeverity;
+  category: VisualPlaytestFindingCategory;
+  observed: string;
+  expected?: string;
+  suggestion?: string;
+  area?: string;
+  evidence?: readonly ImprovementEvidenceRef[];
+  refs?: MarkerRefs;
+  verificationStatus: ImprovementVerificationStatus;
+  nextAction: ImprovementNextAction;
+  disposition?: ImprovementDisposition;
+  sourceRun?: ImprovementRunManifest;
+  data?: JsonValue;
+}
+```
+
+`ImprovementFinding.severity` and `category` deliberately reuse the visual harness values so findings can be shown in the same reports and markers. Evidence is plural because a verified finding may cite a tick, screenshot, marker, trace row, bundle id, metric, and text excerpt at once; conversion helpers project the first visual-compatible fields into `VisualPlaytestFinding.evidence`.
+
+```ts
+function assertImprovementFinding(value: unknown): asserts value is ImprovementFinding;
+function improvementFindingToVisualPlaytestFinding(finding: ImprovementFinding): VisualPlaytestFinding;
+function improvementFindingToMarker(finding: ImprovementFinding): NewMarker;
+function improvementFindingsFromMarkers(markers: readonly Marker[]): ImprovementFinding[];
+```
+
+`assertImprovementFinding` validates schema version, non-empty identifiers/text, supported severity/category/status/action/disposition values, non-negative integer evidence ticks/steps/action indexes, and JSON-compatible refs/data. Invalid payloads throw coded engine errors with code `improvement_finding_invalid`.
+
+`improvementFindingToVisualPlaytestFinding` preserves title, severity, category, observed/expected/suggestion/area, refs, and visual-compatible evidence, then stores the original finding under `data.improvementLoop`. `improvementFindingToMarker` records a normal annotation marker whose `data` contains both `visualPlaytest` and `improvementLoop` payloads, allowing older visual-harness reports to keep working while newer loop tooling reads the durable finding contract. `improvementFindingsFromMarkers` ignores unrelated or malformed markers and returns only valid `data.improvementLoop` findings.
 
 ## Counterfactual Replay / Fork (v0.8.12+)
 

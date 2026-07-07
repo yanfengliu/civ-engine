@@ -19,6 +19,7 @@ The engine already owns most of the substrate:
 - `SessionRecorder`, `SessionReplayer`, `SessionBundle`, `MemorySink`, and `FileSink` capture and replay evidence.
 - `runSynthPlaytest` and `runAgentPlaytest` run command-level autonomous playtests.
 - `runVisualPlaytestLoop` standardizes screenshot, visible-text, control, action, finding, hidden-state, trace, and marker vocabulary for browser-game playtests.
+- `ImprovementFinding` and its marker helpers now standardize the first shared loop payload: durable findings with evidence refs, verification status, next action, and compatibility with visual-playtest markers.
 - `BundleCorpus`, `BundleViewer`, `bundleHotspots`, `runMetrics`, `compareMetricsResults`, `snapshotAtTick`, `diffBundles`, and `SessionReplayer.forkAt` let agents inspect and compare recorded runs.
 - `PlayerObserver` and `VisualPlaytestStateChannel.audience` give the system a way to keep player-visible evidence separate from oracle/debug evidence.
 
@@ -267,7 +268,7 @@ A finding should include:
 - promotion target,
 - and disposition.
 
-`VisualPlaytestFinding` is the existing visual substrate. This design likely needs a broader `ImprovementFinding` that can wrap visual, replay, metric, spec, and harness findings without losing the visual marker bridge.
+`VisualPlaytestFinding` is the visual substrate. `ImprovementFinding` is now the broader shared payload for visual, replay, metric, spec, and harness findings; marker helpers preserve the visual marker bridge by writing both `data.improvementLoop` and `data.visualPlaytest`.
 
 ### Evidence References
 
@@ -333,8 +334,8 @@ The adapter should be thin enough that upgrading the shared contract is cheaper 
 | Area | Current State | Gap |
 | --- | --- | --- |
 | Evidence capture | Engine bundles, visual traces, and markers exist | No cross-game run manifest tying all artifact kinds together |
-| Findings | Visual findings and game-specific findings exist | No unified finding lifecycle across visual/replay/metric/spec findings |
-| Verification | Replay and self-check exist; aoe2 uses replay inspection discipline | No standard verifier stage or verification-status field |
+| Findings | `ImprovementFinding`, visual findings, and game-specific findings exist | No full lifecycle ledger across visual/replay/metric/spec findings yet |
+| Verification | Replay/self-check exist; `ImprovementFinding.verificationStatus` exists; aoe2 uses replay inspection discipline | No standard verifier stage across games yet |
 | Promotion | Some repos add tests/fixtures from findings | No mandatory promotion rule across games |
 | Auto-fix | aoe2 has propose-fix and auto-fix surfaces | No shared safety envelope or proposal/fix disposition schema |
 | Corpus comparison | Engine metrics and corpus tools exist | No cross-game ledger/dashboard for improvement over time |
@@ -368,15 +369,13 @@ write ledger entry
 
 ### Phase 2: Extract Shared Contract
 
-After one real slice proves the shape, add the smallest shared contract to `civ-engine`:
+After one real slice proves the shape, add the smallest shared contract to `civ-engine`. The finding payload/marker part shipped in v1.4.0; the remaining candidate surface is:
 
-- `ImprovementRunManifest`,
-- `ImprovementFinding`,
-- `ImprovementEvidenceRef`,
-- `ImprovementDisposition`,
-- validation/redaction helpers,
-- marker conversion helpers where appropriate,
-- and documentation for game adapters.
+- richer run-manifest conventions,
+- ledger-current-state summaries,
+- verifier-stage result helpers,
+- repeated-finding signatures,
+- and additional marker/report conversion helpers where more games prove a common need.
 
 This should be additive and zero-runtime-dependency.
 

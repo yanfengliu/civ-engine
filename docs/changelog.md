@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.0 - 2026-07-07
+
+Shared recursive-improvement finding contracts. **Additive minor - fully back-compatible.**
+
+`civ-engine` now exports the first public API slice from the agent recursive self-improvement loop design: a durable `ImprovementFinding` payload plus helpers that bridge it into visual findings and session markers. This lets game repos record findings with verification status, next action, plural evidence, optional disposition, and local metadata while preserving compatibility with existing visual-playtest marker reports.
+
+- **New shared finding types:** `IMPROVEMENT_FINDING_SCHEMA_VERSION`, `ImprovementFinding`, `ImprovementEvidenceRef`, `ImprovementRunManifest`, `ImprovementVerificationStatus`, `ImprovementNextAction`, and `ImprovementDisposition`. `getAiContractVersions()` now includes `improvementFinding`.
+- **New conversion and validation helpers:** `improvementFindingToVisualPlaytestFinding`, `improvementFindingToMarker`, `improvementFindingsFromMarkers`, and `assertImprovementFinding`.
+- **Markers carry both payloads.** `improvementFindingToMarker` emits normal annotation markers with `data.improvementLoop` for loop-aware agents and `data.visualPlaytest` for existing visual reports/viewers.
+- **Boundary remains small.** The engine does not own browser automation, provider clients, local gates, game-specific conformance taxonomies, run ledgers, or auto-fix policy.
+- **No existing engine behavior changes.** Visual-only helpers, visual playtest loops, session recording/replay, worlds, and metrics keep their existing behavior.
+
+### Validation
+
+New failing-first coverage in `tests/improvement-loop.test.ts` pins AI contract version exposure, conversion to visual findings, marker payload shape, recovery from markers while ignoring unrelated markers, and malformed finding rejection. Public-surface fixture updated for the new exports. Full gates green: `npm test` (1254 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
 ## 1.3.0 - 2026-07-07
 
 Reusable visual playtest harness contracts. **Additive minor - fully back-compatible.**

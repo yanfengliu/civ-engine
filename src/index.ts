@@ -4,8 +4,8 @@
 // Additions are reviewed surface changes, not accidents.
 export {
   CLIENT_PROTOCOL_VERSION, COMMAND_EXECUTION_SCHEMA_VERSION, COMMAND_RESULT_SCHEMA_VERSION,
-  SCENARIO_RESULT_SCHEMA_VERSION, TICK_FAILURE_SCHEMA_VERSION, WORLD_DEBUG_SCHEMA_VERSION,
-  WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION, WORLD_HISTORY_SCHEMA_VERSION,
+  IMPROVEMENT_FINDING_SCHEMA_VERSION, SCENARIO_RESULT_SCHEMA_VERSION, TICK_FAILURE_SCHEMA_VERSION,
+  WORLD_DEBUG_SCHEMA_VERSION, WORLD_HISTORY_RANGE_SUMMARY_SCHEMA_VERSION, WORLD_HISTORY_SCHEMA_VERSION,
   WORLD_STEP_RESULT_SCHEMA_VERSION, getAiContractVersions, type AiContractVersions,
 } from './ai-contract.js';
 export {
@@ -26,6 +26,18 @@ export {
 export {
   type ResourcePool, type TickDiff,
 } from './diff.js';
+export {
+  assertImprovementFinding,
+  improvementFindingToMarker,
+  improvementFindingToVisualPlaytestFinding,
+  improvementFindingsFromMarkers,
+  type ImprovementDisposition,
+  type ImprovementEvidenceRef,
+  type ImprovementFinding,
+  type ImprovementNextAction,
+  type ImprovementRunManifest,
+  type ImprovementVerificationStatus,
+} from './improvement-loop.js';
 export {
   EngineError, EngineRangeError, EngineTypeError, getErrorCode, isEngineError,
   type EngineErrorOptions,

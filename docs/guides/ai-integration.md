@@ -12,7 +12,7 @@ The engine's core AI-native usage case is a recursive improvement loop:
 run -> record -> find -> verify -> classify -> regress -> fix/propose -> review -> rerun -> compare -> learn
 ```
 
-`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, and coded failure surfaces. The active cross-game design lives in [`docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`](../threads/current/agent-recursive-improvement-loop/DESIGN.md). That design is not yet a public API; it explains how game repos should compose today's engine primitives and what shared run-manifest, finding, evidence-reference, and ledger contracts should be extracted after a reference game proves the vertical slice.
+`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, coded failure surfaces, and a shared `ImprovementFinding` payload. The active cross-game design lives in [`docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`](../threads/current/agent-recursive-improvement-loop/DESIGN.md). The shipped public slice is the finding/evidence/marker contract; full run manifests, ledgers, gate orchestration, browser/provider adapters, and auto-fix policy stay in game repos until reference migrations prove a smaller shared shape.
 
 ## What Matters
 
@@ -324,6 +324,32 @@ const result = await runVisualPlaytestLoop({ host, agent, maxSteps: 20, promptMo
 ```
 
 Hidden state is explicit and audience-labeled. `playerBlind` prompts omit it; `oracleAssisted` prompts include only channels marked `audience: 'agent'`. Sensitive state values and screenshot data URLs are redacted from safe traces by default. See `docs/guides/visual-playtest-harness.md` for adapter guidance for browser-game repos.
+
+## Improvement Finding Contract (v1.4.0)
+
+Use `ImprovementFinding` when a visual, synthetic, replay, metric, or human-review issue should survive into the recursive loop ledger. It adds the durable fields the loop needs around the visual finding shape: `schemaVersion: 1`, stable `id`, plural `evidence`, `verificationStatus`, `nextAction`, optional `disposition`, optional `sourceRun`, and JSON-compatible game-specific `data`.
+
+```typescript
+import { improvementFindingToMarker, type ImprovementFinding } from 'civ-engine';
+
+const finding: ImprovementFinding = {
+  schemaVersion: 1,
+  id: 'aoe2-command-card-1',
+  title: 'ux-gap - command-card',
+  severity: 'medium',
+  category: 'usability',
+  observed: 'The player cannot find a Castle Age research command.',
+  expected: 'The Town Center exposes a visible Castle Age command when prerequisites are met.',
+  evidence: [{ kind: 'tick', tick: 250, screenshotPath: 'artifacts/step-4.png' }],
+  verificationStatus: 'unverified',
+  nextAction: 'proposalOnly',
+  data: { localCategory: 'ux-gap' },
+};
+
+recorder.addMarker(improvementFindingToMarker(finding));
+```
+
+Markers produced by `improvementFindingToMarker` carry both `data.improvementLoop` and `data.visualPlaytest`. That keeps existing visual reports compatible while allowing loop-aware agents to recover durable findings with `improvementFindingsFromMarkers(markers)`. Use `assertImprovementFinding` at repo boundaries before accepting provider output or persisted local ledgers.
 
 ## Bundle Corpus Index (Tier 2)
 
