@@ -51,33 +51,32 @@
 
 **Files (aoe2 repo):** read `AGENTS.md` + the closed thread `docs/threads/done/recursive-self-improvement-loop/` first (Track A opens a new objective thread); expected touch points: `scripts/playtest-llm-auto-fix.mjs`, `scripts/playtest-self-improve.mjs`, `scripts/propose-fix.mjs`, `src/game/playtest/selfImprovementLoop.ts`, `src/game/playtest/fixProposalInput.ts`, new `scripts/playtest-recursive.mjs`, tests under `tests/playtest/`, aoe2 docs/devlog/changelog/version.
 
-- [ ] **Step 1:** Wire ledger-classified `fix` findings into `applyAndGate` + counterfactual rerun as the primary input (today auto-fix triggers only on legacy `engineHalt` regressions and propose-fix falls back to the legacy `REPORT.md`; keep legacy as fallback if cheap).
-- [ ] **Step 2:** `playtest:recursive` command: run → findings → ledger → propose → gated apply → rerun → compare → ledger entry, with hard budgets (max fix attempts per pass, cost cap, wall-clock cap) and proposal-only default autonomy.
-- [ ] **Step 3:** Episodic memory: feed prior ledger finding signatures (`selfImprovementFindingComparison`) into the next run's objective selection and agent context.
-- [ ] **Step 4:** Adopt v1.6.0 fields where cheap (`verificationMethod` on ledger classifications, `createImprovementRunManifest`).
-- [ ] **Step 5:** aoe2 gates + review per its AGENTS.md, devlog/changelog/version, commit + push.
+- [x] **Step 1:** Ledger-classified `fix` findings feed `applyAndGate` + prove-fixed rerun through the new `playtest:recursive` pass; the legacy `engineHalt` auto-fix stays as the crash fast-path.
+- [x] **Step 2:** `playtest:recursive` shipped with proposal-only default, `--apply` opt-in, run/rerun cost-budget split, one fix attempt per pass, and an engine run-manifest per pass. Prove-fixed judges at ORACLE granularity over the union of ledger findings and a fresh oracle sweep (review fix: identity keys embed run-specific ticks/messages, so identity-only matching false-proves under rerun nondeterminism).
+- [x] **Step 3:** Episodic memory via `--known-findings` (ledger → `selectKnownIssues` → known-open-issues prompt section in both agent prompts).
+- [x] **Step 4:** v1.6.0 adoption: minimal schema stamping at both emission sites, oracle findings' `verified` status gated on strong replay self-check with `verificationMethod: 'metric'` + strict validation, widened `nextAction` classified proposal-only.
+- [x] **Step 5:** aoe2 gates green (313 tests), 2-reviewer pass (Codex + in-process), committed + pushed.
 
-## Task 7 (Track C): `farm` Alignment
+## Task 7 (Track C): `farm` Alignment — COMPLETE (farm ec30f15)
 
-Expand into a farm-local plan at execution time per farm's own conventions; the contract-level punch list:
+- [x] Dev-only in-page `SessionRecorder` + `__farmDebug.exportBundle()` (disconnect-for-terminal-snapshot export); the visual loop writes and replay-self-check-verifies `latest.bundle.json` with the recorded snapshot seed.
+- [x] Replay script repointed to the live bundle; `selfCheckStrongOk` reported.
+- [x] Findings author `unverified`; deterministic findings flip to `verified` + `verificationMethod: 'metric'` + an addressed bundle evidence ref only under strong verification (review fixed a dead path: engine `skippedSegments` is an array); LLM findings never auto-verify.
+- [x] Append-only history (`llm-visual-loop-history/<stamp>/` + `ledger.jsonl`) replaced the per-run wipe.
+- [x] Rode on engine v1.6.1 (browser-safe session ids — `node:crypto` import broke in-page recorders).
 
-- [ ] Wire `SessionRecorder` into the live visual loop so runs produce replayable bundles.
-- [ ] Repoint `scripts/llm-playtest-replay.mjs` from the stale `output/playwright/llm-playtest/latest.bundle.json` to the live loop's bundle.
-- [ ] Author findings `unverified`; add a verify step that flips status with `verificationMethod` evidence.
-- [ ] Append-only ledger: stop the per-run output wipe (or archive history before the wipe).
-- [ ] Adopt the marker bridge so evidence refs can cite `bundle`/`marker`.
-- [ ] farm gates + review, commit + push.
+## Task 8 (Track C): `city` Alignment — COMPLETE (city e8f58f5)
 
-## Task 8 (Track C): `city` Alignment
+- [x] `playtest:llm` autonomous runner: Playwright proxying the in-page visual host through the hardened engine runner (enforced redaction, budgets, continue-past-failure); scripted bootstrap default + external-command LLM hook fed engine prompt parts. Smoke-verified end to end twice.
+- [x] Per-run bundle/findings/result + validated engine manifest under `output/playtests-llm/<stamp>/` with `ledger.jsonl`; selfCheck-before-export so the persisted bundle carries the verified terminal snapshot (review fix).
+- [x] Real CI gate shipped (`.github/workflows/ci.yml`, sibling engine checkout + build); stale doc claims reworded to the real recorded-session gate. New devDep `@playwright/test` (audits clean).
 
-Expand into a city-local plan at execution time per city's own conventions; the contract-level punch list:
+## Task 9 (Track C): `townscaper` Alignment — COMPLETE (townscaper 9807837)
 
-- [ ] LLM provider adapter (reuse aoe2's provider pattern) + autonomous driver over `createCityVisualPlaytestHost` with budgets.
-- [ ] Persist bundles (`FileSink` or exported `MemorySink` bundles under `output/`) + start a findings ledger.
-- [ ] Fix stale CI-gate docs (AGENTS.md and roadmap claim a gate no workflow provides) — or add the CI gate.
-- [ ] city gates + review, commit + push.
+- [x] `playtest:verify` re-drive determinism verification (trace-extracted effective decisions, strict latest-frame world-state comparison, canonicalized minus the wall-clock save stamp; verification artifact always written). Smoke-proven: byte-identical re-drive at seed 64231.
+- [x] Per-run engine `ImprovementRunManifest` ledger rows beside the artifacts.
+- [x] Only playtest paths committed; another agent's in-flight rendering work left untouched in-tree.
 
 ## Deferred
 
-- `townscaper` (Harborform) alignment — repo owned by another agent as of 2026-07-07.
-- Track D (corpus dashboard, repeated-finding signatures, engine-feedback auto-routing, `stateDigest` tripwire) — after Tracks A–C prove the shapes.
+- Track D (corpus dashboard, repeated-finding signatures, engine-feedback auto-routing, `stateDigest` tripwire) — next objective, new thread, now that Tracks A–C shipped across the fleet.
