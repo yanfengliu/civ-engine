@@ -1,10 +1,11 @@
-import type { IMPROVEMENT_FINDING_SCHEMA_VERSION } from './ai-contract.js';
 import type { JsonValue } from './json.js';
 import type { MarkerRefs } from './session-bundle.js';
 import type {
   VisualPlaytestFindingCategory,
   VisualPlaytestFindingSeverity,
 } from './visual-playtest-types.js';
+
+export type ImprovementFindingSchemaVersion = 1 | 2;
 
 export type ImprovementVerificationStatus =
   | 'unverified'
@@ -13,12 +14,33 @@ export type ImprovementVerificationStatus =
   | 'fixed'
   | 'regressed';
 
+export type ImprovementVerificationMethod =
+  | 'replay'
+  | 'state'
+  | 'spec'
+  | 'metric'
+  | 'screenshot'
+  | 'human';
+
+export type ImprovementPromotionTarget =
+  | 'test'
+  | 'scenario'
+  | 'fixture'
+  | 'assertion'
+  | 'backlog'
+  | 'engineFeedback'
+  | 'designQuestion';
+
 export type ImprovementNextAction =
   | 'proposalOnly'
   | 'autoFix'
   | 'manualFix'
   | 'observeMore'
-  | 'none';
+  | 'none'
+  | 'improveHarness'
+  | 'fileEngineFeedback'
+  | 'addRegression'
+  | 'updateDesign';
 
 export type ImprovementDisposition =
   | 'candidate'
@@ -42,6 +64,17 @@ export interface ImprovementEvidenceRef {
   data?: JsonValue;
 }
 
+export interface ImprovementRunArtifact {
+  kind: string;
+  path: string;
+}
+
+export interface ImprovementGateResult {
+  name: string;
+  ok: boolean;
+  detail?: string;
+}
+
 export interface ImprovementRunManifest {
   schemaVersion: 1;
   id: string;
@@ -51,12 +84,24 @@ export interface ImprovementRunManifest {
   completedAt?: string;
   bundleId?: string;
   sessionId?: string;
+  gitCommit?: string;
+  engineVersion?: string;
+  model?: string;
+  provider?: string;
+  seed?: string | number;
+  costUsd?: number;
+  durationMs?: number;
+  stopReason?: string;
+  artifacts?: readonly ImprovementRunArtifact[];
+  gates?: readonly ImprovementGateResult[];
   tags?: readonly string[];
   data?: JsonValue;
 }
 
+export type ImprovementRunManifestInput = Omit<ImprovementRunManifest, 'schemaVersion'>;
+
 export interface ImprovementFinding {
-  schemaVersion: typeof IMPROVEMENT_FINDING_SCHEMA_VERSION;
+  schemaVersion: ImprovementFindingSchemaVersion;
   id: string;
   title: string;
   severity: VisualPlaytestFindingSeverity;
@@ -68,8 +113,25 @@ export interface ImprovementFinding {
   evidence?: readonly ImprovementEvidenceRef[];
   refs?: MarkerRefs;
   verificationStatus: ImprovementVerificationStatus;
+  verificationMethod?: ImprovementVerificationMethod;
   nextAction: ImprovementNextAction;
+  promotionTarget?: ImprovementPromotionTarget;
   disposition?: ImprovementDisposition;
   sourceRun?: ImprovementRunManifest;
   data?: JsonValue;
+}
+
+export interface ImprovementFindingInit {
+  id: string;
+  verificationStatus?: ImprovementVerificationStatus;
+  verificationMethod?: ImprovementVerificationMethod;
+  nextAction?: ImprovementNextAction;
+  promotionTarget?: ImprovementPromotionTarget;
+  disposition?: ImprovementDisposition;
+  sourceRun?: ImprovementRunManifest;
+  data?: JsonValue;
+}
+
+export interface AssertImprovementFindingOptions {
+  requireVerificationEvidence?: boolean;
 }

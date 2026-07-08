@@ -28,14 +28,26 @@ export {
 } from './diff.js';
 export {
   assertImprovementFinding,
+  assertImprovementRunManifest,
+  createImprovementRunManifest,
   improvementFindingToMarker,
   improvementFindingToVisualPlaytestFinding,
   improvementFindingsFromMarkers,
+  minimalImprovementFindingSchemaVersion,
+  visualPlaytestFindingToImprovementFinding,
+  type AssertImprovementFindingOptions,
   type ImprovementDisposition,
   type ImprovementEvidenceRef,
   type ImprovementFinding,
+  type ImprovementFindingInit,
+  type ImprovementFindingSchemaVersion,
+  type ImprovementGateResult,
   type ImprovementNextAction,
+  type ImprovementPromotionTarget,
+  type ImprovementRunArtifact,
   type ImprovementRunManifest,
+  type ImprovementRunManifestInput,
+  type ImprovementVerificationMethod,
   type ImprovementVerificationStatus,
 } from './improvement-loop.js';
 export {

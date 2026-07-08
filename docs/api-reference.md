@@ -49,7 +49,7 @@ Complete reference for every public type, method, and module in civ-engine.
 - [Behavioral Metrics](#behavioral-metrics-v082)
 - [AI Playtester Agent](#ai-playtester-agent-v089-extended-v0811)
 - [Visual Playtest Harness](#visual-playtest-harness-v130)
-- [Improvement Loop Finding Contracts](#improvement-loop-finding-contracts-v140)
+- [Improvement Loop Finding Contracts](#improvement-loop-finding-contracts-v140-completed-v160)
 - [Counterfactual Replay / Fork](#counterfactual-replay--fork-v0812)
 - [Bundle Hotspots](#bundle-hotspots-v0813)
 - [Engine Errors](#engine-errors-v0819)
@@ -6021,13 +6021,18 @@ function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPl
 
 `visualPlaytestFindingToMarker` emits a `NewMarker` with `kind: 'annotation'`, text shaped as `[severity/category] title`, and structured data under `data.visualPlaytest`. `visualPlaytestFindingsFromMarkers` ignores unrelated markers and recovers only markers produced by the helper.
 
-## Improvement Loop Finding Contracts (v1.4.0)
+## Improvement Loop Finding Contracts (v1.4.0, completed v1.6.0)
 
-Shared, zero-dependency finding and evidence contracts for the recursive improvement loop. These types are the first public API slice from `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`: game repos can now record the same verified-finding payload while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
+Shared, zero-dependency finding and evidence contracts for the recursive improvement loop, from `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`: game repos record the same verified-finding payload and run manifests while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
 
 ```ts
+type ImprovementFindingSchemaVersion = 1 | 2;
 type ImprovementVerificationStatus = 'unverified' | 'verified' | 'falsePositive' | 'fixed' | 'regressed';
-type ImprovementNextAction = 'proposalOnly' | 'autoFix' | 'manualFix' | 'observeMore' | 'none';
+type ImprovementVerificationMethod = 'replay' | 'state' | 'spec' | 'metric' | 'screenshot' | 'human';
+type ImprovementNextAction =
+  | 'proposalOnly' | 'autoFix' | 'manualFix' | 'observeMore' | 'none'
+  | 'improveHarness' | 'fileEngineFeedback' | 'addRegression' | 'updateDesign'; // the second row requires schemaVersion 2
+type ImprovementPromotionTarget = 'test' | 'scenario' | 'fixture' | 'assertion' | 'backlog' | 'engineFeedback' | 'designQuestion';
 type ImprovementDisposition = 'candidate' | 'accepted' | 'rejected' | 'deferred' | 'wontFix';
 
 interface ImprovementEvidenceRef {
@@ -6045,6 +6050,9 @@ interface ImprovementEvidenceRef {
   data?: JsonValue;
 }
 
+interface ImprovementRunArtifact { kind: string; path: string; }
+interface ImprovementGateResult { name: string; ok: boolean; detail?: string; }
+
 interface ImprovementRunManifest {
   schemaVersion: 1;
   id: string;
@@ -6054,12 +6062,39 @@ interface ImprovementRunManifest {
   completedAt?: string;
   bundleId?: string;
   sessionId?: string;
+  gitCommit?: string;
+  engineVersion?: string;
+  model?: string;
+  provider?: string;
+  seed?: string | number;
+  costUsd?: number;
+  durationMs?: number;
+  stopReason?: string;
+  artifacts?: readonly ImprovementRunArtifact[];
+  gates?: readonly ImprovementGateResult[];
   tags?: readonly string[];
   data?: JsonValue;
 }
 
+type ImprovementRunManifestInput = Omit<ImprovementRunManifest, 'schemaVersion'>;
+
+interface ImprovementFindingInit {
+  id: string;
+  verificationStatus?: ImprovementVerificationStatus;
+  verificationMethod?: ImprovementVerificationMethod;
+  nextAction?: ImprovementNextAction;
+  promotionTarget?: ImprovementPromotionTarget;
+  disposition?: ImprovementDisposition;
+  sourceRun?: ImprovementRunManifest;
+  data?: JsonValue;
+}
+
+interface AssertImprovementFindingOptions {
+  requireVerificationEvidence?: boolean;
+}
+
 interface ImprovementFinding {
-  schemaVersion: typeof IMPROVEMENT_FINDING_SCHEMA_VERSION;
+  schemaVersion: ImprovementFindingSchemaVersion;
   id: string;
   title: string;
   severity: VisualPlaytestFindingSeverity;
@@ -6071,25 +6106,37 @@ interface ImprovementFinding {
   evidence?: readonly ImprovementEvidenceRef[];
   refs?: MarkerRefs;
   verificationStatus: ImprovementVerificationStatus;
+  verificationMethod?: ImprovementVerificationMethod;
   nextAction: ImprovementNextAction;
+  promotionTarget?: ImprovementPromotionTarget;
   disposition?: ImprovementDisposition;
   sourceRun?: ImprovementRunManifest;
   data?: JsonValue;
 }
 ```
 
-`ImprovementFinding.severity` and `category` deliberately reuse the visual harness values so findings can be shown in the same reports and markers. Evidence is plural because a verified finding may cite a tick, screenshot, marker, trace row, bundle id, metric, and text excerpt at once; conversion helpers project the first visual-compatible fields into `VisualPlaytestFinding.evidence`.
+`ImprovementFinding.severity` and `category` deliberately reuse the visual harness values so findings can be shown in the same reports and markers. Evidence is plural because a verified finding may cite a tick, screenshot, marker, trace row, bundle id, metric, and text excerpt at once; conversion helpers project the first visual-compatible fields into `VisualPlaytestFinding.evidence`. `verificationMethod` records HOW a finding was confirmed (the lifecycle axis stays on `verificationStatus`); `promotionTarget` records where a confirmed finding should become durable.
+
+**Schema version 2 and minimal stamping (v1.6.0).** `IMPROVEMENT_FINDING_SCHEMA_VERSION` is now `2` and `getAiContractVersions().improvementFinding` reports it. Validators and readers accept `schemaVersion: 1 | 2`. Findings that use only v1 vocabulary may still stamp `1` for maximum old-reader interop; the widened `nextAction` values require stamping `2` (a v1-stamped finding using them is rejected), so an older reader's skip is a declared version incompatibility instead of silent data loss. New optional fields (`verificationMethod`, `promotionTarget`, the manifest extensions) are additive keys tolerated by v1 readers and do not by themselves require version 2. Marker envelopes mirror the finding's own `schemaVersion`.
 
 ```ts
-function assertImprovementFinding(value: unknown): asserts value is ImprovementFinding;
+function assertImprovementFinding(value: unknown, options?: AssertImprovementFindingOptions): asserts value is ImprovementFinding;
+function assertImprovementRunManifest(value: unknown): asserts value is ImprovementRunManifest;
+function createImprovementRunManifest(input: ImprovementRunManifestInput): ImprovementRunManifest;
+function minimalImprovementFindingSchemaVersion(nextAction: ImprovementNextAction): ImprovementFindingSchemaVersion;
 function improvementFindingToVisualPlaytestFinding(finding: ImprovementFinding): VisualPlaytestFinding;
+function visualPlaytestFindingToImprovementFinding(visual: VisualPlaytestFinding, init: ImprovementFindingInit): ImprovementFinding;
 function improvementFindingToMarker(finding: ImprovementFinding): NewMarker;
 function improvementFindingsFromMarkers(markers: readonly Marker[]): ImprovementFinding[];
 ```
 
-`assertImprovementFinding` validates schema version, non-empty identifiers/text, supported severity/category/status/action/disposition values, non-negative integer evidence ticks/steps/action indexes, and JSON-compatible refs/data. Invalid payloads throw coded engine errors with code `improvement_finding_invalid`.
+`assertImprovementFinding` validates schema version (1 or 2, with the vocabulary gating above), non-empty identifiers/text, supported severity/category/status/method/action/promotion/disposition values, non-negative integer evidence ticks/steps/action indexes, and JSON-compatible refs/data. With `{ requireVerificationEvidence: true }`, a `verified` finding must additionally carry at least one ADDRESSED replayable evidence ref (`tick` with its tick, `marker` with a `markerId`, or `bundle` with a `bundleId`/`sessionId` — a bare kind label does not count) AND a `verificationMethod` — use this in verifier stages so "verified" cannot be asserted without checkable evidence; default validation stays permissive for authoring-time payloads. Invalid payloads throw coded engine errors with code `improvement_finding_invalid`.
 
-`improvementFindingToVisualPlaytestFinding` preserves title, severity, category, observed/expected/suggestion/area, refs, and visual-compatible evidence, then stores the original finding under `data.improvementLoop`. `improvementFindingToMarker` records a normal annotation marker whose `data` contains both `visualPlaytest` and `improvementLoop` payloads, allowing older visual-harness reports to keep working while newer loop tooling reads the durable finding contract. `improvementFindingsFromMarkers` ignores unrelated or malformed markers and returns only valid `data.improvementLoop` findings.
+`createImprovementRunManifest` builds a validated `schemaVersion: 1` manifest and auto-fills `engineVersion` from the running engine unless provided; explicitly-`undefined` optional fields are dropped (convenient for threading `value | undefined` metadata), and it never invents ids or timestamps (pass them in — the engine stays deterministic). `assertImprovementRunManifest` is the standalone validator for manifests read back from disk.
+
+`minimalImprovementFindingSchemaVersion(nextAction)` returns the smallest schema version a finding with that classification may stamp — prefer it over stamping `IMPROVEMENT_FINDING_SCHEMA_VERSION` directly: the constant is the LATEST version, and stamping it on v1-vocabulary findings makes pre-1.6.0 readers skip payloads they could have represented.
+
+`improvementFindingToVisualPlaytestFinding` preserves title, severity, category, observed/expected/suggestion/area, refs, and visual-compatible evidence, then stores the original finding under `data.improvementLoop`. `visualPlaytestFindingToImprovementFinding` is the reverse lift (v1.6.0): it takes the required durable `id` plus the optional `ImprovementFindingInit` fields, defaults to `unverified`/`proposalOnly`, maps the visual evidence fields onto plural evidence refs (round-trip preserves tick/step/actionIndex/screenshotPath/stateLabels), and stamps the minimal schema version for the vocabulary used. `visual.data` is deliberately NOT copied onto the lifted finding (it may hold a nested `improvementLoop` envelope from a prior conversion) — pass game context through `init.data`. On read, `improvementFindingsFromMarkers` treats the envelope version as advisory: the inner finding's own validation governs. `improvementFindingToMarker` records a normal annotation marker whose `data` contains both `visualPlaytest` and `improvementLoop` payloads, allowing older visual-harness reports to keep working while newer loop tooling reads the durable finding contract. `improvementFindingsFromMarkers` ignores unrelated or malformed markers and returns only valid `data.improvementLoop` findings.
 
 ## Counterfactual Replay / Fork (v0.8.12+)
 

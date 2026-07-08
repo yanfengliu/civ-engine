@@ -7,6 +7,12 @@ import {
   deepEqualWithPath,
   type WorldConfig,
 } from '../src/index.js';
+import { ENGINE_VERSION } from '../src/version.js';
+
+const crossMinorVersion = (): string => {
+  const [major, minor] = ENGINE_VERSION.split('.').map(Number);
+  return `${major}.${minor + 1}.0`;
+};
 
 const mkConfig = (): WorldConfig => ({
   gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position',
@@ -171,7 +177,7 @@ describe('SessionReplayer', () => {
 
   it('cross-b engineVersion WARNS but constructs (1.0 policy: b is the additive axis)', () => {
     const { bundle } = recordSession(1);
-    bundle.metadata.engineVersion = '1.6.0';  // same major as the 1.x runtime
+    bundle.metadata.engineVersion = crossMinorVersion();  // same major as the runtime, different b
     const warnings: string[] = [];
     const orig = console.warn;
     console.warn = (msg: string) => { warnings.push(String(msg)); };

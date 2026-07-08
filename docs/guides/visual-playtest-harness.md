@@ -147,7 +147,7 @@ const finding: ImprovementFinding = {
 recorder.addMarker(improvementFindingToMarker(finding));
 ```
 
-Use `improvementFindingsFromMarkers(bundle.markers)` when a loop ledger or report wants only the shared improvement findings. Keep `visualPlaytestFindingsFromMarkers` for older visual-only reports and for findings that do not need loop verification status or next-action metadata.
+Use `improvementFindingsFromMarkers(bundle.markers)` when a loop ledger or report wants only the shared improvement findings. Keep `visualPlaytestFindingsFromMarkers` for older visual-only reports and for findings that do not need loop verification status or next-action metadata. To lift a raw visual finding into the durable contract, use `visualPlaytestFindingToImprovementFinding(visual, { id, ... })` (v1.6.0) — it defaults to `unverified`/`proposalOnly`, maps the visual evidence onto plural refs, and stamps the minimal schema version. Verifier stages should validate with `assertImprovementFinding(finding, { requireVerificationEvidence: true })` so `verified` requires an addressed replayable evidence ref (a tick, a `markerId`, or a `bundleId`/`sessionId`) plus a `verificationMethod`.
 
 ## Reuse Pattern For Game Repos
 

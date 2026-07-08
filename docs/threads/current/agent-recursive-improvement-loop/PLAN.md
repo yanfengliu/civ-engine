@@ -42,10 +42,10 @@
 - Modify: `tests/improvement-loop.test.ts`, `tests/fixtures/public-surface.json`
 - Modify: same doc set as Task 4
 
-- [ ] **Step 1: Failing tests first** for: `verificationMethod` accepted/validated (`replay|state|spec|metric|screenshot|human`), `promotionTarget` accepted/validated, widened `nextAction` (`improveHarness|fileEngineFeedback|addRegression|updateDesign`) accepted by validator and marker round-trip, schema-version-2 minimal stamping — `IMPROVEMENT_FINDING_SCHEMA_VERSION` becomes 2, validators/readers accept `schemaVersion: 1 | 2`, a schemaVersion-1 finding using a widened `nextAction` value is rejected, findings using only v1 vocabulary may still stamp 1, `getAiContractVersions().improvementFinding === 2` — `createImprovementRunManifest` builder output validates via `assertImprovementRunManifest` (extended optional fields: gitCommit, engineVersion, model, provider, seed, costUsd, durationMs, artifacts[], stopReason, gates), strict mode — `assertImprovementFinding(f, { requireVerificationEvidence: true })` rejects `verified` findings lacking a replayable evidence ref (`bundle|marker|tick`) or lacking `verificationMethod`, default mode unchanged (a hardcoded-`verified` finding without evidence still passes non-strict — farm compatibility pin), reverse conversion `visualPlaytestFindingToImprovementFinding(visual, { id, ... })` round-trips with `improvementFindingToVisualPlaytestFinding`.
-- [ ] **Step 2: RED**, **Step 3: Implement** (new fields are additive optional keys tolerated by v1 readers; the `nextAction` widening is NOT — it rides the schema-version-2 minimal-stamping rule per the DESIGN.md delta note), **Step 4: GREEN** including surface/LOC gates.
-- [ ] **Step 5: Docs + version** — 1.5.0 → 1.6.0; update the DESIGN.md shipped-vocabulary-delta note to record the resolution as shipped, including the version-2 stamping rule.
-- [ ] **Step 6: Full gates.** **Step 7: Adversarial review.** **Step 8: Commit + push** — `feat: complete improvement-loop contract (verification method, manifest lifecycle, strict mode)`.
+- [x] **Step 1: Failing tests first** — shipped in `tests/improvement-loop.test.ts` (19 tests; 11 RED before implementation).
+- [x] **Step 2: RED**, **Step 3: Implement**, **Step 4: GREEN** including surface/LOC gates (no split file needed — improvement-loop.ts stayed under 500).
+- [x] **Step 5: Docs + version** — 1.6.0; DESIGN delta note flipped to SHIPPED with the version-2 minimal-stamping rule; ADR 57.
+- [x] **Step 6: Full gates green.** **Step 7: Adversarial review** — Codex + Claude CLIs + 2 in-process; fixes: addressed-evidence requirement for strict mode (Codex HIGH), undefined-tolerant manifest builder + `minimalImprovementFindingSchemaVersion` helper (Claude), `ImprovementFindingInit` documented, cross-minor replayer test un-hardcoded. Synthesis: `2026-07-07/4/REVIEW.md`. **Step 8: Committed + pushed.**
 
 ## Task 6 (Track A): Close The Loop In `aoe2`
 

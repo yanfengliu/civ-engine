@@ -1,8 +1,8 @@
-import { IMPROVEMENT_FINDING_SCHEMA_VERSION } from './ai-contract.js';
 import { EngineRangeError, EngineTypeError } from './engine-error.js';
 import { assertJsonCompatible, cloneJsonValue, type JsonValue } from './json.js';
 import type { Marker } from './session-bundle.js';
 import type { NewMarker } from './session-recorder.js';
+import { ENGINE_VERSION } from './version.js';
 import {
   visualPlaytestFindingToMarker,
   type VisualPlaytestFinding,
@@ -11,18 +11,33 @@ import {
   type VisualPlaytestFindingSeverity,
 } from './visual-playtest.js';
 import type {
+  AssertImprovementFindingOptions,
   ImprovementDisposition,
   ImprovementEvidenceRef,
   ImprovementFinding,
+  ImprovementFindingInit,
+  ImprovementFindingSchemaVersion,
   ImprovementNextAction,
+  ImprovementPromotionTarget,
+  ImprovementRunManifest,
+  ImprovementRunManifestInput,
+  ImprovementVerificationMethod,
   ImprovementVerificationStatus,
 } from './improvement-loop-types.js';
 export type {
+  AssertImprovementFindingOptions,
   ImprovementDisposition,
   ImprovementEvidenceRef,
   ImprovementFinding,
+  ImprovementFindingInit,
+  ImprovementFindingSchemaVersion,
+  ImprovementGateResult,
   ImprovementNextAction,
+  ImprovementPromotionTarget,
+  ImprovementRunArtifact,
   ImprovementRunManifest,
+  ImprovementRunManifestInput,
+  ImprovementVerificationMethod,
   ImprovementVerificationStatus,
 } from './improvement-loop-types.js';
 
@@ -44,13 +59,48 @@ const VERIFICATION_STATUSES = new Set<ImprovementVerificationStatus>([
   'fixed',
   'regressed',
 ]);
-const NEXT_ACTIONS = new Set<ImprovementNextAction>([
+const V1_NEXT_ACTIONS = new Set<ImprovementNextAction>([
   'proposalOnly',
   'autoFix',
   'manualFix',
   'observeMore',
   'none',
 ]);
+const V2_ONLY_NEXT_ACTIONS = new Set<ImprovementNextAction>([
+  'improveHarness',
+  'fileEngineFeedback',
+  'addRegression',
+  'updateDesign',
+]);
+const NEXT_ACTIONS = new Set<ImprovementNextAction>([...V1_NEXT_ACTIONS, ...V2_ONLY_NEXT_ACTIONS]);
+const VERIFICATION_METHODS = new Set<ImprovementVerificationMethod>([
+  'replay',
+  'state',
+  'spec',
+  'metric',
+  'screenshot',
+  'human',
+]);
+const PROMOTION_TARGETS = new Set<ImprovementPromotionTarget>([
+  'test',
+  'scenario',
+  'fixture',
+  'assertion',
+  'backlog',
+  'engineFeedback',
+  'designQuestion',
+]);
+function isReplayableEvidenceRef(ref: ImprovementEvidenceRef): boolean {
+  if (ref.kind === 'tick') return ref.tick !== undefined;
+  if (ref.kind === 'marker') return typeof ref.markerId === 'string' && ref.markerId.length > 0;
+  if (ref.kind === 'bundle') {
+    return (
+      (typeof ref.bundleId === 'string' && ref.bundleId.length > 0) ||
+      (typeof ref.sessionId === 'string' && ref.sessionId.length > 0)
+    );
+  }
+  return false;
+}
 const DISPOSITIONS = new Set<ImprovementDisposition>(['candidate', 'accepted', 'rejected', 'deferred', 'wontFix']);
 const EVIDENCE_KINDS = new Set<ImprovementEvidenceRef['kind']>([
   'tick',
@@ -113,14 +163,17 @@ export function improvementFindingsFromMarkers(markers: readonly Marker[]): Impr
   return findings;
 }
 
-export function assertImprovementFinding(value: unknown): asserts value is ImprovementFinding {
+export function assertImprovementFinding(
+  value: unknown,
+  options: AssertImprovementFindingOptions = {},
+): asserts value is ImprovementFinding {
   if (!isRecord(value)) {
     throw new EngineTypeError('improvement_finding_invalid', 'improvement finding must be a plain object');
   }
-  if (value.schemaVersion !== IMPROVEMENT_FINDING_SCHEMA_VERSION) {
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
     throw new EngineRangeError(
       'improvement_finding_invalid',
-      `improvement finding schemaVersion must be ${IMPROVEMENT_FINDING_SCHEMA_VERSION}`,
+      'improvement finding schemaVersion must be 1 or 2',
       { details: { schemaVersion: serializableDetail(value.schemaVersion) } },
     );
   }
@@ -134,14 +187,120 @@ export function assertImprovementFinding(value: unknown): asserts value is Impro
   requireOptionalString(value.area, 'improvement finding area');
   requireSet(value.verificationStatus, VERIFICATION_STATUSES, 'improvement finding verificationStatus');
   requireSet(value.nextAction, NEXT_ACTIONS, 'improvement finding nextAction');
+  if (value.schemaVersion === 1 && V2_ONLY_NEXT_ACTIONS.has(value.nextAction as ImprovementNextAction)) {
+    throw new EngineRangeError(
+      'improvement_finding_invalid',
+      `improvement finding nextAction '${String(value.nextAction)}' requires schemaVersion 2`,
+      { details: { nextAction: serializableDetail(value.nextAction) } },
+    );
+  }
+  if (value.verificationMethod !== undefined) {
+    requireSet(value.verificationMethod, VERIFICATION_METHODS, 'improvement finding verificationMethod');
+  }
+  if (value.promotionTarget !== undefined) {
+    requireSet(value.promotionTarget, PROMOTION_TARGETS, 'improvement finding promotionTarget');
+  }
   if (value.disposition !== undefined) {
     requireSet(value.disposition, DISPOSITIONS, 'improvement finding disposition');
   }
   if (value.evidence !== undefined) assertEvidenceRefs(value.evidence);
-  if (value.sourceRun !== undefined) assertSourceRun(value.sourceRun);
+  if (value.sourceRun !== undefined) assertRunManifest(value.sourceRun, 'improvement sourceRun');
   if (value.data !== undefined) assertJsonCompatible(value.data, 'improvement finding data');
   if (value.refs !== undefined) assertJsonCompatible(value.refs, 'improvement finding refs');
   assertJsonCompatible(value, 'improvement finding');
+  if (options.requireVerificationEvidence && value.verificationStatus === 'verified') {
+    const evidence = (value.evidence ?? []) as readonly ImprovementEvidenceRef[];
+    if (!evidence.some(isReplayableEvidenceRef)) {
+      throw new EngineRangeError(
+        'improvement_finding_invalid',
+        'verified improvement findings require at least one addressed replayable evidence ref (tick with tick, marker with markerId, or bundle with bundleId/sessionId) under requireVerificationEvidence',
+      );
+    }
+    if (value.verificationMethod === undefined) {
+      throw new EngineRangeError(
+        'improvement_finding_invalid',
+        'verified improvement findings require verificationMethod under requireVerificationEvidence',
+      );
+    }
+  }
+}
+
+export function assertImprovementRunManifest(value: unknown): asserts value is ImprovementRunManifest {
+  assertRunManifest(value, 'improvement run manifest');
+}
+
+export function createImprovementRunManifest(input: ImprovementRunManifestInput): ImprovementRunManifest {
+  const provided = Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  ) as ImprovementRunManifestInput;
+  const manifest: ImprovementRunManifest = {
+    schemaVersion: 1,
+    ...provided,
+    engineVersion: provided.engineVersion ?? ENGINE_VERSION,
+  };
+  assertImprovementRunManifest(manifest);
+  return cloneJsonValue(manifest, 'improvement run manifest');
+}
+
+export function minimalImprovementFindingSchemaVersion(
+  nextAction: ImprovementNextAction,
+): ImprovementFindingSchemaVersion {
+  return V2_ONLY_NEXT_ACTIONS.has(nextAction) ? 2 : 1;
+}
+
+export function visualPlaytestFindingToImprovementFinding(
+  visual: VisualPlaytestFinding,
+  init: ImprovementFindingInit,
+): ImprovementFinding {
+  const nextAction = init.nextAction ?? 'proposalOnly';
+  const schemaVersion = minimalImprovementFindingSchemaVersion(nextAction);
+  const evidence = improvementEvidenceFromVisualEvidence(visual.evidence);
+  const finding: ImprovementFinding = {
+    schemaVersion,
+    id: init.id,
+    title: visual.title,
+    severity: visual.severity,
+    category: visual.category,
+    observed: visual.observed,
+    ...(visual.expected !== undefined ? { expected: visual.expected } : {}),
+    ...(visual.suggestion !== undefined ? { suggestion: visual.suggestion } : {}),
+    ...(visual.area !== undefined ? { area: visual.area } : {}),
+    ...(evidence ? { evidence } : {}),
+    ...(visual.refs !== undefined ? { refs: visual.refs } : {}),
+    verificationStatus: init.verificationStatus ?? 'unverified',
+    ...(init.verificationMethod !== undefined ? { verificationMethod: init.verificationMethod } : {}),
+    nextAction,
+    ...(init.promotionTarget !== undefined ? { promotionTarget: init.promotionTarget } : {}),
+    ...(init.disposition !== undefined ? { disposition: init.disposition } : {}),
+    ...(init.sourceRun !== undefined ? { sourceRun: init.sourceRun } : {}),
+    ...(init.data !== undefined ? { data: init.data } : {}),
+  };
+  assertImprovementFinding(finding);
+  return cloneJsonValue(finding, 'improvement finding');
+}
+
+function improvementEvidenceFromVisualEvidence(
+  evidence: VisualPlaytestFindingEvidence | undefined,
+): ImprovementEvidenceRef[] | undefined {
+  if (!evidence) return undefined;
+  const refs: ImprovementEvidenceRef[] = [];
+  if (evidence.tick !== undefined) refs.push({ kind: 'tick', tick: evidence.tick });
+  if (evidence.step !== undefined) {
+    refs.push({
+      kind: 'step',
+      step: evidence.step,
+      ...(evidence.actionIndex !== undefined ? { actionIndex: evidence.actionIndex } : {}),
+    });
+  } else if (evidence.actionIndex !== undefined) {
+    refs.push({ kind: 'trace', actionIndex: evidence.actionIndex });
+  }
+  if (evidence.screenshotPath !== undefined) {
+    refs.push({ kind: 'screenshot', screenshotPath: evidence.screenshotPath });
+  }
+  if (evidence.stateLabels !== undefined) {
+    refs.push({ kind: 'text', stateLabels: [...evidence.stateLabels] });
+  }
+  return refs.length > 0 ? refs : undefined;
 }
 
 function cloneImprovementFinding(finding: ImprovementFinding): ImprovementFinding {
@@ -157,7 +316,7 @@ function improvementLoopPayload(finding: ImprovementFinding): JsonValue {
 
 function improvementLoopFindingEnvelope(finding: ImprovementFinding): JsonValue {
   return {
-    schemaVersion: IMPROVEMENT_FINDING_SCHEMA_VERSION,
+    schemaVersion: finding.schemaVersion,
     type: 'finding',
     finding: cloneJsonValue(finding, 'improvement finding payload') as unknown as JsonValue,
   };
@@ -215,23 +374,76 @@ function assertEvidenceRefs(value: unknown): asserts value is readonly Improveme
   }
 }
 
-function assertSourceRun(value: unknown): void {
+function assertRunManifest(value: unknown, label: string): asserts value is ImprovementRunManifest {
   if (!isRecord(value)) {
-    throw new EngineTypeError('improvement_finding_invalid', 'improvement finding sourceRun must be a plain object');
+    throw new EngineTypeError('improvement_finding_invalid', `${label} must be a plain object`);
   }
   if (value.schemaVersion !== 1) {
-    throw new EngineRangeError('improvement_finding_invalid', 'improvement sourceRun schemaVersion must be 1');
+    throw new EngineRangeError('improvement_finding_invalid', `${label} schemaVersion must be 1`);
   }
-  requireNonEmptyString(value.id, 'improvement sourceRun id');
-  for (const key of ['gameId', 'objective', 'startedAt', 'completedAt', 'bundleId', 'sessionId'] as const) {
-    requireOptionalString(value[key], `improvement sourceRun ${key}`);
+  requireNonEmptyString(value.id, `${label} id`);
+  const stringKeys = [
+    'gameId',
+    'objective',
+    'startedAt',
+    'completedAt',
+    'bundleId',
+    'sessionId',
+    'gitCommit',
+    'engineVersion',
+    'model',
+    'provider',
+    'stopReason',
+  ] as const;
+  for (const key of stringKeys) {
+    requireOptionalString(value[key], `${label} ${key}`);
+  }
+  if (value.seed !== undefined && typeof value.seed !== 'string' && typeof value.seed !== 'number') {
+    throw new EngineTypeError('improvement_finding_invalid', `${label} seed must be a string or number`);
+  }
+  for (const key of ['costUsd', 'durationMs'] as const) {
+    if (value[key] !== undefined && !(typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0)) {
+      throw new EngineRangeError('improvement_finding_invalid', `${label} ${key} must be a non-negative finite number`);
+    }
+  }
+  if (value.artifacts !== undefined) {
+    if (
+      !Array.isArray(value.artifacts) ||
+      value.artifacts.some(
+        (artifact) =>
+          !isRecord(artifact) || typeof artifact.kind !== 'string' || typeof artifact.path !== 'string',
+      )
+    ) {
+      throw new EngineTypeError(
+        'improvement_finding_invalid',
+        `${label} artifacts must be an array of { kind, path } string pairs`,
+      );
+    }
+  }
+  if (value.gates !== undefined) {
+    if (
+      !Array.isArray(value.gates) ||
+      value.gates.some(
+        (gate) =>
+          !isRecord(gate) ||
+          typeof gate.name !== 'string' ||
+          typeof gate.ok !== 'boolean' ||
+          (gate.detail !== undefined && typeof gate.detail !== 'string'),
+      )
+    ) {
+      throw new EngineTypeError(
+        'improvement_finding_invalid',
+        `${label} gates must be an array of { name, ok, detail? } entries`,
+      );
+    }
   }
   if (value.tags !== undefined) {
     if (!Array.isArray(value.tags) || value.tags.some((tag) => typeof tag !== 'string')) {
-      throw new EngineTypeError('improvement_finding_invalid', 'improvement sourceRun tags must be an array of strings');
+      throw new EngineTypeError('improvement_finding_invalid', `${label} tags must be an array of strings`);
     }
   }
-  if (value.data !== undefined) assertJsonCompatible(value.data, 'improvement sourceRun data');
+  if (value.data !== undefined) assertJsonCompatible(value.data, `${label} data`);
+  assertJsonCompatible(value, label);
 }
 
 function requireNonEmptyString(value: unknown, label: string): void {
