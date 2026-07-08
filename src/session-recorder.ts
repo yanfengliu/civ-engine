@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { portableRandomUUID } from './uuid.js';
 import { cloneJsonValue, type JsonValue } from './json.js';
 import type { TickDiff } from './diff.js';
 import type {
@@ -105,7 +105,7 @@ export class SessionRecorder<
   private _failureListener: ((f: TickFailure) => void) | null = null;
 
   constructor(config: SessionRecorderConfig<TEventMap, TCommandMap, TDebug, TComponents, TState>) {
-    this.sessionId = randomUUID();
+    this.sessionId = portableRandomUUID();
     this._world = config.world;
     this._sink = config.sink ?? new MemorySink();
     this._snapshotInterval = config.snapshotInterval === undefined ? 1000 : config.snapshotInterval;
@@ -293,7 +293,7 @@ export class SessionRecorder<
     // Otherwise post-call mutation by user code would corrupt the recorded
     // bundle. Iter-1 code review fix (Codex H3 / memory aliasing).
     const marker: Marker = cloneJsonValue({
-      id: randomUUID(),
+      id: portableRandomUUID(),
       tick,
       kind: input.kind,
       provenance: 'game' as MarkerProvenance,
@@ -316,7 +316,7 @@ export class SessionRecorder<
 
   attach(blob: { mime: string; data: Uint8Array }, options?: { sidecar?: boolean }): string {
     this._assertOperational('attach');
-    const id = randomUUID();
+    const id = portableRandomUUID();
     // Default ref selection: when caller hasn't explicitly specified
     // `options.sidecar`, pass `{ auto: true }` so each sink applies its
     // own default policy:

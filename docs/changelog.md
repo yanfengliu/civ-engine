@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.1 - 2026-07-08
+
+Browser-safe session ids. **Patch - no API or behavior change.**
+
+`SessionRecorder` and `scenarioResultToBundle` imported `randomUUID` from `node:crypto`, which fails module resolution in browsers and workers — an in-page recorder took the embedding game bundle down with it (surfaced by farm's dev-mode recorder). Both now use a portable UUID (`globalThis.crypto.randomUUID` with a `getRandomValues` v4 fallback; throws coded `uuid_crypto_unavailable` if no WebCrypto exists). Ids are metadata, not simulation state, so determinism discipline is unaffected. A scan test pins that browser-reachable session modules import no `node:` builtins (`FileSink` and the disk corpus remain node-only by design).
+
+### Validation
+
+New `tests/uuid.test.ts` (v4 shape/uniqueness + the node-builtin scan). Full gates green: `npm test` (1303 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
 ## 1.6.0 - 2026-07-07
 
 Improvement-loop contract completion. **Additive minor for code (no runtime behavior of existing valid payloads changes, with one edge: `sourceRun` manifests now type-validate the ten newly-recognized manifest keys, so a degenerate payload like `sourceRun.model: 42` that v1.4.0 tolerated as unknown JSON is now rejected); introduces finding schema version 2 with minimal stamping.**

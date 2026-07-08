@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { portableRandomUUID } from './uuid.js';
 import { cloneJsonValue } from './json.js';
 import type { RegistrationManifest } from './session-bundle.js';
 import type { ScenarioResult } from './scenario-runner.js';
@@ -74,7 +74,7 @@ export function scenarioResultToBundle<
   );
 
   const metadata: SessionMetadata = {
-    sessionId: randomUUID(),
+    sessionId: portableRandomUUID(),
     engineVersion: ENGINE_VERSION,
     nodeVersion: options?.nodeVersion ?? (typeof process !== 'undefined' ? process.version : 'unknown'),
     recordedAt: new Date().toISOString(),
@@ -99,7 +99,7 @@ export function scenarioResultToBundle<
   };
 
   const markers: Marker[] = result.checks.map((outcome) => ({
-    id: randomUUID(),
+    id: portableRandomUUID(),
     tick: endTick,
     kind: 'assertion' as const,
     provenance: 'engine' as const,

@@ -6357,6 +6357,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `scenario_failure_code_empty`, `scenario_steps_invalid` | ScenarioRunner | Scenario config validation | — (E) |
 | `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid`, `visual_playtest_max_steps_invalid`, `visual_playtest_config_invalid` | synthetic playtest / AI playtester / visual playtest harness | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` / `{ maxSteps }` / `{ field, value }` (R) |
 | `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
+| `uuid_crypto_unavailable` | session recording | No WebCrypto implementation on `globalThis.crypto` (session/marker id generation) | — (E) |
 
 The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.
 
