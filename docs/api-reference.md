@@ -5818,6 +5818,7 @@ interface VisualPlaytestControl {
 }
 
 interface VisualPlaytestObservation {
+  tick?: number;
   screenshot?: VisualPlaytestScreenshot;
   visibleText?: readonly string[];
   controls?: readonly VisualPlaytestControl[];
@@ -5825,6 +5826,8 @@ interface VisualPlaytestObservation {
   metadata?: JsonValue;
 }
 ```
+
+`tick` (v1.5.0) is the optional simulation tick the observation was captured at. Hosts that stamp it give findings and replay inspection a typed anchor from a screenshot-level observation back to the deterministic sim; the prompt helpers surface it as `Simulation tick: N`, and trace/redaction clones preserve it.
 
 `playerBlind` prompts omit all hidden state. `oracleAssisted` prompts include only state channels marked `audience: 'agent'`; reviewer and trace-only channels stay out of the prompt. Safe traces redact screenshot data URLs by default. State channels use `redaction: 'value'` to keep label/summary but omit `value`, `redaction: 'channel'` to omit the channel from safe traces/prompts, and `redaction: 'none'` to keep the value even when `sensitive: true`.
 
@@ -5929,7 +5932,7 @@ interface VisualPlaytestActionResult {
   error?: VisualPlaytestErrorShape;
 }
 
-type VisualPlaytestStopReason = 'maxSteps' | 'agentStop' | 'noActions' | 'actionFailed' | 'hostError' | 'agentError';
+type VisualPlaytestStopReason = 'maxSteps' | 'agentStop' | 'noActions' | 'actionFailed' | 'hostError' | 'agentError' | 'budgetExceeded' | 'aborted';
 
 interface VisualPlaytestTraceEntry {
   step: number;
@@ -5942,12 +5945,23 @@ interface VisualPlaytestTraceEntry {
   error?: VisualPlaytestErrorShape;
 }
 
+interface VisualPlaytestBudget {
+  maxWallClockMs?: number;
+  maxActionsPerStep?: number;
+  maxActionFailures?: number;
+}
+
 interface VisualPlaytestLoopConfig {
   host: VisualPlaytestHost;
   agent: VisualPlaytestAgent;
   maxSteps: number;
   promptMode?: VisualPlaytestPromptMode;
   traceObservation?: 'redacted' | 'full';
+  budget?: VisualPlaytestBudget;
+  signal?: AbortSignal;
+  agentObservation?: 'raw' | 'redacted';
+  onActionFailure?: 'abort' | 'continue';
+  now?: () => number;
 }
 
 interface VisualPlaytestLoopResult {
@@ -5962,7 +5976,16 @@ interface VisualPlaytestLoopResult {
 function runVisualPlaytestLoop(config: VisualPlaytestLoopConfig): Promise<VisualPlaytestLoopResult>;
 ```
 
-`traceObservation` defaults to `'redacted'`. Host/agent errors are captured in the result instead of rejecting the returned promise; invalid `maxSteps` throws `EngineRangeError` code `visual_playtest_max_steps_invalid`.
+`traceObservation` defaults to `'redacted'`. Host/agent errors are captured in the result instead of rejecting the returned promise; invalid `maxSteps` throws `EngineRangeError` code `visual_playtest_max_steps_invalid`, and invalid values for the v1.5.0 options throw code `visual_playtest_config_invalid` with `details.field`.
+
+The v1.5.0 hardening options are all opt-in; omitting them preserves pre-1.5.0 behavior exactly (with no budget set, the loop never reads the clock):
+
+- `budget.maxWallClockMs` stops the loop with `stopReason: 'budgetExceeded'` (`ok: true`, a bounded stop like `maxSteps`) once elapsed wall-clock strictly exceeds the cap. Checks run at step boundaries, after `observe`, after each decision, and before each action — the loop cannot interrupt an in-flight `observe`/`decide`/`annotate`/`performAction` call (a breach that lands during the final step's last action exits via the natural stop), so pass the same `signal` to your provider/browser calls for hard cancellation. `now` overrides the clock source (testing/integration); it defaults to `Date.now`.
+- `budget.maxActionsPerStep` executes only the first N actions of a decision; the full proposed list stays visible on the trace entry's `decision`, and a `stop` action in the truncated tail is still honored after the executed prefix completes cleanly (so an explicit agent stop is never silently discarded).
+- `signal` (an `AbortSignal`) stops the loop at the same checkpoints with `stopReason: 'aborted'`, `ok: false`, and an `AbortError`-shaped `result.error`; abort wins over a simultaneous budget breach, and an abort observed right after `decide` skips `host.annotate` (the host may already be tearing down) while still collecting that decision's findings.
+- `agentObservation: 'redacted'` enforces the hidden-state wall at the agent boundary: `agent.decide` receives `observationForAgent(observation, promptMode)` instead of the raw observation, and the `trace` it receives is an agent-facing view whose entry observations (including nested action-result observations) pass through the same filter — reviewer/traceOnly channels never reach the agent even from prior steps or under `traceObservation: 'full'`. The returned `result.trace` stays under `traceObservation` control. The default `'raw'` preserves the historical behavior where redaction is only advisory.
+- `onActionFailure: 'continue'` records a failed action on the trace, reports it to the next `observe` via `previousActionResult` (thrown actions report a synthetic `{ ok: false, action, error }`), skips the rest of that step's actions, and keeps looping instead of ending the run. `budget.maxActionFailures` caps total failures (thrown and `ok: false` alike); exceeding the cap ends the run with `stopReason: 'actionFailed'`. Setting `budget.maxActionFailures` without `onActionFailure: 'continue'` is rejected as `visual_playtest_config_invalid` — under the default abort policy it would be silently dead.
+- Cost/token metering stays game-side where the provider calls live; the engine budget covers wall-clock and action counts only. Only `budget.*`, `agentObservation`, and `onActionFailure` are runtime-validated; `signal` and `now` are type-checked only.
 
 ### Prompt, redaction, and marker helpers
 
@@ -5980,11 +6003,21 @@ interface VisualPlaytestRedactionOptions {
   includeStateValues?: boolean;
 }
 
+type VisualPlaytestPromptPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: VisualPlaytestScreenshot };
+
 function buildVisualPlaytestPrompt(input: VisualPlaytestPromptInput): string;
+function buildVisualPlaytestPromptParts(input: VisualPlaytestPromptInput): VisualPlaytestPromptPart[];
+function observationForAgent(observation: VisualPlaytestObservation, mode?: VisualPlaytestPromptMode): VisualPlaytestObservation;
 function redactVisualPlaytestObservation(observation: VisualPlaytestObservation, options?: VisualPlaytestRedactionOptions): VisualPlaytestObservation;
 function visualPlaytestFindingToMarker(finding: VisualPlaytestFinding): NewMarker;
 function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPlaytestFinding[];
 ```
+
+`buildVisualPlaytestPromptParts` (v1.5.0) is the multimodal sibling of `buildVisualPlaytestPrompt`: it returns typed parts where the screenshot is a single `{ type: 'image', source }` part carrying `path`/`dataUrl`/`mime`/dimensions for the game's provider adapter to map into image content blocks, and the text parts carry the same mode/objective/tick/visible-text/controls/hidden-state sections as the string prompt (minus the screenshot descriptor line). The string helper renders the screenshot as text only — following it verbatim sends no pixels to the model.
+
+`observationForAgent` (v1.5.0) produces the agent-safe view of an observation for a prompt mode (`mode` defaults to `'playerBlind'`): `playerBlind` drops all state channels; `oracleAssisted` keeps only `audience: 'agent'` channels with their redaction levels applied (sensitive values withheld with `redacted: true`). The screenshot — including `dataUrl` — visible text, controls, `tick`, and metadata are preserved; `metadata` is host-owned free-form JSON and is NOT audience-filtered, so do not stuff oracle state there in player-blind experiments. `runVisualPlaytestLoop` applies it automatically under `agentObservation: 'redacted'`, to both the current observation and the agent-facing trace view.
 
 `visualPlaytestFindingToMarker` emits a `NewMarker` with `kind: 'annotation'`, text shaped as `[severity/category] title`, and structured data under `data.visualPlaytest`. `visualPlaytestFindingsFromMarkers` ignores unrelated markers and recovers only markers produced by the helper.
 
@@ -6275,7 +6308,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `rng_state_invalid`, `rng_seed_invalid` | Random | Bad RNG state/seed | — (R) |
 | `resource_already_registered`, `resource_not_registered`, `resource_state_invalid`, `resource_value_invalid` | ResourceStore | Resource registry/state validation | `{ key }`, `{ id }`, `{ label }` per site (E) |
 | `scenario_failure_code_empty`, `scenario_steps_invalid` | ScenarioRunner | Scenario config validation | — (E) |
-| `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid`, `visual_playtest_max_steps_invalid` | synthetic playtest / AI playtester / visual playtest harness | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` / `{ maxSteps }` (R) |
+| `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid`, `visual_playtest_max_steps_invalid`, `visual_playtest_config_invalid` | synthetic playtest / AI playtester / visual playtest harness | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` / `{ maxSteps }` / `{ field, value }` (R) |
 | `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
 
 The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.

@@ -297,6 +297,8 @@ export {
 // contracts for screenshot/control/state-channel based game playtesting.
 export {
   buildVisualPlaytestPrompt,
+  buildVisualPlaytestPromptParts,
+  observationForAgent,
   redactVisualPlaytestObservation,
   runVisualPlaytestLoop,
   visualPlaytestFindingToMarker,
@@ -308,6 +310,7 @@ export {
   type VisualPlaytestAgent,
   type VisualPlaytestAgentInput,
   type VisualPlaytestAnnotationContext,
+  type VisualPlaytestBudget,
   type VisualPlaytestControl,
   type VisualPlaytestDecision,
   type VisualPlaytestErrorShape,
@@ -323,6 +326,7 @@ export {
   type VisualPlaytestPoint,
   type VisualPlaytestPromptInput,
   type VisualPlaytestPromptMode,
+  type VisualPlaytestPromptPart,
   type VisualPlaytestRect,
   type VisualPlaytestRedactionOptions,
   type VisualPlaytestScreenshot,

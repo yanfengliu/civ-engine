@@ -291,13 +291,13 @@ const result = runSynthPlaytest({
 
 See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
 
-## Visual Playtest Harness (v1.3.0)
+## Visual Playtest Harness (v1.3.0, hardened v1.5.0)
 
 Use `runVisualPlaytestLoop` when the agent should interact with a rendered game the way a player would: inspect screenshots, visible text, and available controls; choose click/key/type/wait actions; record findings; then repeat. This complements `runAgentPlaytest`, which drives a `World` through commands. The visual harness is engine-owned only at the contract level: game repos still provide the browser adapter, DOM/canvas control extraction, screenshots, and model/provider client.
 
 ```typescript
 import {
-  buildVisualPlaytestPrompt,
+  buildVisualPlaytestPromptParts,
   runVisualPlaytestLoop,
   type VisualPlaytestAgent,
   type VisualPlaytestHost,
@@ -305,6 +305,7 @@ import {
 
 const host: VisualPlaytestHost = {
   observe: async () => ({
+    tick: game.tick,
     screenshot: await captureScreenshotDescriptor(),
     visibleText: await readVisibleText(),
     controls: await readAvailableControls(),
@@ -317,13 +318,30 @@ const host: VisualPlaytestHost = {
 };
 
 const agent: VisualPlaytestAgent = {
-  decide: async (input) => callModel(buildVisualPlaytestPrompt({ observation: input.observation, mode: input.mode })),
+  decide: async (input) => {
+    const parts = buildVisualPlaytestPromptParts({ observation: input.observation, mode: input.mode });
+    // Map parts into your provider's content blocks: text parts verbatim,
+    // the image part's source.dataUrl/path as an image block so the model sees pixels.
+    return callModel(toProviderContent(parts));
+  },
 };
 
-const result = await runVisualPlaytestLoop({ host, agent, maxSteps: 20, promptMode: 'playerBlind' });
+const controller = new AbortController();
+const result = await runVisualPlaytestLoop({
+  host,
+  agent,
+  maxSteps: 20,
+  promptMode: 'playerBlind',
+  agentObservation: 'redacted',
+  onActionFailure: 'continue',
+  budget: { maxWallClockMs: 5 * 60_000, maxActionsPerStep: 6, maxActionFailures: 5 },
+  signal: controller.signal,
+});
 ```
 
-Hidden state is explicit and audience-labeled. `playerBlind` prompts omit it; `oracleAssisted` prompts include only channels marked `audience: 'agent'`. Sensitive state values and screenshot data URLs are redacted from safe traces by default. See `docs/guides/visual-playtest-harness.md` for adapter guidance for browser-game repos.
+Use `buildVisualPlaytestPromptParts` — not the string-only `buildVisualPlaytestPrompt` — when the model should actually see the screenshot: the string helper renders the image as a text descriptor, so a provider call built from it alone sends no pixels.
+
+Hidden state is explicit and audience-labeled. `playerBlind` prompts omit it; `oracleAssisted` prompts include only channels marked `audience: 'agent'`. Sensitive state values and screenshot data URLs are redacted from safe traces by default. With `agentObservation: 'redacted'` the loop enforces that wall at the `decide()` boundary itself (via `observationForAgent`) instead of trusting the agent to route through the prompt helper. The v1.5.0 budgets/abort/failure-policy options are opt-in and default to the historical behavior; the loop checks them between awaits, so pass the same `AbortSignal` into your provider/browser calls for hard cancellation. See `docs/guides/visual-playtest-harness.md` for adapter guidance for browser-game repos.
 
 ## Improvement Finding Contract (v1.4.0)
 

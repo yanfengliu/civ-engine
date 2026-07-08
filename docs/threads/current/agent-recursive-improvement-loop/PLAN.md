@@ -25,14 +25,14 @@
 - Modify: `src/index.ts`, `tests/visual-playtest.test.ts`, `tests/fixtures/public-surface.json`
 - Modify: `README.md`, `docs/api-reference.md`, `docs/guides/visual-playtest-harness.md`, `docs/guides/ai-integration.md`, `docs/guides/concepts.md`, `docs/architecture/ARCHITECTURE.md`, `docs/architecture/decisions.md`, `docs/architecture/drift-log.md`, `docs/changelog.md`, `docs/devlog/summary.md`, latest `docs/devlog/detailed/*.md`, `package.json`
 
-- [ ] **Step 1: Failing tests first** for each opt-in behavior: budget stop (`maxWallClockMs` exceeded → `stopReason: 'budgetExceeded'`, ok), `AbortSignal` (abort mid-loop → `stopReason: 'aborted'`), `maxActionsPerStep` enforcement, `agentObservation: 'redacted'` (agent receives audience-filtered observation per `promptMode` with screenshot preserved; reviewer/traceOnly/sensitive values absent), `observationForAgent` helper direct, `onActionFailure: 'continue'` (+ `maxActionFailures` cap; failed action recorded in trace, `previousActionResult` carries the error, remaining same-step actions skipped), optional `tick?: number` on observation surfacing in prompt text, `buildVisualPlaytestPromptParts` (text parts equal the string builder's content; image part carries path/dataUrl/mime/dimensions; playerBlind excludes hidden state). Plus default-behavior pins: with no new options, existing semantics are byte-identical (existing suite must stay green untouched).
-- [ ] **Step 2: RED** — `npx.cmd vitest run tests/visual-playtest.test.ts`.
-- [ ] **Step 3: Implement** the additive surface. Keep each file under 500 LOC — extract prompt/redaction helpers to `src/visual-playtest-prompt.ts` if needed (barrel-exported, no public-surface change beyond the new names).
-- [ ] **Step 4: GREEN** — focused tests, then `tests/public-surface.test.ts` + `tests/loc-budget.test.ts`.
-- [ ] **Step 5: Docs + surface pin + version** — 1.4.0 → 1.5.0, changelog entry with behavior callouts (new stopReason values called out for downstream type consumers), guide sections for budgets/redaction/retry/tick/prompt-parts, ADR rows for "runner hardening is opt-in" and "output-union widening ships as additive-with-callout when verified against all known consumers" (verified 2026-07-07: farm passes stopReason through as data, city equality-checks, Harborform's union is open `string & {}`, aoe2 does not consume the runner), drift-log row + ARCHITECTURE visual-playtest row refresh.
-- [ ] **Step 6: Full gates** — `npm.cmd test`, `npm.cmd run typecheck`, `npm.cmd run lint`, `npm.cmd run build`.
-- [ ] **Step 7: Adversarial review** (in-process Workflow; attempt multi-CLI since the runner is agent-loop code), fix findings, re-review until nitpicks only.
-- [ ] **Step 8: Commit + push** — `feat: harden visual playtest runner (budgets, redaction, retry, tick, prompt parts)`.
+- [x] **Step 1: Failing tests first** — shipped as `tests/visual-playtest-hardening.test.ts` + `tests/visual-playtest-redaction-wall.test.ts` (split for the 500-LOC test budget).
+- [x] **Step 2: RED** verified (16/17 initial failures; the default-behavior pin passed by design).
+- [x] **Step 3: Implement** — prompt/redaction builders extracted to `src/visual-playtest-prompt.ts`.
+- [x] **Step 4: GREEN** including surface/LOC gates.
+- [x] **Step 5: Docs + surface pin + version** — 1.5.0; ADR 55 (opt-in hardening) + ADR 56 (output-union widening policy, consumer-verified); drift-log + ARCHITECTURE rows.
+- [x] **Step 6: Full gates green.**
+- [x] **Step 7: Adversarial review** — Codex CLI + Claude CLI + two in-process reviewers; review fixes: agent-facing trace wall (HIGH, three independent reviewers), abort-skips-annotate, lazy clock read, truncated-stop honoring, maxActionFailures pairing validation, post-observe checkpoint. Synthesis: `2026-07-07/3/REVIEW.md`.
+- [x] **Step 8: Committed + pushed.**
 
 ## Task 5: Engine v1.6.0 — Improvement-Loop Contract Completion
 

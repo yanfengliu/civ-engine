@@ -74,6 +74,7 @@ export interface VisualPlaytestControl {
 }
 
 export interface VisualPlaytestObservation {
+  tick?: number;
   screenshot?: VisualPlaytestScreenshot;
   visibleText?: readonly string[];
   controls?: readonly VisualPlaytestControl[];
@@ -201,7 +202,15 @@ export type VisualPlaytestStopReason =
   | 'noActions'
   | 'actionFailed'
   | 'hostError'
-  | 'agentError';
+  | 'agentError'
+  | 'budgetExceeded'
+  | 'aborted';
+
+export interface VisualPlaytestBudget {
+  maxWallClockMs?: number;
+  maxActionsPerStep?: number;
+  maxActionFailures?: number;
+}
 
 export interface VisualPlaytestTraceEntry {
   step: number;
@@ -220,6 +229,11 @@ export interface VisualPlaytestLoopConfig {
   maxSteps: number;
   promptMode?: VisualPlaytestPromptMode;
   traceObservation?: 'redacted' | 'full';
+  budget?: VisualPlaytestBudget;
+  signal?: AbortSignal;
+  agentObservation?: 'raw' | 'redacted';
+  onActionFailure?: 'abort' | 'continue';
+  now?: () => number;
 }
 
 export interface VisualPlaytestLoopResult {
@@ -243,3 +257,7 @@ export interface VisualPlaytestRedactionOptions {
   includeSensitiveState?: boolean;
   includeStateValues?: boolean;
 }
+
+export type VisualPlaytestPromptPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: VisualPlaytestScreenshot };

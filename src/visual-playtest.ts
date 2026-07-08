@@ -12,7 +12,7 @@ import type {
   VisualPlaytestLoopConfig,
   VisualPlaytestLoopResult,
   VisualPlaytestObservation,
-  VisualPlaytestPromptInput,
+  VisualPlaytestPromptMode,
   VisualPlaytestRedactionOptions,
   VisualPlaytestScreenshot,
   VisualPlaytestStateChannel,
@@ -27,6 +27,7 @@ export type {
   VisualPlaytestAgent,
   VisualPlaytestAgentInput,
   VisualPlaytestAnnotationContext,
+  VisualPlaytestBudget,
   VisualPlaytestControl,
   VisualPlaytestDecision,
   VisualPlaytestErrorShape,
@@ -42,6 +43,7 @@ export type {
   VisualPlaytestPoint,
   VisualPlaytestPromptInput,
   VisualPlaytestPromptMode,
+  VisualPlaytestPromptPart,
   VisualPlaytestRect,
   VisualPlaytestRedactionOptions,
   VisualPlaytestScreenshot,
@@ -51,6 +53,7 @@ export type {
   VisualPlaytestTraceEntry,
   VisualPlaytestViewport,
 } from './visual-playtest-types.js';
+export { buildVisualPlaytestPrompt, buildVisualPlaytestPromptParts } from './visual-playtest-prompt.js';
 
 export async function runVisualPlaytestLoop(
   config: VisualPlaytestLoopConfig,
@@ -63,13 +66,42 @@ export async function runVisualPlaytestLoop(
     );
   }
 
+  validateLoopOptions(config);
+
   const mode = config.promptMode ?? 'playerBlind';
+  const now = config.now ?? Date.now;
+  const maxWallClockMs = config.budget?.maxWallClockMs;
+  const startedAt = maxWallClockMs !== undefined ? now() : 0;
+  const maxActionsPerStep = config.budget?.maxActionsPerStep;
+  const maxActionFailures = config.budget?.maxActionFailures;
+  const continueOnFailure = config.onActionFailure === 'continue';
+  const redactedBoundary = config.agentObservation === 'redacted';
   const trace: VisualPlaytestTraceEntry[] = [];
+  const agentTrace: VisualPlaytestTraceEntry[] = redactedBoundary ? [] : trace;
   const findings: VisualPlaytestFinding[] = [];
   let previousActionResult: VisualPlaytestActionResult | undefined;
   let stepsRun = 0;
+  let actionFailures = 0;
+
+  const pushTrace = (entry: VisualPlaytestTraceEntry): void => {
+    trace.push(entry);
+    if (redactedBoundary) agentTrace.push(traceEntryForAgent(entry, mode));
+  };
+
+  const interruption = (): VisualPlaytestLoopResult | null => {
+    if (config.signal?.aborted) {
+      return stop(false, 'aborted', stepsRun, trace, findings, abortErrorShape(config.signal));
+    }
+    if (maxWallClockMs !== undefined && now() - startedAt > maxWallClockMs) {
+      return stop(true, 'budgetExceeded', stepsRun, trace, findings);
+    }
+    return null;
+  };
 
   for (let step = 0; step < config.maxSteps; step++) {
+    const interruptedBeforeStep = interruption();
+    if (interruptedBeforeStep) return interruptedBeforeStep;
+
     let observation: VisualPlaytestObservation;
     try {
       observation = await config.host.observe({ step, previousActionResult });
@@ -77,41 +109,64 @@ export async function runVisualPlaytestLoop(
       return stop(false, 'hostError', stepsRun, trace, findings, errorShape(e));
     }
 
+    const interruptedAfterObserve = interruption();
+    if (interruptedAfterObserve) return interruptedAfterObserve;
+
+    const agentView = redactedBoundary ? observationForAgent(observation, mode) : observation;
+
     let decision: VisualPlaytestDecision;
     try {
-      decision = await config.agent.decide({ step, maxSteps: config.maxSteps, mode, observation, trace });
+      decision = await config.agent.decide({
+        step,
+        maxSteps: config.maxSteps,
+        mode,
+        observation: agentView,
+        trace: agentTrace,
+      });
     } catch (e) {
       return stop(false, 'agentError', stepsRun, trace, findings, errorShape(e));
     }
 
     const stepFindings = [...(decision.findings ?? [])];
-    if (stepFindings.length > 0) {
-      findings.push(...stepFindings);
-      if (config.host.annotate) {
-        try {
-          for (const finding of stepFindings) {
-            await config.host.annotate(finding, { step, observation });
-          }
-        } catch (e) {
-          return stop(false, 'hostError', stepsRun, trace, findings, errorShape(e));
+    if (stepFindings.length > 0) findings.push(...stepFindings);
+    if (config.signal?.aborted) {
+      stepsRun = step + 1;
+      return stop(false, 'aborted', stepsRun, trace, findings, abortErrorShape(config.signal));
+    }
+    if (stepFindings.length > 0 && config.host.annotate) {
+      try {
+        for (const finding of stepFindings) {
+          await config.host.annotate(finding, { step, observation });
         }
+      } catch (e) {
+        return stop(false, 'hostError', stepsRun, trace, findings, errorShape(e));
       }
     }
 
-    const actions = actionsFromDecision(decision);
+    stepsRun = step + 1;
+    const interruptedAfterDecide = interruption();
+    if (interruptedAfterDecide) return interruptedAfterDecide;
+
+    const traceClone = (): VisualPlaytestObservation =>
+      config.traceObservation === 'full'
+        ? cloneObservation(observation, { includeScreenshotDataUrl: true, includeSensitiveState: true })
+        : redactVisualPlaytestObservation(observation);
+
+    const allActions = actionsFromDecision(decision);
+    const actions = maxActionsPerStep !== undefined ? allActions.slice(0, maxActionsPerStep) : allActions;
     if (actions.length === 0) {
-      stepsRun = step + 1;
       return stop(true, decision.stopReason ? 'agentStop' : 'noActions', stepsRun, trace, findings);
     }
 
+    let failedThisStep = false;
     for (let actionIndex = 0; actionIndex < actions.length; actionIndex++) {
+      const interruptedBeforeAction = interruption();
+      if (interruptedBeforeAction) return interruptedBeforeAction;
+
       const action = actions[actionIndex];
-      const observationForTrace =
-        config.traceObservation === 'full'
-          ? cloneObservation(observation, { includeScreenshotDataUrl: true, includeSensitiveState: true })
-          : redactVisualPlaytestObservation(observation);
+      const observationForTrace = traceClone();
       if (action.kind === 'stop') {
-        trace.push({
+        pushTrace({
           step,
           actionIndex,
           observation: observationForTrace,
@@ -120,7 +175,6 @@ export async function runVisualPlaytestLoop(
           findings: stepFindings,
           result: { ok: true, action, message: action.reason ?? decision.stopReason ?? 'agent stopped' },
         });
-        stepsRun = step + 1;
         return stop(true, 'agentStop', stepsRun, trace, findings);
       }
 
@@ -133,12 +187,20 @@ export async function runVisualPlaytestLoop(
         }), action);
       } catch (e) {
         const error = errorShape(e);
-        trace.push({ step, actionIndex, observation: observationForTrace, decision, action, error });
-        stepsRun = step + 1;
-        return stop(false, 'actionFailed', stepsRun, trace, findings, error);
+        pushTrace({ step, actionIndex, observation: observationForTrace, decision, action, error });
+        if (!continueOnFailure) {
+          return stop(false, 'actionFailed', stepsRun, trace, findings, error);
+        }
+        actionFailures += 1;
+        if (maxActionFailures !== undefined && actionFailures > maxActionFailures) {
+          return stop(false, 'actionFailed', stepsRun, trace, findings, error);
+        }
+        previousActionResult = { ok: false, action, error };
+        failedThisStep = true;
+        break;
       }
 
-      trace.push({
+      pushTrace({
         step,
         actionIndex,
         observation: observationForTrace,
@@ -149,47 +211,69 @@ export async function runVisualPlaytestLoop(
       });
       previousActionResult = result;
       if (!result.ok) {
-        stepsRun = step + 1;
-        return stop(false, 'actionFailed', stepsRun, trace, findings, result.error);
+        if (!continueOnFailure) {
+          return stop(false, 'actionFailed', stepsRun, trace, findings, result.error);
+        }
+        actionFailures += 1;
+        if (maxActionFailures !== undefined && actionFailures > maxActionFailures) {
+          return stop(false, 'actionFailed', stepsRun, trace, findings, result.error);
+        }
+        failedThisStep = true;
+        break;
       }
     }
-    stepsRun = step + 1;
+
+    if (!failedThisStep && actions.length < allActions.length) {
+      const truncatedStop = allActions.slice(actions.length).find((action) => action.kind === 'stop');
+      if (truncatedStop) {
+        pushTrace({
+          step,
+          actionIndex: actions.length,
+          observation: traceClone(),
+          decision,
+          action: truncatedStop,
+          findings: stepFindings,
+          result: {
+            ok: true,
+            action: truncatedStop,
+            message: truncatedStop.reason ?? decision.stopReason ?? 'agent stopped',
+          },
+        });
+        return stop(true, 'agentStop', stepsRun, trace, findings);
+      }
+    }
   }
 
   return stop(true, 'maxSteps', stepsRun, trace, findings);
 }
 
-export function buildVisualPlaytestPrompt(input: VisualPlaytestPromptInput): string {
-  const mode = input.mode ?? 'playerBlind';
-  const lines: string[] = [
-    'You are playtesting a browser game through player-surface evidence.',
-    `Mode: ${mode}.`,
-  ];
-  if (input.objective) lines.push(`Objective: ${input.objective}`);
-  if (input.maxActions !== undefined) lines.push(`Maximum actions to return: ${input.maxActions}.`);
+export function observationForAgent(
+  observation: VisualPlaytestObservation,
+  mode: VisualPlaytestPromptMode = 'playerBlind',
+): VisualPlaytestObservation {
+  const clone = cloneObservation(observation, { includeScreenshotDataUrl: true });
+  const { state, ...rest } = clone;
+  if (mode !== 'oracleAssisted') return rest;
+  const agentState = state?.filter((channel) => channel.audience === 'agent');
+  return agentState && agentState.length > 0 ? { ...rest, state: agentState } : rest;
+}
 
-  const { observation } = input;
-  if (observation.screenshot) {
-    lines.push(`Screenshot: ${formatScreenshot(observation.screenshot)}`);
-  }
-  if (observation.visibleText?.length) {
-    lines.push('Visible text:');
-    for (const text of observation.visibleText) lines.push(`- ${text}`);
-  }
-  if (observation.controls?.length) {
-    lines.push('Available controls:');
-    for (const control of observation.controls) lines.push(`- ${formatControl(control)}`);
-  }
-  if (mode === 'oracleAssisted') {
-    const channels = observation.state?.filter((channel) =>
-      channel.audience === 'agent' && channel.redaction !== 'channel') ?? [];
-    if (channels.length) {
-      lines.push('Agent-visible hidden state:');
-      for (const channel of channels) lines.push(`- ${formatStateChannelForPrompt(channel)}`);
-    }
-  }
-  lines.push('Return only actions a player could take unless the host exposes a hidden-state diagnostic.');
-  return lines.join('\n');
+function traceEntryForAgent(
+  entry: VisualPlaytestTraceEntry,
+  mode: VisualPlaytestPromptMode,
+): VisualPlaytestTraceEntry {
+  return {
+    ...entry,
+    observation: observationForAgent(entry.observation, mode),
+    ...(entry.result?.observation
+      ? {
+          result: {
+            ...entry.result,
+            observation: observationForAgent(entry.result.observation, mode),
+          },
+        }
+      : {}),
+  };
 }
 
 export function redactVisualPlaytestObservation(
@@ -284,6 +368,7 @@ function cloneObservation(
   options: VisualPlaytestRedactionOptions = { },
 ): VisualPlaytestObservation {
   return {
+    ...(observation.tick !== undefined ? { tick: observation.tick } : {}),
     ...(observation.screenshot ? { screenshot: cloneScreenshot(observation.screenshot, options) } : {}),
     ...(observation.visibleText ? { visibleText: [...observation.visibleText] } : {}),
     ...(observation.controls ? { controls: observation.controls.map(cloneControl) } : {}),
@@ -339,34 +424,6 @@ function cloneStateChannel(
   }];
 }
 
-function formatScreenshot(screenshot: VisualPlaytestScreenshot): string {
-  const source = screenshot.path ?? (screenshot.dataUrl ? '[inline data URL available]' : '[not provided]');
-  const size = screenshot.width !== undefined && screenshot.height !== undefined
-    ? ` ${screenshot.width}x${screenshot.height}`
-    : '';
-  const mime = screenshot.mime ? ` ${screenshot.mime}` : '';
-  return `${source}${size}${mime}`.trim();
-}
-
-function formatControl(control: VisualPlaytestControl): string {
-  const id = control.id ? `${control.id}: ` : '';
-  const actions = control.actionKinds?.length ? ` actions=${control.actionKinds.join('|')}` : '';
-  const enabled = control.enabled === false ? ' disabled' : '';
-  const bounds = control.bounds
-    ? ` bounds=${control.bounds.x},${control.bounds.y},${control.bounds.width},${control.bounds.height}`
-    : '';
-  return `${id}${control.label}${actions}${enabled}${bounds}`;
-}
-
-function formatStateChannelForPrompt(channel: VisualPlaytestStateChannel): string {
-  const parts = [channel.label];
-  const redaction = channel.redaction ?? (channel.sensitive ? 'value' : 'none');
-  if (channel.summary) parts.push(channel.summary);
-  if (channel.value !== undefined && redaction === 'none') parts.push(JSON.stringify(channel.value));
-  if (channel.value !== undefined && redaction !== 'none') parts.push('[value redacted]');
-  return parts.join(' - ');
-}
-
 function jsonClone<T extends JsonValue>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -384,4 +441,42 @@ function errorShape(e: unknown): VisualPlaytestErrorShape {
     return { name: e.name, message: e.message, stack: e.stack ?? null };
   }
   return { name: 'NonError', message: String(e), stack: null };
+}
+
+function abortErrorShape(signal: AbortSignal): VisualPlaytestErrorShape {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) {
+    return { name: 'AbortError', message: reason.message, stack: reason.stack ?? null };
+  }
+  return { name: 'AbortError', message: reason === undefined ? 'aborted' : String(reason), stack: null };
+}
+
+function validateLoopOptions(config: VisualPlaytestLoopConfig): void {
+  const budget = config.budget;
+  if (budget?.maxWallClockMs !== undefined && !(Number.isFinite(budget.maxWallClockMs) && budget.maxWallClockMs > 0)) {
+    throw invalidLoopOption('budget.maxWallClockMs', budget.maxWallClockMs, 'a positive finite number');
+  }
+  if (budget?.maxActionsPerStep !== undefined && !(Number.isInteger(budget.maxActionsPerStep) && budget.maxActionsPerStep >= 1)) {
+    throw invalidLoopOption('budget.maxActionsPerStep', budget.maxActionsPerStep, 'a positive integer');
+  }
+  if (budget?.maxActionFailures !== undefined && !(Number.isInteger(budget.maxActionFailures) && budget.maxActionFailures >= 1)) {
+    throw invalidLoopOption('budget.maxActionFailures', budget.maxActionFailures, 'a positive integer');
+  }
+  if (budget?.maxActionFailures !== undefined && config.onActionFailure !== 'continue') {
+    throw invalidLoopOption('budget.maxActionFailures', budget.maxActionFailures, "used with onActionFailure: 'continue'");
+  }
+  if (config.agentObservation !== undefined && config.agentObservation !== 'raw' && config.agentObservation !== 'redacted') {
+    throw invalidLoopOption('agentObservation', config.agentObservation, "'raw' or 'redacted'");
+  }
+  if (config.onActionFailure !== undefined && config.onActionFailure !== 'abort' && config.onActionFailure !== 'continue') {
+    throw invalidLoopOption('onActionFailure', config.onActionFailure, "'abort' or 'continue'");
+  }
+}
+
+function invalidLoopOption(field: string, value: unknown, expected: string): EngineRangeError {
+  return new EngineRangeError(
+    'visual_playtest_config_invalid',
+    `${field} must be ${expected} (got ${String(value)})`,
+    { details: { field, value: typeof value === 'number' && Number.isFinite(value) ? value : null } },
+  );
 }
