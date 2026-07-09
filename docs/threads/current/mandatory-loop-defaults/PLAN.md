@@ -1,5 +1,0 @@
-# Plan: mandatory loop defaults
-
-1. **Engine 2.0.0** — TDD-flip the two defaults (redaction wall, strict verification evidence); lenient read pin for historical markers; docs (changelog major entry with migration notes, api-reference, ai-integration + visual-playtest-harness guides, ADR 58); gates; multi-CLI review (agent-loop contract = high-risk); commit + push.
-2. **Fleet migration** — rebuild engine dist; run all four repos' gates against 2.0.0; verify farm/townscaper agents still function behind the wall (their scripted heuristics must read only player-visible surface); pin engine 2.0.0 manifests; aoe2 default flip (full loop default, `--propose-only` opt-out, ledger-backed `--known-findings` default); update repo docs + the recursive-playtest skill invariant line (tested edit).
-3. **Loop-builder skill** — RED baseline done pre-2.0 (18 calls / ~102k tokens, strong plan, guessed conventions); author the skill against the post-2.0 world; GREEN test; REFACTOR; cross-reference from recursive-playtest.
