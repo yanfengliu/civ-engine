@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.0 - 2026-07-08
+
+The proper loop is now the default. **Major - two behavior-changing default flips; no API removals, no signature changes.**
+
+The recursive-improvement contract's honesty invariants were opt-in hardening since 1.5.0/1.6.0; per the loop's intent ("the agent sees and plays the game like a player; verified means mechanically proven"), they are now the defaults. Both old behaviors remain available as explicit opt-outs.
+
+- **`agentObservation` defaults to `'redacted'`.** `runVisualPlaytestLoop` now enforces the hidden-state wall at the `decide()` boundary by default: the agent receives `observationForAgent(observation, promptMode)` and an audience-filtered agent-facing trace; reviewer/traceOnly channels never reach the agent. The returned `result.trace` stays under `traceObservation` control (the debugging/replay channel is unchanged). **Migration:** callers that relied on the raw default must now pass `agentObservation: 'raw'` explicitly; callers already passing `'redacted'` are unaffected.
+- **`assertImprovementFinding` requires verification evidence by default.** A `verified` finding must carry an addressed replayable evidence ref (`tick` with its tick, `marker` with `markerId`, or `bundle` with `bundleId`/`sessionId`) plus a `verificationMethod` — enforced on every path through `assertImprovementFinding`: direct validation, both conversion builders, and marker recording — so a dishonest `verified` claim cannot enter the pipeline. **Migration:** pass `{ requireVerificationEvidence: false }` only for reading historical payloads recorded before 2.0.0; `improvementFindingsFromMarkers` already reads leniently so old bundles stay extractable. Unverified findings are unaffected.
+
+### Validation
+
+TDD: the 1.x default pins were flipped to failing tests first (`tests/visual-playtest-redaction-wall.test.ts` default-wall + explicit-`'raw'` opt-out; `tests/improvement-loop.test.ts` strict-by-default, construct/record refusal, lenient historical read), then the two defaults were implemented. Full gates green: `npm test` (1306 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
 ## 1.6.1 - 2026-07-08
 
 Browser-safe session ids. **Patch - no API or behavior change.**

@@ -154,7 +154,9 @@ export function improvementFindingsFromMarkers(markers: readonly Marker[]): Impr
     if (!isRecord(payload) || payload.type !== 'finding') continue;
     const finding = payload.finding;
     try {
-      assertImprovementFinding(finding);
+      // Lenient read: historical markers may predate the strict default;
+      // writes (improvementFindingToMarker / record) stay strict.
+      assertImprovementFinding(finding, { requireVerificationEvidence: false });
     } catch {
       continue;
     }
@@ -208,7 +210,7 @@ export function assertImprovementFinding(
   if (value.data !== undefined) assertJsonCompatible(value.data, 'improvement finding data');
   if (value.refs !== undefined) assertJsonCompatible(value.refs, 'improvement finding refs');
   assertJsonCompatible(value, 'improvement finding');
-  if (options.requireVerificationEvidence && value.verificationStatus === 'verified') {
+  if ((options.requireVerificationEvidence ?? true) && value.verificationStatus === 'verified') {
     const evidence = (value.evidence ?? []) as readonly ImprovementEvidenceRef[];
     if (!evidence.some(isReplayableEvidenceRef)) {
       throw new EngineRangeError(

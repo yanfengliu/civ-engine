@@ -14,6 +14,11 @@ const crossMinorVersion = (): string => {
   return `${major}.${minor + 1}.0`;
 };
 
+const crossMajorVersion = (): string => {
+  const [major] = ENGINE_VERSION.split('.').map(Number);
+  return `${major + 1}.0.0`;
+};
+
 const mkConfig = (): WorldConfig => ({
   gridWidth: 10, gridHeight: 10, tps: 60, positionKey: 'position',
 });
@@ -199,7 +204,7 @@ describe('SessionReplayer', () => {
 
   it('cross-major (a-component) engineVersion throws BundleVersionError', () => {
     const { bundle } = recordSession(1);
-    bundle.metadata.engineVersion = '2.0.0';
+    bundle.metadata.engineVersion = crossMajorVersion();
     expect(() => SessionReplayer.fromBundle(bundle, {
       worldFactory: (snap) => {
         const w = new World<Record<string, never>, Cmds>(mkConfig());

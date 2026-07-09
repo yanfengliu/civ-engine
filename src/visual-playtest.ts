@@ -75,7 +75,7 @@ export async function runVisualPlaytestLoop(
   const maxActionsPerStep = config.budget?.maxActionsPerStep;
   const maxActionFailures = config.budget?.maxActionFailures;
   const continueOnFailure = config.onActionFailure === 'continue';
-  const redactedBoundary = config.agentObservation === 'redacted';
+  const redactedBoundary = config.agentObservation !== 'raw';
   const trace: VisualPlaytestTraceEntry[] = [];
   const agentTrace: VisualPlaytestTraceEntry[] = redactedBoundary ? [] : trace;
   const findings: VisualPlaytestFinding[] = [];

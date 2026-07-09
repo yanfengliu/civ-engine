@@ -133,5 +133,10 @@ export interface ImprovementFindingInit {
 }
 
 export interface AssertImprovementFindingOptions {
+  /**
+   * Default true: verified findings must carry a verificationMethod and at
+   * least one addressed replayable evidence ref. Pass false only when reading
+   * historical data recorded before the strict default.
+   */
   requireVerificationEvidence?: boolean;
 }

@@ -231,6 +231,7 @@ export interface VisualPlaytestLoopConfig {
   traceObservation?: 'redacted' | 'full';
   budget?: VisualPlaytestBudget;
   signal?: AbortSignal;
+  /** Default 'redacted': the agent sees only player-visible observations and trace. 'raw' opts out of the hidden-state wall. */
   agentObservation?: 'raw' | 'redacted';
   onActionFailure?: 'abort' | 'continue';
   now?: () => number;

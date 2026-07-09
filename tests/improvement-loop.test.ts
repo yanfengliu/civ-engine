@@ -244,13 +244,50 @@ describe('strict verification evidence mode', () => {
     expect(() => assertImprovementFinding(solid, { requireVerificationEvidence: true })).not.toThrow();
   });
 
-  it('keeps default validation permissive for authoring-time verified findings', () => {
-    const farmStyle: ImprovementFinding = {
+  it('requires verification evidence by default for verified findings', () => {
+    const hollow: ImprovementFinding = {
       ...sampleFinding(),
       verificationStatus: 'verified',
       evidence: [{ kind: 'screenshot', screenshotPath: 'steps/01.png' }],
     };
-    expect(() => assertImprovementFinding(farmStyle)).not.toThrow();
+    expect(() => assertImprovementFinding(hollow)).toThrow(/replayable evidence/);
+    expect(() => assertImprovementFinding(hollow, { requireVerificationEvidence: false })).not.toThrow();
+  });
+
+  it('will not construct or record a verified finding without replayable evidence', () => {
+    const visual: VisualPlaytestFinding = {
+      title: 'stall after guidance',
+      severity: 'high',
+      category: 'usability',
+      observed: 'agent stalled at step 6',
+      evidence: { screenshotPath: 'steps/06.png' },
+    };
+    expect(() =>
+      visualPlaytestFindingToImprovementFinding(visual, { id: 'stall-1', verificationStatus: 'verified' }),
+    ).toThrow(/replayable evidence/);
+    const hollow: ImprovementFinding = {
+      ...sampleFinding(),
+      verificationStatus: 'verified',
+      evidence: [{ kind: 'screenshot', screenshotPath: 'steps/06.png' }],
+    };
+    expect(() => improvementFindingToMarker(hollow)).toThrow(/replayable evidence/);
+  });
+
+  it('still recovers historical verified findings recorded without evidence (lenient read)', () => {
+    const hollow: ImprovementFinding = {
+      ...sampleFinding(),
+      verificationStatus: 'verified',
+      evidence: [{ kind: 'screenshot', screenshotPath: 'steps/01.png' }],
+    };
+    const recordedBeforeStrictDefault = JSON.parse(JSON.stringify(hollow));
+    const marker: Marker = {
+      id: 'm-historical',
+      tick: 250,
+      kind: 'annotation',
+      provenance: 'game',
+      data: { improvementLoop: { schemaVersion: 1, type: 'finding', finding: recordedBeforeStrictDefault } },
+    };
+    expect(improvementFindingsFromMarkers([marker])).toEqual([hollow]);
   });
 });
 

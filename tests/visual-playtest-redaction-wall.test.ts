@@ -80,7 +80,25 @@ describe('agent observation redaction boundary', () => {
     expect(seen?.visibleText).toEqual(['Gold: 10', 'Build Farm']);
   });
 
-  it('keeps the raw observation at the agent boundary by default', async () => {
+  it('redacts the agent boundary by default (observation and agent-facing trace)', async () => {
+    const observationsSeen: VisualPlaytestObservation[] = [];
+    const tracesSeen: Array<readonly VisualPlaytestTraceEntry[]> = [];
+    const agent: VisualPlaytestAgent = {
+      decide: ({ observation, trace }) => {
+        observationsSeen.push(observation);
+        tracesSeen.push(trace.map((entry) => ({ ...entry })));
+        return { actions: [{ kind: 'click', target: 'build-farm' }] };
+      },
+    };
+    const result = await runVisualPlaytestLoop({ host: clickHost(), agent, maxSteps: 2 });
+    expect(observationsSeen[0]?.state).toBeUndefined();
+    expect(observationsSeen[0]?.screenshot?.dataUrl).toBe('data:image/png;base64,PIXELS');
+    expect(tracesSeen[1]?.[0]?.observation.state).toBeUndefined();
+    const resultTraceState = result.trace[0]?.observation.state ?? [];
+    expect(resultTraceState.map((channel) => channel.label)).toContain('review queue');
+  });
+
+  it("hands the agent the raw observation only when agentObservation is explicitly 'raw'", async () => {
     let seen: VisualPlaytestObservation | undefined;
     const agent: VisualPlaytestAgent = {
       decide: ({ observation }) => {
@@ -88,7 +106,7 @@ describe('agent observation redaction boundary', () => {
         return { actions: [] };
       },
     };
-    await runVisualPlaytestLoop({ host: clickHost(), agent, maxSteps: 1 });
+    await runVisualPlaytestLoop({ host: clickHost(), agent, maxSteps: 1, agentObservation: 'raw' });
     expect(seen?.state?.map((channel) => channel.label)).toContain('review queue');
     expect(seen?.screenshot?.dataUrl).toBe('data:image/png;base64,PIXELS');
   });
