@@ -1,6 +1,6 @@
 # Loop Engineering Completion (fleet roadmap, proposed 2026-07-08)
 
-Status: PROPOSAL — awaiting owner decisions (§8). Follows the mandatory-defaults thread (`docs/threads/done/mandatory-loop-defaults/`): integrity is done; this designs the remaining autonomy and learning.
+Status: ACCEPTED 2026-07-08 — owner decisions resolved (§8): unattended fixes commit to `main` after gates + adversarial review (`LOOP_SHIFT_DRY` available); fleet artifacts live in a new `loop-ops` sibling repo; the loop may spend ~15–20% of weekly quota in overnight shifts, exploration unlocking after a week of clean scripted shifts. Follows the mandatory-defaults thread (`docs/threads/done/mandatory-loop-defaults/`): integrity is done; this designs the remaining autonomy and learning.
 
 ## 0. Cost model and design stance
 
