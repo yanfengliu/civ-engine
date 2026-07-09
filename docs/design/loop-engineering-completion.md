@@ -55,11 +55,11 @@ Every shift ends by writing (and the aggregator nightly consolidates) a single d
 
 ## 9. Rollout order (each slice TDD + adversarial review, per repo discipline)
 
-1. Engine additive minor: `improvementFindingSignature` + `stateDigest` (+ documented `data.effort` convention).
-2. Coverage→`coverage-gap` findings in farm (it already counts coverage) as the template; canary drill in aoe2 (richest oracle set) as the template.
-3. Shift runner + digest + `loop-ops` (or chosen alternative).
-4. Fix-memory + aggregation dashboard + recurrence alarm.
-5. Exploration→scenario distillation (deepest, last; needs a week of shift telemetry to justify its budget).
+1. Engine additive minor: `improvementFindingSignature` + `stateDigest` (+ documented `data.effort` convention). **DONE 2026-07-08 (civ-engine 2.1.0, 5e2cad1).**
+2. Coverage→`coverage-gap` findings in farm (it already counts coverage) as the template; canary drill in aoe2 (richest oracle set) as the template. **DONE 2026-07-09: farm f797631 (coverage-gap findings, improveHarness joins FIX_ACTIONS, deterministic gap ordering + per-observation sightings from review); aoe2 6aed1a6+b3edfac (3 canaries; first live drill proved two green→red cycles AND honestly reported pinned-units canary-invalid — the oracle is saturated by 16 real open violations, which are the recursive pass's candidates).**
+3. Shift runner + digest + `loop-ops`. **DONE 2026-07-09 (loop-ops 0197566): DIRECTIVES-driven shift.mjs (exclusive lock, tested row attribution incl. canary exclusion, win32 process-tree kill, backoff, digest merge-append), shift playbook with concrete budget caps; high-risk review (Codex + in-process, Claude CLI unreachable/compensated) confirmed 4 HIGH + 6 MEDIUM, all fixed pre-commit — docs/reviews/2026-07-09-shift-machinery.md. Scheduler activation (Windows task running the headless shift session) awaits the owner's explicit permission-posture choice — both mechanisms (bypass vs settings allowlist) are agent-permission widenings the automation gate rightly reserves for the owner.**
+4. Fix-memory + aggregation dashboard + recurrence alarm. **DONE 2026-07-09 (same commit): dashboard.md keyed on candidateClass (threaded through farm/city/townscaper manifests — b07931f/edbaea2/b4f12ff — after review proved city/townscaper ids embed run-specific values; id fallback is farm-only), recurrence from fixed-proven rows AND fleet fix-memory (the only proven-fix signal proposal-only repos have), alarms render in every shift digest.**
+5. Exploration→scenario distillation. **DONE-as-designed 2026-07-09: exploration shifts specified in the playbook and machine-parsed from DIRECTIVES (`locked` by default; at most one exploration run per shift when unlocked); townscaper's decisionsFromTrace → file-agent re-drive is the working reference implementation; farm/city file-agent re-drive is a normal improveHarness candidate for the shift that first needs it, deliberately not pre-built.**
 
 ## 10. Definition of complete
 
