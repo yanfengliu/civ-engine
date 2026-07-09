@@ -6136,6 +6136,24 @@ function improvementFindingsFromMarkers(markers: readonly Marker[]): Improvement
 
 `minimalImprovementFindingSchemaVersion(nextAction)` returns the smallest schema version a finding with that classification may stamp — prefer it over stamping `IMPROVEMENT_FINDING_SCHEMA_VERSION` directly: the constant is the LATEST version, and stamping it on v1-vocabulary findings makes pre-1.6.0 readers skip payloads they could have represented.
 
+```ts
+interface ImprovementFindingSignatureOptions {
+  gameId?: string;
+}
+function improvementFindingSignature(finding: ImprovementFinding, options?: ImprovementFindingSignatureOptions): string;
+
+interface StateDigestOptions {
+  omitKeys?: readonly string[];
+}
+function stateDigest(value: unknown, options?: StateDigestOptions): string;
+```
+
+`improvementFindingSignature` (v2.1.0) returns the cross-run, cross-repo bug-class key used by fleet aggregation and prove-fixed comparison: the declared own-property `data.class` (non-empty string) when present, else the finding id, optionally prefixed `<gameId>/` for cross-repo joins (pass the run manifest's `gameId`). A `gameId` must not contain `/` — the join would otherwise collide distinct classes (`'a/b' + 'c'` vs `'a' + 'b/c'`); the class side may contain `/` freely. It trims but NEVER rewrites — there are deliberately no suffix-stripping heuristics, because guessing which id parts are run-specific is how classes get falsely merged or split; repos wanting stable cross-run identity declare `data.class` when emitting. Validation is minimal (plain object with a usable class or id) so historical ledger rows stay aggregatable; invalid inputs throw code `improvement_finding_signature_invalid`.
+
+`stateDigest` (v2.1.0) returns a canonical 64-bit FNV-1a digest (16 hex chars) of a JSON-compatible value for cheap cross-run state comparison: object keys are sorted (insertion-order stable), array order is significant, and `omitKeys` deep-omits key names everywhere in the tree BEFORE validation — so wall-clock noise (`modifiedAt`, EXIF dates) or non-serializable handles can be excluded instead of pre-stripped. Non-JSON values (non-finite numbers, `undefined`, functions, class instances, circular references) throw code `state_digest_invalid`. It is a comparison key, not a cryptographic hash.
+
+**Effort convention (documented, not validated).** Passes that want quota/effort accounting record `data.effort = { llmCalls?: number, wallClockMs?: number, model?: string }` on the run manifest; `costUsd` remains the top-level field for API-metered runs. Aggregation tooling treats both as optional.
+
 `improvementFindingToVisualPlaytestFinding` preserves title, severity, category, observed/expected/suggestion/area, refs, and visual-compatible evidence, then stores the original finding under `data.improvementLoop`. `visualPlaytestFindingToImprovementFinding` is the reverse lift (v1.6.0): it takes the required durable `id` plus the optional `ImprovementFindingInit` fields, defaults to `unverified`/`proposalOnly`, maps the visual evidence fields onto plural evidence refs (round-trip preserves tick/step/actionIndex/screenshotPath/stateLabels), and stamps the minimal schema version for the vocabulary used. `visual.data` is deliberately NOT copied onto the lifted finding (it may hold a nested `improvementLoop` envelope from a prior conversion) — pass game context through `init.data`. On read, `improvementFindingsFromMarkers` treats the envelope version as advisory: the inner finding's own validation governs. `improvementFindingToMarker` records a normal annotation marker whose `data` contains both `visualPlaytest` and `improvementLoop` payloads, allowing older visual-harness reports to keep working while newer loop tooling reads the durable finding contract. `improvementFindingsFromMarkers` ignores unrelated or malformed markers and returns only valid `data.improvementLoop` findings; it reads leniently (`requireVerificationEvidence: false`) so bundles recorded before the 2.0.0 strict default stay extractable, while every write path (`improvementFindingToMarker`, the finding builders) validates strictly.
 
 ## Counterfactual Replay / Fork (v0.8.12+)
@@ -6358,6 +6376,9 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `playtest_max_ticks_invalid`, `playtest_seed_invalid`, `policy_config_invalid`, `visual_playtest_max_steps_invalid`, `visual_playtest_config_invalid` | synthetic playtest / AI playtester / visual playtest harness | Harness config validation | `{ maxTicks }` / `{ policySeed }` / `{ offset, frequency }` / `{ maxSteps }` / `{ field, value }` (R) |
 | `metric_name_duplicate` | behavioral metrics | Duplicate metric name | `{ name }` (R) |
 | `uuid_crypto_unavailable` | session recording | No WebCrypto implementation on `globalThis.crypto` (session/marker id generation) | — (E) |
+| `improvement_finding_invalid` | `assertImprovementFinding` (also builders, marker recording) | Malformed finding payload, vocabulary/schema-version violation, or (default since 2.0.0) a `verified` finding without replayable evidence + method | `{ schemaVersion }` / `{ nextAction }` per site (T/R) |
+| `improvement_finding_signature_invalid` | `improvementFindingSignature` | Non-plain-object finding, no usable `data.class`/id, or a bad `gameId` (empty, non-string, or containing `/`) | — (T/R) |
+| `state_digest_invalid` | `stateDigest` | Non-JSON value (non-finite number, undefined, function, class instance, circular reference) outside `omitKeys` | `{ context }` (E) |
 
 The completeness gate (`tests/engine-error.test.ts`) scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules — new throw sites must use coded classes.
 

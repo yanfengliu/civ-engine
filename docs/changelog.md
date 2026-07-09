@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0 - 2026-07-08
+
+Fleet-aggregation primitives (loop-engineering roadmap slice 1). **Additive minor.**
+
+- **`improvementFindingSignature(finding, { gameId? })`** — the cross-run, cross-repo bug-class key: declared own-property `data.class` (non-empty string) or the finding id, optionally `<gameId>/`-prefixed (`gameId` must not contain `/` — the join would collide distinct classes; the class side may). Trims but never rewrites (no suffix-stripping heuristics — false class merges/splits are the failure mode the recursive loop's prove-fixed discipline exists to prevent); minimal validation (plain object) so historical JSON ledger rows stay aggregatable. Throws coded `improvement_finding_signature_invalid`.
+- **`stateDigest(value, { omitKeys? })`** — canonical 64-bit FNV-1a digest (16 hex chars) of JSON-compatible state: sorted object keys, significant array order, deep `omitKeys` exempt from validation (strip wall-clock noise or handles without pre-processing). Throws coded `state_digest_invalid` on non-JSON values, mirroring `assertJsonCompatible`. A comparison key, not a cryptographic hash.
+- **`data.effort` convention** — documented (not validated) manifest shape `{ llmCalls?, wallClockMs?, model? }` for quota-based effort accounting alongside `costUsd`.
+- New types: `ImprovementFindingSignatureOptions`, `StateDigestOptions`. Public-surface fixture +4 names (2 runtime + 2 type-only).
+
+### Validation
+
+Failing-first tests: `tests/improvement-signature.test.ts` (class-over-id preference, gameId prefixing, trim-only normalization pin, run-suffix ids stay distinct, coded errors, minimal validation on historical rows) and `tests/state-digest.test.ts` (key-order stability, value/order/shape discrimination, deep omit incl. validation exemption, coded rejections incl. circular refs, digest shape). Full gates green: `npm test` (1316 passed + 1 todo), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 2.0.0 - 2026-07-08
 
 The proper loop is now the default. **Major - two behavior-changing default flips; no API removals, no signature changes.**

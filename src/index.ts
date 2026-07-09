@@ -51,6 +51,11 @@ export {
   type ImprovementVerificationStatus,
 } from './improvement-loop.js';
 export {
+  improvementFindingSignature,
+  type ImprovementFindingSignatureOptions,
+} from './improvement-signature.js';
+export { stateDigest, type StateDigestOptions } from './state-digest.js';
+export {
   EngineError, EngineRangeError, EngineTypeError, getErrorCode, isEngineError,
   type EngineErrorOptions,
 } from './engine-error.js';
