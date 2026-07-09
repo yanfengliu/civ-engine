@@ -22,6 +22,7 @@ A local nightly **shift**: one scheduled session (Windows-native cron via the Cl
 
 - **Engine additive minor:** `improvementFindingSignature(finding)` — a normalized cross-run/cross-repo class key (repo, bug-class id, area) — plus the Track D `stateDigest` canonical state hash. Both pure utilities, zero-dep.
 - **`loop-ops` sibling repo** (small, scripts + committed rollups, raw data gitignored): a nightly aggregator reads every repo's `output/**/passes.jsonl` and emits the fleet dashboard — outcome distribution per repo, oracle fire-rates, class recurrence, time-to-fix, fix-success rate per class, effort per outcome.
+- **`loop-ops` is also the canonical home of the loop documents** (added 2026-07-08 for cross-agent reach): `docs/skills/recursive-playtest.md` (operating contract) and `docs/skills/building-recursive-loop.md` (build recipe) live there as the single source of truth. Every repo's AGENTS.md carries a one-line pointer ("before running or building the recursive loop, read ..."), which Codex follows natively via its AGENTS.md mechanism; the Claude user-level skills keep their discovery descriptions but their bodies become pointers to the canonical files. One source of truth, versioned and reviewable, readable by every agent in the fleet.
 - **Recurrence alarm:** a signature that reappears after `fixed-proven` auto-files a high-severity finding with `nextAction: addRegression` ("the promotion did not hold") — the loop polices its own ratchet.
 
 ## 3. Curriculum — coverage grows itself
