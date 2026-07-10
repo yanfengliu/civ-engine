@@ -1,4 +1,5 @@
-/.claude
+/.claude/*
+!/.claude/skills/
 /.superpowers
 node_modules/
 dist/
