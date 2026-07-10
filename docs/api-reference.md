@@ -2351,7 +2351,7 @@ restored.registerHandler('moveUnit', handler);
 applySnapshot(snapshot: WorldSnapshot, options?: { restorePoison?: boolean }): void
 ```
 
-In-place variant of `deserialize`: loads the snapshot's state into THIS world, preserving registrations (systems, handlers, validators, destroy callbacks — plus component registrations not present in the snapshot, which keep their registration but get fresh empty stores). Clears any current poison before loading; the same `restorePoison` opt-in applies. **Strictness is NOT transferred:** this world keeps its own `strict` setting (like it keeps its registrations) — the ≤ v5 compatibility clause governs `deserialize`, i.e. worlds CONSTRUCTED from snapshots. Strict-mode-safe at any phase (ADR 37).
+In-place variant of `deserialize`: loads the snapshot's state into THIS world, preserving registrations (systems, handlers, validators, destroy callbacks — plus component registrations not present in the snapshot, which keep their registration but get fresh empty stores). Clears any current poison before loading; the same `restorePoison` opt-in applies. **Strictness is NOT transferred:** this world keeps its own `strict` setting (like it keeps its registrations) — the ≤ v5 compatibility clause governs `deserialize`, i.e. worlds CONSTRUCTED from snapshots (strict is a harness policy, not serialized state — the replayed STATE is identical either way). Strict-mode-safe at any phase (ADR 37).
 
 #### `getDiff()`
 
@@ -3327,7 +3327,7 @@ Creates a `PathRequestQueue` specialized for `findGridPath()`, with automatic ca
 createGridPathCacheKey(request: GridPathRequest): string | undefined
 ```
 
-Builds the default cache key used by `createGridPathQueue()`. The generated key includes `movingEntity` so ignore-self passability queries do not reuse another entity's cached route. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
+Builds the default cache key used by `createGridPathQueue()`. The generated key includes `movingEntity` so ignore-self passability queries do not reuse another entity's cached route. The key also includes the request's `start` (and `goal`) position, so an entity re-pathing from a changing position each tick mints a new key every tick; because `PathCache` has no eviction (stale-version entries are bypassed, not deleted), position-keyed usage must call `clearCache()` periodically (or otherwise bound the cache) to avoid unbounded growth. Returns `undefined` when the request contains custom `blocked`, `cost`, or `heuristic` functions and no explicit `cacheKey` is supplied.
 
 ---
 
@@ -4623,7 +4623,7 @@ getState(): WorldHistoryState<TEventMap, TCommandMap, TDebug>
 ```
 
 Returns the full recorder state: initial snapshot, recent ticks, recent command submission outcomes, recent command execution outcomes, and recent tick failures.
-The returned `WorldHistoryState` includes `schemaVersion`.
+The returned `WorldHistoryState` includes `schemaVersion`, and (v2.3.0) an optional `truncated?: boolean` — present and `true` only when the recorder's rolling buffer evicted recorded data (a stream exceeded its capacity); `scenarioResultToBundle` refuses to build a replayable (payload-carrying) bundle from a truncated history.
 
 #### `summarizeWorldHistoryRange(state, options?)`
 
@@ -4854,7 +4854,7 @@ class RecorderClosedError extends SessionRecordingError;     // post-disconnect,
 class SinkWriteError extends SessionRecordingError;          // I/O failure during recording
 class BundleVersionError extends SessionRecordingError;      // schemaVersion / engineVersion incompat
 class BundleRangeError extends SessionRecordingError;        // openAt / tickEntriesBetween out-of-range
-class BundleIntegrityError extends SessionRecordingError;    // structural; replay_across_failure / no_replay_payloads / no_initial_snapshot
+class BundleIntegrityError extends SessionRecordingError;    // structural; replay_across_failure / no_replay_payloads / no_initial_snapshot / missing_tick_entries / history_truncated
 class ReplayHandlerMissingError extends SessionRecordingError;  // worldFactory drift on a recorded command type
 ```
 
@@ -5064,7 +5064,7 @@ interface SelfCheckResult {
 function deepEqualWithPath(a: unknown, b: unknown, path?: string): { equal: boolean; firstDifferingPath?: string };
 ```
 
-Range checks per spec §9.1: `< startTick` or `> max(endTick, persistedEndTick)` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. The `max` keeps a legacy bundle whose `endTick` was never finalized (pre-1.1.4 live export) replayable up to its last persisted snapshot. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
+Range checks per spec §9.1: `< startTick` or `> max(endTick, persistedEndTick)` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. The `max` keeps a legacy bundle whose `endTick` was never finalized (pre-1.1.4 live export) replayable up to its last persisted snapshot. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A gapped bundle body — tick entries missing in the replay range because a rolling-buffer history truncated past capacity, or the body was tampered — throws `BundleIntegrityError(code: 'missing_tick_entries')`; since v2.3.0 `openAt` enforces this continuity guard on the range it replays (previously only `snapshotAtTick` did). A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
 
 `selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
 
@@ -5083,7 +5083,7 @@ interface ScenarioResultToBundleOptions {
 }
 ```
 
-Translates `runScenario` output to a `SessionBundle` with `sourceKind: 'scenario'`. One `kind: 'assertion'` marker per `result.checks` outcome with `provenance: 'engine'`. `metadata.startTick` from `result.history.initialSnapshot.tick` (NOT hardcoded 0). Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`. Replayable bundle requires `runScenario({ history: { captureCommandPayloads: true } })`; otherwise `bundle.commands` is empty and replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')`.
+Translates `runScenario` output to a `SessionBundle` with `sourceKind: 'scenario'`. One `kind: 'assertion'` marker per `result.checks` outcome with `provenance: 'engine'`. `metadata.startTick` from `result.history.initialSnapshot.tick` (NOT hardcoded 0). Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`. Replayable bundle requires `runScenario({ history: { captureCommandPayloads: true } })`; otherwise `bundle.commands` is empty and replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')`. Since v2.3.0, if the scenario's rolling-buffer history evicted recorded ticks/commands (`result.history.truncated`), building a payload-carrying bundle throws `BundleIntegrityError(code: 'history_truncated')` instead of emitting a range-gapped bundle that would advertise full replayability — raise the scenario's `history.capacity` / `commandCapacity` to cover the run, or record with `SessionRecorder`/`FileSink` for archival replay.
 
 ## Synthetic Playtest — Policies (v0.7.20)
 
@@ -5477,7 +5477,7 @@ type MetricsComparison = Record<string, MetricDelta | OnlyInComparison>;
 function compareMetricsResults(baseline: MetricsResult, current: MetricsResult): MetricsComparison;
 ```
 
-Pure delta computation, no regression judgment. Numeric leaves get `delta` and `pctChange`; non-numeric leaves get `equal: deepEqual(a, b)`. Recurses through nested records (e.g., `commandTypeCounts: Record<string, number>` reports per-key only-in-side at the inner level too). `pctChange` conventions: `0/0 → 0`, `nonzero/0 → ±Infinity`, `null` inputs propagate to `null` deltas. Arrays are opaque (no per-element diff in v1).
+Pure delta computation, no regression judgment. Numeric leaves get `delta` and `pctChange`; non-numeric leaves get `equal: deepEqual(a, b)`. Recurses through nested records (e.g., `commandTypeCounts: Record<string, number>` reports per-key only-in-side at the inner level too). `pctChange` conventions: `0/0 → 0`, `nonzero/0 → null` (NOT `±Infinity` — %-change from a zero baseline is undefined, and `±Infinity` would JSON-serialize to `null` and collide with the not-computable sentinel; the finite `delta` carries the magnitude and `baseline === 0` marks the growth-from-zero case, distinguishing it from a `baseline: null` no-baseline case), `null` inputs propagate to `null` deltas. Arrays are opaque (no per-element diff in v1).
 
 
 ## Bundle Viewer (v0.8.7)
@@ -5759,6 +5759,8 @@ interface AgentPlaytestResult<TEventMap, TCommandMap> {
 function runAgentPlaytest<...>(config): Promise<AgentPlaytestResult<...>>;
 ```
 
+`ok` is a STRICTER health signal than `runSynthPlaytest`'s and deliberately diverges from it: `runAgentPlaytest` reports `ok: false` when the world was poisoned (`stopReason: 'poisoned'`), the agent driver threw (`stopReason: 'agentError'`, detail in `agentError`), or the sink errored (`stopReason: 'sinkError'`) — only a clean `maxTicks` / `stopWhen` stop yields `ok: true`. `runSynthPlaytest`, by contrast, reports `ok: true` on a poisoned world (a policy may legitimately drive a world into poison, so poison is not a runner failure there). A loop driver that keys off `result.ok` across both runners must account for this divergence.
+
 ### `bundleSummary(bundle)`
 
 ```ts
@@ -6035,6 +6037,8 @@ function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPl
 `buildVisualPlaytestPromptParts` (v1.5.0) is the multimodal sibling of `buildVisualPlaytestPrompt`: it returns typed parts where the screenshot is a single `{ type: 'image', source }` part carrying `path`/`dataUrl`/`mime`/dimensions for the game's provider adapter to map into image content blocks, and the text parts carry the same mode/objective/tick/visible-text/controls/hidden-state sections as the string prompt (minus the screenshot descriptor line). The string helper renders the screenshot as text only — following it verbatim sends no pixels to the model.
 
 `observationForAgent` (v1.5.0) produces the agent-safe view of an observation for a prompt mode (`mode` defaults to `'playerBlind'`): `playerBlind` drops all state channels; `oracleAssisted` keeps only `audience: 'agent'` channels with their redaction levels applied (sensitive values withheld with `redacted: true`). The screenshot — including `dataUrl` — visible text, controls, `tick`, and metadata are preserved; `metadata` is host-owned free-form JSON and is NOT audience-filtered, so do not stuff oracle state there in player-blind experiments. `runVisualPlaytestLoop` applies it automatically under `agentObservation: 'redacted'`, to both the current observation and the agent-facing trace view.
+
+`redactVisualPlaytestObservation` is a display/logging redactor, NOT the agent-safety boundary: it strips screenshot data-URLs and sensitive channel values per `VisualPlaytestRedactionOptions` (`includeScreenshotDataUrl` / `includeSensitiveState` / `includeStateValues`) but does NOT audience-filter — reviewer/`traceOnly` channels survive it. `observationForAgent` is the audience boundary that strips those channels for the prompt mode, so produce any agent-facing view with `observationForAgent`, not `redactVisualPlaytestObservation`.
 
 `visualPlaytestFindingToMarker` emits a `NewMarker` with `kind: 'annotation'`, text shaped as `[severity/category] title`, and structured data under `data.visualPlaytest`. `visualPlaytestFindingsFromMarkers` ignores unrelated markers and recovers only markers produced by the helper.
 
@@ -6372,6 +6376,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `config_invalid` | `new World`, `GameLoop` | Invalid config field | `{ field }` (R/E) |
 | `speed_invalid` | `World.setSpeed` | Non-finite/non-positive speed | — (E) |
 | `tick_counter_saturated` | GameLoop | Tick counter hit MAX_SAFE_INTEGER | — (R) |
+| `tick_reentrancy` | `World.step` / `stepWithResult` | Re-entrant step from within a tick (a system, command handler, or diff listener stepped the world) | — (E) |
 | `position_invalid_shape`, `position_not_integer`, `position_out_of_bounds` | position writes (World, SpatialGrid) | Malformed/out-of-grid position | `{ x, y }` on grid sites (E/R) |
 | `query_coords_not_integer` | `findNearest` | Non-integer query coordinates | `{ cx, cy }` (R) |
 | `meta_not_finite`, `meta_not_unique` | `setMeta` | Non-finite number / unique-index collision | `{ key, value }` / `{ key, value, owner }` (E) |

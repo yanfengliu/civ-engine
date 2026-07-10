@@ -261,6 +261,15 @@ export type NumericDelta = {
   baseline: number | null;
   current: number | null;
   delta: number | null;
+  /**
+   * Fractional change `(current - baseline) / baseline`, or `null` when it is
+   * not a finite number: either no baseline (`baseline === null`) or a zero
+   * baseline (`baseline === 0` with `current !== 0`, where percentage change is
+   * mathematically undefined). `null` is used deliberately instead of
+   * `±Infinity`, which JSON-serializes to `null` and would silently collide with
+   * the no-baseline case. Distinguish the two by `baseline` (`0` vs `null`) and
+   * the always-finite `delta` (full-review 2026-07-10 L7).
+   */
   pctChange: number | null;
 };
 
@@ -322,7 +331,10 @@ function compareValue(baseline: unknown, current: unknown): MetricDelta {
     const delta = current - baseline;
     let pctChange: number | null;
     if (baseline === 0) {
-      pctChange = current === 0 ? 0 : current > 0 ? Infinity : -Infinity;
+      // %-change from a zero baseline is undefined; emit null, NOT ±Infinity
+      // (which JSON-serializes to null and collides with the no-baseline case).
+      // The finite `delta` carries the magnitude; baseline===0 marks the case.
+      pctChange = current === 0 ? 0 : null;
     } else {
       pctChange = (current - baseline) / baseline;
     }

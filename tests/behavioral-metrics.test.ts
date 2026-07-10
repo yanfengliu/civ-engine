@@ -335,9 +335,9 @@ describe('compareMetricsResults', () => {
     expect((cmp.x as NumericDelta).pctChange).toBe(0);
   });
 
-  it('numeric leaf: nonzero/0 → +Infinity', () => {
+  it('numeric leaf: nonzero/0 → pctChange null, delta carries the change (L7)', () => {
     const cmp = compareMetricsResults({ x: 0 }, { x: 5 });
-    expect((cmp.x as NumericDelta).pctChange).toBe(Infinity);
+    expect(cmp.x).toEqual({ baseline: 0, current: 5, delta: 5, pctChange: null });
   });
 
   it('null inputs → null delta', () => {
@@ -490,9 +490,9 @@ describe('commandTypeCounts / eventTypeCounts JSON-key sorting', () => {
 
 // ---------- Negative pctChange ----------
 describe('compareMetricsResults pctChange edge cases', () => {
-  it('nonzero/0 with negative current → -Infinity', () => {
+  it('nonzero/0 with negative current → pctChange null, negative delta', () => {
     const cmp = compareMetricsResults({ x: 0 }, { x: -5 });
-    expect((cmp.x as NumericDelta).pctChange).toBe(-Infinity);
+    expect(cmp.x).toEqual({ baseline: 0, current: -5, delta: -5, pctChange: null });
   });
 });
 

@@ -120,7 +120,7 @@ if (p95.pctChange !== null && Math.abs(p95.pctChange) > 0.20) {
 fs.writeFileSync('baseline-metrics.json', JSON.stringify(current, null, 2));
 ```
 
-`pctChange` conventions: `0/0 → 0`; `nonzero/0 → ±Infinity`; `null` inputs (e.g., empty-corpus baseline `Stats.p95`) propagate to `null` deltas — consumers can detect "no baseline data" or "no current data" via `=== null`.
+`pctChange` conventions: `0/0 → 0`; `nonzero/0 → null` (%-change from a zero baseline is undefined; `null` is used rather than `±Infinity`, which is not JSON-safe and would round-trip to `null` anyway); `null` inputs (e.g., empty-corpus baseline `Stats.p95`) also propagate to `null` deltas. Because both cases yield `pctChange === null`, distinguish genuine growth-from-zero (`baseline: 0` with a finite `delta`) from no-baseline data (`baseline: null`) via the `baseline` field, not `pctChange` alone.
 
 ## Submission vs. execution semantics
 

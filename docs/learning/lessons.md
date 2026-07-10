@@ -16,6 +16,18 @@ Pointer: devlog entry, file, or test that illustrates it.
 
 ---
 
+## A `replace_all` on a call-shape pattern silently skips the differently-formatted call sites — and a test that only exercises the matched ones passes green — 2026-07-10
+
+| Field | Value |
+|---|---|
+| Surfaced by | `docs/threads/current/full/2026-07-10/2/REVIEW.md` (full-review iter-2, verify-high — runtime-reproduced) |
+| Reviewer findings | verify-high iter-2 ISSUE-FOUND — M1 truncation-tracking wired into only 1 of 5 bounded streams; command-only eviction invisible to `getState().truncated` |
+| Fix commit | 2.3.0 full-review hardening batch (see devlog `2026-07-07_2026-07-10.md` → "Iteration 2") |
+| Test added | `tests/replay-truncation-guard.test.ts > "B: refuses a replayable bundle when only COMMANDS truncated (ticks intact)"` |
+| Behavior delta | Before: a scenario whose `commandCapacity` exhausted before `tickCapacity` (>4 cmd/tick, or a low explicit `commandCapacity`) evicted commands but left `WorldHistoryState.truncated` unset, so `scenarioResultToBundle` shipped a payload-gapped bundle advertising full replayability; `openAt`'s tick-entry continuity guard passed (ticks intact) and it silently replayed WRONG state. After: all five `pushBounded(this.…)` record calls route through the `_truncated`-setting `_pushBounded`, so any stream eviction is caught and the adapter throws `history_truncated`. |
+
+The trap: `replace_all` matches a literal substring. The pattern `pushBounded(this.` matched the ONE single-line call (`pushBounded(this.tickEntries, …)`) but not the four written as `pushBounded(\n      this.recordedCommandEntries, …)` — the newline+indent between `(` and `this.` breaks the match. The edit LOOKED complete (helper added, "all call sites" swept) and the suite stayed green because the only regression test exercised the tick-entry stream that DID get rewritten. Rules: after a structural `replace_all`, grep the negative (`grep 'pushBounded(this' ` vs a count of intended sites) to prove the match count equals the intended count; and when a fix claims to cover N cases (here: 5 bounded streams / two truncation vectors), the test must exercise EACH case, not just the representative one — a green suite over partial coverage is the exact shape of a fix that ships half-done. This is why the adversarial re-review (an independent agent that runtime-reproduced the uncovered vector) is load-bearing, not ceremony.
+
 ## A new method on an exported class is additive PUBLIC SURFACE (minor), even when intended internal — and the name-level surface fixture won't catch it — 2026-06-13
 
 | Field | Value |

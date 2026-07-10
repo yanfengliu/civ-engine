@@ -23,6 +23,8 @@ import type { CommandExecutionResult, ComponentRegistry, World } from './world.j
 import type { WorldSnapshot } from './serializer.js';
 import { createForkBuilder, type ForkBuilder } from './session-fork.js';
 import { compareRegistration } from './session-registration.js';
+import { assertContiguousTickEntries } from './session-continuity.js';
+import { validateBundleMarkers } from './session-replayer-markers.js';
 import { assertBundleShape, assertFactoryContract } from './session-replayer-guards.js';
 import type {
   EventDivergence,
@@ -220,7 +222,7 @@ export class SessionReplayer<
     }
     if (targetTick > md.startTick && this._bundle.commands.length === 0) {
       throw new BundleIntegrityError(
-        'bundle has no command payloads; replay forward is impossible (the bundle was recorded without payload capture or its commands were stripped — only snapshot ticks are reachable: pass a tick that has a recorded snapshot)',
+        'bundle has no command payloads; replay forward is impossible (the bundle was recorded without payload capture or its commands were stripped). To read recorded state at a snapshot tick, use snapshotAtTick(bundle, tick) or the source\'s readSnapshot(tick) — openAt cannot reach any tick above startTick without command payloads.',
         { code: 'no_replay_payloads', requested: targetTick },
       );
     }
@@ -234,6 +236,12 @@ export class SessionReplayer<
     for (const s of all) {
       if (s.tick <= targetTick && s.tick >= start.tick) start = s;
     }
+
+    // A truncated (rolling-buffer scenario) or tampered body can miss tick
+    // entries in the replay range; replaying over the gap silently yields wrong
+    // state, so fail fast (full-review 2026-07-10 M1).
+    assertContiguousTickEntries(this._bundle.ticks, start.tick, targetTick);
+
     const world = this._constructReplayWorld(start.snapshot);
 
     for (let t = start.tick; t < targetTick; t++) {
@@ -282,8 +290,10 @@ export class SessionReplayer<
       skippedSegments: [],
     };
 
-    // No-payload bundles: cannot replay, return ok with warning.
-    if (this._bundle.commands.length === 0 && md.endTick > md.startTick) {
+    // No-payload bundles: cannot replay, return ok with warning. Use
+    // replayableUpperBound (not raw endTick) for consistency with every other
+    // replay bound (full-review 2026-07-10 L6).
+    if (this._bundle.commands.length === 0 && replayableUpperBound(md) > md.startTick) {
       console.warn(
         `[SessionReplayer] selfCheck on bundle without command payloads is a no-op (${md.sessionId})`,
       );
@@ -323,35 +333,7 @@ export class SessionReplayer<
   }
 
   validateMarkers(): MarkerValidationResult {
-    const result: MarkerValidationResult = { ok: true, invalidMarkers: [] };
-    for (const marker of this._bundle.markers) {
-      if (marker.validated === false && marker.refs?.entities && marker.refs.entities.length > 0) {
-        // Retroactive marker — try to verify entity ref against the snapshot at marker.tick
-        try {
-          const snap = this.stateAtTick(marker.tick);
-          for (const ref of marker.refs.entities) {
-            const gens = (snap as { entities?: { generations?: number[]; alive?: boolean[] } }).entities;
-            const alive = gens?.alive?.[ref.id];
-            const generation = gens?.generations?.[ref.id];
-            if (!alive || generation !== ref.generation) {
-              result.invalidMarkers.push({
-                markerId: marker.id,
-                reason: `entity { id: ${ref.id}, generation: ${ref.generation} } not live at tick ${marker.tick}`,
-              });
-              result.ok = false;
-              break;
-            }
-          }
-        } catch (e) {
-          result.invalidMarkers.push({
-            markerId: marker.id,
-            reason: `replay failed: ${(e as Error).message}`,
-          });
-          result.ok = false;
-        }
-      }
-    }
-    return result;
+    return validateBundleMarkers(this._bundle.markers, (t) => this.stateAtTick(t));
   }
 
   // --- internal ---
@@ -366,10 +348,14 @@ export class SessionReplayer<
     const execDivs: ExecutionDivergence[] = [];
     const world = this._constructReplayWorld(a.snapshot);
 
-    // Accumulate replay-side executions via listener
-    const replayExecs: CommandExecutionResult[] = [];
-    const execListener: (r: CommandExecutionResult<keyof TCommandMap>) => void = (r) => {
-      replayExecs.push(r as unknown as CommandExecutionResult);
+    // Bucket replay-side executions by tick (O(1) per-tick lookup, mirroring the
+    // recorded-side _executionsByTick index) instead of re-filtering the whole
+    // accumulated array each tick — was O(T·E) per segment (full-review L4).
+    const replayExecsByTick = new Map<number, CommandExecutionResult[]>();
+    const execListener = (r: CommandExecutionResult<keyof TCommandMap>): void => {
+      const exec = r as unknown as CommandExecutionResult;
+      const list = replayExecsByTick.get(exec.tick);
+      if (list) list.push(exec); else replayExecsByTick.set(exec.tick, [exec]);
     };
     world.onCommandExecution(execListener);
 
@@ -410,7 +396,7 @@ export class SessionReplayer<
             return rest;
           };
           const expectedRaw = this._executionsByTick.get(t + 1) ?? [];
-          const actualRaw = replayExecs.filter((e) => e.tick === t + 1);
+          const actualRaw = replayExecsByTick.get(t + 1) ?? [];
           const expected = expectedRaw.map(stripSeq);
           const actual = actualRaw.map(stripSeq);
           if (!deepEqualOrdered(expected, actual)) {

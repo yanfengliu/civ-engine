@@ -5,6 +5,7 @@
 
 import type { EntityId } from './types.js';
 import { jsonFingerprint } from './json.js';
+import { EngineError } from './engine-error.js';
 import { WORLD_STEP_RESULT_SCHEMA_VERSION } from './ai-contract.js';
 import {
   cloneTickDiff,
@@ -81,6 +82,18 @@ export abstract class WorldTick<
   }
 
   private runTick(options: TickRunOptions): TickFailure | null {
+    // Fail fast on reentrant stepping: a system, command handler, or diff
+    // listener that calls world.step()/stepWithResult() re-enters runTick while
+    // a tick is already in flight, which would clobber dirty tracking, advance
+    // the tick counter twice, and null activeMetrics mid-tick — silently
+    // producing a wrong TickDiff. The engine guards this like every other
+    // invariant (full-review 2026-07-10 L1).
+    if (this._inTickPhase) {
+      throw new EngineError(
+        'tick_reentrancy',
+        'world.step()/stepWithResult() was called re-entrantly from within a tick (a system, command handler, or diff listener stepped the world). Drive ticks only from outside the tick loop.',
+      );
+    }
     const collectMetrics = options.metricsProfile !== 'none';
     const collectDetailedTimings = options.metricsProfile === 'full';
     const metrics = collectMetrics

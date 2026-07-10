@@ -313,6 +313,6 @@ if (!result.ok) {
 }
 ```
 
-If the player has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `building_placed` in the tick's events. If the player is short, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed.
+If the player has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `building_placed` in the tick's events. If the player is short, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed. This holds for a precondition failure; the exception is a buffered mutation that THROWS mid-commit, which consumes the transaction and can leave the world partially applied — see [Commands & Events](commands-and-events.md) and [API Reference → Command Transaction](../api-reference.md#command-transaction).
 
 Note: the v1 `CommandTransaction` surface covers `addResource` / `removeResource` only. `setResourceMax`, `registerResource`, and rates / transfers are not buffered — perform those through the direct `World` API. The full surface and v1 limitations are documented in [API Reference → Command Transaction](../api-reference.md#command-transaction).

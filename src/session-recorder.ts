@@ -197,6 +197,14 @@ export class SessionRecorder<
   disconnect(): void {
     if (!this._connected || this._closed) {
       this._closed = true;
+      // Release the single-recorder slot even when connect() never completed
+      // (e.g. it threw while assembling metadata — getRegistrationManifest — after
+      // claiming the slot), else the world keeps an orphaned mutex that blocks
+      // every future payload-capturing recorder (full-review 2026-07-10 L2).
+      // sessionId-guarded so we only ever release our own slot.
+      if (this._world.__payloadCapturingRecorder?.sessionId === this.sessionId) {
+        delete this._world.__payloadCapturingRecorder;
+      }
       return;
     }
     // Always write the terminal snapshot (capturing any post-snapshot mutation

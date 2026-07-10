@@ -64,6 +64,20 @@ export function scenarioResultToBundle<
     RecordedCommand<TCommandMap>
   >;
 
+  // A replayable bundle (command payloads present) built from a rolling-buffer
+  // WorldHistoryRecorder that already evicted data would advertise the full
+  // [startTick, endTick] range while missing early ticks/commands — openAt would
+  // then silently replay wrong state (or, for a tick gap, throw
+  // missing_tick_entries). Refuse loudly at construction: raise the scenario's
+  // history.capacity / commandCapacity to cover the run, or use
+  // SessionRecorder/FileSink for archival replay (full-review 2026-07-10 M1).
+  if (recordedCommands.length > 0 && result.history.truncated) {
+    throw new BundleIntegrityError(
+      `scenario history truncated: the WorldHistoryRecorder's rolling buffer evicted recorded ticks/commands, so a replayable bundle would be gapped over [${startTick}, ${endTick}]. Increase the scenario's history.capacity (and commandCapacity) to cover the full run, or record with SessionRecorder/FileSink for archival replay.`,
+      { code: 'history_truncated', startTick, endTick, scenarioName: result.name },
+    );
+  }
+
   // Replay guards (`openAt`'s replay_across_failure rejection, `selfCheck`'s
   // failure-segment skip, `forkAt` preconditions) key off metadata.failedTicks
   // exclusively — bundle.failures is informational. Populate it from the

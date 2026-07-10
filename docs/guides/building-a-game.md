@@ -258,7 +258,7 @@ function tryBuildHouse(
 
 If the settlement has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `buildingPlaced` in the tick's events. If the settlement is short on wood, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed.
 
-Reach for a transaction whenever you would otherwise write `if (cost-check) { ...several mutations... }` — the transaction makes the all-or-nothing invariant explicit, cheaper to reason about, and harder to break under future edits.
+Reach for a transaction whenever you would otherwise write `if (cost-check) { ...several mutations... }` — the transaction makes the all-or-nothing invariant explicit, cheaper to reason about, and harder to break under future edits. This all-or-nothing guarantee holds for a precondition/cost-check failure; the one exception is a buffered mutation that THROWS mid-commit, which consumes the transaction and can leave the world partially applied (validate entity liveness in a `require()` predicate) — see [Commands & Events](commands-and-events.md) and [API Reference → Command Transaction](../api-reference.md#command-transaction).
 
 ## 6. Commands (Player Input)
 

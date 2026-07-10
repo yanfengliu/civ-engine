@@ -42,7 +42,13 @@ export abstract class WorldTagsMeta<
 
   getByTag(tag: string): ReadonlySet<EntityId> {
     const set = this.tagIndex.get(tag);
-    return set ? new Set(set) : new Set<EntityId>();
+    if (!set) return new Set<EntityId>();
+    // Id-sorted for serialize/fork round-trip stability: the reverse index is
+    // rebuilt in ascending-id order after deserialize/applySnapshot/forkAt, so a
+    // consumer taking `[...getByTag(t)][0]` sees the same entity live vs replayed
+    // — matching the id-sort discipline already on spatial queries
+    // (getAt/getNeighbors/getInRadius; full-review 2026-07-10 L5).
+    return new Set([...set].sort((a, b) => a - b));
   }
 
   getTags(entity: EntityId): ReadonlySet<string> {

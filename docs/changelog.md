@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.3.0 - 2026-07-10
+
+Full-codebase review + hardening. **Additive minor — one new type field; several behavior corrections (bugfixes) called out below.** First full review since 1.1.3; 5 independent reviewers (both model-diverse CLIs were quota-down, so the review ran on extra Claude opus[1m] reviewers with distinct lenses + driver re-verification). The frozen core and the new v1.2.0–v2.2.0 surfaces were independently confirmed clean; the fixes below are the surviving findings.
+
+### Behavior corrections (bugfixes — may change observable behavior)
+
+- **Command payloads are now isolated + JSON-validated at `submit()`, like events.** `world.submit()`/`submitWithResult()` now clone the command `data` and run `assertJsonCompatible` before queueing — mirroring `EventBus.emit`. Previously the queue held the caller's reference: reusing/mutating one command object across a submit loop made every queued command observe the LAST value, and the per-submit-cloned recording then diverged from live execution, breaking `selfCheck`/replay. **Migration:** submitting non-JSON command data (functions, class instances, `undefined` fields) now throws `json_incompatible` at submit instead of being silently accepted; make command payloads JSON-compatible (required for recording/replay anyway).
+- **`SessionReplayer.openAt` and `scenarioResultToBundle` no longer silently replay wrong state from a truncated bundle.** `WorldHistoryRecorder` is a bounded rolling buffer; a scenario longer than its capacity (default 64 ticks / 256 commands) produced a bundle that advertised full replayability but had evicted early ticks/commands. Now: `openAt` throws `missing_tick_entries` on a gapped body (matching `snapshotAtTick`), and `scenarioResultToBundle` throws `history_truncated` when asked to build a replayable (payload-carrying) bundle from a truncated history. **Migration:** raise the scenario's `history.capacity`/`commandCapacity` to cover the run, or use `SessionRecorder`/`FileSink` for archival replay.
+- **`World.step()`/`stepWithResult()` reject re-entrant stepping** with `tick_reentrancy` instead of silently corrupting the tick — a system, command handler, or diff listener that steps the world is now fail-fast.
+- **`getByTag()` returns entities in ascending-id order** (was tag-insertion order), so a consumer taking `[...getByTag(t)][0]` sees the same entity live vs a snapshot-resumed/forked run. Matches the id-sort discipline already on spatial queries.
+- **`compareMetricsResults` emits `pctChange: null` (not `±Infinity`) for growth from a zero baseline.** `±Infinity` JSON-serialized to `null` and collided with the no-baseline sentinel; a 0→N change is now distinguishable via `baseline` (0 vs null) and the finite `delta`.
+- **`VisibilityMap.getState()` canonical ordering is now code-unit (deterministic across ICU/V8), not `localeCompare`** — a cross-runtime `stateDigest` of visibility state stays stable for non-ASCII ids.
+
+### Added
+
+- **`WorldHistoryState.truncated?: boolean`** — present and `true` only when the recorder's rolling buffer evicted recorded data. Lets consumers (and `scenarioResultToBundle`) tell an incomplete history from a complete one.
+
+### Fixed (internal / quality)
+
+- Recorder mutex-slot leak: a `SessionRecorder.connect()` that threw while assembling metadata (after claiming the world's single-recorder slot) no longer orphans the slot — `disconnect()` releases it, so a later recorder can attach.
+- `selfCheck` executions comparison is now O(1) per tick (bucketed by tick) instead of O(T·E) per segment; its no-payload guard uses `replayableUpperBound` for consistency with every other replay bound; the `no_replay_payloads` error now points to `snapshotAtTick`/`readSnapshot` (the remedy that actually works).
+- Docs clarified: `runAgentPlaytest.ok` semantics (deliberately stricter than `runSynthPlaytest` on poisoned worlds), `applySnapshot` does not adopt the snapshot's `strict` flag, `PathCache` unbounded growth under position-keyed usage, and `observationForAgent` (not `redactVisualPlaytestObservation`) is the agent-safety boundary.
+
+### Validation
+
+New failing-first tests: command-payload isolation + replay parity, replay-truncation guards (openAt gap + adapter refusal + positive controls), and reentrancy/slot-leak/getByTag/VisibilityMap/pctChange regressions. Two internal modules extracted to keep files within the 500-LOC budget (`session-continuity.ts` — shared tick-continuity guard shared by openAt + snapshotAtTick; `session-replayer-markers.ts`). Full gates green: `npm test` (1343 passed + 1 todo), mcp (22), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 2.2.0 - 2026-07-10
 
 Browser-safe package entry. **Additive minor — Node consumers are byte-identical; bundlers now resolve a browser-safe barrel.**

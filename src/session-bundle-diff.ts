@@ -16,6 +16,7 @@ import type { TickDiff } from './diff.js';
 import type { CommandSequenceMap } from './session-fork.js';
 import { applyTickDiff } from './apply-tick-diff.js';
 import { BundleIntegrityError, BundleRangeError } from './session-errors.js';
+import { assertContiguousTickEntries } from './session-continuity.js';
 import { diffSnapshots } from './snapshot-diff.js';
 import type { WorldSnapshot } from './serializer.js';
 import {
@@ -403,17 +404,7 @@ export function snapshotAtTick<TEventMap, TCommandMap>(
   for (const sn of all) {
     if (sn.tick <= tick && sn.tick > base.tick) base = sn;
   }
-  const present = new Set(bundle.ticks.map((te) => te.tick));
-  const missing: number[] = [];
-  for (let t = base.tick + 1; t <= tick; t++) {
-    if (!present.has(t)) missing.push(t);
-  }
-  if (missing.length > 0) {
-    throw new BundleIntegrityError(
-      `cannot hydrate state at tick ${tick}: tick entries missing in (${base.tick}, ${tick}] — the bundle body is gapped (truncated or tampered): ${missing.slice(0, 10).join(', ')}${missing.length > 10 ? ', …' : ''}`,
-      { code: 'missing_tick_entries', missing: missing.slice(0, 50), fromSnapshotTick: base.tick, requested: tick },
-    );
-  }
+  assertContiguousTickEntries(bundle.ticks, base.tick, tick);
   // Deep-clone: hydrateAtTick returns bundle.initialSnapshot / a snapshots entry
   // BY REFERENCE when no diffs apply, and applyTickDiff reuses nested
   // component/resource/state objects — a caller mutating the result would

@@ -52,6 +52,13 @@ export interface WorldHistoryState<
    * recorder on the same world (one wrap per world).
    */
   recordedCommands?: Array<RecordedCommand<TCommandMap>>;
+  /**
+   * Present and `true` only when the recorder's rolling buffer evicted recorded
+   * data (a stream exceeded its capacity). A history that truncated cannot back
+   * a fully-replayable bundle — `scenarioResultToBundle` refuses to build a
+   * payload-carrying (replayable) bundle from one (full-review 2026-07-10 M1).
+   */
+  truncated?: boolean;
 }
 
 export interface WorldHistoryIssueSummary {
@@ -122,6 +129,9 @@ export class WorldHistoryRecorder<
   > = [];
   private readonly failureEntries: TickFailure[] = [];
   private readonly recordedCommandEntries: Array<RecordedCommand<TCommandMap>> = [];
+  // Set once any bounded stream evicts an entry, so a bundle built from this
+  // history can honestly refuse to advertise full replayability (full-review M1).
+  private _truncated = false;
   private initialSnapshot: WorldSnapshot | null = null;
   private connected = false;
   private readonly diffListener: (diff: TickDiff) => void;
@@ -233,6 +243,7 @@ export class WorldHistoryRecorder<
     this.executionEntries.length = 0;
     this.failureEntries.length = 0;
     this.recordedCommandEntries.length = 0;
+    this._truncated = false;
     this.initialSnapshot = this.captureInitialSnapshot
       ? cloneJsonValue(this.world.serialize({ inspectPoisoned: true }), 'history initial snapshot')
       : null;
@@ -281,7 +292,12 @@ export class WorldHistoryRecorder<
         cloneJsonValue(entry, 'history recorded command'),
       );
     }
+    if (this._truncated) state.truncated = true;
     return state;
+  }
+
+  private _pushBounded<T>(target: T[], value: T, capacity: number): void {
+    if (pushBounded(target, value, capacity) > 0) this._truncated = true;
   }
 
   private recordCommandPayload<K extends keyof TCommandMap>(
@@ -296,7 +312,7 @@ export class WorldHistoryRecorder<
       data,
       result,
     };
-    pushBounded(
+    this._pushBounded(
       this.recordedCommandEntries,
       cloneJsonValue(record, `history recorded command ${result.sequence}`),
       this.commandCapacity,
@@ -315,13 +331,13 @@ export class WorldHistoryRecorder<
       metrics: this.world.getMetrics(),
       debug,
     };
-    pushBounded(this.tickEntries, entry, this.tickCapacity);
+    this._pushBounded(this.tickEntries, entry, this.tickCapacity);
   }
 
   private recordCommand(
     result: CommandSubmissionResult<keyof TCommandMap>,
   ): void {
-    pushBounded(
+    this._pushBounded(
       this.commandEntries,
       cloneJsonValue(result, `history command result ${result.sequence}`),
       this.commandCapacity,
@@ -331,7 +347,7 @@ export class WorldHistoryRecorder<
   private recordExecution(
     result: CommandExecutionResult<keyof TCommandMap>,
   ): void {
-    pushBounded(
+    this._pushBounded(
       this.executionEntries,
       cloneJsonValue(
         result,
@@ -342,7 +358,7 @@ export class WorldHistoryRecorder<
   }
 
   private recordFailure(failure: TickFailure): void {
-    pushBounded(
+    this._pushBounded(
       this.failureEntries,
       cloneJsonValue(failure, `history tick failure ${failure.tick}`),
       this.tickCapacity,
@@ -358,9 +374,12 @@ export class WorldHistoryRecorder<
 
 export { summarizeWorldHistoryRange } from './history-range-summary.js';
 
-function pushBounded<T>(target: T[], value: T, capacity: number): void {
+function pushBounded<T>(target: T[], value: T, capacity: number): number {
   target.push(value);
   if (target.length > capacity) {
-    target.splice(0, target.length - capacity);
+    const dropped = target.length - capacity;
+    target.splice(0, dropped);
+    return dropped;
   }
+  return 0;
 }

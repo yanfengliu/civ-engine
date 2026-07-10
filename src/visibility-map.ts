@@ -274,7 +274,13 @@ function compareByNormalizedKey<T extends string | number>(
   a: [T, unknown],
   b: [T, unknown],
 ): number {
-  return normalizeKey(a[0]).localeCompare(normalizeKey(b[0]));
+  // Code-unit comparison, NOT localeCompare: getState()'s canonical player/source
+  // ordering must be deterministic across V8/ICU versions so a cross-runtime
+  // stateDigest of visibility state stays stable for non-ASCII ids
+  // (full-review 2026-07-10 L8).
+  const ka = normalizeKey(a[0]);
+  const kb = normalizeKey(b[0]);
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
 }
 
 function normalizeKey(value: string | number): string {

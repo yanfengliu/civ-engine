@@ -290,9 +290,14 @@ export async function runAgentPlaytest<
     source: sink,
     ticksRun,
     stopReason,
-    // Tighten ok per runSynthPlaytest: also check recorder.lastError, so a
-    // FileSink failure during the terminal-snapshot write inside disconnect()
-    // is reflected as ok: false even if stopReason already locked in 'maxTicks'.
+    // `ok` DELIBERATELY diverges from runSynthPlaytest and is STRICTER: a
+    // poisoned world OR a thrown agent driver is a failed run (ok:false),
+    // whereas runSynthPlaytest reports ok:true on a poisoned world (a policy may
+    // legitimately drive a world into poison). Also checks recorder.lastError so
+    // a sink failure during the terminal-snapshot write inside disconnect()
+    // flips ok:false even if stopReason already locked in 'maxTicks'. This
+    // divergence is documented in api-reference.md § runAgentPlaytest
+    // (full-review 2026-07-10 M2).
     ok:
       stopReason !== 'poisoned' &&
       stopReason !== 'agentError' &&

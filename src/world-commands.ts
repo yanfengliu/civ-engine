@@ -5,7 +5,7 @@
 
 import { EngineError } from './engine-error.js';
 import type { JsonValue } from './json.js';
-import { assertJsonCompatible } from './json.js';
+import { assertJsonCompatible, cloneJsonValue } from './json.js';
 import {
   COMMAND_EXECUTION_SCHEMA_VERSION,
   COMMAND_RESULT_SCHEMA_VERSION,
@@ -61,6 +61,14 @@ export abstract class WorldCommands<
       return result;
     }
 
+    // Isolate the payload from the caller's reference and validate it as JSON
+    // BEFORE minting the sequence — mirrors EventBus.emit (event-bus.ts). Without
+    // this, CommandQueue held `data` by reference, so a caller reusing/mutating
+    // one command object across a submit loop corrupted every queued command AND
+    // diverged live execution from the per-submit-cloned recording, breaking the
+    // replay guarantee (full-review 2026-07-10 H1). Cloning first means a non-JSON
+    // payload throws without consuming a submission number.
+    const isolated = cloneJsonValue(data, `command '${String(type)}'`);
     const result = this.createCommandSubmissionResult(type, {
       accepted: true,
       code: 'accepted',
@@ -68,7 +76,7 @@ export abstract class WorldCommands<
       details: null,
       validatorIndex: null,
     });
-    this.commandQueue.push(type, data, {
+    this.commandQueue.push(type, isolated, {
       submissionSequence: result.sequence,
     });
     this.emitCommandResult(result);
