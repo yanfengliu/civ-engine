@@ -51,7 +51,7 @@ Every shift ends by writing (and the aggregator nightly consolidates) a single d
 
 1. **Unattended commits:** default proposal is agent fixes land on `main` after full gates + in-process adversarial review (identical bar to interactive sessions), with `LOOP_SHIFT_DRY` for observation periods. Alternative: unattended fixes queue on branches for morning approval — safer, but reintroduces the merge-authorization overhead the repos deliberately removed.
 2. **`loop-ops` sibling repo:** yes/no on a new small repo for aggregation, digests, decision queue, and fleet fix-memory (vs. cramming into civ-engine, which pollutes an engine with fleet ops).
-3. **Quota allocation:** what fraction of the weekly quota the loop may spend (proposal: cap ~15–20%, shifts overnight, exploration shifts only after a week of clean scripted shifts).
+3. **Quota allocation:** what fraction of the weekly quota the loop may spend (proposal: cap ~15–20%, shifts overnight, exploration shifts only after a week of clean scripted shifts). **Superseded 2026-07-09: the owner removed all spend/cycle caps — shifts work every picked handoff to a real end state; the exploration lock remains. Additionally: per-repo handoffs run in isolated subagents so repo contexts never mix (playbook step 3).**
 
 ## 9. Rollout order (each slice TDD + adversarial review, per repo discipline)
 
