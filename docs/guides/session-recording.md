@@ -60,6 +60,8 @@ const memoryWithSidecars = new MemorySink({ allowSidecar: true });
 const file = new FileSink('/path/to/bundle-dir');
 ```
 
+`FileSink` is **node-only** (module-scope `node:fs`/`node:path`) and since v2.2.0 lives only in the full barrel — bundlers resolving the browser entry (the exports-map `browser` condition or `civ-engine/browser`) do not see it, so in-page recorders use `MemorySink` and hand the bundle to game code for persistence. The only other node-only export is the `BundleCorpus` disk index (§ Indexing FileSink Bundles below); everything else on this page — `SessionRecorder`, `SessionReplayer`, `MemorySink`, markers, `scenarioResultToBundle` — is browser-safe.
+
 `FileSink` defaults to **sidecar** for attachments (disk-backed sink keeps blobs as files). Pass `attach(blob, { sidecar: false })` to opt into manifest embedding for very small attachments.
 
 `MemorySink` defaults to **dataUrl** for under-threshold attachments (default 64 KiB). Oversize attachments throw `SinkWriteError(code: 'oversize_attachment')` unless constructed with `MemorySinkOptions.allowSidecar: true`.

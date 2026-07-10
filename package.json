@@ -1,6 +1,6 @@
 {
   "name": "civ-engine",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Headless, AI-native 2D grid-based game engine: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies.",
   "keywords": [
     "game-engine",
@@ -39,8 +39,16 @@
   ],
   "exports": {
     ".": {
+      "browser": {
+        "types": "./dist/index.browser.d.ts",
+        "default": "./dist/index.browser.js"
+      },
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/index.browser.d.ts",
+      "default": "./dist/index.browser.js"
     },
     "./package.json": "./package.json"
   },

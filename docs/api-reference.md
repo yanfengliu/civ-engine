@@ -4,6 +4,7 @@ Complete reference for every public type, method, and module in civ-engine.
 
 ## Table of Contents
 
+- [Package Entry Points](#package-entry-points-v220)
 - [Types](#types)
 - [World](#world)
   - [Constructor](#constructor)
@@ -56,6 +57,22 @@ Complete reference for every public type, method, and module in civ-engine.
 - [PlayerObserver](#playerobserver-v0820)
 - [snapshotAtTick](#snapshotattick-v110)
 - [VisibilityMap metrics](#visibilitymap-metrics-v110)
+
+---
+
+## Package Entry Points (v2.2.0)
+
+The package ships two curated barrels; both are explicit export lists pinned by tests (`tests/public-surface.test.ts`, `tests/browser-entry.test.ts`).
+
+| Entry | Resolves to | Surface |
+| ----- | ----------- | ------- |
+| `civ-engine` under Node | `dist/index.js` | Full surface — everything in this reference. |
+| `civ-engine` under a bundler with the `browser` condition (Vite dev/build, webpack, esbuild `platform: 'browser'`) | `dist/index.browser.js` | Full surface minus the node-only `FileSink` and `BundleCorpus`. |
+| `civ-engine/browser` (explicit subpath) | `dist/index.browser.js` | Same browser-safe surface; loads under Node too (browser-SAFE, not browser-only). |
+
+`FileSink` and `BundleCorpus` import `node:fs`/`node:path` at module scope and are the only node-only exports. Everything else — including `CorpusIndexError` and all `BundleCorpus*` query/entry types — is available through every entry, and every shared export is the identical object whichever entry resolved it. Browser apps consuming the package as a symlinked `file:` dependency no longer need prebundling workarounds or `node:*` alias shims: the resolved barrel's module graph contains no node builtins (pinned by a transitive graph-scan test).
+
+**TypeScript types.** The `browser` condition carries its own `types` (`dist/index.browser.d.ts`), but which one your editor resolves depends on `moduleResolution`. Under `node16`/`nodenext` and under `bundler` **without** custom conditions, TS resolves the top-level `types` — the **full** surface — so a browser-bundled app typechecks against `FileSink`/`BundleCorpus` even though its runtime bundle omits them. That skew is only a problem if browser code actually imports a node-only name: you get a green typecheck and a missing-export failure at build/boot (the honest signal to move that code node-side). To make the types match the runtime exactly, set `compilerOptions.customConditions: ["browser"]` (bundler resolution) — TS then resolves the browser `types` and flags the two node-only names as missing at compile time. Importing the explicit `civ-engine/browser` subpath resolves the browser types directly under `node16`/`bundler` (legacy `node`/`node10` resolution does not read `exports` and cannot resolve the subpath — use the main entry there).
 
 ---
 
@@ -4913,7 +4930,7 @@ Defaults: attachments under the threshold embed as `data:<mime>;base64,...` URLs
 
 ## Session Recording — FileSink
 
-Disk-backed `SessionSink & SessionSource`.
+Disk-backed `SessionSink & SessionSource`. **Node-only** (module-scope `node:fs`/`node:path`): exported from the full barrel only, not from the browser entry (see [Package Entry Points](#package-entry-points-v220)) — browser recorders use `MemorySink`.
 
 ### `FileSink`
 
@@ -5223,7 +5240,7 @@ if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
 
 ## Bundle Corpus Index (v0.8.3)
 
-Manifest-first corpus index over closed `FileSink` bundle directories. `BundleCorpus` lists and filters bundle metadata without reading JSONL streams, snapshots, or sidecar bytes, then lazily opens `FileSink` sources or full `SessionBundle`s when a caller asks for one.
+Manifest-first corpus index over closed `FileSink` bundle directories. `BundleCorpus` lists and filters bundle metadata without reading JSONL streams, snapshots, or sidecar bytes, then lazily opens `FileSink` sources or full `SessionBundle`s when a caller asks for one. The `BundleCorpus` class is **node-only** (module-scope `node:fs`/`node:path`) and exported from the full barrel only; `CorpusIndexError` and every `BundleCorpus*`/query type below remain available through the browser entry too (see [Package Entry Points](#package-entry-points-v220)).
 
 ### `BundleCorpus`
 

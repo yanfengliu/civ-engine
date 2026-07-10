@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.1.0-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
+![version](https://img.shields.io/badge/version-2.2.0-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
 
 > **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0` (`docs/changelog.md`): additions ship as minors, removals only as majors through the deprecation policy (`docs/guides/public-api-and-invariants.md`). Invariants are hardened through mandatory multi-CLI review, but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - production consumers should pin a version and track the changelog.
 
@@ -148,6 +148,8 @@ docs/      guides, tutorials, architecture, changelog, and review history
 ```
 
 ## Public Surface
+
+Two package entries (v2.2.0): Node resolves the full barrel; bundlers with the `browser` condition (Vite, webpack, esbuild) and the explicit `civ-engine/browser` subpath resolve a browser-safe barrel — the full surface minus the node-only `FileSink` and `BundleCorpus`, with a module graph free of `node:` builtins so symlinked browser consumers boot without prebundling workarounds or alias shims (`docs/api-reference.md` § "Package Entry Points").
 
 The root package centers on a few primary entry points:
 

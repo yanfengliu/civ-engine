@@ -2,6 +2,8 @@
 
 `BundleCorpus` turns a closed directory tree of `FileSink` session bundles into a deterministic, metadata-first query surface. It is the Spec 7 bridge between disk-resident corpora and consumers like `runMetrics`, `SessionReplayer`, and future bundle viewers.
 
+`BundleCorpus` is **node-only** (module-scope `node:fs`/`node:path`) and since v2.2.0 lives only in the full barrel — the browser entry (exports-map `browser` condition / `civ-engine/browser`) omits the class while keeping `CorpusIndexError` and every corpus/query type, so shared code can still type against `BundleCorpusEntry` and friends. See `docs/api-reference.md` § "Package Entry Points".
+
 ## Quickstart
 
 ```typescript

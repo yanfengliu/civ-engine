@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0 - 2026-07-10
+
+Browser-safe package entry. **Additive minor — Node consumers are byte-identical; bundlers now resolve a browser-safe barrel.**
+
+The package barrel mixed the node-only `FileSink` and `BundleCorpus` (module-scope `node:fs`/`node:path` imports) with browser-safe exports. Browser apps consuming the package as a symlinked `file:` dependency died at boot whenever the barrel was served un-prebundled: the `node:path` named import throws inside Vite's browser-external stub at module evaluation, even in apps that never touch the node-only exports. Townscaper hit this live (worked around with `optimizeDeps.include`); aoe2 and city carry `node:fs`/`node:path` alias shims for the same reason. The fix belongs in the engine: browser consumers should never resolve node-only modules.
+
+- **New browser barrel `dist/index.browser.js`** (`src/index.browser.ts`): the full public surface minus exactly `FileSink` and `BundleCorpus`. `CorpusIndexError` and all corpus types remain available (re-exported from the pure types module — identical objects to the full barrel's, pinned by test).
+- **`browser` condition on the `"."` export:** bundlers that resolve with the browser condition (Vite dev and build, webpack, esbuild `platform: 'browser'`) transparently get the browser barrel with zero import churn. Node's resolver has no `browser` condition and keeps resolving `./dist/index.js` — the full barrel, byte-identical to 2.1.0; top-level `main`/`types` are untouched.
+- **New `./browser` subpath (`civ-engine/browser`):** explicit opt-in for tooling that does not apply the browser condition. It uses a `default` condition deliberately — the barrel is browser-SAFE, not browser-only, and loads fine under Node.
+- **Migration:** none for Node consumers. Browser consumers get the fix automatically; the fleet-wide import inventory confirmed no sibling's browser-served code imports the node-only names, so nothing breaks. Consumer-side workarounds (townscaper's `optimizeDeps.include: ['civ-engine']`, aoe2's and city's `node:fs`/`node:path` alias shims) are now unnecessary and can be dropped at leisure. If browser-bundled code does import `FileSink`/`BundleCorpus`, it now fails with a missing-export error at build/boot instead of taking the whole app down at module evaluation — move that code to a node context.
+
+### Validation
+
+New `tests/browser-entry.test.ts` (7 tests): transitive module-graph purity of the browser barrel (no `node:` builtins, no bare specifiers — with a negative control proving the walker sees the builtins behind the full barrel), runtime and declared-name parity (full surface minus exactly `['BundleCorpus', 'FileSink']`), export identity across both barrels, exports-map shape and condition order, and the no-star/side-effect-import curation pins on the new barrel. Post-build resolution smoke: `node` self-reference resolves the full barrel, `civ-engine/browser` and `node --conditions=browser` resolve the browser barrel. Full gates green: `npm test` (1328 passed + 1 todo), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 2.1.0 - 2026-07-08
 
 Fleet-aggregation primitives (loop-engineering roadmap slice 1). **Additive minor.**
