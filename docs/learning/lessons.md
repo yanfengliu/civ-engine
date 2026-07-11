@@ -16,6 +16,18 @@ Pointer: devlog entry, file, or test that illustrates it.
 
 ---
 
+## A search tool that isn't on PATH returns empty *identically to "no matches"* — never prove ABSENCE with a `2>/dev/null`-suppressed command — 2026-07-10
+
+| Field | Value |
+|---|---|
+| Surfaced by | full-review H2 reachability check (this session's devlog `2026-07-07_2026-07-10.md` → "Notes") |
+| Reviewer findings | n/a — process lesson (the driver's own near-miss, caught by re-checking before implementing) |
+| Fix commit | 2.4.0 full-review H2 (the reachability audit that gated the version decision) |
+| Test added | n/a — process lesson |
+| Behavior delta | Before: `rg -n … 2>/dev/null \| grep …` over the sibling repos returned empty and I concluded "no consumer uses the `ImprovementFinding` contract" — which would have mis-scoped the H2 versioning decision (a wrong "zero consumers" read). `rg` is NOT on this machine's Git-Bash PATH, so it errored to stderr (hidden by `2>/dev/null`) and emitted nothing. After: re-running with `grep -rn --include --exclude-dir` showed aoe2 IS a live consumer (it just doesn't set `fixed`/`regressed`) — same final decision, but now on real evidence. |
+
+The trap: an empty result from a search you're using to prove a NEGATIVE ("nothing matches, therefore safe to change X") is only trustworthy if the tool actually ran. `2>/dev/null` on a `command-not-found` makes a broken invocation look exactly like a clean codebase. Rules: (1) on this machine use `grep -rn --include=… --exclude-dir=…` or the harness Grep tool for cross-repo search — `rg` is not on the Bash PATH; (2) when a grep result gates a decision, don't suppress stderr, or run `which <tool>` / a positive control first (grep for something you KNOW exists and confirm it's found); (3) treat "empty" as "unproven," not "absent," until the tool is confirmed to have executed. Pairs with the `replace_all` lesson below — both are "a green/empty result gave false confidence."
+
 ## A `replace_all` on a call-shape pattern silently skips the differently-formatted call sites — and a test that only exercises the matched ones passes green — 2026-07-10
 
 | Field | Value |

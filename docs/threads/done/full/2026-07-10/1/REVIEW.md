@@ -64,4 +64,4 @@ Fork "fails-at-targetTick ⇒ equivalent" (disproven — `finalizeTickFailure` a
 ## Disposition & next steps
 
 - **H1, M1, M2, L1–L8, L10** and the doc/test NITs → fix this iteration (TDD, severity order), then re-review (iteration 2). L9 → document.
-- **H2** → surfaced to the owner for a ruling before implementing (extend the gate vs document the loop-ops delegation); it is a contract-semantics + versioning decision with fleet-wide impact.
+- **H2** → surfaced to the owner for a ruling before implementing (extend the gate vs document the loop-ops delegation); it is a contract-semantics + versioning decision with fleet-wide impact. **RESOLVED in v2.4.0 (2026-07-10):** owner approved extending the gate — `assertImprovementFinding` now requires a replayable evidence ref + `verificationMethod` for `fixed`/`regressed` under strict mode, same as `verified`. Shipped as an additive minor (not 3.0.0) because a fleet reachability audit found zero consumers set `fixed`/`regressed` today, so nothing legitimate breaks (v1.6.0 validation-tightening-as-minor precedent). See changelog 2.4.0 + devlog.

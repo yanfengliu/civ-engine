@@ -59,6 +59,18 @@ const VERIFICATION_STATUSES = new Set<ImprovementVerificationStatus>([
   'fixed',
   'regressed',
 ]);
+// Statuses that assert a PROVEN outcome and therefore require a replayable
+// evidence ref + a verificationMethod under strict mode. 'verified' (proven
+// real) has required this since 2.0.0; 'fixed'/'regressed' are the terminal
+// claims (proven real AND acted upon) that the fleet treats as the authoritative
+// "a pass is done at fixed-proven" signal — so they must be at least as honest as
+// 'verified', not less (full-review 2026-07-10 H2). 'unverified'/'falsePositive'
+// are not proven-success claims and stay ungated.
+const EVIDENCE_REQUIRED_STATUSES = new Set<ImprovementVerificationStatus>([
+  'verified',
+  'fixed',
+  'regressed',
+]);
 const V1_NEXT_ACTIONS = new Set<ImprovementNextAction>([
   'proposalOnly',
   'autoFix',
@@ -210,18 +222,19 @@ export function assertImprovementFinding(
   if (value.data !== undefined) assertJsonCompatible(value.data, 'improvement finding data');
   if (value.refs !== undefined) assertJsonCompatible(value.refs, 'improvement finding refs');
   assertJsonCompatible(value, 'improvement finding');
-  if ((options.requireVerificationEvidence ?? true) && value.verificationStatus === 'verified') {
+  const status = value.verificationStatus as ImprovementVerificationStatus;
+  if ((options.requireVerificationEvidence ?? true) && EVIDENCE_REQUIRED_STATUSES.has(status)) {
     const evidence = (value.evidence ?? []) as readonly ImprovementEvidenceRef[];
     if (!evidence.some(isReplayableEvidenceRef)) {
       throw new EngineRangeError(
         'improvement_finding_invalid',
-        'verified improvement findings require at least one addressed replayable evidence ref (tick with tick, marker with markerId, or bundle with bundleId/sessionId) under requireVerificationEvidence',
+        `${status} improvement findings require at least one addressed replayable evidence ref (tick with tick, marker with markerId, or bundle with bundleId/sessionId) under requireVerificationEvidence`,
       );
     }
     if (value.verificationMethod === undefined) {
       throw new EngineRangeError(
         'improvement_finding_invalid',
-        'verified improvement findings require verificationMethod under requireVerificationEvidence',
+        `${status} improvement findings require verificationMethod under requireVerificationEvidence`,
       );
     }
   }

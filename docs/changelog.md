@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.4.0 - 2026-07-10
+
+Honesty gate covers the terminal proven claims. **Additive minor for existing valid payloads, with one behavior edge (below).** Full-review finding H2 (flagged independently by two reviewers): the strict verified-evidence gate added in 2.0.0 fired only for `verificationStatus: 'verified'`, leaving the *stronger* terminal claims `fixed` and `regressed` — which the recursive loop treats as the authoritative "a pass is done at fixed-proven" signal — able to enter the durable ledger with no evidence at all. That let an agent route around the 2.0.0 wall by choosing a stronger status. The evidence requirement now covers all three proven states.
+
+- **`assertImprovementFinding` (strict, the default) now requires a replayable evidence ref + a `verificationMethod` for `verificationStatus` `'fixed'` and `'regressed'`, exactly as it already did for `'verified'`.** `'unverified'` and `'falsePositive'` are unaffected (they assert no proven success).
+- **Behavior edge:** a `fixed`/`regressed` finding constructed or recorded through the strict path (`assertImprovementFinding` default, both conversion builders, `improvementFindingToMarker`) without an addressed replayable evidence ref (`tick`/`marker`/`bundle`) and a `verificationMethod` now throws `improvement_finding_invalid` — previously it was accepted. No shipped consumer is affected: an audit of the fleet (aoe2/farm/city/townscaper/loop-ops) found no code that sets `fixed`/`regressed` today (consumers use `unverified`/`verified` only, and their `verified` findings already carry evidence). This only rejects a claim that was never honestly valid.
+- **Migration:** attach the fix's proof when marking a finding `fixed`/`regressed` (a replayable `tick`/`marker`/`bundle` ref plus a `verificationMethod` — e.g. `'replay'`/`'state'`/`'metric'`), the same shape `verified` already requires. To read historical ledger rows recorded before this release, pass `{ requireVerificationEvidence: false }` — the lenient read path (`improvementFindingsFromMarkers`) already does this, so old bundles stay extractable.
+
+### Validation
+
+Failing-first tests (`tests/improvement-loop.test.ts`, the `['fixed','regressed']` block): reject-without-ref, reject-without-method, accept with a replayable ref + method, refuse-to-record + lenient-read-still-works — mirroring the `verified` cases. In-process adversarial verification. Full gates green: `npm test` (1350 passed + 1 todo), mcp (22), `npm run typecheck`, `npm run lint`, `npm run build`.
+
 ## 2.3.0 - 2026-07-10
 
 Full-codebase review + hardening. **Additive minor — one new type field; several behavior corrections (bugfixes) called out below.** First full review since 1.1.3; 5 independent reviewers (both model-diverse CLIs were quota-down, so the review ran on extra Claude opus[1m] reviewers with distinct lenses + driver re-verification). The frozen core and the new v1.2.0–v2.2.0 surfaces were independently confirmed clean; the fixes below are the surviving findings.

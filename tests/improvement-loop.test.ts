@@ -273,6 +273,47 @@ describe('strict verification evidence mode', () => {
     expect(() => improvementFindingToMarker(hollow)).toThrow(/replayable evidence/);
   });
 
+  // full-review 2026-07-10 H2: the terminal proven claims must be as honest as
+  // 'verified' — evidence + method required, not bypassable by choosing a
+  // "stronger" status. The fleet treats fixed-proven as authoritative.
+  for (const status of ['fixed', 'regressed'] as const) {
+    it(`rejects a ${status} finding without a replayable evidence ref or method (default strict)`, () => {
+      const noRef: ImprovementFinding = {
+        ...sampleFinding(),
+        verificationStatus: status,
+        evidence: [{ kind: 'text', label: 'trust me' }],
+      };
+      expect(() => assertImprovementFinding(noRef)).toThrow(new RegExp(`${status}.*replayable evidence`));
+      const methodless: ImprovementFinding = {
+        ...sampleFinding(),
+        verificationStatus: status,
+        evidence: [{ kind: 'tick', tick: 250 }],
+      };
+      expect(() => assertImprovementFinding(methodless)).toThrow(new RegExp(`${status}.*verificationMethod`));
+    });
+
+    it(`accepts a ${status} finding carrying a replayable ref + method`, () => {
+      const solid: ImprovementFinding = {
+        ...sampleFinding(),
+        schemaVersion: 2,
+        verificationStatus: status,
+        verificationMethod: 'replay',
+        evidence: [{ kind: 'marker', markerId: 'm-1' }],
+      };
+      expect(() => assertImprovementFinding(solid)).not.toThrow();
+    });
+
+    it(`will not record a ${status} finding without evidence, but reads historical ones leniently`, () => {
+      const hollow: ImprovementFinding = {
+        ...sampleFinding(),
+        verificationStatus: status,
+        evidence: [{ kind: 'screenshot', screenshotPath: 's.png' }],
+      };
+      expect(() => improvementFindingToMarker(hollow)).toThrow(/replayable evidence/);
+      expect(() => assertImprovementFinding(hollow, { requireVerificationEvidence: false })).not.toThrow();
+    });
+  }
+
   it('still recovers historical verified findings recorded without evidence (lenient read)', () => {
     const hollow: ImprovementFinding = {
       ...sampleFinding(),
