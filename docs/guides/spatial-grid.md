@@ -24,7 +24,7 @@ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 // world.grid is a read-only SpatialGridView with dimensions 64x64
 ```
 
-## Synchronization
+## Automatic Synchronization
 
 The grid is updated lock-step with position writes. Calling `world.setPosition(id, { x, y })` (or `world.setComponent(id, 'position', { x, y })` when `position` is the configured `positionKey`) inserts/moves the entity in the grid and updates the engine's `previousPositions` record in the same call. `world.removeComponent(id, 'position')` removes the entity from the grid.
 
@@ -92,6 +92,20 @@ Returns a flat `EntityId[]` of all entities in the neighboring cells. Automatica
 
 Throws `RangeError` if the center position is out of bounds.
 
+### Get entities within a radius
+
+```typescript
+// All entities within Euclidean distance 4 of (5, 3) — 'euclidean' is the default metric
+const inRange = world.grid.getInRadius(5, 3, 4);
+
+// Manhattan (diamond) distance instead
+const diamond = world.grid.getInRadius(5, 3, 4, 'manhattan');
+```
+
+Returns a flat `EntityId[]` of every entity whose cell lies within `radius` of the center under the chosen `metric` — `'euclidean'` (default) or `'manhattan'`. Results are id-sorted for determinism, and the center cell is included when occupied.
+
+Throws `RangeError` if the center is out of bounds, or if the radius is negative or non-finite.
+
 ## Direction Offsets
 
 Three built-in offset constants:
@@ -158,6 +172,8 @@ world.registerComponent<Position>('pos');
 
 ### Range queries
 
+> **Built-in first:** the engine ships range queries that supersede this hand-rolled loop — `world.grid.getInRadius(cx, cy, radius, metric?)` returns the entities in range, and `world.queryInRadius(cx, cy, radius, ...components)` is a generator that yields only the in-range entities that also have all the given components. Prefer them; the manual version below is kept for cases that need custom per-cell logic.
+
 Find all entities within a radius:
 
 ```typescript
@@ -211,6 +227,8 @@ function movementSystem(w: World): void {
 ```
 
 ### Nearest entity search
+
+> **Built-in first:** `world.findNearest(cx, cy, ...components)` performs an expanding-ring nearest-entity search (by Euclidean distance, with a deterministic lowest-id tiebreak) and supersedes this hand-rolled version. Prefer it; the manual version below is kept for cases that need custom matching.
 
 Find the closest entity with a specific component:
 

@@ -50,12 +50,9 @@ The API reference is the authoritative public surface. The root `README.md` is i
 
 Active work and review syntheses live under `threads/current/`; closed objectives live under `threads/done/`. Each objective folder is a concise kebab-case thread name. Authoritative thread designs and implementation plans live directly under that folder as `DESIGN.md` and `PLAN.md`; review iterations stay one level deeper under date and iteration folders, with `REVIEW.md` as the committed summary.
 
-### Active
-
-- [Agent Recursive Improvement Loop](threads/current/agent-recursive-improvement-loop/DESIGN.md) - Active cross-game design for the engine's core AI-native usage case: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn.
-
 ### Implemented
 
+- [Agent Recursive Improvement Loop](threads/done/agent-recursive-improvement-loop/DESIGN.md) - Shipped design for the engine's core AI-native usage case: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn.
 - [AI Runtime Feedback Plan](threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
 - [AI Final Form Plan](threads/done/ai-final-form/2026-04-11/1/REVIEW.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
 - [AI-First Engine Plan](threads/done/ai-first-engine/2026-04-11/1/REVIEW.md) - Machine-facing command/debug/history improvements that have already landed

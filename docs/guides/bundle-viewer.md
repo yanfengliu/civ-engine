@@ -47,6 +47,8 @@ const opened = frame.state();                   // a paused World at tick 1
 console.log(opened.tick);                       // 1
 ```
 
+**Construction.** `new BundleViewer(bundle, options?)` takes an in-memory bundle; `BundleViewer.fromSource(source, options?)` is the static equivalent for a `SessionSource` (a `FileSink` directory or corpus entry source), calling `source.toBundle()` for you. `BundleViewerOptions.skipRegistrationCheck?: boolean` (default `false`) is forwarded to the internal `SessionReplayer` to skip factory registration verification for deliberately instrumented replay (extra observer systems, debug components).
+
 ## Marker-Anchored Navigation
 
 ```ts
@@ -65,6 +67,9 @@ for (const m of viewer.markers({ kind: 'assertion' })) {
 ```ts
 // Every recorded tick (those that have a SessionTickEntry) in ascending order.
 for (const f of viewer.timeline()) { /* ... */ }
+
+// Just the sorted recorded tick numbers (the indices `timeline()` walks).
+const recordedTicks = viewer.ticks();       // readonly number[]
 
 // Streaming generators with optional filters; all yield deterministically.
 for (const ev of viewer.events({ from: 5, to: 20, type: 'spawned' })) { /* ... */ }
@@ -151,7 +156,7 @@ frame.events.push(x);                                // throws (array frozen)
 A tick within `recordedRange` may not have a `SessionTickEntry` if the recorder skipped it (e.g., during a hand-built test bundle, or in some incomplete-bundle scenarios). The frame's behavior:
 
 - **SessionTickEntry-derived (`events`, `diff`, `metrics`, `debug`):** default to `[]` / `null` when no entry exists for that tick.
-- **Independent streams (`commands`, `executions`, `markers`, `failures`):** always sourced from per-tick indices keyed by their own `submissionTick`/`tick` field. A sparse tick can still surface non-empty arrays for these.
+- **Independent streams (`commands`, `executions`, `markers`):** always sourced from per-tick indices keyed by their own `submissionTick`/`tick` field. A sparse tick can still surface non-empty arrays for these. (Failures are not a per-tick frame field — query them viewer-wide via `viewer.failures()`.)
 
 `viewer.timeline()` iterates only ticks that have a `SessionTickEntry`. Callers wanting every integer tick iterate `recordedRange` themselves and call `atTick`.
 

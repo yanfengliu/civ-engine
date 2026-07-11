@@ -120,12 +120,19 @@ There's no measurable overhead on existing tests when strict mode is off; benchm
 
 ```ts
 class StrictModeViolationError extends Error {
-  readonly details: {
-    code: 'strict_mode_violation';
-    method: string;            // e.g., 'setComponent', 'random'
-    phase: 'between-ticks' | 'after-failure';
-    advice: string;            // human-readable hint
-  };
+  // first-class mirror of `details.code`, read uniformly across error
+  // families via `getErrorCode` (always 'strict_mode_violation')
+  readonly code = 'strict_mode_violation';
+  readonly details: StrictModeViolationDetails;
+}
+
+// `details` is the exported `StrictModeViolationDetails` type:
+interface StrictModeViolationDetails {
+  readonly [key: string]: JsonValue;   // JSON-serializable detail bag
+  code: 'strict_mode_violation';
+  method: string;            // e.g., 'setComponent', 'random'
+  phase: 'between-ticks' | 'after-failure';
+  advice: string;            // human-readable hint
 }
 ```
 

@@ -91,6 +91,7 @@ That means:
 
 The scenario context exposes:
 
+- `name`
 - `world`
 - `debugger`
 - `history`
@@ -98,7 +99,7 @@ The scenario context exposes:
 - `step(count?)`
 - `stepUntil(predicate, options?)`
 - `capture()`
-- `fail(code, message, details?)`
+- `fail(code, message, details?, source?)`
 
 ### `submit`
 
@@ -148,6 +149,8 @@ Check failures are reported in `result.checks`. They do not overwrite `result.fa
 `runScenario()` returns:
 
 - `schemaVersion`
+- `name`
+- `tick`
 - `passed`
 - `failure`
 - `checks`
@@ -157,6 +160,7 @@ Check failures are reported in `result.checks`. They do not overwrite `result.fa
 - `metrics`
 - `diff`
 - `events`
+- `registration?`
 - `issues`
 
 `history` includes command submissions, command executions, and structured tick failures, so the runner result is enough for a fast closed-loop diagnosis without a separate replay system.
@@ -187,7 +191,7 @@ const result = runScenario({
   run: (ctx) => { /* ... */ },
   checks: [{ name: 'final state', check: ctx => ctx.world.getComponent(0, 'position')?.x === 5 }],
   history: {
-    capacity: Number.MAX_SAFE_INTEGER,        // unbounded; default 64 truncates long scenarios
+    capacity: Number.MAX_SAFE_INTEGER,        // unbounded; default 64 would trip history_truncated on long scenarios
     captureCommandPayloads: true,             // required for replay
     captureInitialSnapshot: true,             // default; required for replay
   },
@@ -211,7 +215,8 @@ const checkResult = replayer.selfCheck();
 **Caveats:**
 
 - Without `captureCommandPayloads: true`, the bundle is diagnostic-only — `openAt(tick > startTick)` throws `BundleIntegrityError(code: 'no_replay_payloads')`.
-- `WorldHistoryRecorder` defaults to capacity 64 ticks; long scenarios MUST set `capacity: Number.MAX_SAFE_INTEGER` (or a sufficient value) to avoid silent truncation.
+- `WorldHistoryRecorder` uses a bounded rolling buffer (default capacity 64 ticks / 256 commands). If a long scenario overruns it, early ticks/commands are evicted, so `scenarioResultToBundle()` throws `BundleIntegrityError(code: 'history_truncated')` when command payloads were captured (a rolling-buffer eviction would yield a gapped, non-replayable bundle).
+- **Remedy:** raise the scenario's `history.capacity` (and `commandCapacity`) to cover the whole run, or record with `SessionRecorder` / `FileSink` for archival replay.
 - The `worldFactory` must register handlers/validators/systems on a fresh world THEN call `applySnapshot(snap)` — `World.deserialize` would conflict with subsequent re-registration.
 
-See [Session Recording](./session-recording.md) for the canonical reference.
+See [Session Recording](./session-recording.md) for the `SessionReplayer` / `selfCheck` replay system these bundles feed into.

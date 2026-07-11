@@ -66,7 +66,8 @@ const HEIGHT = 32;
 const world = new World<GameEvents, GameCommands>({
   gridWidth: WIDTH,
   gridHeight: HEIGHT,
-  tps: 10,  // 10 ticks per second for a sim game
+  tps: 10,        // 10 ticks per second for a sim game
+  strict: false,  // sandbox/tutorial: allow world mutations between ticks (see note below)
 });
 
 // Register all component types
@@ -79,6 +80,8 @@ world.registerComponent<ResourceSource>('resourceSource');
 // Register resource types
 world.registerResource('food', { defaultMax: 500 });
 ```
+
+> **Strict mode.** This tutorial passes `strict: false` so the reusable helpers below (`spawnColonist` in §3, `tryBuildHouse` in §5) can mutate the world directly when called between ticks. Under the 1.0 default (`strict: true`), any `World` mutation outside a system phase or the construction-time setup window throws `StrictModeViolationError` — wrap such runtime mutations in `world.runMaintenance(fn)`. See the [Strict mode guide](./strict-mode.md).
 
 ## 2. Map Generation
 
@@ -237,6 +240,7 @@ function tryBuildHouse(
   settlement: EntityId,
   site: { x: number; y: number },
 ): void {
+  const houseId = w.createEntity();
   const result = w
     .transaction()
     .require((world) => {
@@ -244,7 +248,7 @@ function tryBuildHouse(
       return (wood?.current ?? 0) >= 80 || 'not enough wood';
     })
     .removeResource(settlement, 'wood', 80)
-    .setComponent(w.createEntity(), 'building', { kind: 'house', x: site.x, y: site.y })
+    .setComponent(houseId, 'building', { kind: 'house', x: site.x, y: site.y })
     .emit('buildingPlaced', { settlement, site, kind: 'house' })
     .commit();
 
@@ -256,7 +260,7 @@ function tryBuildHouse(
 }
 ```
 
-If the settlement has 80+ wood, every mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the building placed, and `buildingPlaced` in the tick's events. If the settlement is short on wood, **none of the changes apply** — the transaction guarantees there is no partial state where the wood was debited but the building was not placed.
+If the settlement has 80+ wood, every buffered mutation applies in registration order and the event fires; the world ends up with `wood -= 80`, the `building` component set on `houseId`, and `buildingPlaced` in the tick's events. If the settlement is short on wood, **none of the buffered mutations or events apply** — there is no partial state where the wood was debited but the `building` component was not set. Note that `w.createEntity()` is not a buffered transaction op (the `Mutation` union has no `createEntity`), so `houseId` is created eagerly and is **not** rolled back on the failure path — it survives as a live, component-less entity. Hoisting it before the transaction (as above) makes that eager-vs-buffered split explicit; the all-or-nothing guarantee covers buffered mutations and events only.
 
 Reach for a transaction whenever you would otherwise write `if (cost-check) { ...several mutations... }` — the transaction makes the all-or-nothing invariant explicit, cheaper to reason about, and harder to break under future edits. This all-or-nothing guarantee holds for a precondition/cost-check failure; the one exception is a buffered mutation that THROWS mid-commit, which consumes the transaction and can leave the world partially applied (validate entity liveness in a `require()` predicate) — see [Commands & Events](commands-and-events.md) and [API Reference → Command Transaction](../api-reference.md#command-transaction).
 
@@ -481,11 +485,14 @@ function attachClient(ws: WebSocket, world: World<GameEvents, GameCommands>): Cl
 }
 ```
 
-The client receives:
+The client receives (the full `ServerMessage` union — see [AI Integration → Transport Protocol](./ai-integration.md#transport-protocol)):
 - A `snapshot` message on connect (full world state)
 - A `tick` message after each step (diff + events from that tick)
 - A `commandAccepted` message when a submitted command is queued successfully
 - A `commandRejected` message if a submitted command fails validation, is malformed, or names a command with no registered handler
+- A `commandExecuted` message when a queued command runs at the start of a tick (carries `code`, `tick`, and `submissionSequence`)
+- A `commandFailed` message when a queued command's handler throws or is missing
+- A `tickFailed` message carrying the structured `TickFailure` when a tick aborts
 
 The client sends:
 - `command` messages to submit game commands (e.g., `moveColonist`)

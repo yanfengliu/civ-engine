@@ -12,7 +12,7 @@ The engine's core AI-native usage case is a recursive improvement loop:
 run -> record -> find -> verify -> classify -> regress -> fix/propose -> review -> rerun -> compare -> learn
 ```
 
-`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, coded failure surfaces, and a shared `ImprovementFinding` payload. The active cross-game design lives in [`docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`](../threads/current/agent-recursive-improvement-loop/DESIGN.md). The shipped public slice is the finding/evidence/marker contract; full run manifests, ledgers, gate orchestration, browser/provider adapters, and auto-fix policy stay in game repos until reference migrations prove a smaller shared shape.
+`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, coded failure surfaces, and a shared `ImprovementFinding` payload. The active cross-game design lives in [`docs/threads/done/agent-recursive-improvement-loop/DESIGN.md`](../threads/done/agent-recursive-improvement-loop/DESIGN.md). The shipped public slice is the finding/evidence/marker contract; full run manifests, ledgers, gate orchestration, browser/provider adapters, and auto-fix policy stay in game repos until reference migrations prove a smaller shared shape.
 
 ## What Matters
 
@@ -345,7 +345,7 @@ Hidden state is explicit and audience-labeled. `playerBlind` prompts omit it; `o
 
 All of this in-page loop surface — `runVisualPlaytestLoop`, the finding contract and validators below, `SessionRecorder`/`MemorySink`, markers, `bundleHotspots`, `snapshotAtTick` — is browser-safe: since v2.2.0 bundlers resolve a browser entry whose module graph has no `node:` builtins, so game repos embed it without prebundling workarounds or `node:*` alias shims. Only the disk-backed `FileSink` and `BundleCorpus` are node-only (full barrel only); browser recorders hand their `MemorySink` bundle out for node-side persistence and indexing. See `docs/api-reference.md` § "Package Entry Points".
 
-## Improvement Finding Contract (v1.4.0, completed v1.6.0)
+## Improvement Finding Contract
 
 Use `ImprovementFinding` when a visual, synthetic, replay, metric, or human-review issue should survive into the recursive loop ledger. It adds the durable fields the loop needs around the visual finding shape: `schemaVersion: 1 | 2`, stable `id`, plural `evidence`, `verificationStatus` plus `verificationMethod` (how it was confirmed: replay/state/spec/metric/screenshot/human), `nextAction` (including `improveHarness`/`fileEngineFeedback`/`addRegression`/`updateDesign`, which require schema version 2), `promotionTarget`, optional `disposition`, optional `sourceRun` (build one with `createImprovementRunManifest` — it auto-fills `engineVersion` and validates commit/model/provider/seed/cost/duration/artifacts/gates), and JSON-compatible game-specific `data`. Lift raw visual findings into the contract with `visualPlaytestFindingToImprovementFinding(visual, { id, ... })`. Since 2.0.0, bare `assertImprovementFinding` (used by the builders and marker recording too) refuses a `verified` finding — and, since 2.4.0, a terminal `fixed`/`regressed` finding (the loop's authoritative "fixed-proven" claim) — that lacks an addressed replayable evidence ref (a tick, `markerId`, or `bundleId`/`sessionId`) and a method; dishonest proven claims cannot be constructed, recorded, or validated (`unverified`/`falsePositive` stay ungated). `{ requireVerificationEvidence: false }` exists only for reading historical payloads. For cross-run and cross-repo aggregation, key findings by `improvementFindingSignature(finding, { gameId })` (v2.1.0) — declare a stable `data.class` when emitting so the signature survives run-specific ids — and compare states cheaply with `stateDigest(state, { omitKeys })`, deep-omitting wall-clock fields before digesting.
 
@@ -434,7 +434,7 @@ for (const entry of failed) {
   const failureTick = viewer.bundle.metadata.failedTicks![0];
   const before = viewer.atTick(failureTick - 1);
   const events = [...viewer.events({ from: failureTick - 5, to: failureTick - 1 })];
-  console.log(entry.key, before.state().getResources('gold', /* entity */ 1), events.length);
+  console.log(entry.key, before.state().getResource(1, 'gold'), events.length);
 }
 ```
 

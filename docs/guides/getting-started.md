@@ -302,7 +302,7 @@ adapter.handleMessage({
 adapter.disconnect();
 ```
 
-Server messages: `snapshot` (full state), `tick` (diff + events), `commandAccepted` (command queued), `commandRejected` (failed validation, malformed command, or missing handler).
+Server messages: `snapshot` (full state), `tick` (diff + events), `commandAccepted` (command queued), `commandRejected` (failed validation, malformed command, or missing handler), `commandExecuted` / `commandFailed` (tick-time execution outcome), and `tickFailed` (aborted tick). See `api-reference.md` for the full `ServerMessage` union.
 Client messages: `command` (submit a game command), `requestSnapshot` (request full state).
 
 ## Next Steps

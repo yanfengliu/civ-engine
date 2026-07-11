@@ -52,7 +52,7 @@ Components must already be JSON-compatible plain data. `serialize()` rejects non
 interface WorldSnapshot {
   version: 6;                    // format version (current write format; v6 adds `poisoned` + explicit `config.strict`)
   poisoned: TickFailure | null;  // v6: terminal failure, inspection-only (restorePoison opts into restoring it)
-  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, sync options,
+  config: WorldConfig;           // grid dimensions, TPS, positionKey, seed, strict,
                                  //   plus maxTicksPerFrame and instrumentationProfile when non-default
   tick: number;                  // current tick count
   entities: {
@@ -160,7 +160,7 @@ Diffs capture:
 - Entity creation and destruction
 - Component additions, mutations, and removals
 - Resource pool changes
-- World-level state changes (`setState` / `removeState`)
+- World-level state changes (`setState` / `deleteState`)
 - Entity tag additions and removals
 - Entity metadata additions and removals
 
@@ -354,7 +354,7 @@ it('creates an entity in the diff', () => {
 
 ## `diffSnapshots(a, b, opts?)` — snapshot-pair diff helper (v0.8.7)
 
-The `diffSnapshots` helper computes a `TickDiff`-shaped delta between any two `WorldSnapshot`s. It is part of the Bundle Viewer surface (Spec 4) and re-exported from `civ-engine` for live-world snapshot comparison in tests and tools:
+The `diffSnapshots` helper computes a `TickDiff`-shaped delta between two v5/v6 snapshots (older versions throw `snapshot_unsupported_version`). It is part of the Bundle Viewer surface (Spec 4) and re-exported from `civ-engine` for live-world snapshot comparison in tests and tools:
 
 ```ts
 import { diffSnapshots } from 'civ-engine';

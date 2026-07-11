@@ -1,5 +1,40 @@
 # Changelog
 
+## 2.4.1 - 2026-07-10
+
+Documentation-accuracy sweep (doc-review). **No API or behavior change** — this patch corrects drift that the full-review batch (2.3.0/2.4.0) and earlier surface additions left in the guides and API reference, so copy-pasted examples run and the reference matches the shipped types. A 5-way parallel audit against live `src/` produced the findings; fixes landed across 21 docs plus one self-contradictory source comment (`src/snapshot-diff.ts`, comment-only — no code change).
+
+### Corrected — these docs would have broken reader code
+
+- **`World.queryInRadius` is a generator, not an array.** `api-reference.md` typed it `EntityId[]` and showed `.length`/`.map`; it returns `IterableIterator<EntityId>` (`src/world-queries.ts`). Spread it (`[...world.queryInRadius(...)]`) or iterate with `for…of`.
+- **`deleteState`, not `removeState`.** `serialization-and-diffs.md` documented a nonexistent `removeState`; the method is `deleteState`.
+- **`getResource(entity, key)`, not `getResources('gold', 1)`.** `ai-integration.md`'s bundle-viewer example used a nonexistent plural method with swapped arguments.
+- **`world.grid` is `SpatialGridView`, not `SpatialGrid`.** The reference typed it as the mutable class and warned against `insert`/`remove`/`move` methods that the read-only view does not have.
+- **Scenario bundles fail loud, not silent.** `scenario-runner.md` still warned of "silent truncation"; since 2.3.0, `scenarioResultToBundle()` throws `history_truncated` when a payload-carrying bundle would be gapped.
+
+### Corrected — stale or incomplete
+
+- `diffSnapshots` accepts v5 **and** v6 (the reference, the serialization guide, and a self-contradictory `snapshot-diff.ts` comment all said "v5 only").
+- `entities-and-components.md` claimed "no cached query result"; the engine maintains an incremental per-key-set query cache.
+- `building-a-game.md` now constructs its tutorial world with `strict: false` and calls out the 1.0 strict default (its runtime helpers would otherwise throw `StrictModeViolationError`), and hoists the entity out of its `transaction()` example (an eagerly-created id is not rolled back on the failure path).
+- `public-api-and-invariants.md` deprecation policy relabeled "Pre-1.0 (now)" → "Pre-1.0 (history)" (the engine is post-1.0 at 2.4.x).
+- `rendering.md`'s local `RenderEntity` interface renamed to `StoreEntity` (it shadowed the exported `RenderEntity<TView>`).
+- Server-message lists (`getting-started.md`, `building-a-game.md`) now include the full `ServerMessage` union (`commandExecuted`/`commandFailed`/`tickFailed`).
+
+### Added coverage
+
+- `api-reference.md`: `SpatialGridView`, `SpatialGrid.getInRadius`, `WorldConfig.strict` + `instrumentationProfile`, `WorldDebugSnapshot` and its 13 debug sub-types, `TickMetricsProfile`, `WorldHistoryIssueSummary`, `ScenarioCapture`/`ScenarioCheckOutcome` shapes, and the `getByTag` id-sort guarantee.
+- Guides: the bounded-history buffer + `WorldHistoryState.truncated`, the `missing_tick_entries` replay error code, `replayer.validateMarkers()`, `getInRadius`, and the `world.queryInRadius`/`world.findNearest` built-ins.
+
+### Structure
+
+- Repointed stale `docs/threads/current/` links to `done/` across ARCHITECTURE, `docs/README.md`, `ai-integration.md`, `api-reference.md`, and lesson provenance (the recursive-loop thread closed). Refreshed the ARCHITECTURE component map (`improvement-signature.ts`, `state-digest.ts`, `session-continuity.ts`, `session-replayer-markers.ts`), the drift-log (v2.0–v2.4 rows), and the tick-reentrancy guard note.
+- Deduplicated scattered topics to single canonical homes with cross-links: the Improvement Finding contract (`ai-integration.md`), the `openViewer` walkthrough (`bundle-viewer.md`), and `scenarioResultToBundle` (`scenario-runner.md`).
+
+### Validation
+
+Doc-only plus one comment-only source edit. Full gates green: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Post-sweep audit confirms no remaining `removeState`/`getResources` references and no stale `threads/current/` links in the living docs.
+
 ## 2.4.0 - 2026-07-10
 
 Honesty gate covers the terminal proven claims. **Additive minor for existing valid payloads, with one behavior edge (below).** Full-review finding H2 (flagged independently by two reviewers): the strict verified-evidence gate added in 2.0.0 fired only for `verificationStatus: 'verified'`, leaving the *stronger* terminal claims `fixed` and `regressed` — which the recursive loop treats as the authoritative "a pass is done at fixed-proven" signal — able to enter the durable ledger with no evidence at all. That let an agent route around the 2.0.0 wall by choosing a stronger status. The evidence requirement now covers all three proven states.

@@ -126,6 +126,15 @@ Controls how much implicit runtime instrumentation the engine keeps on the hot p
 - `minimal` is the QA/staging profile. `step()` records coarse per-tick metrics such as counts and total duration, but skips detailed phase timings and per-system timing entries.
 - `release` removes avoidable observation work from the implicit `step()` and `submit()` paths. Explicit AI/debug APIs such as `stepWithResult()` and `submitWithResult()` still return structured results when you call them.
 
+### `TickMetricsProfile`
+
+```typescript
+// src/world-types.ts
+type TickMetricsProfile = 'full' | 'minimal' | 'none';
+```
+
+Per-tick metrics level selected by `TickRunOptions.metricsProfile` (the explicit `stepWithResult()` / tick-run path). Distinct from `InstrumentationProfile` (`'full' | 'minimal' | 'release'`), which governs the *implicit* `step()` / `submit()` hot path: `TickMetricsProfile` uses `'none'` where `InstrumentationProfile` uses `'release'`.
+
 ### `WorldConfig`
 
 ```typescript
@@ -138,6 +147,7 @@ interface WorldConfig {
   maxTicksPerFrame?: number; // Spiral-of-death cap (default: 4)
   seed?: number | string;  // Deterministic RNG seed
   instrumentationProfile?: InstrumentationProfile; // Implicit instrumentation level (default: 'full')
+  strict?: boolean;        // Gate content mutations to setup/systems/runMaintenance windows (default: true as of 1.0; pass false to opt out)
 }
 ```
 
@@ -1161,6 +1171,8 @@ Creates a new world with the specified grid dimensions, tick rate, and optional 
 | `config.positionKey` | `string` | No | Component key used for spatial grid sync (default: `'position'`) |
 | `config.maxTicksPerFrame` | `number` | No | Maximum ticks processed per real-time frame before discarding accumulated time (default: `4`) |
 | `config.seed` | `number \| string` | No | Seed for deterministic `world.random()` sequences |
+| `config.instrumentationProfile` | `InstrumentationProfile` | No | Implicit instrumentation level: `'full'` \| `'minimal'` \| `'release'` (default: `'full'`) |
+| `config.strict` | `boolean` | No | Gate all content mutations to setup / system phases / `runMaintenance(fn)` windows (default: `true` as of 1.0; pass `false` to opt out for sandbox/tutorial use) |
 
 **Example:**
 
@@ -1601,10 +1613,10 @@ console.log(world.tick); // 1
 #### `grid`
 
 ```typescript
-readonly grid: SpatialGrid
+readonly grid: SpatialGridView
 ```
 
-Read-only reference to the spatial grid. Use `grid.getAt()` and `grid.getNeighbors()` to query spatial data. Do not call `grid.insert()`, `grid.remove()`, or `grid.move()` directly — the World handles spatial sync automatically.
+Read-only reference to the spatial grid. Use `grid.getAt()`, `grid.getNeighbors()`, and `grid.getInRadius()` to query spatial data. The `grid` view is read-only — it exposes only `width`, `height`, `getAt`, `getNeighbors`, and `getInRadius`. The mutating `insert()` / `remove()` / `move()` methods live on the `SpatialGrid` class, **not** on `SpatialGridView`; the World owns spatial sync, so do not attempt to mutate the grid.
 
 ### Speed Control
 
@@ -2174,7 +2186,7 @@ if (world.hasTag(unit, 'military')) {
 getByTag(tag: string): ReadonlySet<EntityId>
 ```
 
-Returns all entities that have the given tag. The returned set is read-only.
+Returns all entities that have the given tag. The returned set is read-only and **id-sorted** — iteration order is deterministic and stable across serialize→deserialize / `forkAt`, so `[...world.getByTag(t)][0]` yields the same entity live vs replayed.
 
 ```typescript
 for (const id of world.getByTag('military')) {
@@ -2263,13 +2275,18 @@ queryInRadius(
   cy: number,
   radius: number,
   ...components: string[]
-): EntityId[]
+): IterableIterator<EntityId>
 ```
 
-Returns all entities within the given radius of `(cx, cy)` that match all specified components. Uses Euclidean distance.
+Lazily yields all entities within the given radius of `(cx, cy)` that match all specified components. Uses Euclidean distance. Like `query()`, this is a **generator** — iterate it with `for…of` or spread it into an array; it has no `.length`, `.map`, or index access of its own.
 
 ```typescript
-const nearby = world.queryInRadius(10, 10, 5, 'position', 'health');
+for (const id of world.queryInRadius(10, 10, 5, 'position', 'health')) {
+  // process each nearby entity
+}
+
+// Or materialize into an array:
+const nearby = [...world.queryInRadius(10, 10, 5, 'position', 'health')];
 ```
 
 #### `findNearest(cx, cy, ...components)`
@@ -2529,6 +2546,26 @@ const allNearby = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
 const diag = world.grid.getNeighbors(5, 3, DIAGONAL);
 ```
 
+#### `getInRadius(cx, cy, radius, metric?)`
+
+```typescript
+getInRadius(
+  cx: number,
+  cy: number,
+  radius: number,
+  metric?: 'euclidean' | 'manhattan',
+): EntityId[]
+```
+
+Returns all entities within `radius` of the center cell `(cx, cy)`, id-sorted (deterministic and round-trip stable, like `getAt`/`getNeighbors`). `metric` defaults to `'euclidean'`; pass `'manhattan'` for grid/taxicab distance. This is a raw spatial lookup with no component filtering — distinct from `World.queryInRadius`, which additionally filters by component signature and returns a lazy generator. Also available on `SpatialGridView` (`world.grid`).
+
+**Throws:** `RangeError` if `(cx, cy)` is out of bounds, or if `radius` is negative or non-finite.
+
+```typescript
+const inRange = world.grid.getInRadius(10, 10, 5);
+const taxicab = world.grid.getInRadius(10, 10, 5, 'manhattan');
+```
+
 ### Direction Constants
 
 | Constant | Directions | Count |
@@ -2538,6 +2575,22 @@ const diag = world.grid.getNeighbors(5, 3, DIAGONAL);
 | `ALL_DIRECTIONS` | All 8 | 8 |
 
 Each constant is `ReadonlyArray<[number, number]>` of `[dx, dy]` offsets.
+
+### `SpatialGridView`
+
+The read-only projection of a `SpatialGrid`. `world.grid` is a `SpatialGridView` (frozen), exposing only the query surface — none of the mutating `insert`/`remove`/`move` methods.
+
+```typescript
+interface SpatialGridView {
+  readonly width: number;
+  readonly height: number;
+  getAt(x: number, y: number): ReadonlySet<EntityId> | null;
+  getNeighbors(x: number, y: number, offsets?: ReadonlyArray<[number, number]>): EntityId[];
+  getInRadius(cx: number, cy: number, radius: number, metric?: 'euclidean' | 'manhattan'): EntityId[];
+}
+```
+
+The methods behave identically to their `SpatialGrid` counterparts documented above.
 
 ---
 
@@ -4392,6 +4445,9 @@ import {
   runScenario,
   type ScenarioCapture,
   type ScenarioCheck,
+  type ScenarioCheckOutcome,
+  type ScenarioCheckResult,
+  type ScenarioConfig,
   type ScenarioContext,
   type ScenarioFailure,
   type ScenarioResult,
@@ -4425,7 +4481,25 @@ interface ScenarioCheck<TEventMap, TCommandMap> {
 }
 ```
 
-Post-run check evaluated after `run()`.
+Post-run check evaluated after `run()`. A check returns a `ScenarioCheckResult`:
+
+```typescript
+type ScenarioCheckResult = boolean | ScenarioFailure;
+```
+
+`true` (or `false`) is the pass/fail shorthand; returning a `ScenarioFailure` records structured failure detail.
+
+#### `ScenarioCheckOutcome`
+
+```typescript
+interface ScenarioCheckOutcome {
+  name: string;
+  passed: boolean;
+  failure: ScenarioFailure | null;
+}
+```
+
+Per-check result recorded in `ScenarioResult.checks` (one entry per registered check).
 
 #### `ScenarioContext`
 
@@ -4474,6 +4548,24 @@ interface ScenarioStepUntilResult {
 
 Bounded loop result returned by `context.stepUntil()`.
 
+#### `ScenarioCapture`
+
+```typescript
+interface ScenarioCapture<TEventMap, TCommandMap> {
+  schemaVersion: typeof SCENARIO_RESULT_SCHEMA_VERSION;
+  tick: number;
+  snapshot: WorldSnapshot;
+  debug: WorldDebugSnapshot;
+  history: WorldHistoryState<TEventMap, TCommandMap, WorldDebugSnapshot>;
+  metrics: WorldMetrics | null;
+  diff: TickDiff | null;
+  events: Array<{ type: keyof TEventMap; data: TEventMap[keyof TEventMap] }>;
+  registration?: RegistrationManifest; // registration fingerprint copied into bundle metadata
+}
+```
+
+Point-in-time capture returned by `context.step()` and `context.capture()`, and the base interface `ScenarioResult` extends.
+
 #### `ScenarioResult`
 
 ```typescript
@@ -4511,7 +4603,7 @@ runScenario<TEventMap, TCommandMap>(config: {
 }): ScenarioResult<TEventMap, TCommandMap>
 ```
 
-Runs a scenario and returns the final structured result.
+Runs a scenario and returns the final structured result. The config object is typed `ScenarioConfig<TEventMap, TCommandMap>` (also accepts `history.captureCommandPayloads?: boolean` to capture full command payloads for replayable bundles).
 
 ### Behavior Notes
 
@@ -4531,6 +4623,7 @@ Short-horizon recorder for recent command outcomes and tick traces. Useful for A
 import {
   WorldHistoryRecorder,
   summarizeWorldHistoryRange,
+  type WorldHistoryIssueSummary,
   type WorldHistoryRangeSummary,
   type WorldHistoryState,
   type WorldHistoryTick,
@@ -4636,6 +4729,18 @@ summarizeWorldHistoryRange<TEventMap, TCommandMap>(
 
 Aggregates a short tick window into one machine-readable summary covering changed entity IDs, command submission outcomes, command execution outcomes, tick-failure codes, events, diff totals, and debugger issue counts.
 
+#### `WorldHistoryIssueSummary`
+
+```typescript
+interface WorldHistoryIssueSummary {
+  code: string;
+  severity: DebugSeverity;
+  count: number;
+}
+```
+
+One aggregated debugger-issue bucket in `WorldHistoryRangeSummary` — a distinct issue `code`, its `severity`, and how many times it occurred across the summarized window.
+
 ---
 
 ## World Debugger
@@ -4696,6 +4801,117 @@ Returns a structured debug snapshot containing:
 - machine-readable `issues`, including tick-budget diagnostics and diff hazards
 - compatibility `warnings` derived from those issues
 - custom probe payloads
+
+### `WorldDebugSnapshot` and sub-types
+
+The exported shape of `capture()` output and its member types:
+
+```typescript
+type DebugSeverity = 'info' | 'warn' | 'error';
+
+interface WorldDebugSnapshot {
+  schemaVersion: typeof WORLD_DEBUG_SCHEMA_VERSION;
+  tick: number;
+  entityCount: number;
+  componentStoreCount: number;
+  components: DebugComponentSummary[];
+  resources: DebugResourceSummary[];
+  spatial: DebugSpatialSummary;
+  metrics: WorldMetrics | null;
+  diff: DebugDiffSummary | null;
+  tickFailure: TickFailure | null;
+  events: DebugEventSummary[];
+  probes: Record<string, JsonValue>;
+  issues: DebugIssue[];
+  warnings: DebugWarning[];
+}
+
+interface DebugComponentSummary {
+  key: string;
+  entityCount: number;
+}
+
+interface DebugResourceSummary {
+  key: string;
+  entityCount: number;
+  totalCurrent: number;
+  boundedEntities: number;
+  unboundedEntities: number;
+}
+
+interface DebugSpatialCell {
+  x: number;
+  y: number;
+  count: number;
+}
+
+interface DebugSpatialSummary {
+  positionKey: string;
+  entitiesWithPosition: number;
+  entitiesWithoutPosition: number;
+  occupiedCells: number;
+  maxStack: number;
+  densestCells: DebugSpatialCell[];
+}
+
+interface DebugEventSummary {
+  type: string;
+  count: number;
+}
+
+interface DebugDiffSummary {
+  tick: number;
+  created: number;
+  destroyed: number;
+  changedEntities: number;
+  componentSets: Array<[string, number]>;
+  componentRemoved: Array<[string, number]>;
+  resourceSets: Array<[string, number]>;
+  resourceRemoved: Array<[string, number]>;
+  overlappingEntityIds: EntityId[];
+}
+
+interface DebugWarning {
+  severity: DebugSeverity;
+  code: string;
+  message: string;
+}
+
+interface DebugIssue extends DebugWarning {
+  subsystem: string;
+  entityIds?: EntityId[];
+  details?: JsonValue | null;
+  suggestedActions?: string[];
+}
+```
+
+The probe-payload snapshots produced by the probe helpers below and surfaced under `probes`:
+
+```typescript
+interface OccupancyDebugSnapshot {
+  width: number;
+  height: number;
+  version: number;
+  blockedCells: number;
+  occupiedEntities: number;
+  occupiedCells: number;
+  reservedEntities: number;
+  reservedCells: number;
+}
+
+interface VisibilityPlayerDebugSnapshot {
+  playerId: VisibilityPlayerId;
+  sourceCount: number;
+  visibleCells: number;
+  exploredCells: number;
+}
+
+interface VisibilityDebugSnapshot {
+  width: number;
+  height: number;
+  players: VisibilityPlayerDebugSnapshot[];
+}
+```
 
 ### Probe Helpers
 
@@ -5620,7 +5836,7 @@ Codes are scoped to the class. Replay materialization paths bubble `BundleRangeE
 function diffSnapshots(a: WorldSnapshot, b: WorldSnapshot, opts?: { tick?: number }): TickDiff;
 ```
 
-Standalone snapshot-pair helper exported from `src/snapshot-diff.ts` and re-exported via `bundle-viewer.ts`. Returns a `TickDiff`-shaped result. Result `tick` defaults to `opts.tick ?? b.tick ?? 0`. Engine currently produces v5 `WorldSnapshot`s only; non-v5 inputs throw.
+Standalone snapshot-pair helper exported from `src/snapshot-diff.ts` and re-exported via `bundle-viewer.ts`. Returns a `TickDiff`-shaped result. Result `tick` defaults to `opts.tick ?? b.tick ?? 0`. Accepts v5 or v6 `WorldSnapshot`s (the current write format is v6); other versions throw `EngineError('snapshot_unsupported_version')`.
 
 **Scope (intentional):** TickDiff slots only — `entities` (created/destroyed via alive transitions), `components`, `resources`, `state`, `tags`, `metadata`. Snapshot-only fields are excluded: `WorldSnapshot.config` and nested fields, `WorldSnapshot.rng`, `WorldSnapshot.componentOptions`, `WorldSnapshot.entities.{generations,alive,freeList}` directly, `WorldSnapshot.version`. These are registration / determinism invariants and belong outside a state diff.
 
@@ -6044,7 +6260,7 @@ function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPl
 
 ## Improvement Loop Finding Contracts (v1.4.0, completed v1.6.0)
 
-Shared, zero-dependency finding and evidence contracts for the recursive improvement loop, from `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`: game repos record the same verified-finding payload and run manifests while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
+Shared, zero-dependency finding and evidence contracts for the recursive improvement loop, from `docs/threads/done/agent-recursive-improvement-loop/DESIGN.md`: game repos record the same verified-finding payload and run manifests while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
 
 ```ts
 type ImprovementFindingSchemaVersion = 1 | 2;

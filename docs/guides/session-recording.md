@@ -108,7 +108,7 @@ recorder.addMarker({
 });
 ```
 
-Marker references use `EntityRef` (id + generation) to handle entity recycling. The engine validates entity refs against the live `EntityManager` for live-tick markers (`marker.tick === world.tick`); retroactive markers (`marker.tick < world.tick`) skip liveness validation and are stamped `validated: false`.
+Marker references use `EntityRef` (id + generation) to handle entity recycling. The engine validates entity refs against the live `EntityManager` for live-tick markers (`marker.tick === world.tick`); retroactive markers (`marker.tick < world.tick`) skip liveness validation and are stamped `validated: false`. `replayer.validateMarkers(): MarkerValidationResult` re-verifies those retroactive `validated: false` markers against hydrated replay state (the snapshot at each marker's tick), reporting any whose entity refs are no longer live.
 
 ## Replay
 
@@ -166,6 +166,8 @@ result.skippedSegments;     // [{ fromTick, toTick, reason: 'failure_in_segment'
 
 `selfCheck` returns `ok: true, checkedSegments: 0` (with a `console.warn`) on bundles without command payloads — diagnostic-only bundles can't be replayed. Bundles that crossed a recorded `TickFailure` get those segments skipped (replay-across-failure is out of scope per spec §2 / future spec).
 
+If a bundle body is **gapped** — tick entries missing over a range that replay must cross — `openAt()` and the standalone `snapshotAtTick(bundle, tick)` throw `BundleIntegrityError(code: 'missing_tick_entries')` instead of folding over the gap into wrong state. A gap means the recorded history was truncated past the recorder's rolling-buffer capacity, or the bundle was tampered (see the bounded-buffer note under [Scenarios as replayable bundles](#scenarios-as-replayable-bundles)).
+
 ## Fail-fast factory verification (v0.8.18+)
 
 Every new bundle records a `RegistrationManifest` (components, systems in registration order, handlers, validators, resources, destroy-callback count) into `metadata.registration` at `SessionRecorder.connect()`. On replay, every factory construction verifies the factory-owned categories — systems / handlers / validators / destroy-callback count / `positionKey` — and throws a structured `BundleIntegrityError` (`details.code: 'registration_mismatch'`, with named missing/extra/ordered lists) **before any stepping**, instead of the tick-N state divergence factory drift used to produce. Components are checked extras-only (an extra factory component changes `serialize()` output); component options and resources are never compared — `applySnapshot` heals them from the snapshot, which is also why missing components/resources in your factory replay cleanly.
@@ -191,27 +193,9 @@ The engine does NOT structurally enforce these obligations in v1. `selfCheck` is
 
 ## Scenarios as replayable bundles
 
-```ts
-import { runScenario, scenarioResultToBundle } from 'civ-engine';
+See [Scenario Runner](./scenario-runner.md) for `scenarioResultToBundle` and its truncation caveat — that guide is the canonical home for turning a `runScenario()` result into a replayable `SessionBundle` (payload capture, the `no_replay_payloads` diagnostic-only rule, and the `worldFactory` contract).
 
-const result = runScenario({
-  name: 'my-test', world,
-  setup: (ctx) => setupBehavior(ctx.world),
-  run: (ctx) => { ctx.submit('move', { entity: 0, x: 1, y: 1 }); ctx.step(); },
-  checks: [{ name: 'unit moved', check: ctx => ctx.world.getComponent(0, 'position')?.x === 1 }],
-  history: {
-    capacity: Number.MAX_SAFE_INTEGER,
-    captureCommandPayloads: true,    // required for replay
-    captureInitialSnapshot: true,    // default; required for replay
-  },
-});
-
-const bundle = scenarioResultToBundle(result);
-// bundle.markers carries one assertion marker per check outcome
-// (provenance: 'engine')
-```
-
-Without `captureCommandPayloads: true`, the bundle is diagnostic-only — `openAt(tick > startTick)` throws `BundleIntegrityError(code: 'no_replay_payloads')` and `selfCheck` returns `ok: true, checkedSegments: 0`.
+A scenario's `WorldHistoryRecorder` uses a bounded rolling buffer (default 64 ticks / 256 commands) and sets `WorldHistoryState.truncated` when eviction drops recorded data. Because a payload-carrying bundle built from an evicted buffer would advertise a `[startTick, endTick]` range it can't actually replay, `scenarioResultToBundle` throws `BundleIntegrityError(code: 'history_truncated')` rather than emit a gapped bundle. Raise the scenario's `history.capacity` / `commandCapacity` to cover the run, or record with `SessionRecorder` / `FileSink` for archival replay.
 
 ## Synthetic-source bundles
 

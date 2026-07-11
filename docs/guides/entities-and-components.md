@@ -213,7 +213,7 @@ Queries iterate the **smallest** component store among the specified keys and ch
 - A query for `('common1', 'common2')` iterates whichever is smaller
 - Adding a rare component to your query as an extra filter is cheap
 
-There is no cached query result or archetype system. Each `query()` call iterates fresh. For most game sizes (thousands of entities) this is fast enough.
+Query results are cached per unique key-set and maintained incrementally as components are added and removed, so repeated `query()` calls with the same keys don't re-scan. The smallest-store iteration described above is the cache **build** path — it runs once per key-set, the first time that key-set is queried; there is no archetype system. For most game sizes (thousands of entities) this is fast enough.
 
 ## Entity Destruction
 

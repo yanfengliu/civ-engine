@@ -31,12 +31,12 @@ The adapter is **transport-agnostic**. You provide a `send` callback; the adapte
 │   etc.)      │     │   etc.)       │     │             │
 └─────────────┘     └───────────────┘     └──────┬──────┘
                                                   │
-                                           ┌──────▼──────┐
-                                           │    World     │
-                                           │  .serialize()│
-                                           │  .submit()   │
-                                           │  .onDiff()   │
-                                           └─────────────┘
+                                           ┌──────▼──────────────┐
+                                           │        World        │
+                                           │  .serialize()       │
+                                           │  .submitWithResult()│
+                                           │  .onDiff()          │
+                                           └─────────────────────┘
 ```
 
 The adapter uses only World's public API:
@@ -179,7 +179,7 @@ Sent when a queued client command finishes execution during a tick.
     id: string,
     commandType: string,
     submissionSequence: number | null,
-    code: 'executed',
+    code: string,  // 'executed'
     message: string,
     details: JsonValue | null,
     tick: number

@@ -183,7 +183,7 @@ import type { EntityId, ResourcePool, TickDiff, WorldSnapshot } from 'civ-engine
 type ComponentMap = Map<string, unknown>;
 type ResourceMap = Map<string, ResourcePool>;
 
-interface RenderEntity {
+interface StoreEntity {
   id: EntityId;
   generation: number | null;
   components: ComponentMap;
@@ -191,7 +191,7 @@ interface RenderEntity {
 }
 
 class RenderStore {
-  readonly entities = new Map<EntityId, RenderEntity>();
+  readonly entities = new Map<EntityId, StoreEntity>();
 
   applySnapshot(snapshot: WorldSnapshot): void {
     this.entities.clear();
@@ -256,7 +256,7 @@ class RenderStore {
     return 'ok';
   }
 
-  private ensureEntity(id: EntityId, generation: number | null): RenderEntity {
+  private ensureEntity(id: EntityId, generation: number | null): StoreEntity {
     let entity = this.entities.get(id);
     if (!entity) {
       entity = { id, generation, components: new Map(), resources: new Map() };
@@ -496,7 +496,7 @@ import type { EntityId } from 'civ-engine';
 interface SceneAdapter {
   init(target: HTMLElement): Promise<void>;
   loadAssets(manifest: AssetManifest): Promise<void>;
-  upsertEntity(entity: RenderEntity): void;
+  upsertEntity(entity: StoreEntity): void;
   removeEntity(id: EntityId): void;
   renderFrame(timeMs: number): void;
   resize(width: number, height: number): void;

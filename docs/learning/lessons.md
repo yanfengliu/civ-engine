@@ -32,7 +32,7 @@ The trap: an empty result from a search you're using to prove a NEGATIVE ("nothi
 
 | Field | Value |
 |---|---|
-| Surfaced by | `docs/threads/current/full/2026-07-10/2/REVIEW.md` (full-review iter-2, verify-high — runtime-reproduced) |
+| Surfaced by | `docs/threads/done/full/2026-07-10/2/REVIEW.md` (full-review iter-2, verify-high — runtime-reproduced) |
 | Reviewer findings | verify-high iter-2 ISSUE-FOUND — M1 truncation-tracking wired into only 1 of 5 bounded streams; command-only eviction invisible to `getState().truncated` |
 | Fix commit | 2.3.0 full-review hardening batch (see devlog `2026-07-07_2026-07-10.md` → "Iteration 2") |
 | Test added | `tests/replay-truncation-guard.test.ts > "B: refuses a replayable bundle when only COMMANDS truncated (ticks intact)"` |
@@ -67,7 +67,7 @@ The trap: when N parallel audit agents each own one doc surface, a fact duplicat
 ## Code-review prompts: use the AGENTS.md baseline verbatim, then extract only the review — 2026-04-29
 Context: Spec 5 design iter-2 review. I wrote my own multi-paragraph prompt with verbose task context, and also captured Codex's full stdout (4800 lines / 351 KiB) which includes verbatim file dumps from every Read/cat the reviewer made while reasoning.
 Lesson: (1) Use the AGENTS.md "Code review" baseline prompt verbatim — it already includes the "Be concise but effective: keep the reasoning, impact, and file/line evidence needed to act without preserving transcripts, command chatter, or repetitive detail" line. Add only 2-3 lines of task-specific context after the baseline. Don't rewrite the prompt's tone or duplicate its instructions. (2) Codex CLI's exec mode dumps every file it reads into stdout as it reasons. The actual review is only the final ~20 lines (between the last "^codex$" marker and "^tokens used$"). Always extract just the review section before reading into context — feeding the full transcript wastes tokens and clutters context. Claude's CLI output is typically already concise; less filtering needed but still spot-check.
-Pointer: docs/threads/current/counterfactual-replay/2026-04-29/design-2/ (verbose transcript was in tmp/, never committed). Filter pattern: `awk '/^codex$/{n=NR; buf=""} {buf=buf"\n"$0} /^tokens used$/{print buf; exit}' codex-raw.txt` extracts the final review block.
+Pointer: docs/threads/done/counterfactual-replay/2026-04-29/design-2/ (verbose transcript was in tmp/, never committed). Filter pattern: `awk '/^codex$/{n=NR; buf=""} {buf=buf"\n"$0} /^tokens used$/{print buf; exit}' codex-raw.txt` extracts the final review block.
 
 ## 2026-06-11 — "Read-only" reviewer CLIs can write: audit the working tree after every review batch
 
@@ -109,7 +109,7 @@ The general rule: "additive minor, all engine gates green" does NOT prove back-c
 
 | Field | Value |
 |---|---|
-| Surfaced by | docs/threads/current/mandatory-loop-defaults/2026-07-08/1/REVIEW.md (Claude review of the 2.0.0 diff, verified by running the live tree's suite) |
+| Surfaced by | docs/threads/done/mandatory-loop-defaults/2026-07-08/1/REVIEW.md (Claude review of the 2.0.0 diff, verified by running the live tree's suite) |
 | Reviewer findings | Claude iter-1 BLOCKER — `npm test` red (1305/1306) on the working tree while the drafted changelog claimed "gates green" |
 | Fix commit | 6f823eb |
 | Test added | tests/session-replayer.test.ts > "cross-major (a-component) engineVersion throws BundleVersionError" (fixture now derives via `crossMajorVersion()`) |
@@ -121,7 +121,7 @@ Two rules. (1) A version bump is a code change: the full gate suite must run AFT
 
 | Field | Value |
 |---|---|
-| Surfaced by | docs/threads/current/browser-safe-entry/2026-07-10/1/REVIEW.md (docs-accuracy finder DOC-1, verified by running the built package: `import('civ-engine').then(m=>m.ENGINE_VERSION)` printed 2.1.0 while `npm ls` showed 2.2.0) |
+| Surfaced by | docs/threads/done/browser-safe-entry/2026-07-10/1/REVIEW.md (docs-accuracy finder DOC-1, verified by running the built package: `import('civ-engine').then(m=>m.ENGINE_VERSION)` printed 2.1.0 while `npm ls` showed 2.2.0) |
 | Reviewer findings | Fable 5 docs-accuracy DOC-1 HIGH — built 2.2.0 package reports ENGINE_VERSION 2.1.0; CONFIRMED by an independent verifier that also checked six prior release commits all kept the two in sync |
 | Fix commit | (this task's landing commit) |
 | Test added | tests/version-sync.test.ts > "matches package.json version" |

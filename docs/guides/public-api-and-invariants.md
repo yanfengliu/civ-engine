@@ -127,8 +127,8 @@ Since **v2.2.0** there are **two** curated barrels (see `docs/api-reference.md` 
 
 **Deprecation policy:**
 
-- **Pre-1.0 (now):** there is no deprecation grace. Anything slated for removal is removed before the 1.0 freeze; `b`-bumps may break, and the changelog is the migration record.
-- **Post-1.0:** deprecation happens in a **minor** release — `@deprecated` TSDoc on the symbol, a changelog callout, and a migration note in the owning guide. Removal happens in the **next major**, never sooner. Deprecated APIs keep their tests until removal.
+- **Pre-1.0 (history):** there is no deprecation grace. Anything slated for removal is removed before the 1.0 freeze; `b`-bumps may break, and the changelog is the migration record.
+- **Post-1.0 (now, at v2.4.0):** deprecation happens in a **minor** release — `@deprecated` TSDoc on the symbol, a changelog callout, and a migration note in the owning guide. Removal happens in the **next major**, never sooner. Deprecated APIs keep their tests until removal.
 
 **Constructor-shape convention (1.0 decision 8):** pure-grid primitives (`SpatialGrid`, `OccupancyGrid`, `SubcellOccupancyGrid`, `VisibilityMap`) take positional `(width, height)` constructors; utilities with genuine option sets (`Layer`, `World`) take options objects. Blessed deliberately at 1.0 — two integers do not warrant an options bag, and symmetry-for-its-own-sake would have broken four constructors.
 
