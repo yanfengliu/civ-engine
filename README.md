@@ -2,7 +2,7 @@
 
 ![version](https://img.shields.io/badge/version-2.4.1-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
 
-> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors, removals only as majors through the deprecation policy ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened through mandatory multi-CLI review, but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
+> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors, removals only as majors through the deprecation policy ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work — but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
