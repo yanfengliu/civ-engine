@@ -2,7 +2,7 @@
 
 ![version](https://img.shields.io/badge/version-2.4.1-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
 
-> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors, removals only as majors through the deprecation policy ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work — but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
+> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work — but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
@@ -47,12 +47,13 @@ world.registerSystem((w) => {
   for (const id of w.query('position', 'health')) {
     const pos = w.getComponent<Position>(id, 'position')!;
     const hp = w.getComponent<{ hp: number }>(id, 'health')!;
-    // your logic here
+    if (pos.x === 0) w.setComponent(id, 'health', { hp: hp.hp - 10 }); // the left edge hurts
   }
 });
 
 // Step the simulation
 world.step();
+world.getComponent<{ hp: number }>(unit, 'health'); // -> { hp: 90 }
 ```
 
 ## Documentation
@@ -87,7 +88,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | **Commands** | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers — how AI agents send instructions |
 | **Events** | Typed pub/sub — how systems communicate and how observers read what happened |
 | **Resources** | Numeric pools (current/max) per entity with production, consumption, and transfers |
-| **Atomic Transactions** | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations, events, and `require()` preconditions; apply all-or-nothing |
+| **Atomic Transactions** | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations, events, and `require()` preconditions, then apply all-or-nothing on precondition failure or abort (a mutation that *throws* mid-commit consumes the transaction and can leave partial state) |
 | **World State** | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc. |
 | **Tags & Metadata** | Entity labels with reverse-index (`getByTag`), plus per-entity metadata with unique lookup (`getByMeta`) |
 | **Strict-Mode Determinism** | Rejects mutations called outside system phases, the setup window, or `runMaintenance(fn)`, throwing `StrictModeViolationError` at the call site. **On by default**; `strict: false` opts out, and legacy pre-1.0 snapshots deserialize non-strict. ([guide](docs/guides/strict-mode.md)) |
@@ -121,7 +122,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | Feature | What it does |
 | --- | --- |
 | **Debugging** | `WorldDebugger`, machine-readable issues, structured tick failures, `WorldHistoryRecorder`, range summaries, and probes for headless inspection ([guide](docs/guides/debugging.md)) |
-| **Engine Errors** | Every core throw carries a stable machine-readable `code` plus structured `details`, so agents branch on codes instead of message prose |
+| **Engine Errors** | Every core throw carries a stable machine-readable `code` plus structured `details`, so agents branch on codes instead of message prose. The one wrapper is `WorldTickFailureError` — catch it and read `failure.code` |
 | **Scenario Runner** | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results ([guide](docs/guides/scenario-runner.md)) |
 
 ### Recording, replay & the improvement loop
@@ -152,6 +153,7 @@ World.step()
   -> build diff           (collect changes for observers)
   -> update metrics       (timings, query counts, explicit-sync counts)
   -> tick++
+  -> notify diff listeners (fires after tick++; still in-tick, and can fail the tick with diff_listener_threw)
 ```
 
 Position writes (`setPosition`, `setComponent` on the configured position key) update the spatial grid lock-step; there is no per-tick scan.
@@ -160,34 +162,28 @@ Use `world.stepWithResult()` when an AI loop needs a structured runtime failure 
 
 Set an instrumentation profile in `WorldConfig`:
 
-- `full` for AI development — detailed implicit metrics and the richest default observability
+- `full` (the default) for AI development — detailed implicit metrics and the richest default observability
 - `minimal` for QA/staging — coarse implicit metrics with lower hot-path overhead
 - `release` for shipping — no implicit per-tick metrics, while explicit AI/debug APIs still work when called
 
 See [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for detail.
 
-## Package Entry Points
+## Node and browser entry points
 
 Two entries. Node resolves the full barrel. Bundlers with the `browser` condition (Vite, webpack, esbuild) and the explicit `civ-engine/browser` subpath resolve a browser-safe barrel — the full surface minus the node-only `FileSink` and `BundleCorpus`, with a module graph free of `node:` builtins, so browser consumers boot without prebundling workarounds or alias shims.
-
-The root package centers on a few primary entry points:
-
-- `World` — simulation, commands, events, serialization, diffs, resources, and atomic transactions
-- `ClientAdapter` / `RenderAdapter` — external clients and render transports
-- `WorldDebugger`, `WorldHistoryRecorder`, `runScenario()` — AI and debug workflows
-- `SessionRecorder` / `SessionReplayer` / `BundleViewer` / `BundleCorpus` — capture, replay, navigate, and query runs
-- `runSynthPlaytest` / `runAgentPlaytest` / `runVisualPlaytestLoop` — the playtest harnesses
-- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, behavior trees, and typed overlay layers
 
 [docs/api-reference.md](docs/api-reference.md) is authoritative for signatures, types, message shapes, and every standalone utility.
 
 ## Repository Layout
 
 ```text
-src/       engine modules and public package exports
-tests/     unit and integration coverage
-examples/  reference clients and demos
-docs/      guides, tutorials, architecture, changelog, and review history
+src/         engine modules and public package exports
+mcp/         civ-engine-mcp — the MCP server subpackage
+tests/       unit and integration coverage
+examples/    reference clients and demos
+scripts/     debug-client server and the RTS benchmark harness
+benchmarks/  committed baseline for the perf regression gate
+docs/        guides, tutorials, architecture, changelog, and review history
 ```
 
 The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md).
@@ -195,12 +191,12 @@ The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md)
 ## Design Decisions
 
 - **Sparse arrays** for component storage — O(1) lookup, simple implementation
-- **Fixed system pipeline** — deterministic execution, no scheduler overhead
+- **Statically resolved system order** — phases and `before`/`after` constraints resolve once at registration and cache; deterministic execution, no per-tick scheduler overhead
 - **Monolithic World** — flat API, internals are hidden
 - **Zero runtime deps** — pure TypeScript, nothing to break
-- **Generation counters** — minimal change detection for diff/serialization
+- **Dirty-set change tracking** — per-tick dirty/removed sets (plus fingerprint baselines in semantic diff mode) drive diff and serialization; separate entity **generation counters** make recycled entity IDs detectable through stale refs
 - **Standalone utilities** — noise, cellular, map-gen, pathfinding are not World subsystems
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

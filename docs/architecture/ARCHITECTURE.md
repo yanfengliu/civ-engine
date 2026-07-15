@@ -21,7 +21,7 @@ The engine provides reusable infrastructure (entities, components, spatial index
 | GameLoop       | `src/game-loop.ts`       | Fixed-timestep loop, step() for testing, start()/stop() for real-time, speed multiplier, pause/resume |
 | EventBus       | `src/event-bus.ts`       | Typed pub/sub event bus, per-tick buffer, listener registry                            |
 | CommandQueue   | `src/command-queue.ts`   | Typed command buffer, push/drain interface                                             |
-| CommandTransaction | `src/command-transaction.ts` | Atomic propose-validate-commit-or-abort builder over World; buffers component/position/resource mutations + events + precondition predicates, applies all-or-nothing on `commit()` |
+| CommandTransaction | `src/command-transaction.ts` | Atomic propose-validate-commit-or-abort builder over World; buffers component/position/resource mutations + events + precondition predicates, applies all-or-nothing on `commit()` for precondition/validation failure — a mutation that throws mid-commit leaves partial state and consumes the transaction (see `docs/api-reference.md` § CommandTransaction) |
 | Serializer     | `src/serializer.ts`      | Versioned WorldSnapshot types for state serialization                                  |
 | Diff           | `src/diff.ts`            | TickDiff type for per-tick change sets                                                 |
 | ResourceStore  | `src/resource-store.ts`  | Resource pools, production/consumption rates, transfers, dirty tracking                |
