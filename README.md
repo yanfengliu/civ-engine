@@ -2,15 +2,19 @@
 
 ![version](https://img.shields.io/badge/version-2.4.1-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
 
-> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0` (`docs/changelog.md`): additions ship as minors, removals only as majors through the deprecation policy (`docs/guides/public-api-and-invariants.md`). Invariants are hardened through mandatory multi-CLI review, but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback - production consumers should pin a version and track the changelog.
+> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors, removals only as majors through the deprecation policy ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened through mandatory multi-CLI review, but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
-**AI-native** means the engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces. The debugging tools should be easy for an AI to use in a closed implement-debug-iterate feedback loop without human intervention.
+The engine provides reusable infrastructure that game projects consume — it has no game-specific logic, rendering, or UI code.
 
-The core AI-native usage case is the recursive improvement loop: agents run or playtest a game, record evidence, extract findings, verify claims against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from. The cross-game design shipped in [Agent Recursive Improvement Loop Design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md); the shared API is the `ImprovementFinding` contract, marker bridge, and run-manifest lifecycle (v1.6.0), with the honesty invariants on by default since 2.0.0. Gates, browser/provider adapters, and auto-fix policy remain repo-owned.
+## What "AI-native" means
 
-The engine provides reusable infrastructure that game projects consume - it has no game-specific logic, rendering, or UI code.
+The engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces. Every debugging surface is built to be driven by an agent in a closed implement-debug-iterate loop without human intervention.
+
+The core usage case is the **recursive improvement loop**: agents run or playtest a game, record evidence, extract findings, verify claims against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from.
+
+The engine owns the shared machine contracts for that loop — the `ImprovementFinding` payload, the marker bridge, and the run-manifest lifecycle, with honesty invariants enforced by default. Gates, browser/provider adapters, and auto-fix policy remain game-repo-owned. See the [loop design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md).
 
 ## Quick Start
 
@@ -25,22 +29,6 @@ npm run benchmark:check  # perf regression gate vs benchmarks/baseline.json
 ```
 
 Requires Node.js 20+.
-
-## Documentation
-
-- **[Documentation Hub](docs/README.md)** - Full navigation for tutorials, guides, plans, reviews, and project history
-- **[Getting Started](docs/guides/getting-started.md)** - Fastest way to get productive with the engine
-- **[API Reference](docs/api-reference.md)** - Public types, methods, and standalone utilities
-- **[Architecture](docs/architecture/ARCHITECTURE.md)** - Internal structure, subsystem boundaries, and data flow
-- **[AI Integration](docs/guides/ai-integration.md)** - Structured submission and execution outcomes, versioned machine contracts, debugger issues, and history for closed-loop agents
-- **[Agent Recursive Improvement Loop Design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md)** - Shipped design for the cross-repo self-improvement loop built from the engine's playtest, replay, corpus, and visual-harness primitives
-- **[Visual Playtest Harness](docs/guides/visual-playtest-harness.md)** - Reusable screenshot/control/hidden-state contracts for browser-game LLM playtests
-- **[Scenario Runner](docs/guides/scenario-runner.md)** - Headless setup, scripted stepping, checks, and structured experiment results
-- **[Debugging Guide](docs/guides/debugging.md)** - `WorldDebugger`, probes, and the browser debug client
-- **[Sub-Grid Movement Guide](docs/guides/sub-grid-movement.md)** - Recommended fine-grid simulation, slot-based crowding, coarse building placement, and renderer-owned smooth motion
-- **[Changelog](docs/changelog.md)** - Shipped changes and breaking changes
-
-## What You Can Build
 
 ```typescript
 import { World, type Position } from 'civ-engine';
@@ -67,46 +55,90 @@ world.registerSystem((w) => {
 world.step();
 ```
 
+## Documentation
+
+**[Documentation Hub](docs/README.md)** — full navigation for every guide, tutorial, plan, and review.
+
+Start here:
+
+- [Getting Started](docs/guides/getting-started.md) — fastest path to a running world
+- [Core Concepts](docs/guides/concepts.md) — headless ECS model, tick lifecycle, determinism, engine boundaries
+- [Building a Complete Game](docs/guides/building-a-game.md) — end-to-end example using the engine as a foundation
+- [AI Integration](docs/guides/ai-integration.md) — the AI-native surfaces and how they compose into the improvement loop
+
+Reference:
+
+- [API Reference](docs/api-reference.md) — **the authoritative public surface**: every type, method, and standalone utility
+- [Architecture](docs/architecture/ARCHITECTURE.md) — internal structure, subsystem boundaries, data flow
+- [Changelog](docs/changelog.md) — shipped changes, migrations, and version history
+
 ## Feature Overview
 
-| Feature                     | What it does                                                                                                          |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Entities & Components**   | Create entities (numeric IDs), attach typed data objects by key                                                       |
-| **Systems**                 | Pure functions `(world) => void` with optional phase, `before`/`after` ordering constraints                           |
-| **Typed Components**        | Optional `ComponentRegistry` type param for type-safe `getComponent`/`setComponent`/`query` without manual generics   |
-| **Spatial Grid**            | 2D grid auto-synced with position components, neighbor queries, `queryInRadius`, `findNearest`                        |
-| **Commands**                | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers - how AI agents send instructions |
-| **Events**                  | Typed pub/sub - how systems communicate and how observers read what happened                                          |
-| **Resources**               | Numeric pools (current/max) per entity with production, consumption, transfers                                        |
-| **Map Generation**          | Seedable simplex noise, octave layering, cellular automata, tile grid helper                                          |
-| **Pathfinding**             | Generic A* on any graph - provide neighbors/cost/heuristic/hash callbacks                                             |
-| **Occupancy & Crowding**    | Deterministic blocked-cell footprints, blocker metadata, lifecycle bindings, crowding-aware passability, reservations, and sub-cell slot packing  |
-| **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing                         |
-| **Visibility Maps**         | Per-player visible and explored cell tracking for fog-of-war style mechanics                                          |
-| **Render Projection**       | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
-| **Debugging**               | `WorldDebugger`, machine-readable issues, structured tick failures, `WorldHistoryRecorder`, range summaries, and probes for headless inspection |
-| **Scenario Runner**         | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results                       |
-| **Behavior Trees**          | Generic BT framework with action, condition, selector, sequence, and reactive (priority-re-evaluating) nodes          |
-| **Speed Control**           | Runtime speed multiplier, pause/resume; `step()` ignores both for testing                                             |
-| **World State**             | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc.                          |
-| **Tags & Metadata**         | Entity labels with reverse-index (`getByTag`), per-entity metadata with unique lookup (`getByMeta`)                   |
-| **Layered Field Maps**      | `Layer<T>` typed overlay map at configurable downsampled resolution for pollution / influence / weather etc., sparse storage with default-value semantics, JSON-serializable |
-| **Atomic Transactions**     | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations + events + `require()` preconditions, apply all-or-nothing on `commit()` |
-| **System Cadence**          | Optional `interval` / `intervalOffset` on `SystemRegistration` — fire periodic systems at engine level instead of `if (w.tick % N) return;` boilerplate |
-| **Serialization**           | JSON snapshot save/load via `serialize()`/`deserialize()`, including state, tags, metadata, and RNG                   |
-| **State Diffs**             | Per-tick change sets: entities, components, resources, state, tags, and metadata changes                              |
-| **Client Protocol**         | Transport-agnostic typed messages with protocol version markers and structured `commandAccepted`/`commandRejected` plus `commandExecuted`/`commandFailed`/`tickFailed` outcomes |
-| **Session Recording & Replay** | `SessionRecorder` + `SessionReplayer` — capture deterministic, replayable bundles of any World run. `MemorySink` / `FileSink` for in-memory or disk persistence. Marker API for human-authored annotations + engine-emitted assertions (from `scenarioResultToBundle` adapter). `selfCheck` 3-stream comparison verifies determinism. `World.applySnapshot` for in-place state replacement. See `docs/guides/session-recording.md`. |
-| **Synthetic Playtest Harness** | `runSynthPlaytest` drives a `World` via pluggable `Policy` functions for `N` ticks → `SessionBundle`. Built-in policies: `noopPolicy`, `randomPolicy`, `scriptedPolicy`. Sub-RNG sandboxed from `world.rng` via `PolicyContext.random()`. Tier-1 of the AI-first feedback loop; produces FileSink/SessionBundle corpora that can be indexed by BundleCorpus and reduced by behavioral metrics. See `docs/guides/synthetic-playtest.md`. |
-| **Bundle Corpus Index** | `BundleCorpus` scans closed FileSink bundle directories, lists metadata-only entries, filters by manifest-derived fields, and lazily loads matching `SessionBundle`s for replay or metrics. Tier-2 of the AI-first feedback loop; turns disk corpora into a deterministic query surface. See `docs/guides/bundle-corpus-index.md`. |
-| **Behavioral Metrics over Corpus** | `runMetrics(bundles, metrics)` over `Iterable<SessionBundle>` + 11 engine-generic built-ins (`bundleCount`, `sessionLengthStats`, `commandRateStats`, `commandTypeCounts`, `failureBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`, etc.) + `compareMetricsResults` delta helper. Tier-2 of the AI-first feedback loop; pairs with synthetic playtests to define regressions for emergent behavior. See `docs/guides/behavioral-metrics.md`. |
-| **AI Playtester Agent** | `runAgentPlaytest({ world, agent, maxTicks })` async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters. `AgentDriver.decide(ctx)` is sync or async; v0.8.11 ctx adds `addMarker(input)` and `attach(blob, opts?)` for in-flight marker emission (with sidecar-friendly default sink, recoverable via `result.source.readSidecar(id)`). Optional `agent.report(bundle)` for post-run qualitative summaries. `bundleSummary(bundle)` produces a JSON-serializable structured snapshot for feeding to an LLM. `stopReason: 'maxTicks' \| 'stopWhen' \| 'poisoned' \| 'agentError' \| 'sinkError'`. See `docs/guides/ai-playtester.md`. |
-| **Visual Playtest Harness** | `runVisualPlaytestLoop` plus `VisualPlaytestHost` / `VisualPlaytestAgent` contracts for browser-game playtests that operate through screenshots, visible text, available controls, and explicitly labeled hidden-state channels. v1.5.0 adds opt-in run budgets/abort, an enforced agent-boundary redaction mode (the default since 2.0.0 — explicit `agentObservation: 'raw'` opts out), a continue-past-failed-action policy, a typed observation tick, and multimodal prompt parts. Core stays zero-dep; game repos own Playwright/DOM/model adapters. Findings bridge into session markers via `visualPlaytestFindingToMarker`. See `docs/guides/visual-playtest-harness.md`. |
-| **Improvement Loop Finding Contracts** | `IMPROVEMENT_FINDING_SCHEMA_VERSION`, `ImprovementFinding`, plus `improvementFindingToVisualPlaytestFinding`, `visualPlaytestFindingToImprovementFinding`, `improvementFindingToMarker`, `improvementFindingsFromMarkers`, `assertImprovementFinding` (strict verification-evidence mode — the default since 2.0.0 for `verified`, and since 2.4.0 the terminal `fixed`/`regressed` statuses too), `createImprovementRunManifest`, and `assertImprovementRunManifest` give game repos a shared verified-finding payload plus run-manifest lifecycle for recursive self-improvement loops (v1.6.0: schema version 2 with minimal stamping, `verificationMethod`, `promotionTarget`, widened `nextAction`). v2.1.0 adds `improvementFindingSignature` (cross-run/cross-repo bug-class key: declared `data.class` or finding id, optional gameId prefix, no lossy normalization) and `stateDigest` (canonical sorted-key FNV-1a digest with deep `omitKeys`) for fleet aggregation and cheap cross-run state comparison. Markers carry both `data.improvementLoop` and `data.visualPlaytest` so replay/report tooling can evolve without losing visual-harness compatibility. |
-| **Strict-Mode Determinism** | Opt-in `WorldConfig.strict` flag rejects mutation methods called outside system phases / setup window / `runMaintenance(fn)` callbacks. Throws `StrictModeViolationError` at the call site. Escape hatches: `endSetup()`, `runMaintenance(fn)` (depth-counted reentrant), `applySnapshot` (forward-compat). **Default TRUE as of 1.0** (`strict: false` opts out; legacy snapshots load non-strict). See `docs/guides/strict-mode.md`. |
-| **Bundle Viewer** | `BundleViewer` — programmatic agent-driver API over a `SessionBundle`. Marker-anchored navigation (`atMarker(id).state()`), per-tick frames (selective runtime freezing — outer frame + per-tick arrays frozen one-time; recorded `diff` is a readonly view), lazy `SessionReplayer` materialization, two-path `frame.diffSince()` (folded TickDiffs vs snapshot via `diffSnapshots`), content-bounded `recordedRange` for incomplete bundles, eager query validation, and `BundleCorpusEntry.openViewer()` for one-line corpus-to-viewer composition. Tier-3 of the AI-first feedback loop. See `docs/guides/bundle-viewer.md`. |
-| **Counterfactual Replay** | `SessionReplayer.forkAt(targetTick).replace/insert/drop.run({ untilTick })` builder API for "what if the agent had submitted X here instead?" experiments — produces a normal `SessionBundle` of the diverged timeline plus a `Divergence` summary (per-tick command/event split counts, `firstDivergentTick`, `commandSequenceMap`, `equivalent` flag). Plus `diffBundles(a, b, { commandSequenceMap? })` standalone utility for cross-bundle comparison covering commands, events, and state across all six TickDiff dimensions. Equivalence-by-construction: a no-substitution fork is structurally equivalent to source's slice. Tier-3 of the AI-first feedback loop. See `docs/guides/session-recording.md` § Counterfactual replay. |
-| **Bundle Hotspots** | `bundleHotspots(bundle, options?)` per-bundle anomaly-detection helper (v0.8.13+). Returns a sorted-by-tick triage list of "interesting ticks" — tick failures (`high` severity), execution failures (`medium`), per-tick duration outliers (z-score above threshold; `medium`/`high`), and (optional) markers (`low`). First incarnation of the "anomaly detection over the corpus" continuous capability in the AI-first roadmap. Designed for AI agents to identify ticks worth loading via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`. |
+Capabilities at a glance. Signatures and options live in the [API Reference](docs/api-reference.md).
+
+### Core simulation
+
+| Feature | What it does |
+| --- | --- |
+| **Entities & Components** | Numeric entity IDs with typed data objects attached by key |
+| **Typed Components** | Optional `ComponentRegistry` type param for type-safe `getComponent`/`setComponent`/`query` without manual generics |
+| **Systems** | Pure `(world) => void` functions with optional phase and `before`/`after` ordering constraints |
+| **System Cadence** | Optional `interval` / `intervalOffset` fires periodic systems at engine level, replacing `if (w.tick % N) return;` boilerplate |
+| **Commands** | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers — how AI agents send instructions |
+| **Events** | Typed pub/sub — how systems communicate and how observers read what happened |
+| **Resources** | Numeric pools (current/max) per entity with production, consumption, and transfers |
+| **Atomic Transactions** | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations, events, and `require()` preconditions; apply all-or-nothing |
+| **World State** | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc. |
+| **Tags & Metadata** | Entity labels with reverse-index (`getByTag`), plus per-entity metadata with unique lookup (`getByMeta`) |
+| **Strict-Mode Determinism** | Rejects mutations called outside system phases, the setup window, or `runMaintenance(fn)`, throwing `StrictModeViolationError` at the call site. **On by default**; `strict: false` opts out, and legacy pre-1.0 snapshots deserialize non-strict. ([guide](docs/guides/strict-mode.md)) |
+| **Speed Control** | Runtime speed multiplier and pause/resume; `step()` ignores both for testing |
+| **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including state, tags, metadata, and RNG |
+| **State Diffs** | Per-tick change sets across entities, components, resources, state, tags, and metadata |
+
+### Spatial & world generation
+
+| Feature | What it does |
+| --- | --- |
+| **Spatial Grid** | 2D grid auto-synced with position components; neighbor queries, `queryInRadius`, `findNearest` |
+| **Occupancy & Crowding** | Deterministic blocked-cell footprints, blocker metadata, lifecycle bindings, crowding-aware passability, reservations, and sub-cell slot packing. See [sub-grid movement](docs/guides/sub-grid-movement.md) for fine-grid simulation, coarse building placement, and renderer-owned smooth motion |
+| **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
+| **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
+| **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |
+| **Layered Field Maps** | `Layer<T>` typed overlay at configurable downsampled resolution (pollution, influence, weather); sparse storage with default-value semantics, JSON-serializable |
+| **Map Generation** | Seedable simplex noise, octave layering, cellular automata, and a tile grid helper |
+| **Behavior Trees** | Generic BT framework with action, condition, selector, sequence, and reactive (priority-re-evaluating) nodes |
+
+### Client & rendering integration
+
+| Feature | What it does |
+| --- | --- |
+| **Render Projection** | `RenderAdapter` and projection callbacks for renderer-facing snapshots/diffs without coupling the engine to a backend |
+| **Client Protocol** | Transport-agnostic typed messages with protocol version markers and structured accept/reject plus execute/fail/tick-fail outcomes |
+| **Player Observation** | `PlayerObserver` per-player fog-of-war projection — filtered snapshot plus an entered/updated/exited feed, with honest destroyed-vs-fog attribution |
+
+### Debugging & inspection
+
+| Feature | What it does |
+| --- | --- |
+| **Debugging** | `WorldDebugger`, machine-readable issues, structured tick failures, `WorldHistoryRecorder`, range summaries, and probes for headless inspection ([guide](docs/guides/debugging.md)) |
+| **Engine Errors** | Every core throw carries a stable machine-readable `code` plus structured `details`, so agents branch on codes instead of message prose |
+| **Scenario Runner** | `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results ([guide](docs/guides/scenario-runner.md)) |
+
+### Recording, replay & the improvement loop
+
+| Feature | What it does |
+| --- | --- |
+| **Session Recording & Replay** | `SessionRecorder` + `SessionReplayer` capture deterministic, replayable bundles of any run. `MemorySink`/`FileSink` for memory or disk, a marker API for annotations and engine-emitted assertions, and `selfCheck` 3-stream determinism verification ([guide](docs/guides/session-recording.md)) |
+| **Counterfactual Replay** | `forkAt(tick).replace/insert/drop.run()` answers "what if the agent had submitted X here?" — produces a normal bundle plus a `Divergence` summary. `diffBundles()` compares any two bundles ([guide](docs/guides/session-recording.md)) |
+| **Bundle Viewer** | `BundleViewer` programmatic agent-driver API over a bundle: marker-anchored navigation, per-tick frames, and two-path `diffSince()` ([guide](docs/guides/bundle-viewer.md)) |
+| **Bundle Hotspots** | `bundleHotspots()` triage list of interesting ticks — tick failures, execution failures, duration outliers, and markers |
+| **Bundle Corpus Index** | `BundleCorpus` turns disk corpora into a deterministic query surface: metadata-only listing, manifest-derived filtering, and lazy bundle loading ([guide](docs/guides/bundle-corpus-index.md)) |
+| **Behavioral Metrics** | `runMetrics()` over any bundle iterable with 11 engine-generic built-ins plus a `compareMetricsResults` delta helper — defines regressions for emergent behavior ([guide](docs/guides/behavioral-metrics.md)) |
+| **Synthetic Playtest** | `runSynthPlaytest` drives a world via pluggable policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`) with RNG sandboxed from `world.rng` ([guide](docs/guides/synthetic-playtest.md)) |
+| **AI Playtester** | `runAgentPlaytest` async sibling for LLM-driven playtesters — sync-or-async `AgentDriver.decide()`, in-flight markers/attachments, optional `report()`, and `bundleSummary()` for LLM context ([guide](docs/guides/ai-playtester.md)) |
+| **Visual Playtest Harness** | `runVisualPlaytestLoop` plus host/agent contracts for browser games driven through screenshots, visible text, controls, and explicitly labeled hidden-state channels. Agent-boundary redaction is **on by default**; core stays zero-dep, game repos own the Playwright/DOM/model adapters ([guide](docs/guides/visual-playtest-harness.md)) |
+| **Improvement Loop Contracts** | `ImprovementFinding` plus marker bridges, signatures, and run-manifest lifecycle give game repos a shared verified-finding payload. Proven-outcome claims (`verified`, `fixed`, `regressed`) require a replayable evidence ref plus a `verificationMethod` by default — an unproven "fixed" cannot enter the ledger |
+| **MCP Server** | `civ-engine-mcp` exposes the recorded-game surfaces as 14 read-only tools for any MCP-capable agent — zero game code required ([guide](docs/guides/mcp-server.md)) |
 
 ## Architecture
 
@@ -126,19 +158,30 @@ Position writes (`setPosition`, `setComponent` on the configured position key) u
 
 Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 
-Use explicit instrumentation profiles in `WorldConfig`:
+Set an instrumentation profile in `WorldConfig`:
 
-- `full` for AI development: detailed implicit metrics and the richest default observability
-- `minimal` for QA/staging: coarse implicit metrics with lower hot-path overhead
-- `release` for shipping: no implicit per-tick metrics, while explicit AI/debug APIs still work when you call them
+- `full` for AI development — detailed implicit metrics and the richest default observability
+- `minimal` for QA/staging — coarse implicit metrics with lower hot-path overhead
+- `release` for shipping — no implicit per-tick metrics, while explicit AI/debug APIs still work when called
 
-See [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for detailed documentation.
+See [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for detail.
+
+## Package Entry Points
+
+Two entries. Node resolves the full barrel. Bundlers with the `browser` condition (Vite, webpack, esbuild) and the explicit `civ-engine/browser` subpath resolve a browser-safe barrel — the full surface minus the node-only `FileSink` and `BundleCorpus`, with a module graph free of `node:` builtins, so browser consumers boot without prebundling workarounds or alias shims.
+
+The root package centers on a few primary entry points:
+
+- `World` — simulation, commands, events, serialization, diffs, resources, and atomic transactions
+- `ClientAdapter` / `RenderAdapter` — external clients and render transports
+- `WorldDebugger`, `WorldHistoryRecorder`, `runScenario()` — AI and debug workflows
+- `SessionRecorder` / `SessionReplayer` / `BundleViewer` / `BundleCorpus` — capture, replay, navigate, and query runs
+- `runSynthPlaytest` / `runAgentPlaytest` / `runVisualPlaytestLoop` — the playtest harnesses
+- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, behavior trees, and typed overlay layers
+
+[docs/api-reference.md](docs/api-reference.md) is authoritative for signatures, types, message shapes, and every standalone utility.
 
 ## Repository Layout
-
-The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md) and the full public surface lives in [API Reference](docs/api-reference.md).
-
-At the repo level:
 
 ```text
 src/       engine modules and public package exports
@@ -147,42 +190,16 @@ examples/  reference clients and demos
 docs/      guides, tutorials, architecture, changelog, and review history
 ```
 
-## Public Surface
-
-Two package entries (v2.2.0): Node resolves the full barrel; bundlers with the `browser` condition (Vite, webpack, esbuild) and the explicit `civ-engine/browser` subpath resolve a browser-safe barrel — the full surface minus the node-only `FileSink` and `BundleCorpus`, with a module graph free of `node:` builtins so symlinked browser consumers boot without prebundling workarounds or alias shims (`docs/api-reference.md` § "Package Entry Points").
-
-The root package centers on a few primary entry points:
-
-- `World` for simulation, commands, events, serialization, diffs, resources, and atomic transactions (`world.transaction()`)
-- `ClientAdapter` and `RenderAdapter` for external clients and render transports
-- `WorldDebugger`, `WorldHistoryRecorder`, and `runScenario()` for AI/debug workflows
-- `SessionRecorder`, `SessionReplayer`, `SessionBundle`, `MemorySink`/`FileSink`, `Marker`, `RecordedCommand`, `scenarioResultToBundle()`, `RegistrationManifest` + `World.getRegistrationManifest()` (fail-fast replay verification of worldFactory registration, v0.8.18+) for session capture/replay (`docs/guides/session-recording.md`)
-- `runSynthPlaytest`, `noopPolicy`, `randomPolicy`, `scriptedPolicy` for the synthetic playtest harness (Tier-1 of the AI-first feedback loop; `docs/guides/synthetic-playtest.md`)
-- `BundleCorpus`, `BundleQuery`, `BundleCorpusEntry`, `BundleCorpusMetadata`, `CorpusIndexError`, `CorpusIndexErrorCode`, and `InvalidCorpusEntry` for manifest-first disk corpus listing, filtering, and lazy FileSink-backed bundle loading (Tier-2 of the AI-first feedback loop; `docs/guides/bundle-corpus-index.md`)
-- `runMetrics`, `compareMetricsResults`, plus 11 metric factories (`bundleCount`, `sessionLengthStats`, `commandRateStats`, `eventRateStats`, `commandTypeCounts`, `eventTypeCounts`, `failureBundleRate`, `failedTickRate`, `incompleteBundleRate`, `commandValidationAcceptanceRate`, `executionFailureRate`) for behavioral metrics over a corpus (Tier-2 of the AI-first feedback loop; `docs/guides/behavioral-metrics.md`)
-- `BundleViewer`, `TickFrame`, `BundleStateDiff`, `RecordedTickFrameEvent`, `RecordedTickEvent`, `BundleViewerError`, `diffSnapshots`, plus query/option types — programmatic agent-driver API for navigating, slicing, and diffing a `SessionBundle`; composes with `BundleCorpus` via `entry.openViewer()` (Tier-3 of the AI-first feedback loop; `docs/guides/bundle-viewer.md`)
-- `StrictModeViolationError`, `StrictModePhase`, `StrictModeViolationDetails`, plus `WorldConfig.strict` and `World.endSetup` / `World.runMaintenance` / `World.isStrict` / `World.isInTick` / `World.isInSetup` / `World.isInMaintenance` — opt-in mutation-gate enforcement; throws on out-of-tick mutation when strict (Tier-3 of the AI-first feedback loop; `docs/guides/strict-mode.md`)
-- `runAgentPlaytest`, `AgentDriver`, `AgentDriverContext`, `AgentPlaytestConfig`, `AgentPlaytestResult`, `AgentStopReason`, `bundleSummary`, `BundleSummary` — async sibling to `runSynthPlaytest` for LLM-driven (or any other async-decision) playtesters; `AgentDriver.decide(ctx)` is sync or async; v0.8.11 added `ctx.addMarker(input)` and `ctx.attach(blob, opts?)` for in-flight marker emission, plus `result.source` so default-sink callers can `readSidecar(id)`; optional `agent.report(bundle)` for post-run qualitative summaries; `bundleSummary` produces a JSON-flat snapshot for LLM context (Tier-2 of the AI-first feedback loop; `docs/guides/ai-playtester.md`)
-- `runVisualPlaytestLoop`, `VisualPlaytestHost`, `VisualPlaytestAgent`, `VisualPlaytestObservation`, `VisualPlaytestStateChannel`, `VisualPlaytestAction`, `VisualPlaytestFinding`, `VisualPlaytestBudget`, `VisualPlaytestPromptPart`, `buildVisualPlaytestPrompt`, `buildVisualPlaytestPromptParts`, `observationForAgent`, `redactVisualPlaytestObservation`, `visualPlaytestFindingToMarker`, and `visualPlaytestFindingsFromMarkers` — reusable visual playtest loop contracts for browser-game LLM harnesses, with opt-in run budgets/abort, an enforced agent-boundary redaction mode (default since 2.0.0), a continue-past-failed-action policy, a typed observation tick anchor, and multimodal prompt parts (v1.5.0). The engine owns observation/action/finding/trace shapes and hidden-state audience labels; game repos own screenshots, DOM controls, browser automation, and model/provider clients (`docs/guides/visual-playtest-harness.md`)
-- `IMPROVEMENT_FINDING_SCHEMA_VERSION`, `ImprovementFinding`, `ImprovementEvidenceRef`, `ImprovementRunManifest`, `ImprovementVerificationStatus`, `ImprovementVerificationMethod`, `ImprovementNextAction`, `ImprovementPromotionTarget`, `ImprovementDisposition`, `improvementFindingToVisualPlaytestFinding`, `visualPlaytestFindingToImprovementFinding`, `improvementFindingToMarker`, `improvementFindingsFromMarkers`, `assertImprovementFinding` (strict verification-evidence mode — the default since 2.0.0 for `verified`, and since 2.4.0 the terminal `fixed`/`regressed` statuses too), `createImprovementRunManifest`, and `assertImprovementRunManifest` — shared finding/evidence/run-manifest payloads for recursive improvement loops under schema version 2 with minimal stamping; marker helpers embed `data.improvementLoop` beside `data.visualPlaytest` for replay-compatible migration from visual harness findings (v1.6.0). `improvementFindingSignature` + `ImprovementFindingSignatureOptions` and `stateDigest` + `StateDigestOptions` (v2.1.0) — cross-run bug-class keys and canonical state digests for fleet aggregation
-- `SessionReplayer.forkAt(targetTick)`, `ForkBuilder`, `ForkResult`, `ForkRunConfig`, `Divergence`, `DivergenceCounts`, `CommandSequenceMap`, `diffBundles`, `BundleDiff`, `BundleTickDelta`, `DiffBundlesOptions`, `ForkSubstitutionError`, `ForkBuilderConflictError`, `BuilderConsumedError` — counterfactual replay primitive (Spec 5, v0.8.12+). Builder API: `replayer.forkAt(t).replace(seq, cmd).insert(cmd).drop(seq).run({ untilTick })`. Produces a normal `SessionBundle` of the diverged timeline plus a `Divergence` summary; `diffBundles` provides cross-bundle comparison covering commands, events, and state. Single-use builder; conflict rules enforced synchronously. Tier-3 of the AI-first feedback loop (`docs/guides/session-recording.md` § Counterfactual replay; full surface in `docs/api-reference.md`)
-- `bundleHotspots(bundle, options?)`, `BundleHotspot`, `BundleHotspotKind`, `BundleHotspotsOptions` — per-bundle anomaly-detection helper (v0.8.13+). Returns a sorted-by-tick triage list: tick failures, execution failures, per-tick duration outliers (z-score above threshold), and (optionally) markers. First concrete incarnation of the "anomaly detection over the corpus" continuous capability in the AI-first roadmap. Designed for AI agents to identify ticks worth loading via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)` (`docs/api-reference.md` § "Bundle Hotspots (v0.8.13+)")
-- `civ-engine-mcp` (in-repo subpackage v0.1.0, unpublished; shipped alongside engine 1.1.0) — MCP server exposing the recorded-game surfaces (corpus query, summaries, hotspots, viewer frames/diffs, snapshot hydration, behavioral metrics) as 14 tools for any MCP-capable agent; read-only, zero game code required (`docs/guides/mcp-server.md`)
-- `snapshotAtTick(bundle, tick)` — pure-data state materialization from a bundle without `worldFactory` (v1.1.0+)
-- `PlayerObserver` — per-player fog-of-war observation (v0.8.20+): filtered snapshot + per-tick entered/updated/exited feed keyed by a `VisibilityMap`, with honest destroyed-vs-fog attribution and safe-by-default leak prevention (`docs/api-reference.md` § "PlayerObserver")
-- `EngineError`, `EngineRangeError`, `EngineTypeError`, `isEngineError`, `getErrorCode` — every core-engine throw carries a stable machine-readable `code` + structured `details` (v0.8.19+); `getErrorCode` reads the code across BOTH error families (core + session, v0.8.23+); agents branch on codes instead of message prose (`docs/api-reference.md` § "Engine Errors")
-- standalone utilities for pathfinding, map generation, occupancy/crowding, visibility, behavior trees, and typed overlay layers (`Layer<T>`)
-
-Use [docs/api-reference.md](docs/api-reference.md) for the authoritative signatures, types, message shapes, and standalone utility docs.
+The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md).
 
 ## Design Decisions
 
-- **Sparse arrays** for component storage - O(1) lookup, simple implementation
-- **Fixed system pipeline** - deterministic execution, no scheduler overhead
-- **Monolithic World** - flat API, internals are hidden
-- **Zero runtime deps** - pure TypeScript, nothing to break
-- **Generation counters** - minimal change detection for diff/serialization
-- **Standalone utilities** - noise, cellular, map-gen, pathfinding are not World subsystems
+- **Sparse arrays** for component storage — O(1) lookup, simple implementation
+- **Fixed system pipeline** — deterministic execution, no scheduler overhead
+- **Monolithic World** — flat API, internals are hidden
+- **Zero runtime deps** — pure TypeScript, nothing to break
+- **Generation counters** — minimal change detection for diff/serialization
+- **Standalone utilities** — noise, cellular, map-gen, pathfinding are not World subsystems
 
 ## License
 

@@ -6513,11 +6513,17 @@ function bundleHotspots<TEventMap, TCommandMap>(
 
 interface BundleHotspot {
   tick: number;
-  kind: 'tick_failure' | 'execution_failure' | 'duration_outlier' | 'marker';
+  kind: BundleHotspotKind;
   severity: 'low' | 'medium' | 'high';
   message: string;
   details: JsonValue;
 }
+
+type BundleHotspotKind =
+  | 'tick_failure'        // bundle.failures[i] — fatal tick-time error
+  | 'execution_failure'   // bundle.executions[i].executed === false
+  | 'duration_outlier'    // SessionTickEntry.metrics.durationMs.total z-score above threshold
+  | 'marker';             // bundle.markers[i] — user/agent annotation
 
 interface BundleHotspotsOptions {
   durationStdevThreshold?: number;   // default 3 (z-score). Set to Infinity to disable duration outlier detection.

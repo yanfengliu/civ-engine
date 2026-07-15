@@ -354,9 +354,10 @@ export {
   type VisualPlaytestViewport,
 } from './visual-playtest.js';
 
-// Strict-Mode Determinism — Spec 6 (v0.8.8+): opt-in `WorldConfig.strict` flag
+// Strict-Mode Determinism — Spec 6 (v0.8.8+): the `WorldConfig.strict` flag
 // rejects mutation methods called outside system phases / setup window /
-// runMaintenance callbacks. See docs/threads/done/strict-mode/DESIGN.md.
+// runMaintenance callbacks. On by default since 1.0 (`strict: false` opts out).
+// See docs/threads/done/strict-mode/DESIGN.md.
 export {
   StrictModeViolationError,
   type StrictModePhase,
