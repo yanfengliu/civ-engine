@@ -1,213 +1,53 @@
-## Headless-first execution
+# AGENTS.md — civ-engine
 
-Always work headlessly by default. This is a mandatory execution rule, not an adaptable default. Use a visible browser window, desktop application, GUI automation, or another non-headless interaction only when it is absolutely necessary to complete or adequately verify the task and no headless alternative is sufficient. State the reason before launching the non-headless path.
+## What this is
 
-## Agentic working style
+A general-purpose, headless, AI-native 2D grid-based game engine in TypeScript: strict ECS, deterministic ticks, session recording/replay, and autonomous playtest tooling. Zero runtime dependencies, plus an `mcp/` MCP-server subpackage. The engine ships reusable infrastructure that downstream game repos (e.g. `../aoe2`) consume — no game-specific logic, rendering, or UI code lives here.
 
-Treat the rest of this file as **defaults, not rigid law.** The right approach is the one that fits the task in front of you — when a rule here would make the work worse, deviate and say why. Hard "always use X / never use Y" mandates go stale and silently mislead faster than principles do; optimize for the outcome (correct, verified, readable) over any prescribed mechanism.
+## Fleet constitution
 
-**Scale the approach to the task.**
+- Work headlessly by default; go non-headless only when nothing else can complete or verify the task, and say why.
+- These rules are strong defaults, not law: when one would make the work worse, deviate and say why.
+- Scale the approach to the task: trivial changes directly; substantial work as explore → plan → implement → verify, with subagents when work is genuinely parallel.
+- Delivery boundary: each minimal coherent verified unit is reviewed, staged (scoped files only), and committed promptly — never commit failing or partial work as a checkpoint. Commit to `main`; push at the end of every task.
+- The repo's gates must pass before every commit that touches code; doc-only changes need a self-reviewed diff.
+- Review: self-review trivial changes; adversarially review non-trivial ones — independent agents that try to refute the change against the live code. High-risk work (persistence/migrations, security/auth, concurrency, money, supply chain, edits that reach sibling repos) escalates to the multi-cli-review skill. Reviewers must read the live code; verify reviewer claims against the codebase before acting on them; substantive findings outweigh approval votes.
+- Dependency changes: re-resolve the lockfile, run the repo's audit gate (a new HIGH/CRITICAL is a blocker), and note the audit result in the commit message.
+- Docs are part of the change: update every affected surface in the same commit; write prose one line per paragraph (no hard wrapping); never reference or mandate files that don't exist.
+- Bias to continue: work through the whole accepted plan without mid-plan check-ins; context management is the harness's job, never a reason to stop. Stop only for a genuine blocker, a direction-changing decision, or an explicit stop. (Established 2026-05-01; reinforced 2026-07-05.)
+- Model pins live only in `../loop-ops/docs/skills/multi-cli-review.md` — never hardcode model IDs anywhere else.
+- Lessons files (`docs/learning/lessons.md` where present) require evidence anchors — source, fix commit, test id, behavior delta; unanchored lessons are folklore.
+- Recursive loop: before running or driving a pass, read `../loop-ops/docs/skills/recursive-playtest.md`; before building loop machinery, read `../loop-ops/docs/skills/building-recursive-loop.md`.
 
-- Trivial or conversational (a one-line fix, a question) → just do it directly.
-- Substantial work (multi-file features, migrations, audits, broad refactors, research) → orchestrate it. Don't grind through it solo when parallel agents would be faster, more thorough, or would keep your own context lean.
+## Gates
 
-**Reach for modern agentic techniques when they fit:**
-
-- **Compose a bespoke harness per task.** Decide the shape — explore → plan → implement → verify — and build that flow deliberately instead of following a fixed checklist. Different tasks want different orchestration.
-- **Fan out a team of subagents.** Run independent work in parallel (one agent per file, module, or dimension), then integrate. Delegation also keeps the orchestrator's context lean on large jobs.
-- **Use dynamic multi-agent workflows** for decompose-and-cover or generate-and-judge work: parallel exploration, pipelined stages, a final synthesis.
-- **Verify adversarially.** For non-trivial findings or changes, have an independent agent try to refute them or re-run the checks against the real code — don't trust the first pass.
-- **Offload to stay lean.** Push large reads, broad sweeps, and self-contained implementation chunks to subagents; keep the main thread for decisions and integration.
-
-This does not lower the verification bar: tests still pass, diffs still get reviewed, docs still stay current. It changes *how* you get there, not the standard.
+`npm test` · `npm run typecheck` · `npm run lint` · `npm run build` — all four before every code commit; only affected tests while iterating, full suite once confident. Dependency audit gate: `npm audit --audit-level=high` (full tree and `--omit=dev`). CI additionally builds and tests the `mcp/` subpackage, sequenced after the root build because its `file:..` dep resolves against `dist/`.
 
 ## Session start
 
 Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` before starting work.
 
-## Continuing through plans
+## Invariants & boundaries
 
-- **No stopping points within a multi-task plan.** When the user gives you a plan with N tasks, work through all N continuously. Do not stop and ask whether to keep going. Do not pitch `/schedule` for the rest of the work the user already asked for. Harness reminders ("task tools haven't been used recently", auto-mode banners, context warnings) are NOT stop signals — they are administrative noise. Treat the plan itself as the contract, and treat "continue" as the default.
-- **Never manage context yourself — auto-compaction handles it.** Do not stop, checkpoint, hand off "for fresh context", or ask "should I keep going" because the conversation is long. When one increment ships (gates green + commit + push + docs), start the next in the same turn. Stop only for a genuine blocker, a real user decision that changes direction, or an explicit stop. (Fleet rule reinforced 2026-07-05 after the user objected to a mid-marathon "want me to keep rolling?" offer.)
-- The exception is a genuinely non-obvious decision that requires user judgment (e.g., which of two unequal interpretations of a spec is intended). For routine choices, make the call and proceed.
-- This rule was established 2026-05-01 after the user objected sharply to mid-stream stoppage during the investing-tool implementation. The same rule lives in every other repo's AGENTS.md.
+- Downstreams consume the prebuilt engine tarball, not a local build: on every push to `main`, CI's `publish-dist` job packs the built engine and refreshes the rolling `engine-dist` release that downstream CI (e.g. aoe2) fetches. Keep `main` green and pushed — a red or unpushed engine blocks downstream builds. The consumer-side upgrade and breaking-change contract lives in the downstream repos' AGENTS.md files; this repo's obligation is truthful semver plus a migration-focused changelog.
+- Version `a.b.c` under semver, post-1.0 rules (since 2026-06-12): `a` (major) = breaking changes ONLY, and only when the user says so — removals go through the deprecation policy (deprecate in a minor, remove in the next major; `docs/guides/public-api-and-invariants.md`). `b` (minor) = additive surface (new exports, methods, options), with the surface-pin fixture diff (`tests/public-surface.test.ts`) as the review artifact. `c` (patch) = fixes, docs, internal changes — no surface additions. Pre-1.0 changelog entries used `b` as the breaking axis. One bump per coherent shipped change — independent features land as separate commits with separate bumps, while a feature's follow-up fix commits stay on the original version.
+- Recursive-loop ownership: the engine owns the loop's validators and machine contracts — the `ImprovementFinding` contract, marker bridge, and run-manifest lifecycle (shipped v1.6.0; honesty invariants on by default since 2.0.0). Gates, browser/provider adapters, and auto-fix policy remain game-repo-owned; loop operations and fleet aggregation live in `../loop-ops`.
+- TDD for behavior changes: tests first, testing the contract (app experience and mechanisms), not the code.
+- Respect the boundaries documented in `docs/architecture/ARCHITECTURE.md`; if a boundary seems wrong, flag it instead of silently violating it.
+- File size: keep every file under 500 LOC (hard ceiling 1000) — split god-objects by lifecycle/role; prefer composition over inheritance.
 
-## Recursive loop (fleet)
+## Known traps
 
-Before running or driving a `playtest:recursive` pass in any sibling repo, read `../loop-ops/docs/skills/recursive-playtest.md`; before building the loop into a new repo, read `../loop-ops/docs/skills/building-recursive-loop.md`. Those files are the fleet-wide source of truth for the loop contract (pass outcomes, honesty invariants, and the definition of a complete pass — a pass is not done at `proposal-only`). The engine owns the loop's validators and machine contracts (`ImprovementFinding`, manifests, signatures); loop operations and fleet aggregation live in `../loop-ops`.
+- Visual changes verify with before screenshot → change → after screenshot → pixel diff, alongside the normal gates.
+- Debugging sessions record their process in a new file per session from `docs/debugging/template.md`; if a later session invalidates an old conclusion, update the old doc to prevent misunderstandings; clean up temporary dumps (stack traces, test results) when done.
 
-## Core rules
+## Conventions
 
-- Use test-driven development for behavior changes: write or update tests first, then make them pass. Test the contract, not the code: tests should focus primarily on app experience and mechanisms.
-- For each desired change, make the change easy, then make the easy change.
-- Before implementing a non-trivial change, write a plan. (Trivial changes: just make them, per the working-style preamble.)
-- Verify every change against this project's gates: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. All four must pass before declaring a task done.
-- **Dependency-change protocol (mandatory whenever you touch `package.json`'s `dependencies` / `devDependencies` / `optionalDependencies` / `peerDependencies`):**
-  1. Re-resolve the lockfile: `npm install` (commits `package-lock.json`) or the equivalent for the repo's package manager.
-  2. Run `npm audit --audit-level=high --omit=dev` for runtime deps + `npm audit --audit-level=high` for the full tree. A new HIGH/CRITICAL CVE is a blocker — upgrade past it, swap the dep, or document the suppression in the devlog with a reason and expiry date.
-  3. Mention the audit result in the commit message ("npm audit: 0 high/critical" or similar).
-  Skipping any step is a process regression for the same reason multi-CLI review is — supply-chain risk compounds silently and the only defense is making the check unmissable.
-- **Adversarially review non-trivial changes before declaring the task done — default to an in-process Workflow, escalate to multi-CLI review for high-risk work.** For any non-trivial behavior or code change, run an adversarial review pass first: fan out parallel finder subagents (by dimension/file) plus independent verifiers that try to *refute* each finding against the live code, then fix every real finding and re-review until reviewers only nitpick. This in-process Workflow is the default and is always available — no external CLI required. For **high-risk** changes — persistence/migrations, security/auth, agent-loop or concurrency, money, or anything with data-loss or supply-chain blast radius — *also* run the multi-CLI review (Codex + Claude, per the Code review section) and synthesize findings into `docs/threads/current/<objective>/<date>/<iteration_number>/REVIEW.md` (move to `docs/threads/done/<objective>/` when closed); a different model catches blind spots that same-model subagents share. Trivial changes (typos, comments, pure doc edits with no code implications) need only a self-reviewed diff. Don't rationalize your way out of the adversarial pass on non-trivial work; if you skip a review that should have run, run it post-hoc on the same branch before merge.
-- **Verify reviewer claims against the codebase before acting on them.** As the driver (team lead / main agent), when a reviewer says "function X has signature Y" or "this contract is broken," grep / read the actual file before merging the fix. A reviewer might be working from training knowledge, a stale snapshot, or a hallucinated symbol. The cost of one extra `Read` is negligible; the cost of acting on a stale or wrong claim is rework + iteration debt. This pairs with the "Reviewers MUST read the codebase" rule in the Code review section — what gets verified is more important than who said it.
-- When the change is visual:
-  - Capture a before screenshot.
-  - Apply the change.
-  - Capture an after screenshot.
-  - Generate a pixel diff and use that as verification alongside the normal test/build gates.
-
-## Team of subagents (flexible, not rigid)
-
-Subagent dispatch is a tool, not a mandate. Use it when:
-
-- Context budget matters (a long-running investigation that would clutter the main thread)
-- Work is genuinely parallel (independent searches or independent reviews)
-- A specialist agent type fits naturally (Explore for codebase audits, etc.)
-
-For sequential focused work in the main thread, act as engineer directly — dispatching adds overhead and removes the ability to course-correct quickly.
-
-When you do dispatch, the team roles below describe how to brief them. The Team Lead role is always you (the main agent).
-
-- **Team lead** (always the main agent):
-  - Breaks the human's request into atomic tasks, selects the appropriate domain specialists, routes the tasks, and acts as the final gatekeeper before merging.
-- **Architect**: Acts as a consultant. Drafts the initial implementation plan and verifies it against ARCHITECTURE.md before work dispatches.
-- **Game designer**: Validates that the game mechanism works well and is fun. Researches local and online sources to ground opinions.
-- **Software engineer**: Handles code writing.
-  - After coding, ask the code reviewer to review (see Code review section) and iterate. Multi-CLI reviews run in the background; timing and poller mechanics are in the fleet-canonical runbook `../loop-ops/docs/skills/multi-cli-review.md`.
-  - After addressing review comments, ask the reviewer to verify the fix.
-  - If engineer + reviewer cannot reach consensus after 3 iterations, surface the disagreement to the user with both positions and let the user decide.
-  - Save reviewer synthesis under `docs/threads/current/<objective>/<date>/<iteration_number>/`, mirroring the full-codebase review convention (see `docs/threads/done/full/<date>/<iteration_number>/` for historical precedent). The `<objective>` folder is a concise kebab-case phrase naming the work, such as `synthetic-playtest-task-2`, `behavioral-metrics-task-1`, or `thread-archive-migration`; for full-codebase reviews, use `full`.
-  - Thread-level design artifacts live directly under the objective folder as `DESIGN.md` and `PLAN.md`. These are the authoritative design and implementation-plan docs for that objective; `<date>/design-N/REVIEW.md` and `<date>/plan-N/REVIEW.md` are only historical review summaries of design or plan iterations.
-  - Each iteration directory contains only `REVIEW.md`, the concise synthesized summary with severity-tagged findings and the final disposition. Do not commit raw CLI output, stderr/stdout logs, error logs, prompts, or diff snapshots anywhere under `docs`.
-  - If temporary capture files are useful while synthesizing a review, write them outside the thread tree under `tmp/review-runs/<objective>/<date>/<iteration_number>/`, do not stage them, and clean them up when they are no longer useful. The committed thread artifact is the summary only.
-  - `<iteration_number>` starts at 1 and increments for each re-review. Re-reviewers should consider previous iterations' `REVIEW.md` + `docs/learning/lessons.md` + the new diff so they verify earlier fixes landed and don't re-flag old issues.
-  - After folding the final iteration's `REVIEW.md` into the devlog entry for the task, move the objective folder from `docs/threads/current/` to `docs/threads/done/`. The done thread stays as a historical artifact (do not delete — these are valuable audit trails alongside the full-review history).
-  - Continue iterating until reviewers nitpick instead of catching real bugs / giving substantial feedback. Do not get stuck in an infinite loop.
-- **Code reviewer**: Follow the Code review section.
-
-## Code review
-
-The default adversarial pass for non-trivial work is the in-process Workflow (see Core rules). Run the multi-CLI review (Codex + Claude, each reviewing independently) on high-risk changes and full-codebase audits. All multi-CLI mechanics — current review model pins, exact commands, sandbox flags, the background-run/poller pattern, the Codex output-extraction recipe, and CLI failure modes — live in the fleet-canonical runbook `../loop-ops/docs/skills/multi-cli-review.md` (review pins bump there, once for the whole fleet), with `.claude/skills/multi-cli-review/SKILL.md` as this repo's thin stub for repo-specific notes; read the runbook before every multi-CLI session.
-
-Policy for every reviewer, in-process subagent or CLI:
-
-- **Reviewers MUST read the codebase to ground their claims.** Every review prompt must include the directive: *"Verify each claim in the plan/diff against the live codebase — grep for the symbols, function signatures, column names, and file paths it references; do not approve based on prompt text alone."* Without this directive baked in, two reviewers can APPROVE a design with a real defect that only the codebase-reading reviewer catches. Convergence is measured by *substantive finding count*, not *vote count* — a HIGH defect from one reviewer outweighs APPROVED from two.
-- Aspects to review:
-  1. Design — easily scales, generalizes, debugs, can be understood and reasoned about, stays lean.
-  2. Test coverage.
-  3. Correctness.
-  4. Clean code, typing, efficiency, memory leaks. No duplicated logic, inconsistent implementations, violation of boundaries. File size: keep every file under 500 LOC (hard ceiling 1000) — split god-objects by lifecycle/role. Prefer composition over inheritance. Clean up dead code. Do not change app mechanics or behavior unless explicitly asked.
-
-  Documentation accuracy is covered by the Documentation discipline section's reviewer prompt addendum — do not duplicate the rule here.
-
-- **Enrich the baseline prompt** (quoted in the fleet-canonical runbook) **with task-specific context** — the change's intent, prior-iteration findings to verify, files to focus on, and an anti-regression checklist. The bare baseline returns generic feedback; useful reviews need the specifics.
-- **Keep model IDs current.** Use the latest-family alias when a command is meant to track the newest model (for example, `opus[1m]`); bump pinned strings whenever a more capable fixed variant ships (e.g. `claude-opus-5-0[1m]`, `gpt-5.6`). Verify with a one-line smoke test (`echo "ok" | <cli> ...`) before committing the bump — silent fallback to an older model is the failure mode to guard against. Review-command pins live in the fleet-canonical runbook `../loop-ops/docs/skills/multi-cli-review.md`.
-
-## Git
-
-- During substantial multi-step work, treat each minimal coherent unit as a delivery boundary: once it passes the applicable verification and review and all substantive findings are resolved, promptly stage only its scoped files and commit it before unrelated completed units accumulate in the worktree or diff. Self-review trivial changes; adversarially review behavior and public-contract changes. Never commit failing, in-flight, or partial work merely as a checkpoint.
-- **Commit directly to `main`.** This is a solo-developer project; branches add overhead without payoff and block autonomous progress while waiting for merge authorization. Each coherent change lands as its own commit on `main`. The full suite (`npm test`, `npm run typecheck`, `npm run lint`, `npm run build`) must pass before each commit.
-- When you iterate, only run affected tests.
-- After confidence in the change, run the full suite to make sure you didn't accidentally break anything before committing.
-- Commit as soon as you have a coherent, self-contained unit of change.
-- Commit durable docs you added if you are not planning to remove them.
-- **No branches needed for normal work.** Branches are reserved for explicit experimentation that you intend to keep isolated from `main` (and even then, prefer revertable single-commit experiments on `main`). The earlier `agent/<task>` branch convention and the merge-authorization gate are removed — they were artifacts of a multi-developer workflow that doesn't apply here.
-- **Push to remote at the end of every task.** If local commits are ahead of the remote, run `git push`. Don't leave the remote behind.
-
-## Documentation
-
-Key directories:
-
-- `src`: app code.
-- `docs`: architecture, devlogs, threads, API, tutorials, guides.
-- `docs/design`: cross-thread roadmaps and historical design notes that do not belong to one thread. Thread-specific designs and implementation plans belong under `docs/threads/<current|done>/<objective>/DESIGN.md` and `PLAN.md`.
-
-### Discipline (mandatory; not optional)
-
-Code changes are not done until the docs match. Before declaring any task complete, run through this checklist for every shipped change. Skipping any item is a regression and will be caught by the next audit.
-
-**Always update on every feature / behavior change:**
-
-- `docs/changelog.md` — new version entry with what shipped, why, validation, and behavior callouts. Audience is external; focus on what users need to know to migrate. Keep dev-internal commentary in the devlog.
-- `docs/devlog/summary.md` — one line per task; remove outdated info; compact if > 50 lines. Do not cheat by writing super long line.
-- `docs/devlog/detailed/<latest>.md` — full per-task entry per the Devlog convention below.
-- `package.json` — version bump per the Versioning convention below.
-
-**Always update if the change introduces or removes API surface (new exports, new methods, new types, removed APIs, renamed APIs):**
-
-- `docs/api-reference.md` — every new public type, method, and standalone utility gets its own section. Removed APIs get removed (not just struck through). Stale signatures must be updated.
-- `README.md` — Feature Overview table mentions the new capability if it's a user-visible feature; Public Surface bullets list the new top-level export if applicable.
-- `docs/README.md` — index links the new guide if one is added.
-
-**Always update if the change is structural (new subsystem, new boundary, changed data flow):**
-
-- `docs/architecture/ARCHITECTURE.md` — Component Map row + Boundaries paragraph for the new subsystem; tick lifecycle ASCII updated if the flow changes.
-- `docs/architecture/drift-log.md` — append a row with date + change + reason.
-- `docs/architecture/decisions.md` — append a Key Architectural Decision row when the change reflects a non-obvious tradeoff worth recording. Never delete an existing decision; add a newer one that supersedes it.
-
-**Update if applicable to the change's topic:**
-
-- `docs/guides/<topic>.md` — every guide whose subject overlaps the change. A new resource API → `resources.md`. A new system feature → `systems-and-simulation.md`. A new spatial primitive → `spatial-grid.md` / `rts-primitives.md`. A new AI-relevant surface → `ai-integration.md`. A new field-data utility → `map-generation.md`. A new tutorial-grade feature → `building-a-game.md` and `getting-started.md`. The `concepts.md` standalone-utilities list and tick-lifecycle ASCII must reflect new utilities and lifecycle changes.
-- Examples and tutorials must use the current API. If a guide demonstrates the deprecated pattern, replace the demo, don't add a "new way" sidebar.
-- Thread design and plan docs — when an objective has an accepted design or implementation plan, keep the current authoritative versions directly under `docs/threads/current/<objective>/DESIGN.md` and `PLAN.md`; move them with the thread to `docs/threads/done/<objective>/` when the objective closes.
-- `docs/learning/lessons.md` — when you encounter a non-obvious failure mode worth preserving for future sessions (a recurring trap, a rule that prevented a reasonable-seeming mistake, a process step that turned out load-bearing). **Each lesson MUST start with this evidence-anchor table** — without anchors a "lesson" is folklore and self-improvement becomes prompt drift:
-
-  | Field | Value |
-  |---|---|
-  | Surfaced by | path to `REVIEW.md` / debug log / commit / conversation that exposed the failure |
-  | Reviewer findings | which CLI flagged it, severity, finding ID — e.g. `Codex 3-C1`, `Claude iter-2 IMPORTANT` |
-  | Fix commit | short SHA of the commit that closed it |
-  | Test added | exact test node id that pins the lesson — e.g. `tests/sim/path.test.ts > "specific behaviour"` (or `n/a — process lesson` for review/tooling-only lessons) |
-  | Behavior delta | concrete before/after — what would have happened in production without the fix; for engine/sim changes include the affected bundle ID / replay seed / behavioral metric (faction win-rate, pathfinding cost, tick lifecycle ordering) |
-
-  Code lessons require a real test node id; only genuinely process-level lessons may use `n/a`. One concise entry per lesson; this is the source of process learnings that re-reviewers consult alongside prior `REVIEW.md` files.
-
-**Verification step (mandatory before declaring task done):**
-
-- Invoke the `doc-review` skill or grep for removed-API names across `docs/` and `README.md`. The audit must come back clean for the change's diff. Stale references in historical changelog / devlog / drift-log entries are intentional context and should remain — every other surface must reflect current reality.
-- The multi-CLI code review must explicitly verify doc accuracy as part of its review prompt — include "verify docs in the diff match implementation; flag any stale signatures, removed APIs still mentioned, missing coverage of new APIs in canonical guides, or thread design/plan docs that are missing from the objective root."
-
-**Why this is mandatory:** doc drift compounds. A single stale signature in `api-reference.md` becomes the source of truth for the next reader, then for the next feature built on top, then for an external consumer. Treating documentation as part of the change (not after the change) is the only way to keep the surface trustworthy. If a feature is too small to merit a guide update, it is small enough to merit one sentence in the relevant existing guide — silence is not a valid signal.
-
-### Architecture
-
-- Respect the boundaries documented in `docs/architecture/ARCHITECTURE.md`. If a boundary seems wrong, flag it instead of silently violating it.
-- If architecture changes, update the relevant sections in `docs/architecture/ARCHITECTURE.md`, append a row to `docs/architecture/drift-log.md`, and mention the update in the devlog.
-- Do not update `docs/architecture/ARCHITECTURE.md` for non-structural fixes, refactors, UI tweaks, or test-only work.
-- Never delete a Key Architectural Decision in `docs/architecture/decisions.md`; add a newer decision that supersedes it.
-
-### Devlog
-
-- Detailed devlogs live under `docs/devlog/detailed/` as files named `START_DATE_END_DATE.md` (e.g. `2026-04-07_2026-04-13.md`).
-- A new active file is created with `START_DATE == END_DATE` (today's date for both halves).
-- Always append new entries to the latest detailed devlog (the file with the most recent `END_DATE`). When looking something up, start from the latest file and work backwards.
-- Periodically archive: when the active file grows larger than 500 lines or a significant time boundary is reached, `git mv` the file to update its `END_DATE` to the date of its last entry, then start a new file whose `START_DATE` is today (and whose `END_DATE` initially equals `START_DATE`). Check that all previous devlogs' filename dates are still accurate.
-- After every completed task, append a detailed entry with:
-  - timestamp
-  - action
-  - code reviewer comments, broken down by AI provider and theme as stated above
-  - result
-  - reasoning
-  - notes
-- Keep `docs/devlog/summary.md` current after updating the detailed log. Always remove outdated info. Compact when it grows larger than 50 lines.
-- If a subagent handles summary work, it should extract facts only and avoid interpretation.
-
-### Versioning
-
-- Maintain a version number `a.b.c` under **semver (post-1.0 rules, since 2026-06-12)**:
-  - `a` (major): breaking changes ONLY, and only when the human says so. Removals go through the deprecation policy (deprecate in a minor, remove in the next major) — see `docs/guides/public-api-and-invariants.md`.
-  - `b` (minor): additive surface (new exports, new methods, new options). The surface-pin fixture diff is the review artifact.
-  - `c` (patch): fixes, docs, internal changes — no surface additions.
-  - (Pre-1.0 history used `b` as the breaking axis; entries before 1.0.0 in the changelog follow the old convention.)
-- **One version bump per coherent shipped change.** Three independent features land as three commits on `main`, each with its own version bump (e.g., 0.5.9 → 0.5.10 → 0.5.11). Do not roll multiple unrelated features into a single version. A single feature that needs iter-1 + iter-2 fix commits stays on the same version — the fixes are folded into the original commit's version, not new bumps.
-- Maintain `docs/changelog.md` with one entry per version. Check `docs/devlog/` for context.
-- Update the README version badge.
-
-### Doc formatting
-
-- Don't wrap lines. Only use a new line when you are starting a new paragraph.
-
-## Debugging
-
-- When debugging, use `docs/debugging/template.md` to record your process. Create a new file per debugging session and use it to iterate until you solve the problem.
-- If a future session makes you realize that your previous debug sessions on the same topic did not fully solve the problem, update past docs to avoid misunderstandings.
-- Clean up the temporary files (such as stack dump, test results) created during debugging after you are done.
+- Devlog: `docs/devlog/summary.md` (one line per task; remove outdated info; compact past 50 lines — no cheating with mega-lines) + `docs/devlog/detailed/START_DATE_END_DATE.md` (per-task entry: timestamp, action, reviewer findings by provider and theme, result, reasoning, notes; append to the file with the latest `END_DATE` and search backwards from it; archive via `git mv` when the active file passes 500 lines, starting a new file dated today and keeping all filename dates accurate). Subagents doing summary work extract facts only, no interpretation.
+- Changelog `docs/changelog.md`: one entry per version — external audience, migration focus, validation and behavior callouts; dev-internal commentary stays in the devlog. Each version bump updates `package.json` and the README version badge.
+- API surface changes (new, removed, or renamed exports/methods/types): update `docs/api-reference.md` (every public type, method, and standalone utility gets its own section; removed APIs get removed, not struck through; no stale signatures), the README Feature Overview / Public Surface bullets when user-visible, and the `docs/README.md` index when a guide is added.
+- Structural changes: update `docs/architecture/ARCHITECTURE.md` (component-map row, boundaries paragraph, tick-lifecycle ASCII) and append a row to `docs/architecture/drift-log.md`; non-obvious tradeoffs append to `docs/architecture/decisions.md` (append-only — supersede, never delete). Non-structural fixes, refactors, UI tweaks, and test-only work touch none of these.
+- Guide routing — update every `docs/guides/<topic>.md` whose subject overlaps the change: resource APIs → `resources.md`; system features → `systems-and-simulation.md`; spatial primitives → `spatial-grid.md` / `rts-primitives.md`; AI-facing surfaces → `ai-integration.md`; field-data utilities → `map-generation.md`; tutorial-grade features → `building-a-game.md` and `getting-started.md`; `concepts.md`'s standalone-utilities list and tick-lifecycle ASCII track new utilities and lifecycle changes. Guides demonstrate the current API — replace deprecated demos rather than adding "new way" sidebars. A feature too small for a guide update still gets a sentence in the relevant existing guide; silence is not a valid signal.
+- Doc-accuracy sweep before declaring a change done: grep removed/renamed API names across `docs/` and `README.md` (or invoke the doc-review skill). Stale references are intentional only in historical changelog/devlog/drift-log entries; every other surface reflects current reality.
+- Review threads: syntheses land in `docs/threads/current/<objective>/<date>/<n>/REVIEW.md` — synthesis only, severity-tagged findings plus final disposition; never raw CLI output, logs, prompts, or diff snapshots under `docs/` (temp captures go to unstaged `tmp/review-runs/<objective>/<date>/<n>/` and get cleaned up). `DESIGN.md`/`PLAN.md` live at the objective root as the authoritative design and plan docs; `<n>` starts at 1 and increments per re-review, and re-reviewers read prior `REVIEW.md`s + `docs/learning/lessons.md` + the new diff so earlier fixes land verified and old issues aren't re-flagged. Move closed objectives to `docs/threads/done/` and keep them as audit trail. Cross-thread roadmaps and historical design notes live in `docs/design/`.
+- Lessons: `docs/learning/lessons.md` per the fleet evidence-anchor rule; code lessons need a real test node id (`n/a` reserved for genuinely process-level lessons), and engine/sim lessons include the affected bundle ID / replay seed / behavioral metric in the behavior delta.
