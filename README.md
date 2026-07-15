@@ -12,9 +12,9 @@ The engine provides reusable infrastructure that game projects consume — it ha
 
 The engine is designed to be operated by AI agents, not human players directly. Humans provide high-level game designs; AI agents write game logic, submit commands, and observe state through structured, machine-readable interfaces. Every debugging surface is built to be driven by an agent in a closed implement-debug-iterate loop without human intervention.
 
-The core usage case is the **recursive improvement loop**: agents run or playtest a game, record evidence, extract findings, verify claims against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from.
+The core usage case is the **recursive improvement loop**: agents run or playtest a game and record it into a **bundle** (a deterministic, replayable capture of the run, annotated with **markers**), extract structured **findings**, verify each claim against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from.
 
-The engine owns the shared machine contracts for that loop — the `ImprovementFinding` payload, the marker bridge, and the run-manifest lifecycle, with honesty invariants enforced by default. Gates, browser/provider adapters, and auto-fix policy remain game-repo-owned. See the [loop design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md).
+The engine owns the shared machine contracts for that loop, and enforces its honesty invariants by default — a finding cannot claim it proved something without carrying the evidence. Gates, browser/provider adapters, and auto-fix policy stay in the game repo. See the [loop design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md).
 
 ## Install
 
@@ -92,7 +92,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | **Atomic Transactions** | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations, events, and `require()` preconditions, then apply all-or-nothing on precondition failure or abort (a mutation that *throws* mid-commit consumes the transaction and can leave partial state) |
 | **World State** | Non-entity key-value store (`setState`/`getState`) for terrain config, simulation time, etc. |
 | **Tags & Metadata** | Entity labels with reverse-index (`getByTag`), plus per-entity metadata with unique lookup (`getByMeta`) |
-| **Strict-Mode Determinism** | Rejects mutations called outside system phases, the setup window, or `runMaintenance(fn)`, throwing `StrictModeViolationError` at the call site. **On by default**; `strict: false` opts out, and legacy pre-1.0 snapshots deserialize non-strict. ([guide](docs/guides/strict-mode.md)) |
+| **Strict-Mode Determinism** | Rejects mutations called outside system phases, the setup window, or `runMaintenance(fn)`, throwing `StrictModeViolationError` at the call site. **On by default** — `strict: false` opts out, and legacy pre-1.0 snapshots deserialize non-strict ([guide](docs/guides/strict-mode.md)) |
 | **Speed Control** | Runtime speed multiplier and pause/resume; `step()` ignores both for testing |
 | **Serialization** | JSON snapshot save/load via `serialize()`/`deserialize()`, including state, tags, metadata, and RNG |
 | **State Diffs** | Per-tick change sets across entities, components, resources, state, tags, and metadata |

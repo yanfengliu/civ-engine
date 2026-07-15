@@ -4,14 +4,23 @@ This guide covers the core concepts and gets you running a minimal simulation in
 
 ## Installation
 
+Requires Node.js 20+.
+
+To **use** the engine in a project, install the prebuilt tarball (it is not on npm yet — see the [README](../../README.md#install)):
+
 ```bash
-git clone <repo-url>
+gh release download engine-dist --repo yanfengliu/civ-engine --pattern civ-engine.tgz
+npm install ./civ-engine.tgz
+```
+
+To **work on the engine itself**, clone it:
+
+```bash
+git clone https://github.com/yanfengliu/civ-engine.git
 cd civ-engine
 npm install
 npm test        # verify everything works
 ```
-
-Requires Node.js 20+.
 
 ## Core Concepts
 
