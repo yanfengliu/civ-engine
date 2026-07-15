@@ -1,8 +1,8 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.4.1-blue) ![status](https://img.shields.io/badge/status-stable-brightgreen)
+![version](https://img.shields.io/badge/version-2.4.1-blue)
 
-> **Post-1.0, not yet production-validated.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work — but no production deployment has validated the engine end-to-end. Use it for prototyping, AI-agent experiments, and feedback — production consumers should pin a version and track the [changelog](docs/changelog.md).
+> **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work. But no production deployment has exercised the engine end-to-end, and there is no published, pinnable release yet (see [Install](#install)) — so treat it as suitable for prototyping and AI-agent experiments, and read the [changelog](docs/changelog.md) before upgrading.
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
@@ -16,19 +16,20 @@ The core usage case is the **recursive improvement loop**: agents run or playtes
 
 The engine owns the shared machine contracts for that loop — the `ImprovementFinding` payload, the marker bridge, and the run-manifest lifecycle, with honesty invariants enforced by default. Gates, browser/provider adapters, and auto-fix policy remain game-repo-owned. See the [loop design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md).
 
-## Quick Start
-
-```bash
-npm install
-npm test        # run all tests
-npm run lint    # lint
-npm run typecheck
-npm run build   # emit dist package files
-npm run debug:client   # build and serve the browser debug client example
-npm run benchmark:check  # perf regression gate vs benchmarks/baseline.json
-```
+## Install
 
 Requires Node.js 20+.
+
+Not on npm yet. CI packs the built engine on every push to `main` and refreshes a rolling `engine-dist` release, which is what downstream repos consume:
+
+```bash
+gh release download engine-dist --repo yanfengliu/civ-engine --pattern civ-engine.tgz
+npm install ./civ-engine.tgz
+```
+
+The tarball installs under the package name, so `import { World } from 'civ-engine'` resolves. Note that `engine-dist` is a single rolling tag that always tracks `main` — there is no pinnable published release yet, so vendor the tarball you tested against and read the [changelog](docs/changelog.md) before refreshing it.
+
+## Quick Start
 
 ```typescript
 import { World, type Position } from 'civ-engine';
@@ -196,6 +197,24 @@ The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md)
 - **Zero runtime deps** — pure TypeScript, nothing to break
 - **Dirty-set change tracking** — per-tick dirty/removed sets (plus fingerprint baselines in semantic diff mode) drive diff and serialization; separate entity **generation counters** make recycled entity IDs detectable through stale refs
 - **Standalone utilities** — noise, cellular, map-gen, pathfinding are not World subsystems
+
+## Contributing
+
+```bash
+git clone https://github.com/yanfengliu/civ-engine.git
+cd civ-engine
+npm install
+
+npm test        # run all tests
+npm run lint
+npm run typecheck
+npm run build   # emit dist package files
+
+npm run debug:client     # build and serve the browser debug client example
+npm run benchmark:check  # perf regression gate vs benchmarks/baseline.json
+```
+
+All four gates must pass before any commit that touches code. Conventions, review policy, and versioning rules live in [AGENTS.md](AGENTS.md).
 
 ## License
 
