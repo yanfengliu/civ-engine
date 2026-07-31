@@ -66,7 +66,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src tests mcp/src mcp/tests --no-error-on-unmatched-pattern",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "lessons:check": "node scripts/check-lessons.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
