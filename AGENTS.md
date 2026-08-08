@@ -41,11 +41,6 @@ Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` before sta
 - Respect the boundaries documented in `docs/architecture/ARCHITECTURE.md`; if a boundary seems wrong, flag it instead of silently violating it.
 - File size: keep every file under 500 LOC (hard ceiling 1000) — split god-objects by lifecycle/role; prefer composition over inheritance.
 
-## Known traps
-
-- Visual changes verify with before screenshot → change → after screenshot → pixel diff, alongside the normal gates.
-- Debugging sessions record their process in a new file per session from `docs/debugging/template.md`; if a later session invalidates an old conclusion, update the old doc to prevent misunderstandings; clean up temporary dumps (stack traces, test results) when done.
-
 ## Conventions
 
 - Devlog: `docs/devlog/summary.md` (one line per task; compact past 50 lines — no cheating with mega-lines) + `docs/devlog/detailed/START_DATE_END_DATE.md` (per-task entry: timestamp, action, reviewer findings by provider and theme, result, reasoning, notes; append to the file with the latest `END_DATE` and search backwards from it; archive via `git mv` when the active file passes 500 lines, starting a new file dated today and keeping all filename dates accurate). Subagents doing summary work extract facts only, no interpretation.
@@ -56,3 +51,4 @@ Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` before sta
 - Doc-accuracy sweep before declaring a change done: grep removed/renamed API names across `docs/` and `README.md` (or invoke the doc-review skill). Stale references are intentional only in historical changelog/devlog/drift-log entries; every other surface reflects current reality.
 - Review threads: syntheses land in `docs/threads/current/<objective>/<date>/<n>/REVIEW.md` — synthesis only, severity-tagged findings plus final disposition; never raw CLI output, logs, prompts, or diff snapshots under `docs/` (temp captures go to unstaged `tmp/review-runs/<objective>/<date>/<n>/` and get cleaned up). `DESIGN.md`/`PLAN.md` live at the objective root as the authoritative design and plan docs; `<n>` starts at 1 and increments per re-review, and re-reviewers read prior `REVIEW.md`s + `docs/learning/lessons.md` + the new diff so earlier fixes land verified and old issues aren't re-flagged. Move closed objectives to `docs/threads/done/` and keep them as audit trail. Cross-thread roadmaps and historical design notes live in `docs/design/`.
 - Lessons: `docs/learning/lessons.md` per the fleet evidence-anchor rule; code lessons need a real test node id (`n/a` reserved for genuinely process-level lessons), and engine/sim lessons include the affected bundle ID / replay seed / behavioral metric in the behavior delta.
+- Debugging: one file per session under `docs/debugging/`, copied from `template.md` there, which carries the procedure; when a later session invalidates an old conclusion, correct the old file instead of leaving it to mislead.
