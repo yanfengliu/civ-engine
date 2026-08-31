@@ -67,6 +67,7 @@
     "test:watch": "vitest",
     "lint": "eslint src tests mcp/src mcp/tests --no-error-on-unmatched-pattern",
     "typecheck": "tsc",
+    "gates": "node scripts/gates.mjs",
     "lessons:check": "node scripts/check-lessons.mjs"
   },
   "devDependencies": {

@@ -4,12 +4,23 @@ on:
   push:
     branches: [main]
   pull_request:
+  # `npm audit` is time-dependent, not diff-dependent: a newly published
+  # advisory against an unchanged transitive dep turns this repo red with no
+  # commit at all. Without a run on a clock, that only surfaces at the next
+  # unrelated push — which is how main went red on 2026-07-23 behind a green
+  # local gate and stayed red for 27 pushes across 47 days. Weekly, so an
+  # advisory is found by the schedule rather than by whoever pushes next.
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # event_name is in the key so a scheduled run and a push run on the same ref
+  # do not cancel each other; without it the weekly audit would show up as
+  # cancelled push runs, which is noise that reads like a flake.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +62,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [20, 22]
+        # 24 is the fleet baseline and what .nvmrc pins, so it is what everyone
+        # develops on; 20 and 22 are the older majors the engines field still
+        # promises (">=20") and each keeps a job proving it. 24 was missing here
+        # until 2026-08-31 — the version every local gate ran on was the one
+        # version CI never checked.
+        node-version: [20, 22, 24]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
