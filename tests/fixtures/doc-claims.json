@@ -1,0 +1,103 @@
+[
+  {
+    "id": "transaction-atomicity",
+    "kind": "behavioral",
+    "why": "Shipped false for months as `Atomic Transactions … apply all-or-nothing`, contradicted by the repo's own passing test. Every identifier in that sentence was valid, so the name-level doc sweep certified it.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "apply all-or-nothing on precondition failure or abort (a mutation that *throws* mid-commit consumes the transaction and can leave partial state)"
+      },
+      {
+        "doc": "docs/architecture/ARCHITECTURE.md",
+        "quote": "applies all-or-nothing on `commit()` for precondition/validation failure — a mutation that throws mid-commit leaves partial state and consumes the transaction"
+      },
+      {
+        "doc": "docs/architecture/ARCHITECTURE.md",
+        "quote": "the world is in a partially-applied state that the caller must reconcile"
+      }
+    ]
+  },
+  {
+    "id": "tick-lifecycle-equality",
+    "kind": "behavioral",
+    "why": "A tick-lifecycle reorder landed in 2 of the 4 canonical copies and produced a four-way self-contradiction: two surfaces said `increment then notify`, two said the reverse. A partial fix is worse than none, because the corrected copies contradict the missed ones.",
+    "surfaces": [
+      { "doc": "docs/guides/concepts.md", "quote": "world.tick === diff.tick" },
+      { "doc": "docs/api-reference.md", "quote": "`world.tick === diff.tick` while they run" },
+      {
+        "doc": "docs/architecture/ARCHITECTURE.md",
+        "quote": "[during listeners world.tick === diff.tick]"
+      },
+      {
+        "doc": "docs/architecture/ARCHITECTURE.md",
+        "quote": "During `onDiff` listeners `world.tick === diff.tick`."
+      },
+      {
+        "doc": "docs/guides/systems-and-simulation.md",
+        "quote": "increment counter (world.tick now equals diff.tick)"
+      }
+    ]
+  },
+  {
+    "id": "evidence-required-statuses",
+    "kind": "behavioral",
+    "why": "Condensing the improvement-loop gate to \"Terminal claims require replayable evidence by default\" silently dropped `verified` — the status gated longest. The rewrite used the repo's own term of art (`terminal`) to mean something narrower than the code, and read as precise.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "Proven-outcome claims (`verified`, `fixed`, `regressed`) require a replayable evidence ref plus a `verificationMethod` by default"
+      }
+    ]
+  },
+  {
+    "id": "strict-default-and-legacy-carve-out",
+    "kind": "behavioral",
+    "why": "A condensation to \"On by default; `strict: false` opts out\" dropped the legacy-snapshot carve-out entirely. A dropped qualifier is invisible to any check anchored to identifiers.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "**On by default** — `strict: false` opts out, and legacy pre-1.0 snapshots deserialize non-strict"
+      }
+    ]
+  },
+  {
+    "id": "node-baseline",
+    "kind": "process",
+    "why": "A supported-runtime claim is what a prospective consumer acts on first. It is falsified by an `engines` edit or a CI-matrix edit, neither of which renames anything.",
+    "surfaces": [{ "doc": "README.md", "quote": "Requires Node.js 20+." }]
+  },
+  {
+    "id": "engine-dist-rolling",
+    "kind": "process",
+    "why": "The install path is a CI promise, not an API. It goes stale from a workflow commit — exactly the drift axis a name-grep cannot see.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "`engine-dist` is a single rolling tag that always tracks `main`"
+      }
+    ]
+  },
+  {
+    "id": "review-posture",
+    "kind": "process",
+    "why": "The banner told consumers \"Invariants are hardened through **mandatory** multi-CLI review\" for 15 days after a policy commit falsified it. Three automated/adversarial passes missed it; a human reading the rendered page caught it.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work."
+      }
+    ]
+  },
+  {
+    "id": "semver-posture",
+    "kind": "process",
+    "why": "The banner's earlier `removals only as majors` was false: the repo's only major shipped zero removals — it was behavior flips. A release event falsifies a release claim and renames nothing.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike"
+      }
+    ]
+  }
+]

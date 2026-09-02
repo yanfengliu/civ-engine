@@ -1,0 +1,2035 @@
+{
+  "AgentDriver": [
+    "decide",
+    "report?"
+  ],
+  "AgentDriverContext": [
+    "addMarker",
+    "attach",
+    "startTick",
+    "tick",
+    "tickIndex",
+    "world"
+  ],
+  "AgentPlaytestConfig": [
+    "agent",
+    "maxTicks",
+    "sink?",
+    "snapshotInterval?",
+    "sourceLabel?",
+    "stopWhen?",
+    "world"
+  ],
+  "AgentPlaytestResult": [
+    "agentError?",
+    "bundle",
+    "ok",
+    "report?",
+    "source",
+    "stopReason",
+    "ticksRun"
+  ],
+  "AiContractVersions": [
+    "clientProtocol",
+    "commandExecution",
+    "commandResult",
+    "improvementFinding",
+    "scenarioResult",
+    "tickFailure",
+    "worldDebug",
+    "worldHistory",
+    "worldHistoryRangeSummary",
+    "worldStepResult"
+  ],
+  "AssertImprovementFindingOptions": [
+    "requireVerificationEvidence?"
+  ],
+  "AttachmentDescriptor": [
+    "id",
+    "mime",
+    "ref",
+    "sizeBytes"
+  ],
+  "BTNode": [
+    "children",
+    "constructor",
+    "index",
+    "nodeCount",
+    "tick"
+  ],
+  "BTState": [
+    "running"
+  ],
+  "BuilderConsumedError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "BundleCorpus": [
+    "[Symbol.iterator]",
+    "bundles",
+    "constructor",
+    "entries",
+    "get",
+    "invalidEntries",
+    "loadBundle",
+    "openSource",
+    "rootDir"
+  ],
+  "BundleCorpusEntry": [
+    "attachmentBytes",
+    "attachmentCount",
+    "attachmentMimes",
+    "dir",
+    "failedTickCount",
+    "hasFailures",
+    "key",
+    "loadBundle",
+    "materializedEndTick",
+    "metadata",
+    "openSource",
+    "openViewer",
+    "schemaVersion"
+  ],
+  "BundleCorpusOptions": [
+    "scanDepth?",
+    "skipInvalid?"
+  ],
+  "BundleDiff": [
+    "attachmentsDeltas",
+    "equivalent",
+    "firstDivergentTick",
+    "markersDeltas",
+    "metadataDeltas",
+    "perTickDeltas"
+  ],
+  "BundleHotspot": [
+    "details",
+    "kind",
+    "message",
+    "severity",
+    "tick"
+  ],
+  "BundleHotspotsOptions": [
+    "durationStdevThreshold?",
+    "includeMarkers?",
+    "maxDurationOutliers?"
+  ],
+  "BundleIntegrityError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "BundleQuery": [
+    "attachmentMime?",
+    "durationTicks?",
+    "endTick?",
+    "engineVersion?",
+    "failedTickCount?",
+    "incomplete?",
+    "key?",
+    "materializedEndTick?",
+    "nodeVersion?",
+    "persistedEndTick?",
+    "policySeed?",
+    "recordedAt?",
+    "sessionId?",
+    "sourceKind?",
+    "sourceLabel?",
+    "startTick?"
+  ],
+  "BundleRangeError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "BundleStateDiff": [
+    "diff",
+    "fromTick",
+    "source",
+    "toTick"
+  ],
+  "BundleSummary": [
+    "acceptedCommandRate",
+    "acceptedCommands",
+    "commandTypeCounts",
+    "durationTicks",
+    "endTick",
+    "engineVersion",
+    "eventTypeCounts",
+    "failedTicks",
+    "failureCount",
+    "incomplete",
+    "markerCount",
+    "markersByKind",
+    "nodeVersion",
+    "recordedAt",
+    "sessionId",
+    "sourceKind",
+    "sourceLabel",
+    "startTick",
+    "totalCommands",
+    "totalEvents"
+  ],
+  "BundleTickDelta": [
+    "commands",
+    "events",
+    "stateDiff"
+  ],
+  "BundleVersionError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "BundleViewer": [
+    "atMarker",
+    "atTick",
+    "bundle",
+    "commands",
+    "constructor",
+    "events",
+    "executions",
+    "failures",
+    "markerIndex",
+    "markers",
+    "metadata",
+    "recordedRange",
+    "replayableRange",
+    "replayer",
+    "static fromSource",
+    "ticks",
+    "timeline"
+  ],
+  "BundleViewerError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "BundleViewerErrorDetails": [
+    "[index]",
+    "code",
+    "markerId",
+    "message",
+    "tick"
+  ],
+  "BundleViewerOptions": [
+    "skipRegistrationCheck?",
+    "worldFactory?"
+  ],
+  "CellGrid": [
+    "cells",
+    "height",
+    "width"
+  ],
+  "ClientAdapter": [
+    "connect",
+    "constructor",
+    "disconnect",
+    "handleMessage"
+  ],
+  "CommandExecutionResult": [
+    "code",
+    "commandType",
+    "details",
+    "executed",
+    "message",
+    "schemaVersion",
+    "submissionSequence",
+    "tick"
+  ],
+  "CommandQuery": [
+    "from?",
+    "outcome?",
+    "to?",
+    "type?"
+  ],
+  "CommandSequenceMap": [
+    "dropped",
+    "inserted",
+    "preserved",
+    "replaced"
+  ],
+  "CommandSubmissionResult": [
+    "accepted",
+    "code",
+    "commandType",
+    "details",
+    "message",
+    "schemaVersion",
+    "sequence",
+    "tick",
+    "validatorIndex"
+  ],
+  "CommandTransaction": [
+    "abort",
+    "addComponent",
+    "addResource",
+    "commit",
+    "constructor",
+    "emit",
+    "patchComponent",
+    "removeComponent",
+    "removeResource",
+    "require",
+    "setComponent",
+    "setPosition"
+  ],
+  "CommandValidationRejection": [
+    "code",
+    "details?",
+    "message?"
+  ],
+  "CorpusIndexError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "CorpusIndexErrorDetails": [
+    "[index]",
+    "code",
+    "key",
+    "message",
+    "path"
+  ],
+  "DebugComponentSummary": [
+    "entityCount",
+    "key"
+  ],
+  "DebugDiffSummary": [
+    "changedEntities",
+    "componentRemoved",
+    "componentSets",
+    "created",
+    "destroyed",
+    "overlappingEntityIds",
+    "resourceRemoved",
+    "resourceSets",
+    "tick"
+  ],
+  "DebugEventSummary": [
+    "count",
+    "type"
+  ],
+  "DebugIssue": [
+    "code",
+    "details?",
+    "entityIds?",
+    "message",
+    "severity",
+    "subsystem",
+    "suggestedActions?"
+  ],
+  "DebugProbe": [
+    "capture",
+    "key"
+  ],
+  "DebugResourceSummary": [
+    "boundedEntities",
+    "entityCount",
+    "key",
+    "totalCurrent",
+    "unboundedEntities"
+  ],
+  "DebugSpatialCell": [
+    "count",
+    "x",
+    "y"
+  ],
+  "DebugSpatialSummary": [
+    "densestCells",
+    "entitiesWithPosition",
+    "entitiesWithoutPosition",
+    "maxStack",
+    "occupiedCells",
+    "positionKey"
+  ],
+  "DebugWarning": [
+    "code",
+    "message",
+    "severity"
+  ],
+  "DeterministicRandom": [
+    "constructor",
+    "getState",
+    "nextUint32",
+    "random",
+    "static fromState"
+  ],
+  "DiffBundlesOptions": [
+    "commandSequenceMap?"
+  ],
+  "DiffOptions": [
+    "fromSnapshot?"
+  ],
+  "Divergence": [
+    "commandSequenceMap",
+    "equivalent",
+    "firstDivergentTick",
+    "perTickCounts"
+  ],
+  "DivergenceCounts": [
+    "commandsChanged",
+    "commandsForkOnly",
+    "commandsSourceOnly",
+    "eventsChanged",
+    "eventsForkOnly",
+    "eventsSourceOnly"
+  ],
+  "EngineError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "EngineErrorOptions": [
+    "details?"
+  ],
+  "EngineRangeError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "EngineTypeError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "EntityRef": [
+    "generation",
+    "id"
+  ],
+  "EventDivergence": [
+    "actual",
+    "expected",
+    "tick"
+  ],
+  "EventQuery": [
+    "from?",
+    "to?",
+    "type?"
+  ],
+  "ExecutionDivergence": [
+    "actual",
+    "expected",
+    "tick"
+  ],
+  "ExecutionQuery": [
+    "executed?",
+    "from?",
+    "to?",
+    "type?"
+  ],
+  "FileSink": [
+    "attachments",
+    "close",
+    "commands",
+    "constructor",
+    "executions",
+    "failures",
+    "get metadata",
+    "markers",
+    "open",
+    "readSidecar",
+    "readSnapshot",
+    "ticks",
+    "toBundle",
+    "writeAttachment",
+    "writeCommand",
+    "writeCommandExecution",
+    "writeMarker",
+    "writeSnapshot",
+    "writeTick",
+    "writeTickFailure"
+  ],
+  "ForkBuilder": [
+    "drop",
+    "insert",
+    "replace",
+    "run",
+    "snapshot"
+  ],
+  "ForkBuilderConflictError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "ForkResult": [
+    "bundle",
+    "divergence",
+    "source"
+  ],
+  "ForkRunConfig": [
+    "sink?",
+    "sourceLabel?",
+    "untilTick"
+  ],
+  "ForkSubstitutionError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "ForkSubstitutionErrorDetails": [
+    "code",
+    "sequence",
+    "tick"
+  ],
+  "GameEvent": [
+    "data",
+    "type"
+  ],
+  "GridPassability": [
+    "height",
+    "isBlocked",
+    "version",
+    "width"
+  ],
+  "GridPathConfig": [
+    "allowDiagonal?",
+    "blocked?",
+    "cost?",
+    "goal",
+    "height?",
+    "heuristic?",
+    "includeReservations?",
+    "maxCost?",
+    "maxIterations?",
+    "movingEntity?",
+    "occupancy?",
+    "preventCornerCutting?",
+    "start",
+    "trackExplored?",
+    "width?"
+  ],
+  "GridPathRequest": [
+    "allowDiagonal?",
+    "blocked?",
+    "cacheKey?",
+    "cost?",
+    "goal",
+    "height?",
+    "heuristic?",
+    "includeReservations?",
+    "maxCost?",
+    "maxIterations?",
+    "movingEntity?",
+    "occupancy?",
+    "passabilityVersion?",
+    "preventCornerCutting?",
+    "start",
+    "trackExplored?",
+    "width?"
+  ],
+  "ImprovementEvidenceRef": [
+    "actionIndex?",
+    "bundleId?",
+    "data?",
+    "kind",
+    "label?",
+    "markerId?",
+    "screenshotPath?",
+    "sessionId?",
+    "stateLabels?",
+    "step?",
+    "tick?",
+    "value?"
+  ],
+  "ImprovementFinding": [
+    "area?",
+    "category",
+    "data?",
+    "disposition?",
+    "evidence?",
+    "expected?",
+    "id",
+    "nextAction",
+    "observed",
+    "promotionTarget?",
+    "refs?",
+    "schemaVersion",
+    "severity",
+    "sourceRun?",
+    "suggestion?",
+    "title",
+    "verificationMethod?",
+    "verificationStatus"
+  ],
+  "ImprovementFindingInit": [
+    "data?",
+    "disposition?",
+    "id",
+    "nextAction?",
+    "promotionTarget?",
+    "sourceRun?",
+    "verificationMethod?",
+    "verificationStatus?"
+  ],
+  "ImprovementFindingSignatureOptions": [
+    "gameId?"
+  ],
+  "ImprovementGateResult": [
+    "detail?",
+    "name",
+    "ok"
+  ],
+  "ImprovementRunArtifact": [
+    "kind",
+    "path"
+  ],
+  "ImprovementRunManifest": [
+    "artifacts?",
+    "bundleId?",
+    "completedAt?",
+    "costUsd?",
+    "data?",
+    "durationMs?",
+    "engineVersion?",
+    "gameId?",
+    "gates?",
+    "gitCommit?",
+    "id",
+    "model?",
+    "objective?",
+    "provider?",
+    "schemaVersion",
+    "seed?",
+    "sessionId?",
+    "startedAt?",
+    "stopReason?",
+    "tags?"
+  ],
+  "InvalidCorpusEntry": [
+    "error",
+    "path"
+  ],
+  "IsoTimeRange": [
+    "from?",
+    "to?"
+  ],
+  "Layer": [
+    "blockSize",
+    "clear",
+    "clearAt",
+    "clone",
+    "constructor",
+    "fill",
+    "forEach",
+    "forEachReadOnly",
+    "get defaultValue",
+    "getAt",
+    "getCell",
+    "getState",
+    "height",
+    "setAt",
+    "setCell",
+    "static fromState",
+    "width",
+    "worldHeight",
+    "worldWidth"
+  ],
+  "LayerOptions": [
+    "blockSize?",
+    "defaultValue",
+    "worldHeight",
+    "worldWidth"
+  ],
+  "LayerState": [
+    "blockSize",
+    "cells",
+    "defaultValue",
+    "worldHeight",
+    "worldWidth"
+  ],
+  "LooseSystemRegistration": [
+    "after?",
+    "before?",
+    "execute",
+    "interval?",
+    "intervalOffset?",
+    "name?",
+    "phase?"
+  ],
+  "MapGenerator": [
+    "generate"
+  ],
+  "Marker": [
+    "attachments?",
+    "createdAt?",
+    "data?",
+    "id",
+    "kind",
+    "provenance",
+    "refs?",
+    "text?",
+    "tick",
+    "validated?"
+  ],
+  "MarkerQuery": [
+    "from?",
+    "id?",
+    "kind?",
+    "provenance?",
+    "to?"
+  ],
+  "MarkerRefs": [
+    "cells?",
+    "entities?",
+    "tickRange?"
+  ],
+  "MarkerValidationError": [
+    "code",
+    "constructor",
+    "details",
+    "referencesValidationRule"
+  ],
+  "MarkerValidationResult": [
+    "invalidMarkers",
+    "ok"
+  ],
+  "MemorySink": [
+    "attachments",
+    "close",
+    "commands",
+    "constructor",
+    "executions",
+    "failures",
+    "get metadata",
+    "markers",
+    "open",
+    "readSidecar",
+    "readSnapshot",
+    "ticks",
+    "toBundle",
+    "writeAttachment",
+    "writeCommand",
+    "writeCommandExecution",
+    "writeMarker",
+    "writeSnapshot",
+    "writeTick",
+    "writeTickFailure"
+  ],
+  "MemorySinkOptions": [
+    "allowSidecar?",
+    "sidecarThresholdBytes?"
+  ],
+  "Metric": [
+    "create",
+    "finalize",
+    "merge?",
+    "name",
+    "observe",
+    "orderSensitive?"
+  ],
+  "NumberRange": [
+    "max?",
+    "min?"
+  ],
+  "NumericDelta": [
+    "baseline",
+    "current",
+    "delta",
+    "pctChange"
+  ],
+  "ObservedEntity": [
+    "components",
+    "meta",
+    "ref",
+    "resources",
+    "tags"
+  ],
+  "ObservedEntityUpdate": [
+    "components",
+    "componentsRemoved",
+    "meta?",
+    "ref",
+    "resources",
+    "resourcesRemoved",
+    "tags?"
+  ],
+  "OccupancyBinding": [
+    "attachWorld",
+    "bestSubcellPlacement",
+    "block",
+    "canOccupySubcell",
+    "clearReservation",
+    "constructor",
+    "detachWorld",
+    "get version",
+    "getCellStatus",
+    "getMetrics",
+    "height",
+    "isBlocked",
+    "neighborsWithSpace",
+    "occupy",
+    "occupySubcell",
+    "release",
+    "reserve",
+    "resetMetrics",
+    "unblock",
+    "width"
+  ],
+  "OccupancyBindingClaimOptions": [
+    "metadata?"
+  ],
+  "OccupancyBindingMetrics": [
+    "cellStatusQueries",
+    "crowdedSlotChecks",
+    "crowding",
+    "occupancy",
+    "version"
+  ],
+  "OccupancyBindingOptions": [
+    "crowding?",
+    "world?"
+  ],
+  "OccupancyBindingSubcellOptions": [
+    "ignoreEntity?",
+    "includeReservations?",
+    "metadata?",
+    "preferredOffset?",
+    "preferredSlot?"
+  ],
+  "OccupancyBindingWorldHooks": [
+    "offDestroy",
+    "onDestroy"
+  ],
+  "OccupancyCellClaim": [
+    "claim",
+    "entity",
+    "kind",
+    "offset?",
+    "slot?"
+  ],
+  "OccupancyCellStatus": [
+    "blocked",
+    "blockedBy",
+    "crowdedBy",
+    "freeSubcellSlots",
+    "position"
+  ],
+  "OccupancyDebugSnapshot": [
+    "blockedCells",
+    "height",
+    "occupiedCells",
+    "occupiedEntities",
+    "reservedCells",
+    "reservedEntities",
+    "version",
+    "width"
+  ],
+  "OccupancyGrid": [
+    "block",
+    "canOccupy",
+    "canReserve",
+    "clearReservation",
+    "constructor",
+    "get version",
+    "getMetrics",
+    "getOccupant",
+    "getOccupiedCells",
+    "getReservationOwner",
+    "getReservedCells",
+    "getState",
+    "height",
+    "isBlocked",
+    "occupy",
+    "release",
+    "reserve",
+    "resetMetrics",
+    "setBlocked",
+    "static fromState",
+    "unblock",
+    "width"
+  ],
+  "OccupancyGridMetrics": [
+    "areaNormalizations",
+    "blockedCellChecks",
+    "blockedQueries",
+    "claimCellChecks",
+    "claimQueries",
+    "normalizedCellCount",
+    "stateSnapshots"
+  ],
+  "OccupancyGridState": [
+    "blocked",
+    "height",
+    "occupied",
+    "reservations",
+    "version",
+    "width"
+  ],
+  "OccupancyMetadata": [
+    "kind"
+  ],
+  "OccupancyQueryOptions": [
+    "ignoreEntity?",
+    "includeReservations?"
+  ],
+  "OccupancyRect": [
+    "height",
+    "width",
+    "x",
+    "y"
+  ],
+  "OnlyInComparison": [
+    "baseline?",
+    "current?",
+    "onlyIn"
+  ],
+  "OpaqueDelta": [
+    "baseline",
+    "current",
+    "equal"
+  ],
+  "PathCache": [
+    "clear",
+    "delete",
+    "get",
+    "get size",
+    "set"
+  ],
+  "PathConfig": [
+    "cost",
+    "goal",
+    "hash",
+    "heuristic",
+    "maxCost?",
+    "maxIterations?",
+    "neighbors",
+    "start",
+    "trackExplored?"
+  ],
+  "PathRequestQueue": [
+    "clearCache",
+    "clearPending",
+    "constructor",
+    "enqueue",
+    "get pendingCount",
+    "getStats",
+    "process"
+  ],
+  "PathRequestQueueEntry": [
+    "fromCache",
+    "id",
+    "request",
+    "result"
+  ],
+  "PathRequestQueueOptions": [
+    "cacheKey?",
+    "cloneResult?",
+    "passabilityVersion?",
+    "resolve"
+  ],
+  "PathRequestQueueStats": [
+    "cacheHits",
+    "cacheMisses",
+    "cacheSize",
+    "enqueued",
+    "pending",
+    "processed"
+  ],
+  "PathResult": [
+    "cost",
+    "explored?",
+    "path"
+  ],
+  "PlayerObservation": [
+    "entities",
+    "tick",
+    "worldState"
+  ],
+  "PlayerObserver": [
+    "constructor",
+    "isVisible",
+    "observeTick",
+    "reset",
+    "snapshot"
+  ],
+  "PlayerObserverConfig": [
+    "events?",
+    "playerId",
+    "positionless?",
+    "visibility",
+    "world",
+    "worldState?"
+  ],
+  "PlayerTickObservation": [
+    "entered",
+    "events",
+    "exited",
+    "tick",
+    "updated",
+    "worldState"
+  ],
+  "PolicyContext": [
+    "random",
+    "tick",
+    "world"
+  ],
+  "Position": [
+    "x",
+    "y"
+  ],
+  "RandomPolicyConfig": [
+    "burst?",
+    "catalog",
+    "frequency?",
+    "offset?"
+  ],
+  "RandomState": [
+    "state"
+  ],
+  "RecordedCommand": [
+    "data",
+    "result",
+    "sequence",
+    "submissionTick",
+    "type"
+  ],
+  "RecordedTickEvent": [
+    "data",
+    "tick",
+    "type"
+  ],
+  "RecordedTickFrameEvent": [
+    "data",
+    "type"
+  ],
+  "RecorderClosedError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "RegistrationManifest": [
+    "components",
+    "destroyCallbackCount",
+    "handlers",
+    "resources",
+    "schemaVersion",
+    "systems",
+    "validators"
+  ],
+  "RenderAdapter": [
+    "connect",
+    "constructor",
+    "disconnect"
+  ],
+  "RenderDebugCapture": [
+    "capture"
+  ],
+  "RenderDiff": [
+    "created",
+    "destroyed",
+    "frame",
+    "tick",
+    "updated"
+  ],
+  "RenderEntity": [
+    "ref",
+    "view"
+  ],
+  "RenderEntityChange": [
+    "componentKeys",
+    "created",
+    "currentRef",
+    "destroyed",
+    "id",
+    "previousRef",
+    "resourceKeys"
+  ],
+  "RenderProjector": [
+    "projectEntity",
+    "projectFrame?",
+    "shouldProjectChange?"
+  ],
+  "RenderSnapshot": [
+    "entities",
+    "frame",
+    "tick"
+  ],
+  "ReplayHandlerMissingError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "ReplayerConfig": [
+    "skipRegistrationCheck?",
+    "worldFactory"
+  ],
+  "ResourcePool": [
+    "current",
+    "max"
+  ],
+  "ResourceStore": [
+    "addResource",
+    "addTransfer",
+    "clearDirty",
+    "getConsumption",
+    "getDirty",
+    "getProduction",
+    "getRegisteredKeys",
+    "getResource",
+    "getResourceEntities",
+    "getState",
+    "getTransfers",
+    "processTick",
+    "register",
+    "removeEntity",
+    "removeResource",
+    "removeTransfer",
+    "setConsumption",
+    "setProduction",
+    "setResourceMax",
+    "static fromState"
+  ],
+  "ResourceStoreState": [
+    "consumption",
+    "nextTransferId",
+    "pools",
+    "production",
+    "registered",
+    "transfers"
+  ],
+  "ScenarioCapture": [
+    "debug",
+    "diff",
+    "events",
+    "history",
+    "metrics",
+    "registration?",
+    "schemaVersion",
+    "snapshot",
+    "tick"
+  ],
+  "ScenarioCheck": [
+    "check",
+    "name"
+  ],
+  "ScenarioCheckOutcome": [
+    "failure",
+    "name",
+    "passed"
+  ],
+  "ScenarioConfig": [
+    "checks?",
+    "debugger?",
+    "history?",
+    "name",
+    "probes?",
+    "run?",
+    "setup?",
+    "world"
+  ],
+  "ScenarioContext": [
+    "capture",
+    "debugger",
+    "fail",
+    "history",
+    "name",
+    "step",
+    "stepUntil",
+    "submit",
+    "world"
+  ],
+  "ScenarioFailure": [
+    "code",
+    "details?",
+    "message",
+    "source?"
+  ],
+  "ScenarioResult": [
+    "checks",
+    "debug",
+    "diff",
+    "events",
+    "failure",
+    "history",
+    "issues",
+    "metrics",
+    "name",
+    "passed",
+    "registration?",
+    "schemaVersion",
+    "snapshot",
+    "tick"
+  ],
+  "ScenarioResultToBundleOptions": [
+    "nodeVersion?",
+    "registration?",
+    "sourceLabel?"
+  ],
+  "ScenarioStepUntilResult": [
+    "completed",
+    "failure",
+    "steps",
+    "tick"
+  ],
+  "SelfCheckOptions": [
+    "checkEvents?",
+    "checkExecutions?",
+    "checkState?",
+    "stopOnFirstDivergence?"
+  ],
+  "SelfCheckResult": [
+    "checkedSegments",
+    "eventDivergences",
+    "executionDivergences",
+    "ok",
+    "skippedSegments",
+    "stateDivergences"
+  ],
+  "SessionBundle": [
+    "attachments",
+    "commands",
+    "executions",
+    "failures",
+    "initialSnapshot",
+    "markers",
+    "metadata",
+    "schemaVersion",
+    "snapshots",
+    "ticks"
+  ],
+  "SessionMetadata": [
+    "durationTicks",
+    "endTick",
+    "engineVersion",
+    "failedTicks?",
+    "incomplete?",
+    "nodeVersion",
+    "persistedEndTick",
+    "policySeed?",
+    "recordedAt",
+    "registration?",
+    "sessionId",
+    "sourceKind",
+    "sourceLabel?",
+    "startTick"
+  ],
+  "SessionRecorder": [
+    "addMarker",
+    "attach",
+    "connect",
+    "constructor",
+    "disconnect",
+    "get isClosed",
+    "get isConnected",
+    "get lastError",
+    "get markerCount",
+    "get snapshotCount",
+    "get tickCount",
+    "sessionId",
+    "takeSnapshot",
+    "toBundle"
+  ],
+  "SessionRecorderConfig": [
+    "debug?",
+    "policySeed?",
+    "sink?",
+    "snapshotInterval?",
+    "sourceKind?",
+    "sourceLabel?",
+    "terminalSnapshot?",
+    "world"
+  ],
+  "SessionRecordingError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "SessionReplayer": [
+    "forkAt",
+    "get markerCount",
+    "get metadata",
+    "markers",
+    "markersAt",
+    "markersByEntity",
+    "markersByEntityId",
+    "markersOfKind",
+    "openAt",
+    "selfCheck",
+    "snapshotTicks",
+    "stateAtTick",
+    "static fromBundle",
+    "static fromSource",
+    "tickEntriesBetween",
+    "ticks",
+    "validateMarkers"
+  ],
+  "SessionSink": [
+    "close",
+    "open",
+    "writeAttachment",
+    "writeCommand",
+    "writeCommandExecution",
+    "writeMarker",
+    "writeSnapshot",
+    "writeTick",
+    "writeTickFailure"
+  ],
+  "SessionSnapshotEntry": [
+    "snapshot",
+    "tick"
+  ],
+  "SessionSource": [
+    "attachments",
+    "commands",
+    "executions",
+    "failures",
+    "markers",
+    "metadata",
+    "readSidecar",
+    "readSnapshot",
+    "ticks",
+    "toBundle"
+  ],
+  "SessionTickEntry": [
+    "debug",
+    "diff",
+    "events",
+    "metrics",
+    "tick"
+  ],
+  "SinkWriteError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "SkippedSegment": [
+    "fromTick",
+    "reason",
+    "toTick"
+  ],
+  "SpatialGrid": [
+    "assertBounds",
+    "constructor",
+    "getAt",
+    "getInRadius",
+    "getNeighbors",
+    "height",
+    "insert",
+    "move",
+    "remove",
+    "width"
+  ],
+  "SpatialGridView": [
+    "getAt",
+    "getInRadius",
+    "getNeighbors",
+    "height",
+    "width"
+  ],
+  "StateDigestOptions": [
+    "omitKeys?"
+  ],
+  "StateDivergence": [
+    "actual",
+    "expected",
+    "firstDifferingPath?",
+    "fromTick",
+    "toTick"
+  ],
+  "Stats": [
+    "count",
+    "max",
+    "mean",
+    "min",
+    "p50",
+    "p95",
+    "p99"
+  ],
+  "StopContext": [
+    "random",
+    "tick",
+    "world"
+  ],
+  "StrictModeViolationDetails": [
+    "[index]",
+    "advice",
+    "code",
+    "method",
+    "phase"
+  ],
+  "StrictModeViolationError": [
+    "code",
+    "constructor",
+    "details"
+  ],
+  "SubcellNeighborOptions": [
+    "ignoreEntity?",
+    "includeReservations?",
+    "offsets?",
+    "preferredOffset?",
+    "preferredSlot?"
+  ],
+  "SubcellNeighborSpace": [
+    "bestSlot",
+    "freeSlots",
+    "position"
+  ],
+  "SubcellOccupancyGrid": [
+    "bestSlotForUnit",
+    "canOccupy",
+    "constructor",
+    "get version",
+    "getMetrics",
+    "getOccupiedPlacement",
+    "getSlotOccupant",
+    "getState",
+    "height",
+    "neighborsWithSpace",
+    "occupy",
+    "release",
+    "resetMetrics",
+    "slots",
+    "static fromState",
+    "width"
+  ],
+  "SubcellOccupancyGridMetrics": [
+    "blockedCellChecks",
+    "blockedQueries",
+    "freeSlotChecks",
+    "freeSlotQueries",
+    "neighborCellChecks",
+    "neighborQueries",
+    "placementQueries",
+    "slotChecks",
+    "stateSnapshots"
+  ],
+  "SubcellOccupancyGridOptions": [
+    "isCellBlocked?",
+    "slots?"
+  ],
+  "SubcellOccupancyGridState": [
+    "height",
+    "occupied",
+    "slots",
+    "version",
+    "width"
+  ],
+  "SubcellOccupancyOptions": [
+    "ignoreEntity?",
+    "includeReservations?",
+    "preferredOffset?",
+    "preferredSlot?"
+  ],
+  "SubcellPlacement": [
+    "offset",
+    "position",
+    "slot"
+  ],
+  "SubcellSlotOffset": [
+    "x",
+    "y"
+  ],
+  "SynthPlaytestConfig": [
+    "maxTicks",
+    "policies",
+    "policySeed?",
+    "sink?",
+    "snapshotInterval?",
+    "sourceLabel?",
+    "stopWhen?",
+    "world"
+  ],
+  "SynthPlaytestResult": [
+    "bundle",
+    "ok",
+    "policyError?",
+    "stopReason",
+    "ticksRun"
+  ],
+  "SystemRegistration": [
+    "after?",
+    "before?",
+    "execute",
+    "interval?",
+    "intervalOffset?",
+    "name?",
+    "phase?"
+  ],
+  "TickDiff": [
+    "components",
+    "entities",
+    "metadata",
+    "resources",
+    "state",
+    "tags",
+    "tick"
+  ],
+  "TickFailure": [
+    "code",
+    "commandType",
+    "details",
+    "error",
+    "message",
+    "phase",
+    "schemaVersion",
+    "submissionSequence",
+    "subsystem",
+    "systemName",
+    "tick"
+  ],
+  "TickFrame": [
+    "commands",
+    "debug",
+    "diff",
+    "diffSince",
+    "events",
+    "executions",
+    "markers",
+    "metrics",
+    "snapshot",
+    "state",
+    "tick"
+  ],
+  "TickRange": [
+    "from?",
+    "to?"
+  ],
+  "Transfer": [
+    "from",
+    "id",
+    "rate",
+    "resource",
+    "to"
+  ],
+  "TreeBuilder": [
+    "action",
+    "condition",
+    "reactiveSelector",
+    "reactiveSequence",
+    "selector",
+    "sequence"
+  ],
+  "VisibilityDebugSnapshot": [
+    "height",
+    "players",
+    "width"
+  ],
+  "VisibilityMap": [
+    "clearPlayer",
+    "constructor",
+    "getExploredCells",
+    "getMetrics",
+    "getSources",
+    "getState",
+    "getVisibleCells",
+    "height",
+    "isExplored",
+    "isVisible",
+    "removeSource",
+    "resetMetrics",
+    "setSource",
+    "static fromState",
+    "update",
+    "width"
+  ],
+  "VisibilityMapMetrics": [
+    "computedCells",
+    "recomputes",
+    "visibilityQueries"
+  ],
+  "VisibilityMapState": [
+    "height",
+    "players",
+    "width"
+  ],
+  "VisibilityPlayerDebugSnapshot": [
+    "exploredCells",
+    "playerId",
+    "sourceCount",
+    "visibleCells"
+  ],
+  "VisionSource": [
+    "radius",
+    "x",
+    "y"
+  ],
+  "VisualPlaytestActionContext": [
+    "actionIndex",
+    "observation",
+    "step"
+  ],
+  "VisualPlaytestActionResult": [
+    "action?",
+    "error?",
+    "message?",
+    "observation?",
+    "ok"
+  ],
+  "VisualPlaytestAgent": [
+    "decide"
+  ],
+  "VisualPlaytestAgentInput": [
+    "maxSteps",
+    "mode",
+    "observation",
+    "step",
+    "trace"
+  ],
+  "VisualPlaytestAnnotationContext": [
+    "observation",
+    "step"
+  ],
+  "VisualPlaytestBudget": [
+    "maxActionFailures?",
+    "maxActionsPerStep?",
+    "maxWallClockMs?"
+  ],
+  "VisualPlaytestControl": [
+    "actionKinds?",
+    "bounds?",
+    "description?",
+    "enabled?",
+    "id?",
+    "label",
+    "target?"
+  ],
+  "VisualPlaytestDecision": [
+    "action?",
+    "actions?",
+    "findings?",
+    "rationale?",
+    "stopReason?"
+  ],
+  "VisualPlaytestErrorShape": [
+    "message",
+    "name",
+    "stack"
+  ],
+  "VisualPlaytestFinding": [
+    "area?",
+    "category",
+    "data?",
+    "evidence?",
+    "expected?",
+    "observed",
+    "refs?",
+    "severity",
+    "suggestion?",
+    "title"
+  ],
+  "VisualPlaytestFindingEvidence": [
+    "actionIndex?",
+    "screenshotPath?",
+    "stateLabels?",
+    "step?",
+    "tick?"
+  ],
+  "VisualPlaytestHost": [
+    "annotate?",
+    "observe",
+    "performAction"
+  ],
+  "VisualPlaytestLoopConfig": [
+    "agent",
+    "agentObservation?",
+    "budget?",
+    "host",
+    "maxSteps",
+    "now?",
+    "onActionFailure?",
+    "promptMode?",
+    "signal?",
+    "traceObservation?"
+  ],
+  "VisualPlaytestLoopResult": [
+    "error?",
+    "findings",
+    "ok",
+    "stepsRun",
+    "stopReason",
+    "trace"
+  ],
+  "VisualPlaytestObservation": [
+    "controls?",
+    "metadata?",
+    "screenshot?",
+    "state?",
+    "tick?",
+    "visibleText?"
+  ],
+  "VisualPlaytestObserveInput": [
+    "previousActionResult?",
+    "step"
+  ],
+  "VisualPlaytestPoint": [
+    "x",
+    "y"
+  ],
+  "VisualPlaytestPromptInput": [
+    "maxActions?",
+    "mode?",
+    "objective?",
+    "observation"
+  ],
+  "VisualPlaytestRect": [
+    "height",
+    "width",
+    "x",
+    "y"
+  ],
+  "VisualPlaytestRedactionOptions": [
+    "includeScreenshotDataUrl?",
+    "includeSensitiveState?",
+    "includeStateValues?"
+  ],
+  "VisualPlaytestScreenshot": [
+    "alt?",
+    "dataUrl?",
+    "height?",
+    "mime?",
+    "path?",
+    "width?"
+  ],
+  "VisualPlaytestStateChannel": [
+    "audience",
+    "label",
+    "redacted?",
+    "redaction?",
+    "sensitive?",
+    "summary?",
+    "value?"
+  ],
+  "VisualPlaytestTraceEntry": [
+    "action?",
+    "actionIndex",
+    "decision?",
+    "error?",
+    "findings?",
+    "observation",
+    "result?",
+    "step"
+  ],
+  "VisualPlaytestViewport": [
+    "deviceScaleFactor?",
+    "height",
+    "width"
+  ],
+  "World": [
+    "_inSetup",
+    "_inTickPhase",
+    "_maintenanceDepth",
+    "activeMetrics",
+    "addComponent",
+    "addResource",
+    "addTag",
+    "addTagInternal",
+    "addTransfer",
+    "applySnapshot",
+    "asWorld",
+    "assertAlive",
+    "assertPositionInBounds",
+    "buildDiff",
+    "clearComponentDirty",
+    "commandExecutionListeners",
+    "commandQueue",
+    "commandResultListeners",
+    "componentBits",
+    "componentOptions",
+    "componentStores",
+    "constructor",
+    "createEntity",
+    "createTickFailure",
+    "currentDiff",
+    "currentMetrics",
+    "deleteMeta",
+    "deleteState",
+    "destroyCallbacks",
+    "destroyEntity",
+    "diffListeners",
+    "emit",
+    "emitTickFailure",
+    "endSetup",
+    "entityManager",
+    "entityMeta",
+    "entitySignatures",
+    "entityTags",
+    "eventBus",
+    "executeSystems",
+    "executeTickOrThrow",
+    "findNearest",
+    "gameLoop",
+    "get isPaused",
+    "get tick",
+    "getAliveEntities",
+    "getByMeta",
+    "getByTag",
+    "getComponent",
+    "getComponents",
+    "getConsumption",
+    "getDiff",
+    "getEntityGeneration",
+    "getEntityRef",
+    "getEvents",
+    "getInstrumentationProfile",
+    "getLastTickFailure",
+    "getMeta",
+    "getMetaEntries",
+    "getMetrics",
+    "getObservableTick",
+    "getProduction",
+    "getRegistrationManifest",
+    "getResource",
+    "getResourceEntities",
+    "getSpeed",
+    "getState",
+    "getStateDirty",
+    "getStateKeys",
+    "getStore",
+    "getTags",
+    "getTransfers",
+    "grid",
+    "handlers",
+    "hasCommandHandler",
+    "hasState",
+    "hasTag",
+    "instrumentationProfile",
+    "isAlive",
+    "isCurrent",
+    "isInMaintenance",
+    "isInSetup",
+    "isInTick",
+    "isPoisoned",
+    "isStrict",
+    "lastTickFailure",
+    "makeWorldPoisonedFailure",
+    "metaDirtyEntities",
+    "metaIndex",
+    "nextCommandResultSequence",
+    "nextComponentBit",
+    "nextSystemOrder",
+    "off",
+    "offCommandExecution",
+    "offCommandResult",
+    "offDestroy",
+    "offDiff",
+    "offTickFailure",
+    "on",
+    "onCommandExecution",
+    "onCommandResult",
+    "onDestroy",
+    "onDiff",
+    "onTickFailure",
+    "patchComponent",
+    "pause",
+    "poisoned",
+    "poisonedWarningEmitted",
+    "positionKey",
+    "previousPositions",
+    "processCommands",
+    "query",
+    "queryCache",
+    "queryInRadius",
+    "queryMask",
+    "random",
+    "rebuildComponentSignatures",
+    "rebuildSpatialIndex",
+    "recover",
+    "registerComponent",
+    "registerComponentBit",
+    "registerHandler",
+    "registerResource",
+    "registerSystem",
+    "registerValidator",
+    "removeComponent",
+    "removeEntityMeta",
+    "removeEntityTags",
+    "removeFromSpatialIndex",
+    "removeResource",
+    "removeTag",
+    "removeTransfer",
+    "resolvedSystemOrder",
+    "resourceStore",
+    "resume",
+    "rng",
+    "runMaintenance",
+    "seed",
+    "serialize",
+    "setComponent",
+    "setConsumption",
+    "setEntityComponentSignature",
+    "setEntitySignature",
+    "setMeta",
+    "setMetaInternal",
+    "setPosition",
+    "setProduction",
+    "setResourceMax",
+    "setSpeed",
+    "setState",
+    "spatialGrid",
+    "start",
+    "stateBaseline",
+    "stateDirtyKeys",
+    "stateRemovedKeys",
+    "stateStore",
+    "static deserialize",
+    "step",
+    "stepWithResult",
+    "stop",
+    "strict",
+    "submit",
+    "submitWithResult",
+    "syncSpatialEntity",
+    "systems",
+    "tagIndex",
+    "tagsDirtyEntities",
+    "tickFailureListeners",
+    "transaction",
+    "validators",
+    "warnIfPoisoned"
+  ],
+  "WorldConfig": [
+    "gridHeight",
+    "gridWidth",
+    "instrumentationProfile?",
+    "maxTicksPerFrame?",
+    "positionKey?",
+    "seed?",
+    "strict?",
+    "tps"
+  ],
+  "WorldDebugSnapshot": [
+    "componentStoreCount",
+    "components",
+    "diff",
+    "entityCount",
+    "events",
+    "issues",
+    "metrics",
+    "probes",
+    "resources",
+    "schemaVersion",
+    "spatial",
+    "tick",
+    "tickFailure",
+    "warnings"
+  ],
+  "WorldDebugger": [
+    "addProbe",
+    "capture",
+    "constructor",
+    "removeProbe"
+  ],
+  "WorldHistoryIssueSummary": [
+    "code",
+    "count",
+    "severity"
+  ],
+  "WorldHistoryRangeSummary": [
+    "changedEntityIds",
+    "commandOutcomes",
+    "diff",
+    "endTick",
+    "events",
+    "executionOutcomes",
+    "failures",
+    "issues",
+    "schemaVersion",
+    "startTick",
+    "tickCount",
+    "ticks"
+  ],
+  "WorldHistoryRecorder": [
+    "clear",
+    "connect",
+    "constructor",
+    "disconnect",
+    "findTick",
+    "getCommandExecutionHistory",
+    "getCommandHistory",
+    "getState",
+    "getTickFailureHistory",
+    "getTickHistory"
+  ],
+  "WorldHistoryState": [
+    "commands",
+    "executions",
+    "failures",
+    "initialSnapshot",
+    "recordedCommands?",
+    "schemaVersion",
+    "ticks",
+    "truncated?"
+  ],
+  "WorldHistoryTick": [
+    "debug",
+    "diff",
+    "events",
+    "metrics",
+    "tick"
+  ],
+  "WorldMetrics": [
+    "commandStats",
+    "componentStoreCount",
+    "durationMs",
+    "entityCount",
+    "query",
+    "simulation",
+    "spatial",
+    "systems",
+    "tick"
+  ],
+  "WorldSnapshotV1": [
+    "components",
+    "config",
+    "entities",
+    "tick",
+    "version"
+  ],
+  "WorldSnapshotV2": [
+    "components",
+    "config",
+    "entities",
+    "resources",
+    "tick",
+    "version"
+  ],
+  "WorldSnapshotV3": [
+    "components",
+    "config",
+    "entities",
+    "resources",
+    "rng",
+    "tick",
+    "version"
+  ],
+  "WorldSnapshotV4": [
+    "components",
+    "config",
+    "entities",
+    "metadata",
+    "resources",
+    "rng",
+    "state",
+    "tags",
+    "tick",
+    "version"
+  ],
+  "WorldSnapshotV5": [
+    "componentOptions?",
+    "components",
+    "config",
+    "entities",
+    "metadata",
+    "resources",
+    "rng",
+    "state",
+    "tags",
+    "tick",
+    "version"
+  ],
+  "WorldSnapshotV6": [
+    "poisoned",
+    "version"
+  ],
+  "WorldStepResult": [
+    "failure",
+    "ok",
+    "schemaVersion",
+    "tick"
+  ],
+  "WorldTickFailureError": [
+    "constructor",
+    "failure"
+  ]
+}
