@@ -2,6 +2,18 @@
 
 The standing answer to "did the gates actually do their job".
 
+
+## If a gate here is wrong
+
+A gate and the claim in its header can be wrong together, and when they are they look exactly like a gate that is right: retiring 356 lessons across this fleet found 43 that named a defect their own named test did not catch. Auditing one means reaching what was actually believed, measured, and abandoned — never the sentence the gate carries about itself, which is the same self-agreement these gates exist to catch.
+
+That evidence was deleted in the retirement commits, not lost. This repo's evidence file as it stood immediately before, all 15 entries with their anchors:
+
+    git show 0fe2a76:docs/learning/lessons-evidence.md
+
+`git log -- docs/learning/lessons-evidence.md` lists every earlier revision, and `git log -S'<phrase from the gate header>' -- docs/learning/` finds the entry a particular gate came from.
+
+
 Every lesson this repo retired from `lessons.md` is listed here with the gate that replaced it and the exact product-code mutation that was made to prove the gate goes red. A gate that has never been made to fail is a claim, not a gate — the canon says so, and this file is where the claim is cashed.
 
 Every mutation below was applied to product code, run, observed red, reverted with `git checkout --`, and re-run green. Baseline before the campaign: `npm run gates` green, all eleven steps (2026-09-02), so no red below is inherited.
