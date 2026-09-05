@@ -65,6 +65,40 @@ const read = (file: string): string => readFileSync(path.join(root, file), 'utf8
 const claims = JSON.parse(read(path.join('tests', 'fixtures', 'doc-claims.json'))) as Claim[];
 const readme = (): string => read('README.md');
 
+/**
+ * Bounds: the generated constitution's review paragraph/rule and README banner.
+ * This proves a stated policy, not that a reviewer actually ran. Incidental
+ * model-pin mentions cannot satisfy the mechanics clause. Text mutations below
+ * exercise the missing scope, availability, routing, and overclaim cases.
+ */
+function assertReviewPosture(agents: string, readmeText: string): void {
+  const canon = agents.match(
+    /<!-- FLEET-CANON:BEGIN[^\n]*\r?\n([\s\S]*?)<!-- FLEET-CANON:END -->/,
+  )?.[1];
+  expect(canon, 'the review claim needs the generated fleet constitution').toBeDefined();
+  const reviewParagraph = canon!.match(/^Obtain independent,[^\r\n]+/m)?.[0];
+  expect(
+    reviewParagraph,
+    'the review policy must cover substantial or high-risk changes when available',
+  ).toContain('review for substantial or high-risk changes when available.');
+  expect(reviewParagraph, 'the review policy must assess the exact revision').toContain(
+    'Review the exact revision against acceptance criteria.',
+  );
+  const mechanicsRule = canon!.match(/^- For substantial or high-risk changes,[^\r\n]+/m)?.[0];
+  expect(mechanicsRule, 'the review convention must preserve availability').toContain(
+    'use independent review when available.',
+  );
+  expect(mechanicsRule, 'the review rule must route to the fleet mechanics').toContain(
+    '`../fleet/docs/skills/multi-cli-review.md` provides the review mechanics.',
+  );
+  const banner = readmeText.split(/\r?\n/).find((line) => line.startsWith('> **Post-1.0'));
+  expect(banner, 'the README status banner is gone').toBeDefined();
+  expect(
+    /mandatory|non-negotiable|(?:each|every) (?:change|commit)/i.test(banner!),
+    'the banner overstates the review guarantee',
+  ).toBe(false);
+}
+
 const mkConfig = (over: Partial<WorldConfig> = {}): WorldConfig => ({
   gridWidth: 8,
   gridHeight: 8,
@@ -221,30 +255,7 @@ const predicates: Record<string, () => void> = {
   },
 
   'review-posture': () => {
-    // A process claim's authority is the constitution, not src/. This is the
-    // trigger a code-anchored sweep structurally cannot have: the sentence goes
-    // stale when a POLICY commit lands.
-    const agents = read('AGENTS.md');
-    // The anchor must be the sentence that makes the claim TRUE, not a token
-    // that happens to appear elsewhere. A first draft asserted only that
-    // AGENTS.md contained "multi-cli-review", and deleting the high-risk
-    // escalation rule left the gate green — the string still appeared in the
-    // unrelated "reviewer model pins live in multi-cli-review.md" line. Bind
-    // the two halves of the claim together instead.
-    expect(
-      /High-risk work[^\n]*multi-cli-review/.test(agents),
-      'README says high-risk work escalates to multi-CLI review; AGENTS.md must still route it there',
-    ).toBe(true);
-    expect(
-      /independent (harsh )?critic/i.test(agents),
-      'README says adversarial review is the default posture; AGENTS.md must still require it',
-    ).toBe(true);
-    // And the posture the banner used to overstate must not come back unnoticed:
-    // "mandatory multi-CLI review" was true when written and false 15 days later.
-    const banner = readme().split(/\r?\n/).find((line) => line.startsWith('> **Post-1.0'));
-    expect(banner, 'the README status banner is gone').toBeDefined();
-    expect(/mandatory|non-negotiable/i.test(banner!), 'the banner overstates the review guarantee')
-      .toBe(false);
+    assertReviewPosture(read('AGENTS.md'), readme());
   },
 
   'semver-posture': () => {
@@ -324,4 +335,60 @@ describe('doc claims — the roster cannot silently shrink', () => {
         'predicate that fails when it stops being true.',
     ).toEqual([]);
   });
+});
+
+describe('review-posture predicate controls', () => {
+  it.each([
+    {
+      name: 'review scope',
+      source: 'AGENTS.md',
+      remove: 'review for substantial or high-risk changes when available.',
+      error: /review policy must cover/,
+    },
+    {
+      name: 'policy availability',
+      source: 'AGENTS.md',
+      remove: ' changes when available.',
+      error: /review policy must cover/,
+    },
+    {
+      name: 'revision acceptance criteria',
+      source: 'AGENTS.md',
+      remove: 'Review the exact revision against acceptance criteria.',
+      error: /review policy must assess the exact revision/,
+    },
+    {
+      name: 'convention availability',
+      source: 'AGENTS.md',
+      remove: 'use independent review when available.',
+      error: /review convention must preserve availability/,
+    },
+    {
+      name: 'mechanics routing with model-pin mention still present',
+      source: 'AGENTS.md',
+      remove: '`../fleet/docs/skills/multi-cli-review.md` provides the review mechanics.',
+      error: /review rule must route to the fleet mechanics/,
+    },
+  ])('rejects missing $name', ({ source, remove, error }) => {
+    const agents = read(source);
+    expect(() => assertReviewPosture(agents, readme()), 'unmodified control must pass').not.toThrow();
+    expect(agents, 'mutation target must exist').toContain(remove);
+    const mutated = agents.replace(remove, '');
+    expect(mutated, 'the unrelated model-pin mention remains').toContain(
+      'Reviewer model pins live only in `../fleet/docs/skills/multi-cli-review.md`',
+    );
+    expect(() => assertReviewPosture(mutated, readme())).toThrow(error);
+  });
+
+  it.each(['mandatory review', 'non-negotiable review', 'review for each change', 'review for every commit'])(
+    'rejects a banner promising %s',
+    (overclaim) => {
+      const agents = read('AGENTS.md');
+      const original = readme();
+      expect(() => assertReviewPosture(agents, original), 'unmodified control must pass').not.toThrow();
+      const mutated = original.replace('> **Post-1.0', `> **Post-1.0 ${overclaim}`);
+      expect(mutated, 'the banner mutation must take effect').not.toBe(original);
+      expect(() => assertReviewPosture(agents, mutated)).toThrow(/banner overstates the review guarantee/);
+    },
+  );
 });

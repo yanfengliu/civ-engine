@@ -81,11 +81,11 @@
   {
     "id": "review-posture",
     "kind": "process",
-    "why": "The banner told consumers \"Invariants are hardened through **mandatory** multi-CLI review\" for 15 days after a policy commit falsified it. Three automated/adversarial passes missed it; a human reading the rendered page caught it.",
+    "why": "The banner told consumers \"Invariants are hardened through **mandatory** multi-CLI review\" for 15 days after a policy commit falsified it. Three automated/adversarial passes missed it; a human reading the rendered page caught it. The 2026-09-05 fleet policy (AGENTS.md canon e2cb4ac06499) then called for independent review on substantial or high-risk changes when available, making the replacement promise about each change stale too. The predicate checks the substantive review paragraph and mechanics rule, not the unrelated model-pin mention.",
     "surfaces": [
       {
         "doc": "README.md",
-        "quote": "Invariants are hardened by adversarial review — independent agents that try to refute each change against the live code, escalating to multi-CLI review for high-risk work."
+        "quote": "For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics."
       }
     ]
   },
