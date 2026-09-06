@@ -6,7 +6,7 @@ import { MemorySink } from '../src/session-sink.js';
 import { compareMetricsResults, type NumericDelta } from '../src/behavioral-metrics.js';
 
 // Regression tests for the 2026-07-10 full-review hardening batch (LOW findings
-// that touch behaviour). See docs/threads/*/full/2026-07-10/1/REVIEW.md.
+// that touch behaviour). See docs/work/70_full-2026-07-10/reviews/0_legacy.md.
 
 const cfg = () => ({ gridWidth: 8, gridHeight: 8, tps: 60 });
 

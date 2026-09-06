@@ -52,16 +52,16 @@ Active work and review syntheses live under `threads/current/`; closed objective
 
 ### Implemented
 
-- [Agent Recursive Improvement Loop](threads/done/agent-recursive-improvement-loop/DESIGN.md) - Shipped design for the engine's core AI-native usage case: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn.
-- [AI Runtime Feedback Plan](threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
-- [AI Final Form Plan](threads/done/ai-final-form/2026-04-11/1/REVIEW.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
-- [AI-First Engine Plan](threads/done/ai-first-engine/2026-04-11/1/REVIEW.md) - Machine-facing command/debug/history improvements that have already landed
-- [Render Contract and Debugger Plan](threads/done/render-contract-debugger/2026-04-10/1/REVIEW.md) - Render-facing projection and debugger support work that has already landed
-- [RTS Engine Scale Plan](threads/done/rts-engine-scale/2026-04-10/1/REVIEW.md) - RTS-scale support work that has already landed
-- [Expert Review Remaining Candidates](threads/done/expert-review-remaining/2026-04-11/1/REVIEW.md) - Archived on 2026-04-11; remaining SoA and dependency-graph ideas stay deferred until measured workloads justify them
-- [Expert Review](threads/done/expert-review/2026-04-10/1/REVIEW.md) - Review findings already addressed
-- [Engine Design Review](threads/done/engine-design-review/2026-04-10/1/REVIEW.md) - Broader engine assessment
-- [Engine Hardening Plan](threads/done/engine-hardening/2026-04-10/1/REVIEW.md) - Hardening work that has already landed
+- [Agent Recursive Improvement Loop](work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md) - Shipped design for the engine's core AI-native usage case: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn.
+- [AI Runtime Feedback Plan](work/18_ai-runtime-feedback/reviews/0_legacy.md) - Tick-time command execution, structured tick failures, and transport/debug/history runtime feedback that has already landed
+- [AI Final Form Plan](work/16_ai-final-form/reviews/0_legacy.md) - Versioned AI contracts, budget-aware diagnostics, and history range summaries that have already landed
+- [AI-First Engine Plan](work/17_ai-first-engine/reviews/0_legacy.md) - Machine-facing command/debug/history improvements that have already landed
+- [Render Contract and Debugger Plan](work/14_render-contract-debugger/reviews/0_legacy.md) - Render-facing projection and debugger support work that has already landed
+- [RTS Engine Scale Plan](work/15_rts-engine-scale/reviews/0_legacy.md) - RTS-scale support work that has already landed
+- [Expert Review Remaining Candidates](work/19_expert-review-remaining/reviews/0_legacy.md) - Archived on 2026-04-11; remaining SoA and dependency-graph ideas stay deferred until measured workloads justify them
+- [Expert Review](work/13_expert-review/reviews/0_legacy.md) - Review findings already addressed
+- [Engine Design Review](work/11_engine-design-review/reviews/0_legacy.md) - Broader engine assessment
+- [Engine Hardening Plan](work/12_engine-hardening/reviews/0_legacy.md) - Hardening work that has already landed
 
 ## History and Internal Process
 

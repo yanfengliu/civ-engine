@@ -1,6 +1,6 @@
 // `World` — the engine's single public entry point. Since v0.8.15 the class
 // is composed from a chain of internal layer classes (one file each, see
-// `docs/threads/done/loc-budget/PLAN.md`):
+// `docs/work/46_loc-budget/historical/threads/done/loc-budget/PLAN.md`):
 //
 //   WorldCore -> WorldQueries -> WorldTagsMeta -> WorldEntities
 //     -> WorldObservers -> WorldCommands -> WorldSystems -> WorldTick -> World
@@ -342,7 +342,7 @@ export class World<
    * `applySnapshot(snap)` to load state without conflict.
    *
    * Note: replay across recorded tick failures is out of scope (see
-   * `docs/threads/done/session-recording/DESIGN.md` §2).
+   * `docs/work/29_session-recording/historical/threads/done/session-recording/DESIGN.md` §2).
    * `applySnapshot` clears any current `lastTickFailure` / poison state.
    */
   applySnapshot(snapshot: WorldSnapshot, options?: { restorePoison?: boolean }): void {

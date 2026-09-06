@@ -345,7 +345,7 @@ The manual form pays the call/return overhead every tick and shows up as a track
 
 ## Amortizing heavy work (v0.8.21)
 
-A tick is atomic — all systems run to completion or the tick fails — so a heavy frame (5 000 path requests after a big order, a cascading damage wave) must be *amortized* across ticks rather than time-boxed. The obvious tool is forbidden: **wall-clock-bounded slicing ("work until 8 ms elapsed") is nondeterministic by construction** and breaks recording, `selfCheck`, fork, and any future lockstep. Four binding rules make slicing determinism-safe (full rationale: `docs/threads/done/time-slicing/DESIGN.md`):
+A tick is atomic — all systems run to completion or the tick fails — so a heavy frame (5 000 path requests after a big order, a cascading damage wave) must be *amortized* across ticks rather than time-boxed. The obvious tool is forbidden: **wall-clock-bounded slicing ("work until 8 ms elapsed") is nondeterministic by construction** and breaks recording, `selfCheck`, fork, and any future lockstep. Four binding rules make slicing determinism-safe (full rationale: `docs/work/54_time-slicing/historical/threads/done/time-slicing/DESIGN.md`):
 
 1. **Budgets are counts, never milliseconds.** "Process 24 requests per tick" is deterministic; "process for 8 ms" is not.
 2. **Work order is deterministic.** Sliced work lives in FIFO queues (or sorted structures) whose drain order is a pure function of queue contents — never of timing.

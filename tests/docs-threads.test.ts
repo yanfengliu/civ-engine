@@ -1,147 +1,55 @@
-import { existsSync, readdirSync } from 'node:fs';
+// Harness: the pre-migration docs/threads gate. This keeps its whole-docs raw
+// filename/path prohibition and per-work/per-review category checks under the
+// permanent docs/work contract. Inline mutation proofs live in
+// docs-work-validator.test.ts; the helper uses no sibling fleet checkout.
+// Bound: current tree structure, bytes, and effective Git attributes. It does
+// not prove historical grouping, prose truth, reviewer independence, or status.
+import { execFileSync } from 'node:child_process';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { validateGitAttributes, validateWorkDocs } from './helpers/docs-work-validator.js';
 
-const docsDir = path.join(process.cwd(), 'docs');
-const legacyReviewsDir = path.join(docsDir, 'reviews');
-const threadsDir = path.join(docsDir, 'threads');
-
-const threadNamePattern = /^[a-z0-9][a-z0-9-]*$/;
-const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-const iterationPattern = /^(?:\d+|(?:design|plan)-\d+)$/;
-const threadRootFiles = new Set(['DESIGN.md', 'PLAN.md']);
-const splitReviewThreadParents = new Map<string, { parent: string; doc: string }>([
-  ['session-recording-spec', { parent: 'session-recording', doc: 'DESIGN.md' }],
-  ['session-recording-plan', { parent: 'session-recording', doc: 'PLAN.md' }],
-]);
-const forbiddenArtifactFileNames = new Set([
-  'codex.md',
-  'codex.txt',
-  'claude.md',
-  'claude.txt',
-  'diff.md',
-  'diff.txt',
-  'error.md',
-  'error.txt',
-  'opus.md',
-  'opus.txt',
-  'prompt.md',
-  'prompt.txt',
-  'stderr.md',
-  'stderr.txt',
-  'stdout.md',
-  'stdout.txt',
-]);
-const forbiddenArtifactFilePattern =
-  /^(?:.*\.log|.*\.stderr|.*\.stdout|raw-.*\.md|.*-prompt\.md|.*-diff\.md|.*-stdout\.md|.*-stderr\.md|transcript-.*\.md)$/;
-
-function listEntries(dir: string) {
-  return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.name !== '.gitkeep');
-}
-
-function walkEntries(dir: string): string[] {
-  return listEntries(dir).flatMap((entry) => {
-    const fullPath = path.join(dir, entry.name);
-    const relativePath = path.relative(docsDir, fullPath).replaceAll(path.sep, '/');
-    return entry.isDirectory() ? [relativePath, ...walkEntries(fullPath)] : [relativePath];
+const root = process.cwd();
+const gitSafeRoot = root.replaceAll('\\', '/');
+function git(args: string[], input?: string) {
+  return execFileSync('git', ['-c', `safe.directory=${gitSafeRoot}`, ...args], {
+    cwd: root, encoding: 'utf8', input, timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'],
   });
 }
-
-describe('docs thread archive structure', () => {
-  test('uses thread-root design docs and summary-only iterations', () => {
-    const requiredThreadDocs = new Map<string, Set<string>>();
-    const requireThreadDoc = (lifecycle: string, thread: string, doc: string) => {
-      const key = `${lifecycle}/${thread}`;
-      const docs = requiredThreadDocs.get(key) ?? new Set<string>();
-      docs.add(doc);
-      requiredThreadDocs.set(key, docs);
-    };
-
-    expect(existsSync(legacyReviewsDir), 'legacy review directory should be fully migrated to docs/threads').toBe(
-      false,
-    );
-    expect(existsSync(path.join(threadsDir, 'done')), 'docs/threads/done should exist').toBe(true);
-    expect(existsSync(path.join(threadsDir, 'current')), 'docs/threads/current should exist').toBe(true);
-    expect(listEntries(threadsDir).map((entry) => entry.name).sort()).toEqual(['current', 'done']);
-
-    for (const lifecycle of ['current', 'done'] as const) {
-      const lifecycleDir = path.join(threadsDir, lifecycle);
-
-      for (const threadEntry of listEntries(lifecycleDir)) {
-        expect(threadEntry.isDirectory(), `${threadEntry.name} should be a thread directory`).toBe(true);
-        expect(threadEntry.name, `${threadEntry.name} should be a concise kebab-case objective`).toMatch(
-          threadNamePattern,
-        );
-
-        const threadDir = path.join(lifecycleDir, threadEntry.name);
-        const splitParent = splitReviewThreadParents.get(threadEntry.name);
-        if (splitParent && lifecycle === 'done') {
-          requireThreadDoc(lifecycle, splitParent.parent, splitParent.doc);
-        }
-
-        for (const dateEntry of listEntries(threadDir)) {
-          if (threadRootFiles.has(dateEntry.name)) {
-            expect(
-              dateEntry.isFile(),
-              `${threadEntry.name}/${dateEntry.name} should be a thread-root markdown file`,
-            ).toBe(true);
-            continue;
-          }
-
-          expect(dateEntry.isDirectory(), `${threadEntry.name}/${dateEntry.name} should be a date directory`).toBe(
-            true,
-          );
-          expect(dateEntry.name, `${threadEntry.name}/${dateEntry.name} should use yyyy-mm-dd`).toMatch(datePattern);
-
-          const dateDir = path.join(threadDir, dateEntry.name);
-          for (const iterationEntry of listEntries(dateDir)) {
-            expect(
-              iterationEntry.isDirectory(),
-              `${threadEntry.name}/${dateEntry.name}/${iterationEntry.name} should be an iteration directory`,
-            ).toBe(true);
-            expect(
-              iterationEntry.name,
-              `${threadEntry.name}/${dateEntry.name}/${iterationEntry.name} should be numeric or design-N/plan-N`,
-            ).toMatch(iterationPattern);
-            if (iterationEntry.name.startsWith('design-')) {
-              requireThreadDoc(lifecycle, threadEntry.name, 'DESIGN.md');
-            }
-            if (iterationEntry.name.startsWith('plan-')) {
-              requireThreadDoc(lifecycle, threadEntry.name, 'PLAN.md');
-            }
-
-            const iterationDir = path.join(dateDir, iterationEntry.name);
-            const iterationEntries = listEntries(iterationDir);
-            expect(
-              iterationEntries.map((entry) => entry.name).sort(),
-              `${threadEntry.name}/${dateEntry.name}/${iterationEntry.name} should keep only REVIEW.md`,
-            ).toEqual(['REVIEW.md']);
-          }
-        }
-      }
+function readDocuments() {
+  const files = new Map<string, Buffer>();
+  const directories = new Set<string>();
+  function walk(directory: string, prefix = '') {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const name = prefix + entry.name;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) { directories.add(name); walk(fullPath, name + '/'); }
+      else if (entry.isFile()) files.set(name, readFileSync(fullPath));
+      else throw new Error(`docs/${name} is not an ordinary file or directory; review the unexpected entry.`);
     }
+  }
+  walk(path.join(root, 'docs'));
+  return { files, directories };
+}
+function readLegacySource(source: string) {
+  const match = /^civ-engine@([0-9a-f]{40}|[0-9a-f]{64}):(.+)$/.exec(source);
+  if (!match || /[\\\0\r\n]/.test(match[2]) || match[2].split('/').some((part) => !part || part === '.' || part === '..' || part.includes(':'))) {
+    throw new Error(`Historical raw source ${source} needs civ-engine@<full-commit>:<safe-repo-path>.`);
+  }
+  return execFileSync('git', ['-c', `safe.directory=${gitSafeRoot}`, 'show', `${match[1]}:${match[2]}`], { cwd: root, timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] });
+}
 
-    for (const [threadKey, docs] of requiredThreadDocs) {
-      const [lifecycle, thread] = threadKey.split('/');
-      for (const doc of docs) {
-        expect(
-          existsSync(path.join(threadsDir, lifecycle, thread, doc)),
-          `${thread} should keep its authoritative ${doc} at the thread root`,
-        ).toBe(true);
-      }
-    }
+describe('permanent work documentation structure', () => {
+  test('keeps registered plans, every authored review round, and exact historical exceptions', () => {
+    const { files, directories } = readDocuments();
+    expect(validateWorkDocs(files, directories, readLegacySource)).toEqual([]);
   });
-
-  test('does not keep raw review or error-log artifacts in committed docs', () => {
-    const forbiddenArtifacts = walkEntries(docsDir).filter((relativePath) => {
-      const basename = path.basename(relativePath).toLowerCase();
-      return (
-        relativePath.split('/').includes('raw') ||
-        forbiddenArtifactFileNames.has(basename) ||
-        forbiddenArtifactFilePattern.test(basename)
-      );
-    });
-
-    expect(forbiddenArtifacts).toEqual([]);
+  test('Git preserves the exact bytes used by imported-file and review-target digests', () => {
+    const { files } = readDocuments();
+    const workPaths = [...files.keys()].filter((file) => file.startsWith('work/')).map((file) => `docs/${file}`);
+    expect(workPaths.length, 'docs/work must exist before its Git attributes can be verified').toBeGreaterThan(0);
+    const output = git(['check-attr', '-z', '--stdin', 'text', 'filter', 'working-tree-encoding', 'ident'], workPaths.join('\0') + '\0');
+    expect(validateGitAttributes(output, workPaths)).toEqual([]);
   });
 });

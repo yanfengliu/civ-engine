@@ -1,5 +1,5 @@
 // Spec 5 / Steps 8-10b — diffBundles standalone utility.
-// See docs/threads/done/counterfactual-replay/DESIGN.md (v4) §4 + §4.3.
+// See docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/DESIGN.md (v4) §4 + §4.3.
 //
 // Walks the union of two bundles' tick ranges and produces per-tick deltas
 // (commands, events, state) plus separate metadata/markers/attachments

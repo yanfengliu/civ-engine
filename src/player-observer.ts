@@ -7,7 +7,7 @@
 // only what its player sees — including the visibility-TRANSITION semantics
 // raw diff filtering cannot express (full data when an entity enters view;
 // an explicit exit notice when it leaves). Design + review history:
-// docs/threads/done/player-observation/.
+// docs/work/52_player-observation/.
 
 import { EngineError } from './engine-error.js';
 import { cloneJsonValue } from './json.js';

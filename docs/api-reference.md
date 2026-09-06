@@ -4930,7 +4930,7 @@ These helpers expose standalone utility state through the same debugger surface.
 
 The session-recording subsystem captures deterministic, replayable bundles of `World` runs. This section documents the bundle / marker / error type definitions; subsequent sections cover the sink interfaces, recorder, replayer, and scenario adapter.
 
-See `docs/guides/session-recording.md` for the user-facing guide and `docs/threads/done/session-recording/DESIGN.md` for the full subsystem design.
+See `docs/guides/session-recording.md` for the user-facing guide and `docs/work/29_session-recording/historical/threads/done/session-recording/DESIGN.md` for the full subsystem design.
 
 ### `SessionBundle`
 
@@ -6260,7 +6260,7 @@ function visualPlaytestFindingsFromMarkers(markers: readonly Marker[]): VisualPl
 
 ## Improvement Loop Finding Contracts (v1.4.0, completed v1.6.0)
 
-Shared, zero-dependency finding and evidence contracts for the recursive improvement loop, from `docs/threads/done/agent-recursive-improvement-loop/DESIGN.md`: game repos record the same verified-finding payload and run manifests while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
+Shared, zero-dependency finding and evidence contracts for the recursive improvement loop, from `docs/work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md`: game repos record the same verified-finding payload and run manifests while still owning browser/provider adapters, local gates, game-specific metrics, run ledgers, and auto-fix policy.
 
 ```ts
 type ImprovementFindingSchemaVersion = 1 | 2;

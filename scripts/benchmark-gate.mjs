@@ -2,7 +2,7 @@
 // comparison (exact deterministic counters + coarse calibrated time ratio),
 // calibration workload, and the markdown renderer (moved here from
 // rts-benchmark.mjs so it is unit-testable). Design:
-// docs/threads/done/benchmark-gate/DESIGN.md.
+// docs/work/48_benchmark-gate/historical/threads/done/benchmark-gate/DESIGN.md.
 
 import { performance } from 'node:perf_hooks';
 

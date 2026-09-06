@@ -17,7 +17,7 @@ import type { SystemPhase } from './world-internal.js';
  * factory-owned categories (systems / handlers / validators /
  * destroyCallbackCount); components/options/resources are capture-only —
  * `applySnapshot` heals them from the snapshot. See
- * `docs/threads/done/registration-manifest/DESIGN.md` §1.
+ * `docs/work/53_registration-manifest/historical/threads/done/registration-manifest/DESIGN.md` §1.
  */
 export interface RegistrationManifest {
   schemaVersion: 1;

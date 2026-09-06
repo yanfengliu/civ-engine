@@ -140,7 +140,7 @@ export {
   type WorldDebugSnapshot,
 } from './world-debugger.js';
 
-// Session-recording subsystem (T1+; see docs/threads/done/session-recording/DESIGN.md)
+// Session-recording subsystem (T1+; see docs/work/29_session-recording/historical/threads/done/session-recording/DESIGN.md)
 export {
   SESSION_BUNDLE_SCHEMA_VERSION,
   type SessionBundle,
@@ -221,7 +221,7 @@ export {
 } from './session-scenario-bundle.js';
 // Counterfactual Replay / Fork — Spec 5 (v0.8.12+):
 // SessionReplayer.forkAt(targetTick) builder API + Divergence summary.
-// See docs/threads/done/counterfactual-replay/DESIGN.md.
+// See docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/DESIGN.md.
 export {
   ForkSubstitutionError,
   ForkBuilderConflictError,
@@ -298,7 +298,7 @@ export {
 
 // AI Playtester Agent — Spec 9 (v0.8.9+): async sibling to runSynthPlaytest for
 // LLM-driven (or any other async-decision) playtesters, plus bundleSummary helper
-// for feeding bundle facts to an LLM. See docs/threads/done/ai-playtester/DESIGN.md.
+// for feeding bundle facts to an LLM. See docs/work/41_ai-playtester/historical/threads/done/ai-playtester/DESIGN.md.
 export {
   runAgentPlaytest,
   bundleSummary,
@@ -357,7 +357,7 @@ export {
 // Strict-Mode Determinism — Spec 6 (v0.8.8+): the `WorldConfig.strict` flag
 // rejects mutation methods called outside system phases / setup window /
 // runMaintenance callbacks. On by default since 1.0 (`strict: false` opts out).
-// See docs/threads/done/strict-mode/DESIGN.md.
+// See docs/work/44_strict-mode/historical/threads/done/strict-mode/DESIGN.md.
 export {
   StrictModeViolationError,
   type StrictModePhase,
@@ -366,7 +366,7 @@ export {
 
 // Bundle Viewer — Spec 4 (v0.8.7+): Programmatic agent-driver API for navigating,
 // slicing, and diffing a SessionBundle. Composes with BundleCorpus and SessionReplayer.
-// See docs/threads/done/bundle-viewer/DESIGN.md.
+// See docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/DESIGN.md.
 export {
   BundleViewer,
   BundleViewerError,

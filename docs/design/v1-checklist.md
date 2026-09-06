@@ -1,6 +1,6 @@
 # 1.0 checklist — the breaking-decision menu
 
-Produced by the `v1-surface` objective (v0.8.23; design + reviews in `docs/threads/done/v1-surface/`). The non-breaking groundwork — explicit export curation + two-level surface pin, the cross-family error-code read-side mirror (`getErrorCode`, ADR 47), and the deprecation policy — is already shipped. Each item below is a **human decision**; approving an item triggers its work. The `a`-bump to 1.0.0 is itself human-gated per the versioning convention.
+Produced by the `v1-surface` objective (v0.8.23; design + reviews in `docs/work/57_v1-surface/`). The non-breaking groundwork — explicit export curation + two-level surface pin, the cross-family error-code read-side mirror (`getErrorCode`, ADR 47), and the deprecation policy — is already shipped. Each item below is a **human decision**; approving an item triggers its work. The `a`-bump to 1.0.0 is itself human-gated per the versioning convention.
 
 ## Decisions
 
@@ -12,7 +12,7 @@ Produced by the `v1-surface` objective (v0.8.23; design + reviews in `docs/threa
 | 4 | **Trim: `FORBIDDEN_PRECONDITION_METHODS`** | Remove from public surface — **APPROVED by owner 2026-06-11; LANDED in 1.0.0** | Test-support constant; the transaction tests import it from src directly either way. |
 | 5 | **Trim: `gridPathPassabilityVersion`** | Remove from public surface — **APPROVED by owner 2026-06-11; LANDED in 1.0.0** | PathCache internal; `createGridPathCacheKey` is the public surface for cache keying. |
 | 6 | **Trim: `clearRunningState`** | **Bless (keep)** — **APPROVED (bless) by owner 2026-06-11; convention documented in 1.0.0** | Guide-documented BT escape hatch — cutting it is a real documented-API break with known use cases (design-1 reclassification). Keep unless usage data says otherwise. |
-| 7 | **Declare 1.0.0** | After 1–6 are decided and landed — **APPROVED by owner 2026-06-11; review converged (docs/threads/done/full/2026-06-11/) and the work landed — DECLARED in 1.0.0** | Includes the human `dist/index.d.ts` diff review step (the name pin does not gate signatures/shapes). |
+| 7 | **Declare 1.0.0** | After 1–6 are decided and landed — **APPROVED by owner 2026-06-11; review converged (docs/work/55_full-2026-06-11/) and the work landed — DECLARED in 1.0.0** | Includes the human `dist/index.d.ts` diff review step (the name pin does not gate signatures/shapes). |
 | 8 | **Constructor-shape convention for spatial utilities** *(added by the 2026-06-11 pre-1.0 review)* | **Bless positional `(width, height)`** for pure-grid primitives — **applied on owner continue 2026-06-11; documented in public-api guide (1.0.0)** | The alternative — migrating them to options objects for symmetry with `Layer`/`WorldConfig` — is a breaking constructor change across four utilities for cosmetic gain. `Layer` takes options because it HAS many options; pure grids take two integers. Blessing documents the convention in the public-api guide; 1.0 is the last free chance to choose the other path, which is why it is surfaced. |
 
 ## Freeze list (1.0 declares as policy, not just current fact)

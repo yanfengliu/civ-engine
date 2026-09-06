@@ -10,7 +10,7 @@ import type { EntityId } from './types.js';
  * `a` and `b`.
  *
  * Snapshot fields that fall outside the `TickDiff` schema are intentionally
- * NOT surfaced — see `docs/threads/done/bundle-viewer/DESIGN.md` §7
+ * NOT surfaced — see `docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/DESIGN.md` §7
  * "Scope of `diffSnapshots`":
  *   - `WorldSnapshot.rng` (selfCheck's domain)
  *   - `WorldSnapshot.componentOptions` (registration invariant)

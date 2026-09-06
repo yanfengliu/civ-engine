@@ -14,7 +14,7 @@ The engine is designed to be operated by AI agents, not human players directly. 
 
 The core usage case is the **recursive improvement loop**: agents run or playtest a game and record it into a **bundle** (a deterministic, replayable capture of the run, annotated with **markers**), extract structured **findings**, verify each claim against replay/state/screenshots/specs, promote confirmed failures into durable regressions, fix or propose a focused change, rerun gates, compare outcomes, and leave a ledger the next agent can learn from.
 
-The engine owns the shared machine contracts for that loop, and enforces its honesty invariants by default — a finding cannot claim it proved something without carrying the evidence. Gates, browser/provider adapters, and auto-fix policy stay in the game repo. See the [loop design](docs/threads/done/agent-recursive-improvement-loop/DESIGN.md).
+The engine owns the shared machine contracts for that loop, and enforces its honesty invariants by default — a finding cannot claim it proved something without carrying the evidence. Gates, browser/provider adapters, and auto-fix policy stay in the game repo. See the [loop design](docs/work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md).
 
 ## Install
 

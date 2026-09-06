@@ -31,7 +31,7 @@ export interface WorldConfig {
    * callback. Default TRUE as of 1.0 (decision 1): pass `strict: false` to opt out for sandbox/tutorial use. Pre-1.0 snapshots without the flag deserialize as non-strict (ADR 48). Registration methods (registerComponent,
    * registerSystem, registerHandler, registerValidator, registerResource)
    * remain allowed at any time. See Spec 6 in
-   * `docs/threads/done/strict-mode/DESIGN.md`.
+   * `docs/work/44_strict-mode/historical/threads/done/strict-mode/DESIGN.md`.
    */
   strict?: boolean;
 }

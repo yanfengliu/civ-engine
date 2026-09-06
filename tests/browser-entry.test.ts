@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 // killed townscaper's boot at civ-engine's FileSink re-export (node:path in
 // Vite's browser-external stub throws at module evaluation), so the split and
 // its non-drift invariants are pinned here; rationale in
-// docs/threads/done/browser-safe-entry/DESIGN.md.
+// docs/work/69_browser-safe-entry/historical/threads/done/browser-safe-entry/DESIGN.md.
 
 const NODE_ONLY = ['BundleCorpus', 'FileSink'];
 

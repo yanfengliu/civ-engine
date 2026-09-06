@@ -1,5 +1,5 @@
 // Spec 5 (Counterfactual Replay) — types, error classes, and ForkBuilder.
-// See docs/threads/done/counterfactual-replay/DESIGN.md (v4 ACCEPTED) and
+// See docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/DESIGN.md (v4 ACCEPTED) and
 // PLAN.md (v5 ACCEPTED). This module hosts the public surface for
 // SessionReplayer.forkAt(targetTick) / ForkBuilder / Divergence.
 

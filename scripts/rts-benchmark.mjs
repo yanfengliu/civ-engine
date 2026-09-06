@@ -1,6 +1,6 @@
 // RTS-scale benchmark + regression gate entry point. Scenario/run logic lives
 // here; comparison, calibration, baseline schema, and markdown rendering live
-// in ./benchmark-gate.mjs. Design: docs/threads/done/benchmark-gate/DESIGN.md.
+// in ./benchmark-gate.mjs. Design: docs/work/48_benchmark-gate/historical/threads/done/benchmark-gate/DESIGN.md.
 //
 // Tier-1 determinism invariants every scenario MUST keep (the gate's exact
 // counters depend on them): no Math.random / Date.now / wall-clock control

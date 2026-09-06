@@ -1,5 +1,5 @@
 // Bottom layer of the `World` class chain (see `src/world.ts` and
-// `docs/threads/done/loc-budget/PLAN.md`): owns every state-bearing field,
+// `docs/work/46_loc-budget/historical/threads/done/loc-budget/PLAN.md`): owns every state-bearing field,
 // the constructor, strict-mode windows, poison/recover, game-loop
 // passthroughs, and the tiny shared helpers the upper layers build on.
 // The chain is a file-organization device — `World` remains one runtime

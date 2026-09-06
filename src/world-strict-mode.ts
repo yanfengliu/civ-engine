@@ -1,6 +1,6 @@
 // Strict-mode error class, phase enum, and mutation-gate helper for `World`.
 // Extracted from `src/world.ts` to avoid compounding the existing 2379-LOC overage
-// per AGENTS.md 500-LOC review cap. See Spec 6 — `docs/threads/done/strict-mode/DESIGN.md`.
+// per AGENTS.md 500-LOC review cap. See Spec 6 — `docs/work/44_strict-mode/historical/threads/done/strict-mode/DESIGN.md`.
 
 import type { JsonValue } from './json.js';
 

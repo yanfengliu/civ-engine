@@ -4,9 +4,9 @@
 
 **Vision:** civ-engine should support an environment where AI agents do as much game-development work as possible without human intervention — generating, exercising, debugging, and verifying game logic autonomously, with humans involved only for design intent and judgment calls. This document captures the multi-spec roadmap that delivers that environment.
 
-A single recording-and-replay spec is the substrate. The full vision spans nine specs across three tiers; implemented thread-specific designs are tracked under `docs/threads/done/<objective>/DESIGN.md`, with implementation plans beside them as `PLAN.md`; cross-thread roadmap material stays in `docs/design/`.
+A single recording-and-replay spec is the substrate. The full vision spans nine specs across three tiers; implemented work-specific designs and plans are retained under `docs/work/<id>_<theme>/historical/`, with a current `plan.md` entry per unit; cross-thread roadmap material stays in `docs/design/`.
 
-**Current culmination:** the roadmap's implemented primitives now point toward the recursive improvement loop: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn. The active cross-game design is `docs/threads/current/agent-recursive-improvement-loop/DESIGN.md`. It should guide near-term game integrations, but it does not add a public engine API until one real vertical slice proves the shared contract.
+**Current culmination:** the roadmap's implemented primitives now point toward the recursive improvement loop: run/playtest, record, find, verify, classify, promote, fix or propose, review, rerun, compare, and learn. The active cross-game design is `docs/work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md`. It should guide near-term game integrations, but it does not add a public engine API until one real vertical slice proves the shared contract.
 
 ## Tier 1 — Foundational
 
@@ -14,7 +14,7 @@ Without these, "AI-first" is aspirational. They are the irreducible substrate fo
 
 ### Spec 1: Session Recording & Replay (engine primitives)
 
-Status: **Implemented** (v0.7.7-pre -> v0.7.19). See `docs/threads/done/session-recording/DESIGN.md`.
+Status: **Implemented** (v0.7.7-pre -> v0.7.19). See `docs/work/29_session-recording/historical/threads/done/session-recording/DESIGN.md`.
 
 What it delivers: deterministic capture of any World run as a portable `SessionBundle`; replay engine that opens a paused World at any tick; marker API for human and programmatic annotations; sink interface for memory and disk persistence; unification with `ScenarioRunner` so test runs and live captures share the same bundle format and replayer.
 
@@ -22,7 +22,7 @@ What it unlocks: every other spec in this roadmap.
 
 ### Spec 3: Synthetic Playtest Harness
 
-Status: **Implemented** (v0.7.20 + v0.8.0 + v0.8.1). See `docs/threads/done/synthetic-playtest/DESIGN.md` and `docs/threads/done/synthetic-playtest/PLAN.md`.
+Status: **Implemented** (v0.7.20 + v0.8.0 + v0.8.1). See `docs/work/32_synthetic-playtest/historical/threads/done/synthetic-playtest/DESIGN.md` and `docs/work/32_synthetic-playtest/historical/threads/done/synthetic-playtest/PLAN.md`.
 
 What it delivers: `runSynthPlaytest` drives a supplied `World` with pluggable synchronous policies, records through `SessionRecorder`, and returns a replayable `SessionBundle`. Built-ins cover no-op, random catalog, and scripted policies; LLM-driven policies remain future Spec 9 work.
 
@@ -32,7 +32,7 @@ Why it depends on Spec 1: synthetic playtest is just "policy → submit() → Se
 
 ### Spec 8: Behavioral Metrics over Corpus
 
-Status: **Implemented** (v0.8.2). See `docs/threads/done/behavioral-metrics/DESIGN.md` and `docs/threads/done/behavioral-metrics/PLAN.md`.
+Status: **Implemented** (v0.8.2). See `docs/work/25_behavioral-metrics/historical/threads/done/behavioral-metrics/DESIGN.md` and `docs/work/25_behavioral-metrics/historical/threads/done/behavioral-metrics/PLAN.md`.
 
 What it delivers: `runMetrics(bundles, metrics)` reduces any `Iterable<SessionBundle>` with engine-generic built-ins (bundle count, session length, command/event rates, failure rates, command validation acceptance, execution failure) plus user-defined metrics, and `compareMetricsResults` computes deltas across commits. Game-semantic metrics such as resource Gini or time-to-first-conflict remain user-defined because the engine does not own game event contracts.
 
@@ -48,7 +48,7 @@ Tier 1 makes AI-first possible. Tier 2 makes it powerful.
 
 ### Spec 9: AI Playtester Agent
 
-Status: **Implemented** (v0.8.9, extended in v0.8.11 with `AgentDriverContext.addMarker / attach` and `AgentPlaytestResult.source` to support Spec 2's in-flight agent markers). See `docs/threads/done/ai-playtester/DESIGN.md` and `docs/threads/done/ai-playtester/PLAN.md` (and `docs/threads/done/spec-9-1/2026-04-29/` for the v0.8.11 follow-up reviews).
+Status: **Implemented** (v0.8.9, extended in v0.8.11 with `AgentDriverContext.addMarker / attach` and `AgentPlaytestResult.source` to support Spec 2's in-flight agent markers). See `docs/work/41_ai-playtester/historical/threads/done/ai-playtester/DESIGN.md` and `docs/work/41_ai-playtester/historical/threads/done/ai-playtester/PLAN.md` (and `docs/work/43_spec-9-1/` for the v0.8.11 follow-up reviews).
 
 What it delivers: a separate LLM-driven agent that plays the game (via the same `submit()` boundary), then writes natural-language qualitative feedback ("I found myself doing X repetitively in the early game; the second hour felt aimless"). Distinct from coding agents — its job is to *play and report*, not to edit code.
 
@@ -58,7 +58,7 @@ Why it depends on Spec 3: the playtester is just a specific class of policy plug
 
 ### Spec 7: Bundle Search / Corpus Index
 
-Status: **Implemented** (v0.8.3). See `docs/threads/done/bundle-corpus-index/DESIGN.md` and `docs/threads/done/bundle-corpus-index/PLAN.md`.
+Status: **Implemented** (v0.8.3). See `docs/work/27_bundle-corpus-index/historical/threads/done/bundle-corpus-index/DESIGN.md` and `docs/work/27_bundle-corpus-index/historical/threads/done/bundle-corpus-index/PLAN.md`.
 
 What it delivers: `BundleCorpus` indexes closed `FileSink` bundle directories by `manifest.json`, provides metadata-only listing/filtering over manifest-derived fields, exposes deterministic entry order, and lazily opens matching bundles through `FileSink` for `SessionReplayer` or `runMetrics`. Content-derived command/event/marker predicates are deferred to a future summary index.
 
@@ -76,7 +76,7 @@ Tier 3 is leverage on top of an already-working autonomous loop. Defer until Tie
 
 ### Spec 4: Standalone Bundle Viewer
 
-Status: **Implemented** (v0.8.7). See `docs/threads/done/bundle-viewer/DESIGN.md` and `docs/threads/done/bundle-viewer/PLAN.md`.
+Status: **Implemented** (v0.8.7). See `docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/DESIGN.md` and `docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/PLAN.md`.
 
 What it delivers: `BundleViewer` wraps a `SessionBundle` and exposes navigation by tick number, by marker ID, and by linear timeline iteration. Returns `TickFrame` views with selective runtime freezing (outer frame + per-tick arrays frozen one-time; elements not). Lazily opens a paused World at any reachable tick via `frame.state()` / `viewer.replayer()`. `frame.diffSince(otherTick)` chooses between folded recorded `TickDiff`s and a snapshot-via-`diffSnapshots` fallback, and explicitly throws when a recorded `TickFailure` falls in the range. Composes with `BundleCorpus` via `BundleCorpusEntry.openViewer()`. UI is intentionally out of scope for v1.
 
@@ -96,7 +96,7 @@ Why it depends on Spec 1: the marker schema is engine-side; the UI just produces
 
 ### Spec 5: Counterfactual Replay / Fork
 
-Status: **Implemented** (v0.8.12). See `docs/threads/done/counterfactual-replay/DESIGN.md` (v4) and `docs/threads/done/counterfactual-replay/PLAN.md` (v5).
+Status: **Implemented** (v0.8.12). See `docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/DESIGN.md` (v4) and `docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/PLAN.md` (v5).
 
 What it delivers: `SessionReplayer.forkAt(tick).replace/insert/drop.run({ untilTick })` — change inputs at tick N, replay forward, observe how the simulation diverges. `Divergence` summary with per-tick split counts (commandsSourceOnly/forkOnly/changed and same for events) plus `commandSequenceMap` for cross-bundle alignment. `diffBundles(a, b, { commandSequenceMap? })` standalone utility covers commands, events, and state across all six TickDiff dimensions. Equivalence-by-construction: a no-substitution fork is structurally equivalent to source's slice. Single-tick substitution; multi-tick is chained via re-fork (ADR 2). Internal `applyTickDiff` helper folds TickDiffs into snapshots for `diffBundles`'s state-fold consumer.
 
@@ -104,7 +104,7 @@ What it unlocks: the most powerful debugging primitive. "If the player/agent had
 
 ### Spec 6: Engine Strict-Mode Determinism Enforcement
 
-Status: **Implemented** (v0.8.8). See `docs/threads/done/strict-mode/DESIGN.md` and `docs/threads/done/strict-mode/PLAN.md`.
+Status: **Implemented** (v0.8.8). See `docs/work/44_strict-mode/historical/threads/done/strict-mode/DESIGN.md` and `docs/work/44_strict-mode/historical/threads/done/strict-mode/PLAN.md`.
 
 What it delivers: `World({ strict: true })` flag that rejects mutations from outside system phases. All external state changes must go through `submit()`. Includes escape hatches for setup, deserialization, and explicit out-of-tick maintenance. Auditing of all mutation methods to gate on inside-tick state.
 
@@ -157,18 +157,18 @@ Why it's deferred: it's a meaty engine-wide behavioral change with its own desig
 
 | Spec | Title                                | Status     | File                                                      |
 | ---- | ------------------------------------ | ---------- | --------------------------------------------------------- |
-| 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `docs/threads/done/session-recording/DESIGN.md` (v5) + `docs/threads/done/session-recording/PLAN.md` |
+| 1    | Session Recording & Replay           | **Implemented** (v0.7.7-pre → v0.7.19) | `docs/work/29_session-recording/historical/threads/done/session-recording/DESIGN.md` (v5) + `docs/work/29_session-recording/historical/threads/done/session-recording/PLAN.md` |
 | 2    | Game-Side Annotation UI              | **Implemented in aoe2 v0.1.5** (capture-only) | `aoe2/docs/threads/done/annotation-ui/DESIGN.md` (v5) + `PLAN.md` (v2). Coordinated with civ-engine v0.8.11 (`AgentDriverContext.addMarker / attach`). Replay scrubber → v0.1.6. |
-| 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/threads/done/synthetic-playtest/PLAN.md` (v7) |
-| 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/threads/done/bundle-viewer/PLAN.md` (v2) |
-| 5    | Counterfactual Replay / Fork         | **Implemented** (v0.8.12) | `docs/threads/done/counterfactual-replay/DESIGN.md` (v4) + `docs/threads/done/counterfactual-replay/PLAN.md` (v5) |
-| 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/threads/done/strict-mode/DESIGN.md` (v3) + `docs/threads/done/strict-mode/PLAN.md` (v2) |
-| 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/threads/done/bundle-corpus-index/PLAN.md` (v6) |
-| 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/threads/done/behavioral-metrics/PLAN.md` (v4) |
-| 9    | AI Playtester Agent                  | **Implemented** (v0.8.9, extended v0.8.11) | `docs/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/threads/done/ai-playtester/PLAN.md` (v1). v0.8.11 extension reviews: `docs/threads/done/spec-9-1/2026-04-29/`. |
+| 3    | Synthetic Playtest Harness           | **Implemented** (v0.7.20 + v0.8.0 + v0.8.1) | `docs/work/32_synthetic-playtest/historical/threads/done/synthetic-playtest/DESIGN.md` (v10) + `docs/work/32_synthetic-playtest/historical/threads/done/synthetic-playtest/PLAN.md` (v7) |
+| 4    | Standalone Bundle Viewer             | **Implemented** (v0.8.7) | `docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/DESIGN.md` (v6) + `docs/work/36_bundle-viewer/historical/threads/done/bundle-viewer/PLAN.md` (v2) |
+| 5    | Counterfactual Replay / Fork         | **Implemented** (v0.8.12) | `docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/DESIGN.md` (v4) + `docs/work/42_counterfactual-replay/historical/threads/done/counterfactual-replay/PLAN.md` (v5) |
+| 6    | Strict-Mode Determinism Enforcement  | **Implemented** (v0.8.8) | `docs/work/44_strict-mode/historical/threads/done/strict-mode/DESIGN.md` (v3) + `docs/work/44_strict-mode/historical/threads/done/strict-mode/PLAN.md` (v2) |
+| 7    | Bundle Search / Corpus Index         | **Implemented** (v0.8.3) | `docs/work/27_bundle-corpus-index/historical/threads/done/bundle-corpus-index/DESIGN.md` (v4 + plan-review correction) + `docs/work/27_bundle-corpus-index/historical/threads/done/bundle-corpus-index/PLAN.md` (v6) |
+| 8    | Behavioral Metrics over Corpus       | **Implemented** (v0.8.2) | `docs/work/25_behavioral-metrics/historical/threads/done/behavioral-metrics/DESIGN.md` (v4) + `docs/work/25_behavioral-metrics/historical/threads/done/behavioral-metrics/PLAN.md` (v4) |
+| 9    | AI Playtester Agent                  | **Implemented** (v0.8.9, extended v0.8.11) | `docs/work/41_ai-playtester/historical/threads/done/ai-playtester/DESIGN.md` (v2) + `docs/work/41_ai-playtester/historical/threads/done/ai-playtester/PLAN.md` (v1). v0.8.11 extension reviews: `docs/work/43_spec-9-1/`. |
 
-| 10   | Intra-tick time-slicing (amortized work) | **Drafted** (design-only, v0.8.21) | `docs/threads/done/time-slicing/DESIGN.md` (v3, 2 review iterations). Rules shipped in `docs/guides/systems-and-simulation.md` § "Amortizing heavy work" + determinism-contract item 10. |
-| 11   | Lockstep multiplayer                 | **Drafted** (design-only, v0.8.22) | `docs/threads/done/lockstep/DESIGN.md` (v3, 2 review iterations). LockstepSession + stateDigest specced; no code until a networked consumer exists. |
+| 10   | Intra-tick time-slicing (amortized work) | **Drafted** (design-only, v0.8.21) | `docs/work/54_time-slicing/historical/threads/done/time-slicing/DESIGN.md` (v3, 2 review iterations). Rules shipped in `docs/guides/systems-and-simulation.md` § "Amortizing heavy work" + determinism-contract item 10. |
+| 11   | Lockstep multiplayer                 | **Drafted** (design-only, v0.8.22) | `docs/work/51_lockstep/historical/threads/done/lockstep/DESIGN.md` (v3, 2 review iterations). LockstepSession + stateDigest specced; no code until a networked consumer exists. |
 
 Update this row as specs are drafted, accepted, implemented, and merged.
 
@@ -185,15 +185,15 @@ Update this row as specs are drafted, accepted, implemented, and merged.
 
 | Spec | What | Trigger |
 | ---- | ---- | ------- |
-| 10 | Intra-tick time-slicing primitive (amortized work queue as plain-data + pure functions) | A consumer demonstrates sustained tick-budget overruns that cadence + game-side cursor-in-component queues cannot absorb (`docs/threads/done/time-slicing/DESIGN.md` v3) |
-| 11 | Lockstep multiplayer (`LockstepSession` + `world.stateDigest()`) | A consumer commits to networked multiplayer — a second simulating peer outside tests (`docs/threads/done/lockstep/DESIGN.md` v3). The standalone `stateDigest(value, { omitKeys })` utility landed early in v2.1.0 for the recursive-loop aggregation track (sorted-key canonical digest, per the lockstep design's "or standalone digest" allowance); the World-integrated `world.stateDigest()` remains deferred to this trigger |
+| 10 | Intra-tick time-slicing primitive (amortized work queue as plain-data + pure functions) | A consumer demonstrates sustained tick-budget overruns that cadence + game-side cursor-in-component queues cannot absorb (`docs/work/54_time-slicing/historical/threads/done/time-slicing/DESIGN.md` v3) |
+| 11 | Lockstep multiplayer (`LockstepSession` + `world.stateDigest()`) | A consumer commits to networked multiplayer — a second simulating peer outside tests (`docs/work/51_lockstep/historical/threads/done/lockstep/DESIGN.md` v3). The standalone `stateDigest(value, { omitKeys })` utility landed early in v2.1.0 for the recursive-loop aggregation track (sorted-key canonical digest, per the lockstep design's "or standalone digest" allowance); the World-integrated `world.stateDigest()` remains deferred to this trigger |
 | 12 *(new)* | **Per-player bundle filtering** (`filterBundleForPlayer`) — PlayerObserver's recorded-history sibling: project a recorded omniscient bundle through a per-player visibility timeline so agents can be trained/evaluated on honest observations of past games | An agent-training or evaluation workflow over corpus bundles materializes (e.g., aoe2 playtesting at scale) |
 | 13 *(new)* | **Ghost memory** — last-seen-state layer atop PlayerObserver (classic RTS fog memory: remembered stale enemy positions) | A second consumer hand-rolls what aoe2 hand-rolled, or aoe2's implementation proves general; until then it stays game-level policy per the player-observation design |
 | 14 *(new)* | **Corpus anomaly aggregation** — `bundleHotspots` is per-bundle; aggregate recurring failure signatures and metric drift across a corpus, e.g. between agent versions | The corpus outgrows human triage (≳100 bundles per iteration loop) |
 
 ### Track C — AI-native thesis (push-driven; the only speculative track)
 
-- **MCP server** (`civ-engine-mcp`, in-repo subpackage — core stays zero-dep): **SHIPPED v1 (engine 1.1.0, 2026-06-12)** — recorded-artifact interrogation (14 tools: corpus query/overview/refresh, summaries, hotspots, markers, snapshots incl. arbitrary-tick hydration, viewer frames/diffs, cross-bundle diffs, behavioral metrics), read-only with zero game code. Live-world operation remains the v2 trigger (needs a game-module loading story). `docs/guides/mcp-server.md`; thread `docs/threads/done/mcp-server/`.
+- **MCP server** (`civ-engine-mcp`, in-repo subpackage — core stays zero-dep): **SHIPPED v1 (engine 1.1.0, 2026-06-12)** — recorded-artifact interrogation (14 tools: corpus query/overview/refresh, summaries, hotspots, markers, snapshots incl. arbitrary-tick hydration, viewer frames/diffs, cross-bundle diffs, behavioral metrics), read-only with zero game code. Live-world operation remains the v2 trigger (needs a game-module loading story). `docs/guides/mcp-server.md`; thread `docs/work/58_mcp-server/`.
 - **Determinism tripwire (dev mode)** — the contract's documented-but-unenforced clauses (unordered iteration, wall-clock reads) get a cheap dev-loop harness: dual-seeded short-run digest comparison (piggybacks on Spec 11's `stateDigest`). Catches violations at author time instead of at selfCheck time.
 - **1.x release engineering** — npm publish cadence + provenance on top of the existing pack/audit CI; semver enforced by the deprecation policy + surface-pin fixture (additions = minor; removals = major-only).
 

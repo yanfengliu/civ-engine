@@ -1,4 +1,4 @@
-// civ-engine-mcp server (DESIGN: docs/threads/done/mcp-server/DESIGN.md).
+// civ-engine-mcp server (DESIGN: docs/work/58_mcp-server/historical/threads/done/mcp-server/DESIGN.md).
 // v1 scope: READ-ONLY recorded-artifact interrogation over one corpus root.
 // The server never constructs Worlds, never writes files; every bundle access
 // goes through BundleCorpus key lookups (containment is inherent — ids are

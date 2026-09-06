@@ -1,0 +1,1686 @@
+{
+  "version": 1,
+  "allocations": [
+    {
+      "id": 0,
+      "theme": "core-engine-foundation",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-04-core-engine-foundation.md",
+          "sha256": "e64c93dc989b605cfbd7479d518263a3db3a352c012ddffe4d62a92651407900",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-04-core-engine-foundation.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-04-core-engine-foundation-design.md",
+          "sha256": "a2bf2988d2b97b57a6ead7d018322150fb69c18057d95655357a4b83624b09c0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-04-core-engine-foundation-design.md"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "theme": "event-bus",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-05-event-bus.md",
+          "sha256": "aae1ad0800a3f226ff8d8b623eb848faf9d791ae994e833a22c926e67f078e94",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-05-event-bus.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-05-event-bus-design.md",
+          "sha256": "732787d4528d695e4f9707e6eb23fc28ac7fcab4764cd6f6246bb30be656b438",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-05-event-bus-design.md"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "theme": "input-command-layer",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-05-input-command-layer.md",
+          "sha256": "d92fd65319b0863c4afd252ecfd2994781fbbaa4f2782345d5626cd1c41efe12",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-05-input-command-layer.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-05-input-command-layer-design.md",
+          "sha256": "48038e0f10a7989e80ee9c01de23f86e27dca61b9c31c2982c0eb5ed9f72f58f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-05-input-command-layer-design.md"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "theme": "resource-system",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-05-resource-system.md",
+          "sha256": "51704d5c122111f005f137725a77aba97017264e00715566c6cc235b149722e6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-05-resource-system.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-05-resource-system-design.md",
+          "sha256": "ed41f824fb06262c0b22f9f09da241b8f2c0c1e41ef9bd83d7c43476d5bcc6f7",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-05-resource-system-design.md"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "theme": "state-diff-output",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-05-state-diff-output.md",
+          "sha256": "32d821150a2d45735ecb76d1000192869c2bc8fa9ba29d1d51fec0ed36aa3f8d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-05-state-diff-output.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-05-state-diff-output-design.md",
+          "sha256": "ee3df38dbbc17628962b31a947bed72e728adfa4be38c3f7404a3627cf4c4faf",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-05-state-diff-output-design.md"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "theme": "state-serialization",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-05-state-serialization.md",
+          "sha256": "65ca9523e63a11c599f2faa938efebd21860494e45c80361eb0d97a24d541154",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-05-state-serialization.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-05-state-serialization-design.md",
+          "sha256": "1a03ac274a370cd6776f50e56312600233e5f41ae8d199dc27c41ca6f9029d3a",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-05-state-serialization-design.md"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "theme": "client-protocol",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-06-client-protocol.md",
+          "sha256": "9848f732bdf723d4bf798011256fae3ddaa4f8530bb0fde02e343f7d1b32d023",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-06-client-protocol.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-06-client-protocol-design.md",
+          "sha256": "d0c144b458173d281d86caa007c704eb79d96a0ba32e2af1475b36b9820ff7df",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-06-client-protocol-design.md"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "theme": "engine-improvements",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-06-engine-improvements.md",
+          "sha256": "e633eb683105042adeb07ea2d3045cc2f0940f699a02e3cb976e8beafddf8cbf",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-06-engine-improvements.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-06-engine-improvements-design.md",
+          "sha256": "f5ae1e17e602b1f4a61ce46b6df96fe8632dacf5f8677ad041c0de7b6f55be0e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-06-engine-improvements-design.md"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "theme": "map-infrastructure",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-06-map-infrastructure.md",
+          "sha256": "5bd15652109c3acba4c941f2985eb0a856fe22c7207302a30128145f3b582cee",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-06-map-infrastructure.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-06-map-infrastructure-design.md",
+          "sha256": "7b1716cde070a8bd786af114cd154abcb24ccb2cb330e99c83429707e0e1f2d8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-06-map-infrastructure-design.md"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "theme": "pathfinding",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-06-pathfinding.md",
+          "sha256": "2a0fdde2b755021c874f8a535d7f2f56464fc5230aaf3930df0af2aab1916d6c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-06-pathfinding.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-06-pathfinding-design.md",
+          "sha256": "553e3f011c851144fc91842fe09677f3390872ed9a6fb9ed91760725748d593c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-06-pathfinding-design.md"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "theme": "simulation-speed",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-06-simulation-speed.md",
+          "sha256": "d3b713f4b962a831a2be6d8ac679845850d00bc2c729d3846c507e891c2c2528",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-06-simulation-speed.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-06-simulation-speed-design.md",
+          "sha256": "beb4efa06872afdc46a55fb4a827be69b7c4831314055898b2fd0096f158568b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-06-simulation-speed-design.md"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "theme": "engine-design-review",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "9978437cee698a865a6da123fd38c032fc910e61521f34a04c5051b2945ab3cf",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-design-review/2026-04-10/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "theme": "engine-hardening",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "d736370d0422ce5b71269b6b810c5b60e09b9c273538aa4bb0dc621a6de8f4c8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-hardening/2026-04-10/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "theme": "expert-review",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "69cb24d58df58c515a4a0456180bed312371414ef61a0e5159346729aac1c345",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/expert-review/2026-04-10/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "theme": "render-contract-debugger",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "17fd4a8f204c56bd0a1d24b07986ffe0d9714cfd00e5f99fa93fc64ce565486e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/render-contract-debugger/2026-04-10/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "theme": "rts-engine-scale",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "c5cc9ff94c7629667d8f1eab51a2dbdf0a4276526e781663fea0de400f2c4e3d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/rts-engine-scale/2026-04-10/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "theme": "ai-final-form",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "762d5f2a5ba142752a6e7d41741120705b90afe9125595ecfe6b9b5c605ec559",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-final-form/2026-04-11/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "theme": "ai-first-engine",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "50baca2d62e6bfa8932b9f7af4fa1f8a6191ecd21ff7e422182b0922e0698f08",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-first-engine/2026-04-11/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "theme": "ai-runtime-feedback",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "4499cf129a51bc8e7b76329c3f3510b633aa089fbfcb99f1ab218dcb920400dd",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "theme": "expert-review-remaining",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "3de37c7c5b115317bc28a5a28b4e9ee19163cc4fb5a5ff14c9c4c758f5d8da57",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/expert-review-remaining/2026-04-11/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "theme": "release-instrumentation",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "f04a4529b6559fcbea4de04841849eb09ec750d6a3c8c474f474da6dec9a2fb1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/release-instrumentation/2026-04-11/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "theme": "engine-feedback-2026-04-12",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/specs/2026-04-12-engine-feedback-design.md",
+          "sha256": "109808c4a5aa81fe0fd5e8acb169e583e09bf9c0cc62bb4a13eda8b8716bdb1e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-12-engine-feedback-design.md"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "theme": "engine-feedback-2026-04-23",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-23-engine-feedback.md",
+          "sha256": "8af0c9ec0a130af6b4e9622b823d66b9382f4f343f24ec0498cfaddab8415f62",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-23-engine-feedback.md"
+        },
+        {
+          "path": "historical/superpowers/specs/2026-04-23-engine-feedback-design.md",
+          "sha256": "ae7014e12912a3dee9ce2b1ac61ad2ff97fedb7024360254bbbc65b1f5ef7b4b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/specs/2026-04-23-engine-feedback-design.md"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "theme": "full",
+      "legacyFiles": [
+        {
+          "path": "historical/superpowers/plans/2026-04-25-full-review-fixes.md",
+          "sha256": "143f4cbd70511f73a27aeace626998deab1104e6bb2f21ff93bae1f8f28f020e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/superpowers/plans/2026-04-25-full-review-fixes.md"
+        },
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "53049b474f10613bd90c84851c0e03e5f423e184516504be6b203fb466275d59",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-25/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "7150000d8691183593cb7835ef222c50612460d0ae93c4fa621b7569dec9b18d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-25/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "54b6558148e48b745c6922ca21999839a9b92774e5681c856a30b6a6514d2107",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "46039533096fa45d3ed8ad83b35a0cce92bb9c067979b9b034b7411f37781bfb",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "31dddf20670591ef8bfe358dc24060afd52bc0046c2da128145f6a22128549c1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "89020e3ce5307d085223b5f3378d3100cb683b10ac04e253a22b6f1b66e78265",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/4/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "a185ba8e390b4dad3239410a6c09b614bca374ed954efceb282abbba4877f242",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/5/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "284be17f4e677b37f44cf8b63e663fbff8f3c36f0c153310204d575effaad57a",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/6/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "a65499451d00387059edf7a61fc99b083eeeecbd3cd329737a87f4251382ec39",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/7/REVIEW.md"
+        },
+        {
+          "path": "reviews/9_legacy.md",
+          "sha256": "1d773a1f9c21f30d098e5c7b0269bb1988f3ace8b85413e4492a25570ebe33f3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/8/REVIEW.md"
+        },
+        {
+          "path": "reviews/10_legacy.md",
+          "sha256": "100aa63d6e1e7875dbe8754a6d2ef9dac048c8a11a7d83e9ee91ea8826a85c14",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-04-26/9/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "theme": "session-recording-spec",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "9d5ab9e67a04b5c129d6d9164fd00284fc08d3bdb66ba540df6e9aef28e02cf1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-spec/2026-04-26/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "02c12268c13aed85173a7392a81bb28c808defac815024c65ea73b0bc81dff69",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-spec/2026-04-27/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "6ce7edc914a3adafd741b313d528fd84f79c33e2879e6c8ad378a876475a7d72",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-spec/2026-04-27/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "03268299cfa59f33fab19117efc3d88de29eb2fbf24926965c08170adba647d3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-spec/2026-04-27/4/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "theme": "behavioral-metrics",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "f5f371f12d9bb7c292e038fcb04d5393308c876c2140ce0a5e1aba2c18342019",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "c64a1e649510a9cdf95b24a82980378627e92a298e188f227ed3aa1b6b8a0329",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "a0728f633ba443d4efd3285f1845d901593fd9a309db83274d25a8ea663db1f6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/design-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/plan-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "2a2e51b7e73b0c17e7d48b150a03b4692286e39070cf56618fa2dd6ee10596c4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/2026-04-27/plan-3/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/behavioral-metrics/DESIGN.md",
+          "sha256": "ce51f742d5c6ddce7b3ef0a09da8fceb3e45107b201ed6f22d0a509be1381609",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/behavioral-metrics/PLAN.md",
+          "sha256": "8977d3483ed8ea5f6640e79174a86d76aa858ef9f658f78d2c5796db65ddd2ce",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "theme": "behavioral-metrics-task-1",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "9b3baa470554d13aeb512c71a71f0a3a09684bb7f273e60afb4241523defaffa",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/behavioral-metrics-task-1/2026-04-27/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "theme": "bundle-corpus-index",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "b511c18f729fc44df3c5347585f9553a77012edc864f9e33537e3860cde29a85",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "e6c999cf42ac797272117513f9f263b3e60279ae7d71417f25ee486b12108789",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "065b3fe56d8866442e73289c16fb5b06436aecf8b5209d43756788377f8e4e9e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "9f48e5d11d0fdf52e884034142e3e1228f7cac3154fd1974bc8dd14ded71172f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/design-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "1c4346d1d7d7ba32a6aad7f1075142c3dcc6ec1eb00c3e6f560e040561daa82c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "5a3a3a9a2f31116441deebd0c785580400d08371cecad380f5817288f51ab899",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "11c8690be2231010bdf8ca19cc161781cae37859a57e0bf6e2ede199de29df33",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "885e07bda2988a4be776bd8f246f712a4686b54871d08daad6a859520d7ea971",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "5e8b15735aba71e142b0891922ffc422ee1a55283f6c0c366d9132a89164eed3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-5/REVIEW.md"
+        },
+        {
+          "path": "reviews/9_legacy.md",
+          "sha256": "e022a14a3cbb3354651d1312376af9c1e8d81f9ce48d33290ff12321c2324023",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/2026-04-27/plan-6/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/bundle-corpus-index/DESIGN.md",
+          "sha256": "d817852f9863561e646221ababc77575465cbd1b2b3d4107aec6c6204ca8940e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/bundle-corpus-index/PLAN.md",
+          "sha256": "3f8aa72ee0ae3bf6a13a067f071fec851a38de662cf0f21d6d0609b358034f79",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "theme": "bundle-corpus-index-task-1",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "f5c614dc0fcb396821272a05a1dd32b73c66ac48ca512175d74b96cb3adb7aa8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "e70ecb5add1de5ea77648f5c9f9282e65ddbaf2dccf71684c24c1158e2d6c30b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "87cec1213db2e920fa2a9e7b55a85a66d5bf692bea14af29a0f767f9440b647a",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "3d7ecc255ec809f62a5ad7166e8ef16599a81acb178c088499bf8809858aa1db",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "149693f5f41ea979fa75c3b8d527c9ab886d32622ca275b508d8db944839a5de",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/5/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "fb91096189c71da64d2244b139b66a225d4b233ffb400d525aa94534cd148037",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/6/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "ea3a296443ec6157f0f04315423fad5e16a22910c3f9d7b6e708593bd3830d86",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/7/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "3a77aede86e25e01ba15b4fd4b9cf44045aa56a9d5c5fabb18caa7144d477370",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/8/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "30325ee19394e0a44ca20d4b6728ac6267761e082d3859a092aa5eb14af7b5cb",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-corpus-index-task-1/2026-04-27/9/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "theme": "session-recording",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording/2026-04-27/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording/2026-04-27/2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/session-recording/DESIGN.md",
+          "sha256": "73e8265fbe2a52f240b4d04e7fee2502164bc9e1fcb197a32763165391e8f00c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/session-recording/PLAN.md",
+          "sha256": "a0c8757efe69d0eb42ff96f94815d8219b593708ab74979e11299be258a5f9ac",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "theme": "session-recording-followups",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "bf03b1426d35d1478783cbc84caee604f76fa73b1076c307c9364f7854c75744",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-followups/2026-04-27/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "theme": "session-recording-plan",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "4e038d7a0a7e1550f83309cf6340971ce3b02767e22a58b89e5dc99dbe1239b2",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-plan/2026-04-27/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-plan/2026-04-27/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-plan/2026-04-27/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/session-recording-plan/2026-04-27/4/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "theme": "synthetic-playtest",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "e1499ccf677f2a1d1a117ac209235cb7726b9d792a812620216a0376360118d3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "c527632ff304be0393b2a572c7dcca81ef5a2c954dd7314a5a681efd25e950fe",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "c252db2346c0eeea668a1bbc5a8209b22b4aa46dfae58a91ae557eb972b7e918",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "c73ab7d5143ebc50c18202fe697bf1acf5683fff0bf532a78f3df729f50c09e8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "8f2c605828ee02b6d2a4961527fd85dcd0fb2cbbedcb7804eb8a5c70ff18ff03",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-5/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "7fce33a5b4a8bdc6535f0de2efb09cfb0e062ab1b67ed315c08e246398e0a1c4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-6/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "faff10bc3c2a635e876701beb1b1d5a6fd31e62f93044b1eb5ff323d7bb5b791",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-7/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-8/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-9/REVIEW.md"
+        },
+        {
+          "path": "reviews/9_legacy.md",
+          "sha256": "3105966d65ed93854339f780f283f46ff6a8ba0a88402d16402b24b09e6f33c8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/design-10/REVIEW.md"
+        },
+        {
+          "path": "reviews/10_legacy.md",
+          "sha256": "baf64901c0e2ef8388ffc11183fc1fb87c0f4cb4dc39940dc3edf52afaacda80",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/11_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/12_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/13_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/14_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-5/REVIEW.md"
+        },
+        {
+          "path": "reviews/15_legacy.md",
+          "sha256": "458b3d57a41b4ec4012fe831b0387eb1cd807c96e9df97a6fa79aee1b79b0a09",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-6/REVIEW.md"
+        },
+        {
+          "path": "reviews/16_legacy.md",
+          "sha256": "0e5b54e849921974a860c9f9246ab986559ce6e83a1620fad2c178309a06574d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/2026-04-27/plan-7/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/synthetic-playtest/DESIGN.md",
+          "sha256": "3ca24f3eab13c1cac50c1abbb1d237677f8ef24ebcb610b7227ce9a39e4f5d1c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/synthetic-playtest/PLAN.md",
+          "sha256": "11335105f8e81e6f888253d22d481d659f2226dfc9306435df9077f0ae86c142",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "theme": "synthetic-playtest-task-1",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "87796479ab44a799c39a6d92a192c2d0e9da1950c4512cc902e7f681ab6eb9c5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest-task-1/2026-04-27/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "theme": "synthetic-playtest-task-2",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "c3ea17f4352e5213a0e3427e28bc7f3a0a04812eee11cc3fef09ecac538e82d7",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest-task-2/2026-04-27/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "theme": "synthetic-playtest-task-3",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "759f7eb7e0980a3b77497ddacee9796fde7d311c737d8b87b39339a24d490056",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/synthetic-playtest-task-3/2026-04-27/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "theme": "bundle-viewer",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "4bbd5a70d2999019e463d3783df0f49ea337ee64dbcf401bb0f80855ce3784bc",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "4230b3897239926e7cc920f2270b69be246089db41c0ebb1338b6ead9ba90da3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "3880a400aba885f1923749c947cf19b660f80965de58ec4a5e357ee6d85df99f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "8c5878fd1efc7ae4f0c16d32add9bc0eb93a0bb2fea3bf54bdb91118cfc9d54d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "2180ee3355ba646dad129129778d08f8de67183c189139defaeff1fd0f7b6b59",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "4599e6d6fd32e11de6dbb9e7d870b871148998fcc6b8e367a898d12f6c9e7e99",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "1869ea342e624b640ccceb71a5f08eb8c36dfde36bb27168725e4f4ab152b1a0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-5/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "a4a27b49d459c81f6159357dd8f2b89613fb5996a93b1368ffc3ef22050eff9c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/design-6/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "fe1bb45eefc36b738b872cd48f013bae0ce2202a0e4ab621c46c6ee7e590e306",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/9_legacy.md",
+          "sha256": "b0e1cf831b1e06e17e91456af94cf65f7021563f295fc34396ab8e4cf9bb771e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/2026-04-28/plan-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/bundle-viewer/DESIGN.md",
+          "sha256": "dbbd9ac8048dcabaf0fc5551d30eccd16f2bff08cdcea8bd6b24992807a55959",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/bundle-viewer/PLAN.md",
+          "sha256": "fdf7125c74ea9cfc068e68d554e92b093af6899e3760084f65b6e3e1a964648d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-viewer/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "theme": "code-reviewer-model-bump",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "b9b6e077800608cc3717b2651b133ce13eaa371ce0151a1042eb60012e2d245e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/code-reviewer-model-bump/2026-04-28/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "theme": "thread-archive-migration",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "1783fd982f9c2f96cc293f6087ccca9f5742c150af2763bc0200dd112d52229d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-archive-migration/2026-04-28/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "c3485a4b8722935fb65d221e669b3256e86c6302988c819aefdd19689518a80e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-archive-migration/2026-04-28/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "5ceea858b4d33b3060ebac0f1d18bec41b6af1c7ede6d1799da1e6cd3313ef04",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-archive-migration/2026-04-28/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "e36cb0fb0d96d6a70fc14f80cc50ed31439a9fbc0560745d28311a6eb24e66c3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-archive-migration/2026-04-28/4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "c67227dd1d023700d68c8723ff201d3862cfa6ab03bfe5ca15bcbefdc3913d4f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-archive-migration/2026-04-28/5/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "theme": "thread-design-relocation",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "cc1b51cf15a9a67cb1b87d21c4f249b0c7dd657a31a20827d55ca1150e5ec8d0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-design-relocation/2026-04-28/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "0bc3a23c4776c30f3ec2fb94e1e9c770e7dadf2ff5b887bab6bbec403f0a74f5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-design-relocation/2026-04-28/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "fc6bf7b6aede414b5916a6097d29639fb6ef13de25e05b77ca7097e7f5a087ce",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/thread-design-relocation/2026-04-28/3/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "theme": "agents-md-tightening",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "5d87866f80e1c27d33fb5bfba4ec285cd8c55243d38ab064be9e8abaa0ae3f7f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agents-md-tightening/2026-04-29/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "b34a64a265732f0b4cfb44fa92be3c78fdb97676d01eb7de1b3698ed0552daf4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agents-md-tightening/2026-04-29/2/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "theme": "ai-playtester",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "fab4850912cf452036d3f4f5b997149c77c755a4e196f74a829d8d8cab2d4c17",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-playtester/2026-04-29/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "78e347ec988823d85d8cadee68734922f1414c01cc565fab9a2e53758d7e62f9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-playtester/2026-04-29/design-1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/ai-playtester/DESIGN.md",
+          "sha256": "9ad44d9db847147fe6a327a8be5bb2087a908a0b4b3695e80f3806eb00c10bc8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-playtester/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/ai-playtester/PLAN.md",
+          "sha256": "ab044e74861a6760cdb07579e99ca9de7140f460f6e5418c2096f5607c0955f9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/ai-playtester/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "theme": "counterfactual-replay",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "599b8057f93ba3cc53d297312e4ea2a42b83d48c4d0c8d9c1273965744b895c5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "257b407cf2e195f3e37176edaa63d0976461e7c8dbbc61d732713e82a83cc9ca",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "43acbff589153c8cd78fdd0cc76035b5a2d6c81708472021e5809b7535cc6595",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "8c0d93028294a8e1ddf21ed73055486188c5bc64cbd4d8b1a4b7697ecf1e640b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/design-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "060887f5596a33cc0c510ad077dbc3d16fc5d8d1999104936e21590fdf794368",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "a86bf3c1a59036b6fea9b0d327b9a7d512e02c8367e2888d14a160dcb56b2042",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/plan-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "6f78c80950e960a5cf51bc9fa3ad182af92c338a82df6151d45f3cdc121dbfdb",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/plan-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/7_legacy.md",
+          "sha256": "8e49b7fd35bd17e862aff98c4f2988c51fc2697fe5d1e046c5a28009f1b77919",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/plan-4/REVIEW.md"
+        },
+        {
+          "path": "reviews/8_legacy.md",
+          "sha256": "410f2e0ef98df9d7d2c47ca80a90c9c3e1f677919af9790c82958a2b6e2de871",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-29/plan-5/REVIEW.md"
+        },
+        {
+          "path": "reviews/9_legacy.md",
+          "sha256": "47ed2438571ad76bcc599411cc2557596620298cb8bc557698ce88410e19b167",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-30/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/10_legacy.md",
+          "sha256": "9891cd60ce3e046abecfb241074aafbcccc1e1dcf0efda6f37ed8c9651b60e92",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-30/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/11_legacy.md",
+          "sha256": "9c3454efd04962d6e284977ef4abf718eadacb35196d2d68bdc010d62f339331",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-30/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/12_legacy.md",
+          "sha256": "0d3c9119b7c2dd17c8cc86a3f3c6a803767ee83b1a820eb90c8bf3c68b752b14",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/2026-04-30/4/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/counterfactual-replay/DESIGN.md",
+          "sha256": "75d6be569ffd875f1634f4cce5b7676fad292d8c2aa5aeaf8064d27c65a00dd6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/counterfactual-replay/PLAN.md",
+          "sha256": "3aed14f4b3c8d28fa2c143adf2c8af2e82a7f1881c65f5549ae27dd96c11cd03",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/counterfactual-replay/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "theme": "spec-9-1",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "d22906217bf5e931badf436e522ebb7f1197876370ce28dc4d808540c3f89750",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/spec-9-1/2026-04-29/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "399dc3eedb5d0fd0fe4014357e4bde614994f078293b631b7ac925c51c703c27",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/spec-9-1/2026-04-29/2/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "theme": "strict-mode",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "3f624fcc33c4ba2b487e5c080e0bcdfba713e28ffaa223f78c35190dce4ff57e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "f4c2d90e9bc268a1dccd4473b9d7c9a3c7b18b61091a2f8617141de02cb2747b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "0195e957619364b0424d327a59507a2faac39cbd2be6332e4ab6985524a23fb2",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "b139f99a2b28e102e3869f72609073a72a0b7d4cc2741c518396f37d558c2852",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "1dc2d897b180d4c139760ffd961a6e0c35261e1dc0eb521c96c46ceb6fef81ed",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/design-3/REVIEW.md"
+        },
+        {
+          "path": "reviews/5_legacy.md",
+          "sha256": "f446146e23771693e38cf82fef2685ce4cb2a090cedc839d0dbbe6910a56f7ea",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/plan-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/6_legacy.md",
+          "sha256": "c71afe21fb59620e15a9d2916a52f8f409bde163f1e88f39e4760ad373c79d9c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/2026-04-29/plan-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/strict-mode/DESIGN.md",
+          "sha256": "7b0cac71dd56435bd3ca5770cce1b14ca0d8be88d11af221d5d0f8451dc775e6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/strict-mode/PLAN.md",
+          "sha256": "ff997c14b484e29501304f2a699fefa3038c88d5cb4ba00faf548ffa6ed95079",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/strict-mode/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "theme": "bundle-hotspots",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "fb5ab0581c2856cbad78caf7f7726ddc047261563e5cd7bd67b985c465361c35",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-hotspots/2026-04-30/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "1fcd45cb01d20029ff0e1e8fb35649e4f3a2ca20a576a59e6ddc472119a5f3c8",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-hotspots/2026-04-30/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "614af32c1c32d00f367b0757a2f36bdd14cf214f3bc8205d52b266dc9a6c0438",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-hotspots/2026-04-30/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "713ee96a84fd98dc70d32d6255948afc0037f55fd620a200ae293999474a98c6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-hotspots/2026-04-30/4/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "ae44e0209e399ee030a10dda2ec17d4fa9850286a7af737e141ace5f68cc15a0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/bundle-hotspots/2026-04-30/5/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "theme": "loc-budget",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "ef588327fc4bb2e93e5f808fe000d21dbe00b397a23681a18cfe6524001bc7a3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/loc-budget/2026-06-09/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/loc-budget/PLAN.md",
+          "sha256": "977b2a5123023e82d0f81c92e927bfedb6d52356991b9aec4fea4fddd1914853",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/loc-budget/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "theme": "package-hygiene",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "6ad77d75f8e31adba729cece24d06bed96e3d0dfbdf1369dbded8324932b0751",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/package-hygiene/2026-06-09/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "theme": "benchmark-gate",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "dd261389d3e5190e9a862ca7b142e8e542c73e6caf863958e3576e5b60c898c9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "854560807a9119aeaeeaa35eeda4764a23d06568e0e977482801e4eb185c07be",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/2026-06-10/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "e870251dfe5d0168357088d7f01c9180cfc0508abe0f511990a029fd03170cb1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "f04180b57233063967dcf374120d54c78c0881edf9d863a2ad82c3c35f0990db",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/benchmark-gate/DESIGN.md",
+          "sha256": "c51f3aaed524129367d7f7c0aba96380f3590f4fbfb9a7e0932556667e2a685e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/benchmark-gate/PLAN.md",
+          "sha256": "58f315ebf5af2303d8ec5017e9e0959ef56e55783fcf42cd56eda87ae74dd548",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/benchmark-gate/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "theme": "engine-error-codes",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "8815c2ff45024fb22062ca71a1588a357f9566052ed5b6b3b9553d95e4501a1e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "af990873332657c96719f5259f3bcca7c9fb365a328d4d602bd2850512886ed4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/2026-06-10/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "5170e1e17ea7616e03f2a4dab5af6436456180bcafa20287b44f0a23929151f4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/2026-06-10/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "49c7986f00782083d47b525da2341f09814f01707624dd0284bd48b53e07eb84",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "ee985eea78ef05173131fef0c6249a16d32ba64cc1eefdfe39f98abd23f9bca9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/engine-error-codes/DESIGN.md",
+          "sha256": "b8311e35c369382fa8ad80160487afc4b9b9e12167ff0b27e3f4749c50fa215a",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/engine-error-codes/DESIGN.md"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "theme": "full-2026-06-10",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "374336a02c078222ccb62773d71c49d675e444e57c4af2d8db9fca5f0d144a42",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "173d16b6731b78e3243854d9e7c645ea41714001e512155af41a02c89e2d279b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-10/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "a07049f69726c393d8b85f0fb7ddda6f44124a1dc5d3b7a8ddb42324e967b7d5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-10/3/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "theme": "lockstep",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "2b6b5996832e96c4cbbe13a78392d5411472e337d49210183a260422c48cf154",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/lockstep/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "8de225d9c8de4b3ab251667a4f1d713851712877070fbb6596ec7e47a80d5484",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/lockstep/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "c880e9be5e75e5098c70a854c43a443afbb8308e792278a89f74fd994fa5d7ad",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/lockstep/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/lockstep/DESIGN.md",
+          "sha256": "ced5a71afb9e3492218a124ff7d6a3c95e9c103fbfe54c09e9c1c31e5b46ba0e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/lockstep/DESIGN.md"
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "theme": "player-observation",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "d528e6dbc4e8def3c9d11cbeddc03220ec47920031e93b77ad15b59f19fbb038",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "28bd56e73f96ac8cd0a61ed49e10fbeea0461dc5c4b8da29de6f68e7d56b6f72",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/2026-06-10/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "fff358b998be5d2d48008d2aa2a60961ca48c348701d3103b801ecbf9a85fb99",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "113005eb1255a398a713fb79cd442956b9cd9e97099819742ce4736c52e5931d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "reviews/4_legacy.md",
+          "sha256": "877813f86339e77a4a3d07c3e868d80521aa6d3dab841073c2b1ba5653adb4c0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/2026-06-10/design-3/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/player-observation/DESIGN.md",
+          "sha256": "512c08b7d8ed13ca85892d51cb574a4a423869edb8b6b3f8f2d03828940ec6ba",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/player-observation/PLAN.md",
+          "sha256": "38711838ec118b4a8a2d8548a59883a3e1f051bd1ac867571a19b1ab65faeead",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/player-observation/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "theme": "registration-manifest",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "3868c16c01dcfa3ab75739e9d5e7a59736f4ac96f7d19ca3a7886392c6dfe5e1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "0b1a9cfa56c3b38b7a9ba3b44d3b80566633610c7740dd78d748602d2477085e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/2026-06-10/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "cab3194dbee0c30768bc66b917fd70df137170f8d68a2888aa9ddeae2fdc350d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "15898689a022f6c398f71c9642c04de545f48cad9cb57822928624748ba50829",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/registration-manifest/DESIGN.md",
+          "sha256": "c7285f7bfd12ad582966819706ba1c60e7e67ce4ff4f3a91ab473bb6fae0c8a9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/registration-manifest/PLAN.md",
+          "sha256": "da7082d50748221b9dce8870e83ff627f1cd95347242a858a5ebcde3a0328f92",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/registration-manifest/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 54,
+      "theme": "time-slicing",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "1195c0eb06b6cae3fc7b26b94b33bb4837e6207b676b4cee5fbe4ee6c1740117",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/time-slicing/2026-06-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "787cb8673b12c7642f6efb293e5eac756f9c48493da2fa5de336984a5fc69628",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/time-slicing/2026-06-10/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "83201dd02cb83cfa0e0fc97b54cc3d8321261232ace93d499ee3c83029d093cb",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/time-slicing/2026-06-10/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/time-slicing/DESIGN.md",
+          "sha256": "9f1b05235cfae6bde3296e80ee3732ed887bb81f998a4d2acb08ab626f6f6e51",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/time-slicing/DESIGN.md"
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "theme": "full-2026-06-11",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "67ed774c7d35f83a58f688772690ba194abda49f19181d4ac8451d0d5c9d9751",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-11/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "1d0c851050f6cc95b53094abe1852cf4161213c77dcd3bc0fd510334678289d5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-11/2/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "theme": "v1-release",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "89bda6dad057015e010138f1045026e9a85c390f15a5ed2ea136f831a0622a63",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/v1-release/2026-06-11/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/v1-release/PLAN.md",
+          "sha256": "48b7e1f4f492cea155a016e7a5e13d930e09923cdb61dad4183731fd8764e4c0",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/v1-release/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "theme": "v1-surface",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "eb0352a823c4e128d1bc263c04ecf60c20d5c9481ceb7ba7c1d000245f881a33",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/v1-surface/2026-06-11/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "492b73e36f8597380d89e1df60f24194a05ed6ad99e9256ffda6da1f495d52bb",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/v1-surface/2026-06-11/design-1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/v1-surface/DESIGN.md",
+          "sha256": "43172e797a7eb5b6f7f36cb71f2dc23150ec762ec2112b3cb2b9737d442d9ca6",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/v1-surface/DESIGN.md"
+        }
+      ]
+    },
+    {
+      "id": 58,
+      "theme": "mcp-server",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "d2f296c6d4c5dcc5b4dd99bac7a290ba65f4be7170c57db5520842899f64ffa1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mcp-server/2026-06-12/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "e7fb5e48f0ee1de31eec6c6375c8a0d81a8959124ff43a35dbb1dc667d95d78e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mcp-server/2026-06-12/design-1/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "986deaf1befb3c4d2cd66f11f27dcee8a13461a6697487b4cf2457a2cc06be69",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mcp-server/2026-06-12/design-2/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/mcp-server/DESIGN.md",
+          "sha256": "41371098041c52771862f5b03e471fa2e07ce38213fb2a2643420cf3c05b527c",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mcp-server/DESIGN.md"
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "theme": "replayer-errors",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "4375256fa5cb29534fd07e7cbaa6ffe4c9e57b49fc8499539395aee7e6a8806d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/replayer-errors/2026-06-12/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 60,
+      "theme": "small-items-1x",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "7c53240164d283edb1ff649c3b0d3ad058ebb44efa74ed33402482f39e6cf8f3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/small-items-1x/2026-06-12/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "theme": "doc-accuracy-1x",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "78f689aad817e651447a221871dc3f5288e1781dab89722d926f7dd4e6494514",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/doc-accuracy-1x/2026-06-13/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 62,
+      "theme": "full-2026-06-13",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "0e674cedaddf54f96e2828b74cc6fc135bc188c44f47da0eff571d9dda59ee40",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-13/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "27bd3568a3171aee6ddef73976bff19b2795422de2f8621ecbc3eafd835b2ec5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-13/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "d189e42e4b7c12711e502d9b0e65eb1704b270fb3c8ed1f9b61d826a8a77b70e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-13/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "4eaf7a5ba5cd789f41c49628a109cfc8eba143b3f529a84a8d69502c973f4cfd",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-06-13/4/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "theme": "recorder-generics",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "386ddb866c33f48084393e8de67eee6d14a7466ae37f5303cb299d9b63fa9812",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/recorder-generics/2026-06-13/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/recorder-generics/DESIGN.md",
+          "sha256": "44a98eea10a7ed6875dcf19f00b4a54d35c43317d601503609e76d7b8b19042d",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/recorder-generics/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/recorder-generics/PLAN.md",
+          "sha256": "4934e76e6eb8beed923519114ce17cb390ac712c179e8c28377555304760d89b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/recorder-generics/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 64,
+      "theme": "replay-endtick-finalization",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "f51cc5401de0a015c74fcfb1c36a7feb0406ec12d20d7cf55f91f0e54cd61b5b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/replay-endtick-finalization/2026-06-13/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "c2106d0634c9e7456382d93f2dd2f2dd511817ce25c6a962ef25e3e7e4854c3b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/replay-endtick-finalization/2026-06-13/2/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "theme": "vitest-4-upgrade",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "bf5c27037277f8dba0a5b74174eee171844f14bc7dff0ebbf5c07639d0e10be9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/vitest-4-upgrade/2026-06-13/1/REVIEW.md"
+        }
+      ]
+    },
+    {
+      "id": 66,
+      "theme": "agent-recursive-improvement-loop",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "7b82f7c0dcce1e402a521ed904b31de012abf86b9a3b0f6e52f7cf7599b51611",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/2026-07-07/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "ef32380209976f193df6be03a3bb25bd11e1215694f928185691bae6234b2e7b",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/2026-07-07/2/REVIEW.md"
+        },
+        {
+          "path": "reviews/2_legacy.md",
+          "sha256": "77ddc2326b8b5ea062c60e2aca6386677b58b60fbc745981def30ab2790fcf08",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/2026-07-07/3/REVIEW.md"
+        },
+        {
+          "path": "reviews/3_legacy.md",
+          "sha256": "82d11c99fb057e2635d317f990ac100c8a88381496034efd2e7c9cadcff6960e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/2026-07-07/4/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/agent-recursive-improvement-loop/DESIGN.md",
+          "sha256": "f09d97b2cb040b2d74e28b5e4d641b7572f92fe23dc7839d04b6b926ac457db5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/agent-recursive-improvement-loop/PLAN.md",
+          "sha256": "bf3d358119739be6dc31fb03e511e67c81ba118275ab2600e20267f6bdaf135e",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/agent-recursive-improvement-loop/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "theme": "visual-playtest-harness",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "ad9d3bf40f246688bf861ea73af7ddaf82d323e567c2cadfa7556aa2176d034f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/visual-playtest-harness/2026-07-07/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/visual-playtest-harness/DESIGN.md",
+          "sha256": "91448a716fd0acd7f80b7b862dc9b7689119d2dd534a406dd8ee14842d0e8555",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/visual-playtest-harness/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/visual-playtest-harness/PLAN.md",
+          "sha256": "a85d0b4d50e796e3f887223535da23843ad414794dcd3a94debcc33b33ce58bc",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/visual-playtest-harness/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 68,
+      "theme": "mandatory-loop-defaults",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "94516d3c2dc38dbaa2161739d93ffa9e1abd496b3f6a8d05a0ede361007822e9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mandatory-loop-defaults/2026-07-08/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/mandatory-loop-defaults/DESIGN.md",
+          "sha256": "4c27d86107644f71c4379dc45ed2f2e8953cd832becb88ed48a499bb12cf1ea1",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mandatory-loop-defaults/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/mandatory-loop-defaults/PLAN.md",
+          "sha256": "332423f22887d92e655e6af10e844e7c0b21e7c80eeb67fb058351be0dd22a9f",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/mandatory-loop-defaults/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 69,
+      "theme": "browser-safe-entry",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "b76035ea1e2a3dcc252a4ef33bf2f8c7b6061cb724ab50ca422a1b8916cff5e4",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/browser-safe-entry/2026-07-10/1/REVIEW.md"
+        },
+        {
+          "path": "historical/threads/done/browser-safe-entry/DESIGN.md",
+          "sha256": "b281fe01816de929256f69c4023365f68aac3d62b405b8a2d8c699fb870972c3",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/browser-safe-entry/DESIGN.md"
+        },
+        {
+          "path": "historical/threads/done/browser-safe-entry/PLAN.md",
+          "sha256": "ca3c8387a89baa65e5925a056ac864e76935b11c270ef469fa4de9e2e02da3ff",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/browser-safe-entry/PLAN.md"
+        }
+      ]
+    },
+    {
+      "id": 70,
+      "theme": "full-2026-07-10",
+      "legacyFiles": [
+        {
+          "path": "reviews/0_legacy.md",
+          "sha256": "a59f0aea58d9140f6b761f3f2275d29128e3cd35a98409f470baea2e02b99da5",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-07-10/1/REVIEW.md"
+        },
+        {
+          "path": "reviews/1_legacy.md",
+          "sha256": "e4566101945dc375bb06c08c71da85881ac2a0a98d1d9b1bf5ca904ba1bacbe9",
+          "source": "civ-engine@d84582255469f3dce8058b4491b39bbddcda4901:docs/threads/done/full/2026-07-10/2/REVIEW.md"
+        }
+      ]
+    }
+  ]
+}

@@ -12,7 +12,7 @@ The engine's core AI-native usage case is a recursive improvement loop:
 run -> record -> find -> verify -> classify -> regress -> fix/propose -> review -> rerun -> compare -> learn
 ```
 
-`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, coded failure surfaces, and a shared `ImprovementFinding` payload. The active cross-game design lives in [`docs/threads/done/agent-recursive-improvement-loop/DESIGN.md`](../threads/done/agent-recursive-improvement-loop/DESIGN.md). The shipped public slice is the finding/evidence/marker contract; full run manifests, ledgers, gate orchestration, browser/provider adapters, and auto-fix policy stay in game repos until reference migrations prove a smaller shared shape.
+`civ-engine` already provides most of the substrate for this loop: command and visual playtest runners, session recording and replay, markers, corpus indexing, metrics, bundle viewing, counterfactual replay, player-filtered observation, coded failure surfaces, and a shared `ImprovementFinding` payload. The active cross-game design lives in [`docs/work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md`](../work/66_agent-recursive-improvement-loop/historical/threads/done/agent-recursive-improvement-loop/DESIGN.md). The shipped public slice is the finding/evidence/marker contract; full run manifests, ledgers, gate orchestration, browser/provider adapters, and auto-fix policy stay in game repos until reference migrations prove a smaller shared shape.
 
 ## What Matters
 
