@@ -157,16 +157,21 @@ const replayer = SessionReplayer.fromBundle(bundle, {
 ```ts
 const result = replayer.selfCheck();
 result.ok;                  // false if any divergence found
-result.checkedSegments;     // count of snapshot pairs checked
+result.checkedSegments;     // attempted snapshot segments; all-disabled checks still count
 result.stateDivergences;    // [{ fromTick, toTick, expected, actual, firstDifferingPath }]
 result.eventDivergences;    // [{ tick, expected: events[], actual: events[] }]
 result.executionDivergences; // [{ tick, expected: results[], actual: results[] }]
 result.skippedSegments;     // [{ fromTick, toTick, reason: 'failure_in_segment' }]
+result.coverage?.complete;  // every interval compared for the enabled checks; false if none ran
+result.coverage?.stateComparisonTicks; // actual state endpoints, not every intermediate state
+result.coverage?.uncoveredRanges; // tails, failures or early stop, with explicit reasons
 ```
 
-`selfCheck` returns `ok: true, checkedSegments: 0` (with a `console.warn`) on bundles without command payloads — diagnostic-only bundles can't be replayed. Bundles that crossed a recorded `TickFailure` get those segments skipped (replay-across-failure is out of scope per spec §2 / future spec).
+Since 2.5.0, coverage always reports the existing metadata replay horizon, enabled checks, positive checked intervals (fromTick,toTick], actual state endpoints and uncovered ranges. A live or terminal-disabled recording can have an unchecked tail after its last snapshot; selfCheck describes that tail without replaying it. complete is relative to the enabled comparisons and independent of ok: a fully compared divergent recording can be complete and fail. Consumers requiring all three checks should inspect enabledChecks as well as ok and complete.
 
-If a bundle body is **gapped** — tick entries missing over a range that replay must cross — `openAt()` and the standalone `snapshotAtTick(bundle, tick)` throw `BundleIntegrityError(code: 'missing_tick_entries')` instead of folding over the gap into wrong state. A gap means the recorded history was truncated past the recorder's rolling-buffer capacity, or the bundle was tampered (see the bounded-buffer note under [Scenarios as replayable bundles](#scenarios-as-replayable-bundles)).
+Bundles without command payloads keep ok true, checkedSegments zero and the warning, but coverage is incomplete with no_payloads. The schema cannot distinguish a commandless session from stripped payloads, so the existing conservative no-op stays. Empty horizons, no snapshot segments, all-disabled checks and all-skipped failure segments are also incomplete with explicit notRunReason. Failure and early-stop intervals are named in uncoveredRanges. State comparison occurs only at reported snapshot endpoints; this is not a claim about every intermediate state or recording provenance.
+
+If a bundle body is **gapped** — tick entries missing over a range that replay must cross — `selfCheck()`, `openAt()` and the standalone `snapshotAtTick(bundle, tick)` throw `BundleIntegrityError(code: 'missing_tick_entries')` instead of folding over the gap into wrong state. A gap means the recorded history was truncated past the recorder's rolling-buffer capacity, or the bundle was tampered (see the bounded-buffer note under [Scenarios as replayable bundles](#scenarios-as-replayable-bundles)).
 
 ## Fail-fast factory verification (v0.8.18+)
 

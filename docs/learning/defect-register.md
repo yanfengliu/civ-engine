@@ -8,6 +8,14 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-10-01 — Self-check success hid unverified recording intervals
+
+**Symptom (downstream feedback):** selfCheck could return ok true after checking only the snapshot-bounded prefix of a longer recording, and its zero-segment no-payload result looked like deterministic success.
+
+**Investigation and root cause:** the loop compared adjacent recorded snapshots, while ok represented only divergence findings. There was no coverage result for the replay horizon, unanchored tail, skipped failure segments, early stop or disabled checks. Missing tick rows defaulted to empty expected events. An incomplete recording could also contain snapshot endpoints above its persisted replay cap.
+
+**Class check:** tests/session-self-check-coverage.test.ts uses literal independent intervals/endpoints for terminal-disabled tails, no payloads, zero segments, empty horizons, all-disabled/selected checks, failure boundaries, early stop, legacy metadata, incomplete caps, nonzero starts and missing tick rows. Consumer assignability and exact world-construction/step counts are pinned. Original coverage absence, raw-endTick-only bounds, above-persisted endpoints and missing continuity checks are deliberate mutation controls. Coverage describes performed comparisons against supplied recordings; it does not prove provenance or every intermediate state. Existing ok and exception families remain.
+
 ## 2026-08-31 — CI red for 47 days behind a green local gate
 
 **Symptom (as reported):** "Fix Github CI failure."

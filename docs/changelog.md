@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.5.0 - 2026-10-01
+
+SessionReplayer.selfCheck now always reports comparison coverage separately from divergence results. The optional-on-type coverage field preserves old consumer-created SelfCheckResult objects; three additive public types describe its ranges and reasons.
+
+- coverage identifies the replay horizon, enabled checks, actually checked segments, actual state-comparison endpoints and uncovered intervals. It distinguishes unchecked tails, no payloads, no snapshot segments, failed segments, early stop, empty horizons and all-disabled checks. complete is relative to the enabled checks and stays false when no comparison ran; ok keeps its existing divergence-only meaning.
+- Self-check excludes snapshot endpoints beyond the existing replay horizon and applies the existing missing_tick_entries diagnostic before replaying a gapped segment. It does not replay an unanchored tail. Valid recordings keep their existing world-construction and tick counts.
+- Consumers requiring complete verification should require result.ok, result.coverage?.complete and all intended enabledChecks. State comparison occurs at reported snapshot endpoints, not every intermediate state. Recording/snapshot/bundle formats and existing exception families are unchanged. No runtime dependency is added.
+
 ## 2.4.2 - 2026-10-01
 
 Security and CI dependency repair; core simulation and public APIs are unchanged. The private MCP server is now 0.1.1. Existing bundle/replay formats remain unchanged.

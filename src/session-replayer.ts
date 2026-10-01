@@ -24,6 +24,7 @@ import type { WorldSnapshot } from './serializer.js';
 import { createForkBuilder, type ForkBuilder } from './session-fork.js';
 import { compareRegistration } from './session-registration.js';
 import { assertContiguousTickEntries } from './session-continuity.js';
+import { describeSelfCheckCoverage } from './session-self-check-coverage.js';
 import { validateBundleMarkers } from './session-replayer-markers.js';
 import { assertBundleShape, assertFactoryContract } from './session-replayer-guards.js';
 import type {
@@ -43,6 +44,9 @@ export type {
   ReplayerConfig,
   SelfCheckOptions,
   SelfCheckResult,
+  SelfCheckCoverage,
+  SelfCheckRange,
+  SelfCheckUncoveredRange,
   SkippedSegment,
   StateDivergence,
 } from './session-replayer-types.js';
@@ -284,51 +288,48 @@ export class SessionReplayer<
     const checkEvents = options.checkEvents ?? true;
     const checkExecutions = options.checkExecutions ?? true;
     const md = this._bundle.metadata;
+    const horizon = { fromTick: md.startTick, toTick: replayableUpperBound(md) };
+    const enabledChecks = { state: checkState, events: checkEvents, executions: checkExecutions };
+    const completed: Array<{ fromTick: number; toTick: number }> = [];
     const result: SelfCheckResult = {
       ok: true, checkedSegments: 0,
-      stateDivergences: [], eventDivergences: [], executionDivergences: [],
-      skippedSegments: [],
+      stateDivergences: [], eventDivergences: [], executionDivergences: [], skippedSegments: [],
     };
-
-    // No-payload bundles: cannot replay, return ok with warning. Use
-    // replayableUpperBound (not raw endTick) for consistency with every other
-    // replay bound (full-review 2026-07-10 L6).
-    if (this._bundle.commands.length === 0 && replayableUpperBound(md) > md.startTick) {
+    if (this._bundle.commands.length === 0 && horizon.toTick > horizon.fromTick) {
       console.warn(
         `[SessionReplayer] selfCheck on bundle without command payloads is a no-op (${md.sessionId})`,
       );
+      result.coverage = describeSelfCheckCoverage(horizon, enabledChecks, [], [], { noPayloads: true });
       return result;
     }
-
     const allSnapshots: SessionSnapshotEntry[] = [
       { tick: md.startTick, snapshot: this._bundle.initialSnapshot },
-      ...this._bundle.snapshots,
-    ];
+      ...this._bundle.snapshots.filter(s => s.tick > md.startTick && s.tick <= horizon.toTick),
+    ].sort((a, b) => a.tick - b.tick);
+    const presentTicks = new Set(this._bundle.ticks.map(entry => entry.tick));
+    let stopped = false;
     for (let i = 0; i < allSnapshots.length - 1; i++) {
       const a = allSnapshots[i];
       const b = allSnapshots[i + 1];
-      // Skip segments containing a recorded TickFailure. A segment (a, b]
-      // replays ticks a+1 .. b, so a failure at exactly b.tick is inside it —
-      // and that is the DEFAULT terminal layout: a failed tick consumes its
-      // tick number and the disconnect-time terminal snapshot lands on it.
-      // (full-review 2026-06-10 H1: the previous `ft >= a.tick && ft < b.tick`
-      // guard missed the terminal case, so selfCheck() threw a raw
-      // WorldTickFailureError on every poisoned-stop bundle. A failure at
-      // a.tick belongs to the PREVIOUS segment and must not skip this one.)
-      if (md.failedTicks?.some((ft) => ft > a.tick && ft <= b.tick)) {
+      if (b.tick === a.tick) continue;
+      // A failure at b is inside (a,b]; a failure at a belongs to the preceding segment.
+      if (md.failedTicks?.some(ft => ft > a.tick && ft <= b.tick)) {
         result.skippedSegments.push({ fromTick: a.tick, toTick: b.tick, reason: 'failure_in_segment' });
         continue;
       }
+      assertContiguousTickEntries(this._bundle.ticks, a.tick, b.tick, presentTicks);
       const segDiv = this._checkSegment(a, b, { checkState, checkEvents, checkExecutions });
       result.checkedSegments++;
+      completed.push({ fromTick: a.tick, toTick: b.tick });
       result.stateDivergences.push(...segDiv.state);
       result.eventDivergences.push(...segDiv.events);
       result.executionDivergences.push(...segDiv.executions);
       if (segDiv.state.length || segDiv.events.length || segDiv.executions.length) {
         result.ok = false;
-        if (options.stopOnFirstDivergence) break;
+        if (options.stopOnFirstDivergence) { stopped = true; break; }
       }
     }
+    result.coverage = describeSelfCheckCoverage(horizon, enabledChecks, completed, result.skippedSegments, { stopped });
     return result;
   }
 

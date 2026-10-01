@@ -1162,19 +1162,38 @@
     "steps",
     "tick"
   ],
+  "SelfCheckCoverage": [
+    "checkedRanges",
+    "complete",
+    "enabledChecks",
+    "horizon",
+    "notRunReason?",
+    "stateComparisonTicks",
+    "uncoveredRanges"
+  ],
   "SelfCheckOptions": [
     "checkEvents?",
     "checkExecutions?",
     "checkState?",
     "stopOnFirstDivergence?"
   ],
+  "SelfCheckRange": [
+    "fromTick",
+    "toTick"
+  ],
   "SelfCheckResult": [
     "checkedSegments",
+    "coverage?",
     "eventDivergences",
     "executionDivergences",
     "ok",
     "skippedSegments",
     "stateDivergences"
+  ],
+  "SelfCheckUncoveredRange": [
+    "fromTick",
+    "reason",
+    "toTick"
   ],
   "SessionBundle": [
     "attachments",

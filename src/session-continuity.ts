@@ -14,8 +14,8 @@ export function assertContiguousTickEntries(
   ticks: readonly { tick: number }[],
   fromTick: number,
   toTick: number,
+  present: ReadonlySet<number> = new Set(ticks.map((te) => te.tick)),
 ): void {
-  const present = new Set(ticks.map((te) => te.tick));
   const missing: number[] = [];
   for (let t = fromTick + 1; t <= toTick; t++) {
     if (!present.has(t)) missing.push(t);

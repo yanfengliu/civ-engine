@@ -66,6 +66,33 @@ export interface SkippedSegment {
   reason: 'failure_in_segment';
 }
 
+/** A positive transition interval (fromTick, toTick]; horizon may be empty. */
+export interface SelfCheckRange {
+  fromTick: number;
+  toTick: number;
+}
+
+export interface SelfCheckUncoveredRange extends SelfCheckRange {
+  reason: 'no_payloads' | 'no_snapshot_segment' | 'failure_in_segment'
+    | 'stopped_on_divergence' | 'all_checks_disabled';
+}
+
+/** Comparisons actually performed against the supplied recording, not provenance. */
+export interface SelfCheckCoverage {
+  /** Existing replay horizon: incomplete uses persistedEndTick; otherwise max(endTick, persistedEndTick). */
+  horizon: SelfCheckRange;
+  enabledChecks: { state: boolean; events: boolean; executions: boolean };
+  /** One interval per completed segment, including segments with divergences. */
+  checkedRanges: SelfCheckRange[];
+  /** State is compared only at these segment endpoints, never at every intermediate tick. */
+  stateComparisonTicks: number[];
+  uncoveredRanges: SelfCheckUncoveredRange[];
+  /** All positive-horizon intervals compared for enabled checks; false when no comparison ran. Independent of ok. */
+  complete: boolean;
+  notRunReason?: 'empty_horizon' | 'no_payloads' | 'no_segments'
+    | 'all_checks_disabled' | 'all_segments_skipped';
+}
+
 export interface SelfCheckResult {
   ok: boolean;
   checkedSegments: number;
@@ -73,6 +100,8 @@ export interface SelfCheckResult {
   eventDivergences: EventDivergence[];
   executionDivergences: ExecutionDivergence[];
   skippedSegments: SkippedSegment[];
+  /** Always returned by selfCheck; optional for old consumer-created result objects. */
+  coverage?: SelfCheckCoverage;
 }
 
 export interface MarkerValidationResult {

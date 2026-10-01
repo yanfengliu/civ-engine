@@ -5268,6 +5268,22 @@ interface SelfCheckOptions {
   checkExecutions?: boolean;         // default true
 }
 
+interface SelfCheckRange { fromTick: number; toTick: number; } // transitions (fromTick,toTick]
+interface SelfCheckUncoveredRange extends SelfCheckRange {
+  reason: 'no_payloads' | 'no_snapshot_segment' | 'failure_in_segment'
+    | 'stopped_on_divergence' | 'all_checks_disabled';
+}
+interface SelfCheckCoverage {
+  horizon: SelfCheckRange;
+  enabledChecks: { state: boolean; events: boolean; executions: boolean };
+  checkedRanges: SelfCheckRange[];
+  stateComparisonTicks: number[];
+  uncoveredRanges: SelfCheckUncoveredRange[];
+  complete: boolean;
+  notRunReason?: 'empty_horizon' | 'no_payloads' | 'no_segments'
+    | 'all_checks_disabled' | 'all_segments_skipped';
+}
+
 interface SelfCheckResult {
   ok: boolean;
   checkedSegments: number;
@@ -5275,14 +5291,17 @@ interface SelfCheckResult {
   eventDivergences: EventDivergence[];
   executionDivergences: ExecutionDivergence[];
   skippedSegments: SkippedSegment[];      // segments containing failedTicks
+  coverage?: SelfCheckCoverage;           // always returned; optional for old consumer objects
 }
 
 function deepEqualWithPath(a: unknown, b: unknown, path?: string): { equal: boolean; firstDifferingPath?: string };
 ```
 
-Range checks per spec §9.1: `< startTick` or `> max(endTick, persistedEndTick)` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. The `max` keeps a legacy bundle whose `endTick` was never finalized (pre-1.1.4 live export) replayable up to its last persisted snapshot. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A gapped bundle body — tick entries missing in the replay range because a rolling-buffer history truncated past capacity, or the body was tampered — throws `BundleIntegrityError(code: 'missing_tick_entries')`; since v2.3.0 `openAt` enforces this continuity guard on the range it replays (previously only `snapshotAtTick` did). A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-`b` throws `BundleVersionError`; within-`b` warns. Cross-Node-major warns.
+Range checks per spec §9.1: `< startTick` or `> max(endTick, persistedEndTick)` (or `> persistedEndTick` for incomplete bundles) throws `BundleRangeError`. The `max` keeps a legacy bundle whose `endTick` was never finalized (pre-1.1.4 live export) replayable up to its last persisted snapshot. `tick` at-or-after first `failedTicks` throws `BundleIntegrityError(code: 'replay_across_failure')`. Replay forward without payloads throws `BundleIntegrityError(code: 'no_replay_payloads')`. A gapped bundle body — tick entries missing in the replay range because a rolling-buffer history truncated past capacity, or the body was tampered — throws `BundleIntegrityError(code: 'missing_tick_entries')`; since v2.3.0 `openAt` enforces this continuity guard on the range it replays (previously only `snapshotAtTick` did). A missing handler in the factory throws the eager `registration_mismatch` on v0.8.18+ bundles; `ReplayHandlerMissingError` fires mid-replay for legacy bundles (no `registration` field) and under `skipRegistrationCheck`. Engine version cross-major throws `BundleVersionError`; cross-`b` within the same major and within-`b` mismatches warn. Cross-Node-major warns.
 
-`selfCheck` walks consecutive snapshot pairs (initial + periodic + terminal). 3-stream comparison: state via `deepEqualWithPath`, events ordered structural equality, executions ordered structural equality (excluding `submissionSequence` which resets per segment until snapshot v6 lands). Failure spans skipped.
+`selfCheck` walks ascending positive snapshot pairs inside the existing replay horizon (initial + periodic + terminal). State is compared only at each reported terminal snapshot endpoint; enabled events and executions are compared per replayed transition, with submissionSequence excluded. Failed segments are skipped and gapped tick streams throw the existing missing_tick_entries diagnostic before replay. It never replays an unanchored tail.
+
+coverage is always returned, but optional in SelfCheckResult for consumer compatibility. All nonempty ranges describe (fromTick,toTick]; the horizon may be empty. complete means all positive-horizon intervals were compared for the enabled checks and at least one comparison ran; it is independent of ok. A divergent complete recording can have ok false and complete true. No payloads, no segments, all-skipped segments, all-disabled checks and empty horizons remain incomplete, with explicit notRunReason. stateComparisonTicks identifies only actual state endpoints; coverage does not prove every intermediate state or recording provenance. checkedSegments retains its old attempted-segment count, including when all checks are disabled.
 
 ## Session Recording — scenarioResultToBundle
 
@@ -5439,7 +5458,7 @@ interface SynthPlaytestResult<TEventMap, TCommandMap, TDebug = JsonValue> {
 
 ### Determinism — CI guard pattern
 
-`SessionReplayer.selfCheck()` is meaningful for non-poisoned synthetic bundles where `ticksRun >= 1`. For `stopReason === 'poisoned'` bundles, the failed-tick-bounded final segment is skipped and reported in `skippedSegments` with reason `'failure_in_segment'` (since v0.8.16; previously it was replayed and `selfCheck()` re-threw the original tick failure). For `ticksRun === 0`, the terminal snapshot equals the initial → `selfCheck()` returns `ok:true` vacuously.
+`SessionReplayer.selfCheck()` is meaningful for non-poisoned synthetic bundles where `ticksRun >= 1`. For `stopReason === 'poisoned'` bundles, the failed-tick-bounded final segment is skipped and reported in `skippedSegments` with reason `'failure_in_segment'` (since v0.8.16; previously it was replayed and `selfCheck()` re-threw the original tick failure). For `ticksRun === 0`, selfCheck retains ok true but reports coverage.complete false and notRunReason empty_horizon; no determinism comparison is implied.
 
 ```typescript
 if (result.ok && result.stopReason !== 'poisoned' && result.ticksRun >= 1) {
