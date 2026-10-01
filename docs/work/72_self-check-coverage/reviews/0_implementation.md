@@ -34,3 +34,32 @@ The eleven-step full gate, actual build/pack and remote matrix/publish-dist have
 ## Round outcome
 
 Bounded implementation review passed with no material findings. Full local gates and final integrated acceptance remain required before any code commit. Main/release must wait for root's explicit distribution release even after local acceptance.
+## Target recovery after private commit, 2026-10-01
+
+The owner bound the unchanged 21 reviewed files to private commit e6ac46c2f8d7a307cc932f955bdd91a9286ba88c. Every committed Git blob and SHA256 matches its pre-commit review-entry manifest. The committed diff from base a839ad5e5b435f36e7494b86ff63606573a10e47 restricted to these 21 paths is byte-identical to the preserved 53,242-byte review patch, SHA256 1b350e9f58622bd204ffb8a0af1007e83b4e2862e4217e375ce87b636d95c30f. The authored reviewer report above is unchanged. Seven extra commit paths are only work registry/plans/review and devlog records; their exact paths are recorded in the ignored commit-binding.json while the release is held. This is owner recovery evidence, not a new independent review.
+
+| Reviewed path | Committed Git blob |
+|---|---|
+| README.md | d962877f9f0083769a027f18ae3037a507d1b076 |
+| docs/api-reference.md | ff8a98cf731df57c5f151f85c8a9e66790890c28 |
+| docs/architecture/ARCHITECTURE.md | b00b217c0edf489560a8fa9162b5e4a74b54bfdb |
+| docs/architecture/decisions.md | 875923a18bd9ac73c503bfca5f93b42f849259fd |
+| docs/architecture/drift-log.md | dd617615fa78031f1df876f797af514ab7d2cf60 |
+| docs/changelog.md | 784b9c919f01de4fd082aed13f1dc00bd31e6524 |
+| docs/guides/session-recording.md | d8038e1fed2b4c9d4b14a557794c718dffc2009a |
+| docs/learning/defect-register.md | e79bff548c1d9dadd9ef9dec6803ebe9c587925b |
+| mcp/package-lock.json | 7a616fbdb730b7fa52badeb5eb20f820d39699b9 |
+| package-lock.json | ab84dd9dc66590a5f2a688ec7364d06be1a8cca8 |
+| package.json | bd8802e248151a88c0f469dfec6cc21125956504 |
+| src/index.browser.ts | 27547eddce5999899173881a25d8761e9c028c36 |
+| src/index.ts | 943447f95f48d6e99eb3607e40674ccb0488731f |
+| src/session-continuity.ts | 962b40bc10350e31245b3cc429d4cfc1d55500f5 |
+| src/session-replayer-types.ts | ccdfbf7942b05cfbd62287ad55dacf81a6fa40f4 |
+| src/session-replayer.ts | 1c4eb5ea949615014362c08be66dfe49966b9122 |
+| src/session-self-check-coverage.ts | 36464dd32869046d820f55bcc0b7a4e9bd688efc |
+| src/version.ts | a522d4e002d789bf117bfc040d7953c32e068e6c |
+| tests/fixtures/public-surface-members.json | 2755acd4fc2c3a48ff93d42a689900b482dd4ae7 |
+| tests/fixtures/public-surface.json | 8748c9e8ef3998fc34bcd2b2e2423bb7f061644a |
+| tests/session-self-check-coverage.test.ts | 85bb42ff6cf8943055c167129db4fa57210923d1 |
+
+Subsequent owner verification: all eleven npm run gates steps exited 0, with 1477 root tests plus one todo and 22 MCP tests. Build/pack, typecheck/lint and exact benchmark counters/time bounds passed. Core full/production audits have no findings; MCP retains Hono moderate. Gate attempt 1 took 58.091 seconds and owned JobObject cleanup passed with zero leftovers. The private commit does not count as main/release acceptance; root still holds that boundary.
