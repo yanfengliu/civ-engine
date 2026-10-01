@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.4.1-blue)
+![version](https://img.shields.io/badge/version-2.4.2-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. But no production deployment has exercised the engine end-to-end, and there is no published, pinnable release yet (see [Install](#install)) — so treat it as suitable for prototyping and AI-agent experiments, and read the [changelog](docs/changelog.md) before upgrading.
 

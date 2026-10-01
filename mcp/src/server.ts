@@ -46,7 +46,7 @@ const LIMIT = z.number().int().min(1).max(2000).optional()
 
 export function buildServer(corpusRoot: string): McpServer {
   const state = new CorpusState(corpusRoot);
-  const server = new McpServer({ name: 'civ-engine-mcp', version: '0.1.0' });
+  const server = new McpServer({ name: 'civ-engine-mcp', version: '0.1.1' });
 
   server.registerTool('corpus_overview', {
     description:

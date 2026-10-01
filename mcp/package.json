@@ -1,6 +1,6 @@
 {
   "name": "civ-engine-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "MCP server exposing civ-engine's recorded-game surfaces (corpus, bundles, viewer, hotspots, metrics) as tools. v1: read-only artifact interrogation; unpublished (run via node mcp/dist/cli.js).",
   "type": "module",

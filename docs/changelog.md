@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.2 - 2026-10-01
+
+Security and CI dependency repair; core simulation and public APIs are unchanged. The private MCP server is now 0.1.1. Existing bundle/replay formats remain unchanged.
+
+- Updated existing MCP transitive runtime packages: fast-uri 3.1.6 to 3.1.8 (URI authority/host handling advisories), ip-address 10.7.0 to 10.7.2 (mixed-family subnet checks and input-size diagnostics), and qs 6.15.2 to 6.16.0 (array-limit bypass and attacker-controlled isBuffer). No runtime package was added.
+- Updated development packages in both lockfiles to Vitest 4.1.11 and its matching internal packages. The root lock also updates brace-expansion to 1.1.21/5.0.12 and @humanfs/node to 0.16.8 with its required core/types packages. Manifests keep the same dependency ranges and unrelated locked packages are retained.
+- No game migration is required. Contributors should run npm ci and npm run build in their root checkout, then npm ci in mcp/, then npm run gates from the root; downstreams continue consuming the rolling engine-dist tarball only after engine CI is green.
+- Remaining audit bound: MCP retains Hono 4.13.5, affected by moderate [GHSA-hxh3-vqpv-xpqv](https://github.com/advisories/GHSA-hxh3-vqpv-xpqv) (fixed in 4.13.7; hono/jsx server-side boundary/string rendering). The supported MCP entry point uses stdio and does not import that renderer. All configured high-severity audit gates pass; this release does not claim zero vulnerabilities.
+
 ## 2.4.1 - 2026-07-10
 
 Documentation-accuracy sweep (doc-review). **No API or behavior change** — this patch corrects drift that the full-review batch (2.3.0/2.4.0) and earlier surface additions left in the guides and API reference, so copy-pasted examples run and the reference matches the shipped types. A 5-way parallel audit against live `src/` produced the findings; fixes landed across 21 docs plus one self-contradictory source comment (`src/snapshot-diff.ts`, comment-only — no code change).

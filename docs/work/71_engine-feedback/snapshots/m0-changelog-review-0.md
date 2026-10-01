@@ -1,0 +1,1867 @@
+# Changelog
+
+## 2.4.2 - 2026-10-01
+
+Security and CI dependency repair; core simulation and public APIs are unchanged. The private MCP server is now 0.1.1. Existing bundle/replay formats remain unchanged.
+
+- Updated existing MCP transitive runtime packages: fast-uri 3.1.6 to 3.1.8 (URI authority/host handling advisories), ip-address 10.7.0 to 10.7.2 (mixed-family subnet checks and input-size diagnostics), and qs 6.15.2 to 6.16.0 (array-limit bypass and attacker-controlled isBuffer). No runtime package was added.
+- Updated development packages in both lockfiles to Vitest 4.1.11 and its matching internal packages. The root lock also updates brace-expansion to 1.1.21/5.0.12 and @humanfs/node to 0.16.8 with its required core/types packages. Manifests keep the same dependency ranges and unrelated locked packages are retained.
+- No game migration is required. Contributors should run npm ci in their own checkout, then npm run gates; downstreams continue consuming the rolling engine-dist tarball only after engine CI is green.
+
+## 2.4.1 - 2026-07-10
+
+Documentation-accuracy sweep (doc-review). **No API or behavior change** — this patch corrects drift that the full-review batch (2.3.0/2.4.0) and earlier surface additions left in the guides and API reference, so copy-pasted examples run and the reference matches the shipped types. A 5-way parallel audit against live `src/` produced the findings; fixes landed across 21 docs plus one self-contradictory source comment (`src/snapshot-diff.ts`, comment-only — no code change).
+
+### Corrected — these docs would have broken reader code
+
+- **`World.queryInRadius` is a generator, not an array.** `api-reference.md` typed it `EntityId[]` and showed `.length`/`.map`; it returns `IterableIterator<EntityId>` (`src/world-queries.ts`). Spread it (`[...world.queryInRadius(...)]`) or iterate with `for…of`.
+- **`deleteState`, not `removeState`.** `serialization-and-diffs.md` documented a nonexistent `removeState`; the method is `deleteState`.
+- **`getResource(entity, key)`, not `getResources('gold', 1)`.** `ai-integration.md`'s bundle-viewer example used a nonexistent plural method with swapped arguments.
+- **`world.grid` is `SpatialGridView`, not `SpatialGrid`.** The reference typed it as the mutable class and warned against `insert`/`remove`/`move` methods that the read-only view does not have.
+- **Scenario bundles fail loud, not silent.** `scenario-runner.md` still warned of "silent truncation"; since 2.3.0, `scenarioResultToBundle()` throws `history_truncated` when a payload-carrying bundle would be gapped.
+
+### Corrected — stale or incomplete
+
+- `diffSnapshots` accepts v5 **and** v6 (the reference, the serialization guide, and a self-contradictory `snapshot-diff.ts` comment all said "v5 only").
+- `entities-and-components.md` claimed "no cached query result"; the engine maintains an incremental per-key-set query cache.
+- `building-a-game.md` now constructs its tutorial world with `strict: false` and calls out the 1.0 strict default (its runtime helpers would otherwise throw `StrictModeViolationError`), and hoists the entity out of its `transaction()` example (an eagerly-created id is not rolled back on the failure path).
+- `public-api-and-invariants.md` deprecation policy relabeled "Pre-1.0 (now)" → "Pre-1.0 (history)" (the engine is post-1.0 at 2.4.x).
+- `rendering.md`'s local `RenderEntity` interface renamed to `StoreEntity` (it shadowed the exported `RenderEntity<TView>`).
+- Server-message lists (`getting-started.md`, `building-a-game.md`) now include the full `ServerMessage` union (`commandExecuted`/`commandFailed`/`tickFailed`).
+
+### Added coverage
+
+- `api-reference.md`: `SpatialGridView`, `SpatialGrid.getInRadius`, `WorldConfig.strict` + `instrumentationProfile`, `WorldDebugSnapshot` and its 13 debug sub-types, `TickMetricsProfile`, `WorldHistoryIssueSummary`, `ScenarioCapture`/`ScenarioCheckOutcome` shapes, and the `getByTag` id-sort guarantee.
+- Guides: the bounded-history buffer + `WorldHistoryState.truncated`, the `missing_tick_entries` replay error code, `replayer.validateMarkers()`, `getInRadius`, and the `world.queryInRadius`/`world.findNearest` built-ins.
+
+### Structure
+
+- Repointed stale `docs/threads/current/` links to `done/` across ARCHITECTURE, `docs/README.md`, `ai-integration.md`, `api-reference.md`, and lesson provenance (the recursive-loop thread closed). Refreshed the ARCHITECTURE component map (`improvement-signature.ts`, `state-digest.ts`, `session-continuity.ts`, `session-replayer-markers.ts`), the drift-log (v2.0–v2.4 rows), and the tick-reentrancy guard note.
+- Deduplicated scattered topics to single canonical homes with cross-links: the Improvement Finding contract (`ai-integration.md`), the `openViewer` walkthrough (`bundle-viewer.md`), and `scenarioResultToBundle` (`scenario-runner.md`).
+
+### Validation
+
+Doc-only plus one comment-only source edit. Full gates green: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Post-sweep audit confirms no remaining `removeState`/`getResources` references and no stale `threads/current/` links in the living docs.
+
+## 2.4.0 - 2026-07-10
+
+Honesty gate covers the terminal proven claims. **Additive minor for existing valid payloads, with one behavior edge (below).** Full-review finding H2 (flagged independently by two reviewers): the strict verified-evidence gate added in 2.0.0 fired only for `verificationStatus: 'verified'`, leaving the *stronger* terminal claims `fixed` and `regressed` — which the recursive loop treats as the authoritative "a pass is done at fixed-proven" signal — able to enter the durable ledger with no evidence at all. That let an agent route around the 2.0.0 wall by choosing a stronger status. The evidence requirement now covers all three proven states.
+
+- **`assertImprovementFinding` (strict, the default) now requires a replayable evidence ref + a `verificationMethod` for `verificationStatus` `'fixed'` and `'regressed'`, exactly as it already did for `'verified'`.** `'unverified'` and `'falsePositive'` are unaffected (they assert no proven success).
+- **Behavior edge:** a `fixed`/`regressed` finding constructed or recorded through the strict path (`assertImprovementFinding` default, both conversion builders, `improvementFindingToMarker`) without an addressed replayable evidence ref (`tick`/`marker`/`bundle`) and a `verificationMethod` now throws `improvement_finding_invalid` — previously it was accepted. No shipped consumer is affected: an audit of the fleet (aoe2/farm/city/townscaper/loop-ops) found no code that sets `fixed`/`regressed` today (consumers use `unverified`/`verified` only, and their `verified` findings already carry evidence). This only rejects a claim that was never honestly valid.
+- **Migration:** attach the fix's proof when marking a finding `fixed`/`regressed` (a replayable `tick`/`marker`/`bundle` ref plus a `verificationMethod` — e.g. `'replay'`/`'state'`/`'metric'`), the same shape `verified` already requires. To read historical ledger rows recorded before this release, pass `{ requireVerificationEvidence: false }` — the lenient read path (`improvementFindingsFromMarkers`) already does this, so old bundles stay extractable.
+
+### Validation
+
+Failing-first tests (`tests/improvement-loop.test.ts`, the `['fixed','regressed']` block): reject-without-ref, reject-without-method, accept with a replayable ref + method, refuse-to-record + lenient-read-still-works — mirroring the `verified` cases. In-process adversarial verification. Full gates green: `npm test` (1350 passed + 1 todo), mcp (22), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 2.3.0 - 2026-07-10
+
+Full-codebase review + hardening. **Additive minor — one new type field; several behavior corrections (bugfixes) called out below.** First full review since 1.1.3; 5 independent reviewers (both model-diverse CLIs were quota-down, so the review ran on extra Claude opus[1m] reviewers with distinct lenses + driver re-verification). The frozen core and the new v1.2.0–v2.2.0 surfaces were independently confirmed clean; the fixes below are the surviving findings.
+
+### Behavior corrections (bugfixes — may change observable behavior)
+
+- **Command payloads are now isolated + JSON-validated at `submit()`, like events.** `world.submit()`/`submitWithResult()` now clone the command `data` and run `assertJsonCompatible` before queueing — mirroring `EventBus.emit`. Previously the queue held the caller's reference: reusing/mutating one command object across a submit loop made every queued command observe the LAST value, and the per-submit-cloned recording then diverged from live execution, breaking `selfCheck`/replay. **Migration:** submitting non-JSON command data (functions, class instances, `undefined` fields) now throws `json_incompatible` at submit instead of being silently accepted; make command payloads JSON-compatible (required for recording/replay anyway).
+- **`SessionReplayer.openAt` and `scenarioResultToBundle` no longer silently replay wrong state from a truncated bundle.** `WorldHistoryRecorder` is a bounded rolling buffer; a scenario longer than its capacity (default 64 ticks / 256 commands) produced a bundle that advertised full replayability but had evicted early ticks/commands. Now: `openAt` throws `missing_tick_entries` on a gapped body (matching `snapshotAtTick`), and `scenarioResultToBundle` throws `history_truncated` when asked to build a replayable (payload-carrying) bundle from a truncated history. **Migration:** raise the scenario's `history.capacity`/`commandCapacity` to cover the run, or use `SessionRecorder`/`FileSink` for archival replay.
+- **`World.step()`/`stepWithResult()` reject re-entrant stepping** with `tick_reentrancy` instead of silently corrupting the tick — a system, command handler, or diff listener that steps the world is now fail-fast.
+- **`getByTag()` returns entities in ascending-id order** (was tag-insertion order), so a consumer taking `[...getByTag(t)][0]` sees the same entity live vs a snapshot-resumed/forked run. Matches the id-sort discipline already on spatial queries.
+- **`compareMetricsResults` emits `pctChange: null` (not `±Infinity`) for growth from a zero baseline.** `±Infinity` JSON-serialized to `null` and collided with the no-baseline sentinel; a 0→N change is now distinguishable via `baseline` (0 vs null) and the finite `delta`.
+- **`VisibilityMap.getState()` canonical ordering is now code-unit (deterministic across ICU/V8), not `localeCompare`** — a cross-runtime `stateDigest` of visibility state stays stable for non-ASCII ids.
+
+### Added
+
+- **`WorldHistoryState.truncated?: boolean`** — present and `true` only when the recorder's rolling buffer evicted recorded data. Lets consumers (and `scenarioResultToBundle`) tell an incomplete history from a complete one.
+
+### Fixed (internal / quality)
+
+- Recorder mutex-slot leak: a `SessionRecorder.connect()` that threw while assembling metadata (after claiming the world's single-recorder slot) no longer orphans the slot — `disconnect()` releases it, so a later recorder can attach.
+- `selfCheck` executions comparison is now O(1) per tick (bucketed by tick) instead of O(T·E) per segment; its no-payload guard uses `replayableUpperBound` for consistency with every other replay bound; the `no_replay_payloads` error now points to `snapshotAtTick`/`readSnapshot` (the remedy that actually works).
+- Docs clarified: `runAgentPlaytest.ok` semantics (deliberately stricter than `runSynthPlaytest` on poisoned worlds), `applySnapshot` does not adopt the snapshot's `strict` flag, `PathCache` unbounded growth under position-keyed usage, and `observationForAgent` (not `redactVisualPlaytestObservation`) is the agent-safety boundary.
+
+### Validation
+
+New failing-first tests: command-payload isolation + replay parity, replay-truncation guards (openAt gap + adapter refusal + positive controls), and reentrancy/slot-leak/getByTag/VisibilityMap/pctChange regressions. Two internal modules extracted to keep files within the 500-LOC budget (`session-continuity.ts` — shared tick-continuity guard shared by openAt + snapshotAtTick; `session-replayer-markers.ts`). Full gates green: `npm test` (1343 passed + 1 todo), mcp (22), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 2.2.0 - 2026-07-10
+
+Browser-safe package entry. **Additive minor — Node consumers are byte-identical; bundlers now resolve a browser-safe barrel.**
+
+The package barrel mixed the node-only `FileSink` and `BundleCorpus` (module-scope `node:fs`/`node:path` imports) with browser-safe exports. Browser apps consuming the package as a symlinked `file:` dependency died at boot whenever the barrel was served un-prebundled: the `node:path` named import throws inside Vite's browser-external stub at module evaluation, even in apps that never touch the node-only exports. Townscaper hit this live (worked around with `optimizeDeps.include`); aoe2 and city carry `node:fs`/`node:path` alias shims for the same reason. The fix belongs in the engine: browser consumers should never resolve node-only modules.
+
+- **New browser barrel `dist/index.browser.js`** (`src/index.browser.ts`): the full public surface minus exactly `FileSink` and `BundleCorpus`. `CorpusIndexError` and all corpus types remain available (re-exported from the pure types module — identical objects to the full barrel's, pinned by test).
+- **`browser` condition on the `"."` export:** bundlers that resolve with the browser condition (Vite dev and build, webpack, esbuild `platform: 'browser'`) transparently get the browser barrel with zero import churn. Node's resolver has no `browser` condition and keeps resolving `./dist/index.js` — the full barrel, byte-identical to 2.1.0; top-level `main`/`types` are untouched.
+- **New `./browser` subpath (`civ-engine/browser`):** explicit opt-in for tooling that does not apply the browser condition. It uses a `default` condition deliberately — the barrel is browser-SAFE, not browser-only, and loads fine under Node.
+- **Migration:** none for Node consumers. Browser consumers get the fix automatically; the fleet-wide import inventory confirmed no sibling's browser-served code imports the node-only names, so nothing breaks. Consumer-side workarounds (townscaper's `optimizeDeps.include: ['civ-engine']`, aoe2's and city's `node:fs`/`node:path` alias shims) are now unnecessary and can be dropped at leisure. If browser-bundled code does import `FileSink`/`BundleCorpus`, it now fails with a missing-export error at build/boot instead of taking the whole app down at module evaluation — move that code to a node context.
+
+### Validation
+
+New `tests/browser-entry.test.ts` (7 tests): transitive module-graph purity of the browser barrel (no `node:` builtins, no bare specifiers — with a negative control proving the walker sees the builtins behind the full barrel), runtime and declared-name parity (full surface minus exactly `['BundleCorpus', 'FileSink']`), export identity across both barrels, exports-map shape and condition order, and the no-star/side-effect-import curation pins on the new barrel. Post-build resolution smoke: `node` self-reference resolves the full barrel, `civ-engine/browser` and `node --conditions=browser` resolve the browser barrel. Full gates green: `npm test` (1328 passed + 1 todo), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 2.1.0 - 2026-07-08
+
+Fleet-aggregation primitives (loop-engineering roadmap slice 1). **Additive minor.**
+
+- **`improvementFindingSignature(finding, { gameId? })`** — the cross-run, cross-repo bug-class key: declared own-property `data.class` (non-empty string) or the finding id, optionally `<gameId>/`-prefixed (`gameId` must not contain `/` — the join would collide distinct classes; the class side may). Trims but never rewrites (no suffix-stripping heuristics — false class merges/splits are the failure mode the recursive loop's prove-fixed discipline exists to prevent); minimal validation (plain object) so historical JSON ledger rows stay aggregatable. Throws coded `improvement_finding_signature_invalid`.
+- **`stateDigest(value, { omitKeys? })`** — canonical 64-bit FNV-1a digest (16 hex chars) of JSON-compatible state: sorted object keys, significant array order, deep `omitKeys` exempt from validation (strip wall-clock noise or handles without pre-processing). Throws coded `state_digest_invalid` on non-JSON values, mirroring `assertJsonCompatible`. A comparison key, not a cryptographic hash.
+- **`data.effort` convention** — documented (not validated) manifest shape `{ llmCalls?, wallClockMs?, model? }` for quota-based effort accounting alongside `costUsd`.
+- New types: `ImprovementFindingSignatureOptions`, `StateDigestOptions`. Public-surface fixture +4 names (2 runtime + 2 type-only).
+
+### Validation
+
+Failing-first tests: `tests/improvement-signature.test.ts` (class-over-id preference, gameId prefixing, trim-only normalization pin, run-suffix ids stay distinct, coded errors, minimal validation on historical rows) and `tests/state-digest.test.ts` (key-order stability, value/order/shape discrimination, deep omit incl. validation exemption, coded rejections incl. circular refs, digest shape). Full gates green: `npm test` (1316 passed + 1 todo), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 2.0.0 - 2026-07-08
+
+The proper loop is now the default. **Major - two behavior-changing default flips; no API removals, no signature changes.**
+
+The recursive-improvement contract's honesty invariants were opt-in hardening since 1.5.0/1.6.0; per the loop's intent ("the agent sees and plays the game like a player; verified means mechanically proven"), they are now the defaults. Both old behaviors remain available as explicit opt-outs.
+
+- **`agentObservation` defaults to `'redacted'`.** `runVisualPlaytestLoop` now enforces the hidden-state wall at the `decide()` boundary by default: the agent receives `observationForAgent(observation, promptMode)` and an audience-filtered agent-facing trace; reviewer/traceOnly channels never reach the agent. The returned `result.trace` stays under `traceObservation` control (the debugging/replay channel is unchanged). **Migration:** callers that relied on the raw default must now pass `agentObservation: 'raw'` explicitly; callers already passing `'redacted'` are unaffected.
+- **`assertImprovementFinding` requires verification evidence by default.** A `verified` finding must carry an addressed replayable evidence ref (`tick` with its tick, `marker` with `markerId`, or `bundle` with `bundleId`/`sessionId`) plus a `verificationMethod` — enforced on every path through `assertImprovementFinding`: direct validation, both conversion builders, and marker recording — so a dishonest `verified` claim cannot enter the pipeline. **Migration:** pass `{ requireVerificationEvidence: false }` only for reading historical payloads recorded before 2.0.0; `improvementFindingsFromMarkers` already reads leniently so old bundles stay extractable. Unverified findings are unaffected.
+
+### Validation
+
+TDD: the 1.x default pins were flipped to failing tests first (`tests/visual-playtest-redaction-wall.test.ts` default-wall + explicit-`'raw'` opt-out; `tests/improvement-loop.test.ts` strict-by-default, construct/record refusal, lenient historical read), then the two defaults were implemented. Full gates green: `npm test` (1306 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
+## 1.6.1 - 2026-07-08
+
+Browser-safe session ids. **Patch - no API or behavior change.**
+
+`SessionRecorder` and `scenarioResultToBundle` imported `randomUUID` from `node:crypto`, which fails module resolution in browsers and workers — an in-page recorder took the embedding game bundle down with it (surfaced by farm's dev-mode recorder). Both now use a portable UUID (`globalThis.crypto.randomUUID` with a `getRandomValues` v4 fallback; throws coded `uuid_crypto_unavailable` if no WebCrypto exists). Ids are metadata, not simulation state, so determinism discipline is unaffected. A scan test pins that browser-reachable session modules import no `node:` builtins (`FileSink` and the disk corpus remain node-only by design).
+
+### Validation
+
+New `tests/uuid.test.ts` (v4 shape/uniqueness + the node-builtin scan). Full gates green: `npm test` (1303 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
+## 1.6.0 - 2026-07-07
+
+Improvement-loop contract completion. **Additive minor for code (no runtime behavior of existing valid payloads changes, with one edge: `sourceRun` manifests now type-validate the ten newly-recognized manifest keys, so a degenerate payload like `sourceRun.model: 42` that v1.4.0 tolerated as unknown JSON is now rejected); introduces finding schema version 2 with minimal stamping.**
+
+The recursive-improvement design's verification and classification vocabulary is now fully expressible, run manifests have a lifecycle, and "verified" can be made structurally honest. The fleet survey found two game repos freezing `verificationStatus` and two hand-shaping manifests — this release gives both patterns a real contract.
+
+- **Verification method and promotion target:** optional `verificationMethod` (`replay | state | spec | metric | screenshot | human`) records HOW a finding was confirmed while `verificationStatus` stays the lifecycle axis; optional `promotionTarget` (`test | scenario | fixture | assertion | backlog | engineFeedback | designQuestion`) records where a confirmed finding becomes durable. Both are additive keys tolerated by v1.4/v1.5 readers.
+- **Widened `nextAction` under schema version 2:** `improveHarness`, `fileEngineFeedback`, `addRegression`, and `updateDesign` are now first-class classifications. Because v1.4.0 readers closed-set-validate `nextAction` and silently skip invalid marker findings, these values require `schemaVersion: 2` — `IMPROVEMENT_FINDING_SCHEMA_VERSION` is now `2`, validators/readers accept `1 | 2`, findings using only v1 vocabulary may keep stamping `1`, a v1-stamped finding using widened values is rejected, and marker envelopes mirror the finding's own version. **Migration note:** existing v1 payloads validate unchanged; readers older than 1.6.0 will skip v2-stamped findings by declared version incompatibility rather than silently mislabeling them. If your code stamps `schemaVersion: IMPROVEMENT_FINDING_SCHEMA_VERSION`, note the constant is now the LATEST version (2) — prefer `minimalImprovementFindingSchemaVersion(nextAction)` so v1-vocabulary findings keep stamping 1 for maximum old-reader interop.
+- **Run-manifest lifecycle:** `ImprovementRunManifest` gains optional `gitCommit`, `engineVersion`, `model`, `provider`, `seed`, `costUsd`, `durationMs`, `stopReason`, `artifacts` (`{ kind, path }[]`), and `gates` (`{ name, ok, detail? }[]`). New `createImprovementRunManifest(input)` builds a validated manifest and auto-fills `engineVersion` (never invents ids or timestamps); new `assertImprovementRunManifest(value)` validates manifests read back from disk.
+- **Strict verification mode:** `assertImprovementFinding(value, { requireVerificationEvidence: true })` refuses `verified` findings lacking at least one ADDRESSED replayable evidence ref (a `tick` ref with its tick, a `marker` ref with `markerId`, or a `bundle` ref with `bundleId`/`sessionId` — bare kind labels do not count) or lacking `verificationMethod`. Default validation stays permissive, so existing authoring-time flows are unaffected.
+- **Reverse conversion:** `visualPlaytestFindingToImprovementFinding(visual, init)` lifts a raw visual finding into the durable contract with defaults (`unverified`/`proposalOnly`), plural-evidence mapping that round-trips with `improvementFindingToVisualPlaytestFinding`, and minimal schema-version stamping.
+- **New types:** `ImprovementFindingSchemaVersion`, `ImprovementVerificationMethod`, `ImprovementPromotionTarget`, `ImprovementRunArtifact`, `ImprovementGateResult`, `ImprovementRunManifestInput`, `ImprovementFindingInit`, `AssertImprovementFindingOptions`.
+
+### Validation
+
+Failing-first coverage extends `tests/improvement-loop.test.ts` to 23 tests: schema-version-2 exposure through `getAiContractVersions()`, v1-vocabulary payloads still valid with envelopes mirroring version 1 (including the new optional fields as additive keys on v1), widened vocabulary rejected under v1 — both directly and as a silent skip when reading forged markers — and round-tripping through markers under v2, method/target value validation, strict-mode rejections (including unaddressed `bundle`/`marker` refs) and acceptance, permissive default (authoring-time `verified` compatibility pin), manifest builder/validator including embedded `sourceRun`, explicitly-undefined optional tolerance, and caller-supplied `engineVersion` override, minimal-version helper, and reverse-conversion evidence round-trip, `visual.data` drop, plus minimal stamping. Public-surface fixture +16 entries (4 runtime + 12 declared). Full gates green: `npm test` (1300 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
+## 1.5.0 - 2026-07-07
+
+Visual playtest runner hardening + multimodal prompt parts. **Additive minor - fully back-compatible; every new option is opt-in and defaults preserve 1.3.0/1.4.0 behavior exactly.**
+
+A code-verified fleet survey found `runVisualPlaytestLoop` live in three game repos and exposed four practical gaps: no run bounds, an advisory-only hidden-state wall at the agent boundary, whole-run aborts on a single invalid LLM action, and hand-rolled multimodal delivery in every repo because the string prompt renders the screenshot as text. This release closes them at the contract level.
+
+- **Run budgets and abort:** `VisualPlaytestLoopConfig.budget` (`maxWallClockMs`, `maxActionsPerStep`, `maxActionFailures`), `signal: AbortSignal`, and a `now` clock override. Budget exhaustion stops with the new `stopReason: 'budgetExceeded'` (`ok: true`); abort stops with the new `'aborted'` (`ok: false`, `AbortError`-shaped `error`) and wins over a simultaneous budget breach. Checks run at step boundaries, after `observe`, after each decision, and before each action; in-flight host/agent calls are the adapter's to cancel (pass the same signal to provider/browser calls). An abort observed right after `decide` skips `host.annotate` while still collecting that decision's findings. With no wall-clock budget the loop never reads the clock. A `stop` action truncated off by `maxActionsPerStep` is still honored after the executed prefix completes cleanly; the full proposed list stays visible on the trace entry's `decision`. Cost/token metering stays game-side.
+- **Enforced agent-boundary redaction:** `agentObservation: 'redacted'` hands `agent.decide` the new `observationForAgent(observation, mode)` view — screenshot (including `dataUrl`), visible text, controls, and `tick` preserved; state channels dropped under `playerBlind` and audience-filtered with redaction levels applied under `oracleAssisted`. The `trace` handed to the agent passes through the same filter (including nested action-result observations), so prior-step reviewer/traceOnly state never reaches the agent even under `traceObservation: 'full'`, which continues to control only the returned `result.trace`. The default `'raw'` keeps the historical hand-the-raw-observation behavior.
+- **Continue-past-failed-action policy:** `onActionFailure: 'continue'` records the failure on the trace (thrown actions become a synthetic `{ ok: false, action, error }`), reports it to the next `observe` via `previousActionResult`, skips the rest of that step's actions, and keeps looping; `budget.maxActionFailures` caps total failures (thrown and `ok: false` alike) before an `'actionFailed'` stop, and is rejected without `onActionFailure: 'continue'` (it would be silently dead under the default policy). The default `'abort'` keeps the historical first-failure-ends-the-run behavior.
+- **Typed observation tick:** optional `VisualPlaytestObservation.tick` anchors a screenshot-level observation to the simulation tick it was captured at; prompt helpers surface it as `Simulation tick: N` and trace/redaction clones preserve it.
+- **Multimodal prompt parts:** `buildVisualPlaytestPromptParts(input)` returns `VisualPlaytestPromptPart[]` — the same prompt sections as `buildVisualPlaytestPrompt` as text parts plus one `{ type: 'image', source }` part carrying the screenshot payload for the game's provider adapter. Use it when the model should actually see pixels; the string helper remains text-only.
+- **New validation code:** invalid values for the new options throw `EngineRangeError` code `visual_playtest_config_invalid` with `details.field`.
+- **Behavior callout for type consumers:** `VisualPlaytestStopReason` widens with `'budgetExceeded'` and `'aborted'`. Verified against all known consumers (none switch exhaustively over the union); if you exhaustively switch on `stopReason`, add arms for the two new values. Policy recorded as ADR 56.
+- **Internal layout:** prompt building moved to `src/visual-playtest-prompt.ts` for the 500-LOC budget; all public names still export from the package root.
+
+### Validation
+
+New failing-first coverage in `tests/visual-playtest-hardening.test.ts` + `tests/visual-playtest-redaction-wall.test.ts` (28 tests) pins wall-clock and per-action budget stops incl. the strict-greater boundary and the no-budget-no-clock-read guarantee, abort during decide (skipping annotate, keeping findings) and pre-aborted signals, abort priority over budget, per-step action caps with decision retention and truncated-`stop` honoring, continue-past-failure with trace/`previousActionResult`/failure-cap semantics for thrown and `ok: false` actions alike, the maxActionFailures-requires-continue validation, redacted vs raw agent boundaries in both prompt modes including the agent-facing trace wall under `traceObservation: 'full'`, `observationForAgent` directly, tick propagation into prompts and traces, prompt-part shapes and string-prompt parity, and coded config validation. The pre-existing visual playtest suite runs unchanged, pinning that defaults preserve prior behavior. Public-surface fixture updated (+6 entries: 2 runtime + 4 declared). Full gates green: `npm test` (1282 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`. Adversarially reviewed by Codex CLI + Claude CLI + two in-process reviewers; the agent-trace leak, annotate-after-abort, clock-read, and truncated-stop findings were fixed pre-release.
+
+## 1.4.0 - 2026-07-07
+
+Shared recursive-improvement finding contracts. **Additive minor - fully back-compatible.**
+
+`civ-engine` now exports the first public API slice from the agent recursive self-improvement loop design: a durable `ImprovementFinding` payload plus helpers that bridge it into visual findings and session markers. This lets game repos record findings with verification status, next action, plural evidence, optional disposition, and local metadata while preserving compatibility with existing visual-playtest marker reports.
+
+- **New shared finding types:** `IMPROVEMENT_FINDING_SCHEMA_VERSION`, `ImprovementFinding`, `ImprovementEvidenceRef`, `ImprovementRunManifest`, `ImprovementVerificationStatus`, `ImprovementNextAction`, and `ImprovementDisposition`. `getAiContractVersions()` now includes `improvementFinding`.
+- **New conversion and validation helpers:** `improvementFindingToVisualPlaytestFinding`, `improvementFindingToMarker`, `improvementFindingsFromMarkers`, and `assertImprovementFinding`.
+- **Markers carry both payloads.** `improvementFindingToMarker` emits normal annotation markers with `data.improvementLoop` for loop-aware agents and `data.visualPlaytest` for existing visual reports/viewers.
+- **Boundary remains small.** The engine does not own browser automation, provider clients, local gates, game-specific conformance taxonomies, run ledgers, or auto-fix policy.
+- **No existing engine behavior changes.** Visual-only helpers, visual playtest loops, session recording/replay, worlds, and metrics keep their existing behavior.
+
+### Validation
+
+New failing-first coverage in `tests/improvement-loop.test.ts` pins AI contract version exposure, conversion to visual findings, marker payload shape, recovery from markers while ignoring unrelated markers, and malformed finding rejection. Public-surface fixture updated for the new exports. Full gates green: `npm test` (1254 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
+## 1.3.0 - 2026-07-07
+
+Reusable visual playtest harness contracts. **Additive minor - fully back-compatible.**
+
+`civ-engine` now exports a zero-runtime-dependency visual playtest surface for browser-game LLM harnesses. It standardizes the shared loop vocabulary that had started to repeat across game repos while leaving browser automation, screenshots, DOM/canvas control extraction, model/provider calls, cost tracking, and game-specific hidden-state serialization in those repos.
+
+- **New core visual loop contracts:** `VisualPlaytestObservation`, `VisualPlaytestStateChannel`, `VisualPlaytestControl`, `VisualPlaytestAction`, `VisualPlaytestDecision`, `VisualPlaytestFinding`, `VisualPlaytestHost`, `VisualPlaytestAgent`, `VisualPlaytestTraceEntry`, `VisualPlaytestLoopConfig`, and `VisualPlaytestLoopResult`.
+- **New runner and helpers:** `runVisualPlaytestLoop`, `buildVisualPlaytestPrompt`, `redactVisualPlaytestObservation`, `visualPlaytestFindingToMarker`, and `visualPlaytestFindingsFromMarkers`.
+- **Hidden state is explicit and audience-labeled.** `playerBlind` prompts omit hidden state. `oracleAssisted` prompts include only channels marked `audience: 'agent'`; `reviewer` and `traceOnly` channels stay out of acting-agent prompts. Safe traces redact screenshot data URLs and sensitive state values by default.
+- **Findings bridge into session bundles.** `visualPlaytestFindingToMarker` turns structured visual findings into normal `SessionRecorder` annotation markers, and `visualPlaytestFindingsFromMarkers` recovers them for reports/viewers.
+- **No existing engine behavior changes.** `runAgentPlaytest`, `runSynthPlaytest`, `SessionRecorder`, replay, bundle viewer, and world APIs are unchanged.
+
+### Validation
+
+New failing-first coverage in `tests/visual-playtest.test.ts` pins loop ordering, multi-action decisions, explicit stop, max-step stop, host/agent/action failures, coded invalid-`maxSteps` errors, player-blind vs oracle-assisted hidden-state prompts, explicit redaction metadata, safe vs full trace observation capture, nested action-result redaction, and marker round-trip through `SessionRecorder`. Public-surface fixture updated for the new exports. Full gates green: `npm test` (1249 passed + 1 todo), `npm run typecheck`, `npm run lint`, and `npm run build`.
+
+## 1.2.0 - 2026-06-13
+
+Component/state-typed session recording + replay (aoe2 engine-feedback, surfaced by v0.8.15). **Additive minor — fully back-compatible.**
+
+`SessionRecorder` / `SessionReplayer` previously hardcoded `World<TEventMap, TCommandMap>`, so a component-typed world (`World<E, C, GameComponents, GameState>`) — invariant in `TComponents` since v0.8.15's layer-chain split — could not flow through without an `as unknown as` cast that erased component-type safety at the recorder/replayer boundary (a component access returned `unknown`). aoe2 absorbed it with a `toEngineWorld` / `fromEngineWorld` cast seam.
+
+- **`SessionRecorder` / `SessionReplayer` (and `SessionRecorderConfig` / `ReplayerConfig`) now thread `TComponents` / `TState`** (mirroring `World`'s, with the same `ComponentRegistry` / `Record<string, unknown>` constraints + defaults), **appended after each type's existing parameters** so no existing explicit type argument changes meaning. `new SessionRecorder({ world })` accepts a fully-typed world with no cast; `replayer.openAt(t)` returns a world where `getComponent(id, 'position')` is `Position`, not `unknown`. Threading **sidesteps** the invariance (the caller's world is inferred, never narrowed) — World's layer chain is untouched.
+- **Playtest harnesses deliver a typed world to the driver.** `runAgentPlaytest` / `runSynthPlaytest` drop the `world as unknown as World<E, C>` casts their configs previously erased. `AgentDriverContext` / `AgentDriver` gain `TComponents` / `TState` (parity with `PolicyContext`, already threaded), so `agent.decide(ctx)` / `stopWhen(ctx)` now see a registry-typed `ctx.world`.
+- **Out of scope (unchanged, default-generic):** `toBundle()` stays `SessionBundle` (the serialized JSON middle; a typed return breaks consumers holding a default-generic slot — verified against aoe2), `ForkBuilder`, and `BundleViewer`. A future minor can thread fork/viewer.
+
+**Usage note:** TypeScript has no partial type-argument specification, so the typed path works via inference — call with no explicit type arguments. Writing `<E, C>` defaults `TComponents` to `Record<string, unknown>` (the unchanged back-compat path).
+
+### Validation
+
+`npm test` 1238 + 1 todo (a new `session-generics` type+runtime test: a typed world records/replays with no cast and `getComponent` is registry-typed; failing-first against the un-threaded signatures), `npm run typecheck`/`lint`/`build`, `mcp` 22, `npm audit` 0 high/critical. **Back-compat proof:** the aoe2 consumer (which links `civ-engine` by symlink and still uses the cast seam) `typecheck`s green against the rebuilt engine with zero edits. Public-surface name-pin unchanged (generic-arity additions don't change export names). ADR 52. Multi-CLI reviewed.
+
+## 1.1.4 - 2026-06-13
+
+Replay-bound finalization fix (surfaced by the aoe2 consumer's engine-feedback, 2026-06-13). A bundle exported via a **live `toBundle()` before `disconnect()`** — the path used by long LLM-playtest captures — shipped `metadata.endTick: 0` / `durationTicks: 0` even though the run was fully recorded, because those fields were finalized only in `disconnect()`. `SessionReplayer.openAt` clamped its reachable upper bound to `endTick`, so every recorded run was rejected at `tick > 0` — the engine's own "what actually happened" replay-debugging path was unusable for those bundles. **No public API surface change** (pure patch); behavior callouts below.
+
+### Fixed
+
+- **`endTick` / `durationTicks` are now finalized live, on every recorded tick (HIGH).** Both `MemorySink` and `FileSink` advance `metadata.endTick` (and `durationTicks`) on every `writeTick` **and `writeTickFailure`** (a failed tick consumes its tick number, so it extends the recorded range too), mirroring how `persistedEndTick` already advanced in `writeSnapshot`. A `toBundle()` taken at any point — before `disconnect()`/`close()` — now returns internally consistent metadata. **Behavior callout:** a live-exported bundle's `endTick` now reflects the last recorded tick instead of `startTick`; the `disconnect()`-finalized value is unchanged. For a failure-terminated live export, `openAt(failedTick)` now reports `replay_across_failure` rather than a misleading `too_high`. `FileSink` keeps its manifest write cadence (on `open`/`writeSnapshot`/`close`, not per tick); the live `endTick` flushes to disk on the next snapshot or `close()`.
+- **The replay surface tolerates a legacy understated `endTick` (HIGH).** For complete bundles the reachable upper bound is now `max(endTick, persistedEndTick)`, computed by one internal `replayableUpperBound` helper used across `SessionReplayer.openAt` / `tickEntriesBetween`, `snapshotAtTick`, `BundleViewer.replayableRange`, and `BundleCorpusEntry.materializedEndTick`; `BundleViewer.recordedRange.end` is purely content-bounded. The `civ-engine-mcp` server's reported `effectiveUpperBound` reads `materializedEndTick` (so an AI agent sees the recovered horizon, not `0`). For any cleanly-recorded bundle `endTick ≥ persistedEndTick`, so this is a no-op; it only recovers bundles already on disk that were recorded by the buggy live-export path (so they need no re-recording). Incomplete (sink-failure) bundles still cap at `persistedEndTick`. **Behavior callout:** `openAt` on such a legacy bundle now replays (up to the last persisted snapshot) instead of throwing `BundleRangeError`.
+
+### Validation
+
+`npm test` (1237 + 1 todo; nine new failing-first tests across the recorder, both sinks, replayer, viewer, `snapshotAtTick`, and corpus, plus two extended failure-path sink tests), `npm run typecheck`, `npm run lint`, `npm run build`, and `mcp` 22 (two new tests pinning the recovered `effectiveUpperBound`). `npm audit` 0 high/critical (full + omit-dev). Verified against the real `campaign-4` capture (`endTick: 0`, `persistedEndTick: 9000`): the recovered bound is `9000`. Multi-CLI reviewed (Codex + Gemini + Claude).
+
+## 1.1.3 - 2026-06-13
+
+Full-codebase review hardening (4 review iterations to convergence; Codex + Claude — Gemini unreachable; thread `docs/threads/done/full/2026-06-13/`). The first full review since 1.0: the core tick/ECS/PRNG/query-cache machinery was re-confirmed defect-free, with fixes concentrated in determinism edges, read-side semantics, input validation, and the newest (MCP / `snapshotAtTick`) surfaces. **No public API surface change** (pure patch); behavior callouts below.
+
+### Fixed — determinism & correctness
+
+- **Spatial query order is now deterministic across reload (HIGH).** `world.grid.getAt` / `getNeighbors` / `getInRadius`, `world.queryInRadius`, and standalone `SpatialGrid` reads now return entities in ascending-id order. A cell's iteration order was previously move-into-cell order when built live but position-store order when rebuilt by `deserialize` / `openAt` / `forkAt` / `applySnapshot`, so a system reading spatial iteration order could diverge silently after a mid-stream reload (the deferred determinism-contract clause-6 case, now tested). **Behavior callout:** code relying on the old (unspecified, non-round-trip-stable) order now sees id order; `getAt` also returns a fresh copy (mutating it no longer affects the grid).
+- **`runSynthPlaytest` no longer leaks recorder state when a user callback throws (HIGH).** A throwing `world.submitWithResult` (bad command) or `stopWhen` predicate bypassed `recorder.disconnect()`, leaving the World submit-wrapped and the payload-capture mutex held — blocking the next recording on that World. Now wrapped in try/finally (mirrors the async `runAgentPlaytest`). **Behavior callout:** a bad command from a policy now ends the run with `stopReason: 'policyError'` instead of throwing.
+- **`VisibilityMap` read APIs no longer create phantom players (MEDIUM).** `isVisible` / `isExplored` / `getVisibleCells` / `getExploredCells` / `getSources` for an unknown player previously created + stored an empty player entry, mutating canonical (serialized) state and growing memory unbounded. Reads now return empty/false without storing.
+- **`snapshotAtTick` deep-clones its result (MEDIUM).** It could return bundle snapshot data by reference, so a caller mutating the returned `WorldSnapshot` corrupted the source `SessionBundle`. Now `structuredClone`d, matching `serialize()` / `applySnapshot` discipline.
+- **Fork/bundle divergence: `{}` vs `[]` is now symmetric (MEDIUM).** The internal structural-equality helper treated `({}, [])` as equal but `([], {})` as unequal, so a flipped object↔array payload could read as "equivalent" by argument order.
+
+### Fixed — input validation (fail-fast on out-of-contract input)
+
+- **`snapshotAtTick`** rejects NaN / fractional / non-finite ticks with `BundleRangeError` code `tick_not_integer` (was: returned a made-up state).
+- **`createCellGrid` / `stepCellGrid`** reject non-integer / non-positive dimensions and a `cells.length` that disagrees with `width*height` — a fractional width otherwise corrupted the flat `y*width+x` grid.
+- **Marker validation** rejects fractional marker ticks, tick-ranges, and cell coordinates (was: silently entered the bundle as non-deterministic addresses).
+
+### Fixed — MCP server & misc
+
+- **`run_metrics` / `compare_metrics` preserve `±Infinity` (MEDIUM).** Zero-baseline metric deltas (intentionally `±Infinity`) were serialized to `null` by `JSON.stringify`, dropping the signal; the MCP output now emits non-finite numbers as `"Infinity"` / `"-Infinity"` / `"NaN"` strings.
+- **Hydrated snapshots are flagged.** `bundle_snapshots` and `viewer_frame` stamp `carriedForward: ['rng','config','componentOptions']` on a hydrated (non-recorded) tick, where those fields reflect the nearest recorded snapshot, not the requested tick — so agents don't read a stale rng as tick-accurate. (At a recorded tick the state is verbatim and the flag is correctly absent.)
+- **MCP metric lookup is prototype-safe** — a metric named `constructor` / `__proto__` now yields a clean "unknown metric" error.
+- **MemorySink and FileSink agree on snapshots.** A terminal snapshot landing on an already-snapshotted tick is coalesced by tick in both sinks (MemorySink replace-in-place ↔ FileSink overwrite), so `bundle.snapshots` has unique ticks AND a same-tick post-snapshot mutation is preserved.
+- **`ComponentStore` semantic-diff baseline is incremental** — O(changed) per tick instead of re-fingerprinting every component; no behavior change.
+
+### Validation
+
+4 multi-CLI review iterations to unanimous convergence. Codex caught a real `MemorySink`/terminal-snapshot **state-loss regression** in an interim fix that Claude had approved (the multi-reviewer payoff); the interim `getAtRaw` perf accessor was reverted to keep this a pure patch with no surface addition. ~16 failing-first tests pin the fixes. All four gates + benchmark gate green (benchmark improved); `npm audit --audit-level=high` 0 (full tree + `--omit=dev`); public-surface fixture unchanged. Root suite 1228 passed + 1 todo (the deferred clause-6 todo became a real test); mcp 20.
+
+## 1.1.2 - 2026-06-13
+
+Dev-tooling security upgrade — no runtime, API, or behavior change. Clears the 5 HIGH advisories the 1.1.1 lockfile sync surfaced.
+
+- **vitest 3 → 4.1.8** in both the root and the `mcp` subpackage. The advisory chain was `esbuild 0.17–0.28` (GHSA-gv7w-rqvm-qjhr, GHSA-g7r4-m6w7-qqqr) pulled transitively via `vite` via `vitest`; vitest 4.1.8 / `vite 8` no longer install esbuild at all — vite 8 bundles via `rolldown` and lists esbuild only as an optional peer — so the vulnerable package is **absent** from both resolved dev trees (`npm ls esbuild` is empty); that absence by removal, not an esbuild upgrade, is what clears the advisory. Drop-in: both test suites pass unchanged (root 1215 + 2 todo, mcp 18) with **no config or test edits** — both configs use only the stable `test.include` / `testTimeout` options. Both lockfiles re-resolved (and the mcp lock's previously-stale `file:..` parent ref is corrected as a side effect).
+- `npm audit --audit-level=high` is now **0** on both the full tree and `--omit=dev` (the engine remains zero-runtime-dependency).
+- **Dev-environment note:** vitest 4 requires Node `^20.19 || ^22.12 || >=24` to *run the test tooling*. This does **not** change the engine's own `engines` constraint (`node >=20`) — the published package is zero-dep and unaffected; only contributors running `npm test` need the newer dev Node. The CI matrix (`node-version: [20, 22]`, resolved to latest patches) already satisfies it.
+
+### Validation
+
+Both trees: `npm test` (root 1215 + 2 todo, mcp 18), `npm run typecheck`, `npm run lint`, `npm run build`, benchmark gate — all green. `npm audit --audit-level=high` 0 (full tree + `--omit=dev`). Multi-CLI review (Codex + Claude) on the dependency diff.
+
+## 1.1.1 - 2026-06-13
+
+Documentation-accuracy pass (`/doc-review`) — no API or behavior change; `ENGINE_VERSION` tracks the patch. A four-surface audit (README, api-reference, architecture, guides) against the live code brought every canonical doc up to date with the 1.1.0 MCP-server release and fixed pre-existing drift.
+
+- **Architecture docs caught up to 1.1.0:** Component Map + Boundaries gain the MCP server subsystem (in-repo `civ-engine-mcp` subpackage; sole owner of the MCP SDK; core stays zero-dep); drift-log gains the 1.1.0 row; `decisions.md` gains ADR 49 (MCP read-only / no-World-construction scope + the `snapshotAtTick` prerequisite) and ADR 50 (SDK isolation in a private subpackage).
+- **Fixed (doc correctness): tick-lifecycle ordering.** Four current docs showed "notify diff listeners" before "increment tick counter"; the engine increments first (`gameLoop.advance()` precedes the listener loop) precisely so `world.tick === diff.tick` holds during listeners. Order corrected in all four (`concepts.md`, ARCHITECTURE.md Data Flow, the api-reference `step()` docs, and `systems-and-simulation.md`).
+- **Fixed (stale signature): `getAiContractVersions()`** in api-reference listed 6 of its 9 return fields (missing `commandExecution`, `tickFailure`, `worldStepResult`); now complete. The `SYSTEM_PHASES` constant is now documented.
+- **Fixed (stale benchmark field):** `rts-primitives.md` advertised the "Spatial sync scan counts" benchmark field that v0.8.17 stopped emitting (the underlying scan metrics were removed back in v0.5.0); now "Spatial explicit sync counts" + the `query.membershipChecks` counter. `VisibilityMap.getMetrics()/resetMetrics()` (1.1.0) added to its tracked-surface list.
+- **README + roadmap:** the MCP subpackage version is corrected (`civ-engine-mcp` is 0.1.0, shipped alongside engine 1.1.0 — not "v1.1.0+"); the pre-1.0 alpha banner is refreshed for the post-1.0 surface freeze; the roadmap's three "carried-over small items" are marked shipped (VisibilityMap metrics → 1.1.0; recorder headroom + `offDestroy` Set → 1.0.2).
+
+### Validation
+
+Doc-only diff plus the version-tracking constant and a version-only lockfile sync; all four gates (`npm test` 1215 + 2 todo, `npm run typecheck`, `npm run lint`, `npm run build`) + benchmark gate green; mcp suite 18 passed; runtime `npm audit --omit=dev` 0 high/critical (zero runtime deps). Multi-CLI review (Codex + Claude; Gemini unreachable this session) with the codebase-grounding directive caught one incompleteness — two further current copies of the tick-lifecycle order (`api-reference.md` `step()` docs + `systems-and-simulation.md`) still showed the old order — fixed before commit. A pre-existing dev-only audit advisory set (esbuild via vite/vitest, 5 HIGH; shipped surface unaffected) is flagged for a separate vitest-4 follow-up.
+
+## 1.1.0 - 2026-06-12
+
+MCP server + the additive engine surface it stands on (objective `mcp-server`, post-1.0 roadmap Track C; design reviewed in 2 iterations — see `docs/threads/done/mcp-server/`).
+
+### civ-engine-mcp 0.1.0 (new in-repo subpackage, unpublished)
+
+A read-only MCP (Model Context Protocol) server over a recorded-bundle corpus: any MCP-capable agent can interrogate recorded games conversationally — 14 tools spanning corpus query/overview/refresh, `bundle_summary`, hotspots, markers, snapshots (incl. arbitrary-tick hydration and the v6 `poisoned` terminal-state field), viewer frames and range diffs, cross-bundle diffs (summary-first), and the 11 behavioral metrics with baseline/current comparison. Output discipline: every list takes a `limit` and reports `total` + `truncated` (no silent caps); every tool error carries the engine code via `getErrorCode`. The server never constructs Worlds and never writes files; corrupt manifests are skipped and surfaced, not fatal. The core package keeps zero runtime dependencies — the subpackage owns the MCP SDK. Run: `node mcp/dist/cli.js --corpus <dir>` (`docs/guides/mcp-server.md`). Live-world operation is deferred to a future version (needs a game-module loading story).
+
+### Engine additions
+
+- **`snapshotAtTick(bundle, tick)`** — pure-data state materialization at any in-range tick (nearest snapshot + folded TickDiffs; zero World construction). Coded errors: `BundleRangeError` out of range, `replay_across_failure` when a recorded failure precedes the tick, `missing_tick_entries` on gapped bundle bodies. This closes the gap where `BundleViewer.diffSince`'s snapshot fallback — triggered by the NORMAL created-then-destroyed-in-range case — required `worldFactory`.
+- **`VisibilityMap.getMetrics()` / `resetMetrics()`** (+ `VisibilityMapMetrics` type) — deterministic counters (recomputes, computedCells, visibilityQueries); metrics parity with OccupancyGrid.
+
+### Validation
+
+7 engine tests (snapshotAtTick semantics incl. failure-crossing, below-failure forensics, non-tautological fold-vs-recorded agreement, and the gapped-body `missing_tick_entries` guard) + 1 VisibilityMap metrics test + 18 MCP in-process round-trips over the SDK's InMemoryTransport against a real recorded fixture corpus (incl. the corrupt-manifest skip, truncation honesty, engine-error code mapping, and the fold-bail snapshot fallback). CI gains the mcp steps (own lockfile, audit, build, test) sequenced after the root build.
+
+## 1.0.2 - 2026-06-12
+
+Patch batch: the pre-1.0 review carry-overs.
+
+- **`offDestroy` is O(1)**: the destroy-callback registry is a `Set` (insertion-ordered like the previous array; registry parity with every other listener surface). Behavior note: registering the same function reference twice is now a no-op (previously fired twice and counted twice in `destroyCallbackCount`) — a bundle recorded under a duplicate-registering factory would now replay to a `registration_mismatch`; realistic blast radius ~zero since inline closures are distinct references.
+- **`PlayerObserver.reset()` re-asserts grid dimensions** — an `applySnapshot` that resizes the world grid under a live observer now surfaces as `player_observer_grid_mismatch` at the reset boundary the lifecycle already mandates, instead of a later misattributed bounds error.
+- **`session-recorder.ts` headroom**: §6.1 marker validation extracted to `src/session-marker-validation.ts` (behavior and rule ids unchanged; the recorder sat exactly at the 500-line cap).
+- Process: AGENTS.md versioning section updated to post-1.0 semver (major = breaking/human-gated via the deprecation policy; minor = additive; patch = fixes).
+
+### Validation
+
+1 new test (reset dimension re-assert); marker-validation behavior pinned by the existing recorder suite (rule ids unchanged). Full suite green; all gates pass.
+
+## 1.0.1 - 2026-06-12
+
+Replayer error-quality audit (owner-asked: "when the replayer doesn't work, does it give the right error message?"). Empirical answer: mostly yes — but two failure modes were SILENT and one was misleading. All fixed; every replay failure now names the actual defect with a stable code and actionable guidance.
+
+- **Fixed (silent → coded): a `worldFactory` that forgets `applySnapshot`.** `openAt` used to return a tick-0 world with NO error — silently wrong replay output. Now throws `BundleIntegrityError` `factory_snapshot_not_applied` at construction — detected via tick equality plus structural fingerprints (alive entities, state keys, component entry counts), so the tick-0 case is caught too; a tick-0 snapshot structurally identical to a fresh world is the documented residual blind spot (rng/resource state may differ).
+- **Fixed (silent → coded): a factory returning a poisoned world** (e.g. a listener that throws during construction stepping — invisible to the registration manifest). Now throws `factory_world_poisoned` with the underlying `failureCode`/`failureTick`.
+- **Fixed (misleading → precise): non-bundle input.** `fromBundle({...garbage})` used to say "unsupported bundle schemaVersion: undefined" (or crash later on a raw TypeError). Now throws `bundle_malformed` listing exactly which required fields are missing, before any version gate.
+- **Coded the family's last builtin-class throw:** `forkBuilder.run({ untilTick })` validation is now `ForkBuilderConflictError` with code `until_tick_invalid` (was a plain `RangeError`) — closes the legacy gap documented since v0.8.19.
+- **Message actionability:** `replay_across_failure` now says what TO do (openAt below the first failure, or inspect the terminal v6 snapshot via `restorePoison`); `no_replay_payloads` names the likely cause; `cross_a` names the remedy (matching-major tooling); the two `handler_missing` messages are harmonized.
+- Internal: guards live in new `src/session-replayer-guards.ts` (LOC budget); `ForkBuilderConflictErrorDetails` fields are now per-code optional.
+
+### Validation
+
+11 new tests (`tests/session-replayer-errors.test.ts`) pinning each guard, code, and message contract — including regression pins on the two formerly-silent failures, the tick-0 fingerprint case, null/primitive inputs, selfCheck-path protection, and an interim-snapshot no-false-positive proof. One pre-existing test repinned to the coded fork error. Full suite 1200 passed + 2 todo; all gates + benchmark green.
+
+## 1.0.0 - 2026-06-11
+
+**The 1.0 release.** The public surface freezes under semver: the surface fixture (104 runtime / 315 declared names) (`tests/fixtures/public-surface.json`) is the contract — additions are minors, removals happen only in majors via the deprecation policy (`docs/guides/public-api-and-invariants.md`). Decisions and rationale: `docs/design/v1-checklist.md` (all 8 items owner-approved); pre-release gate: the converged 2026-06-11 full review.
+
+### BREAKING — `strict` defaults to `true`
+
+The mutation gate is now on by default: out-of-phase mutations throw `StrictModeViolationError` at the call site. **Migration:** pass `strict: false` to opt out, or (preferred) move between-tick mutations into systems / `runMaintenance(fn)`. **Pre-1.0 SNAPSHOTS (save files) are unaffected:** version ≤ 5 snapshots without an explicit `config.strict` deserialize as NON-strict (the compatibility clause, ADR 48). **Pre-1.0 BUNDLES are a different story and always were:** the replayer's version policy rejects cross-`a` (and rejected cross-`b` throughout 0.x) at construction with `BundleVersionError` — bundle replay is same-engine-version tooling by design, so replay 0.x bundles with 0.x tooling. The clause exists for the snapshot-loading path (`World.deserialize` / `applySnapshot`), which is version-tolerant. The setup window is unchanged — construct-and-populate code keeps working without modification.
+
+### BREAKING-lite — snapshot v6
+
+`serialize()` now emits version 6: adds `poisoned: TickFailure | null` (the terminal failure, carried for INSPECTION — a poisoned world's snapshot finally says so) and always writes `config.strict` explicitly. Load paths accept versions 1–6, keep CLEARING live poison by default, and gain `{ restorePoison: true }` (the ≤v5 strict clause applies to `deserialize` — `applySnapshot` never transfers strictness; the target world keeps its own) for terminal-state-fidelity tooling (restored worlds behave exactly like the original poisoned one; `recover()` clears). `diffSnapshots` / `applyTickDiff` accept v5 and v6 (`poisoned` excluded from diff semantics; `applyTickDiff` emits the input's version with `poisoned: null` — an applied successful diff is a healthy state by definition).
+
+### BREAKING — surface trims
+
+Removed from the package surface (still engine-internal): `FORBIDDEN_PRECONDITION_METHODS` (test-support constant; the precondition denylist remains documented prose) and `gridPathPassabilityVersion` (PathCache internal; `createGridPathQueue` wires it automatically, `createGridPathCacheKey` remains the public keying surface).
+
+### Replay version policy under the freeze
+
+`SessionReplayer` now **warns** (instead of throwing) on same-major cross-`b` bundles: under the 1.0 semver freeze the `b`-component is the additive axis, and a fatal gate would orphan every recorded corpus at every minor release. Cross-`a` remains fatal (`BundleVersionError`, `cross_a`); `selfCheck` remains the divergence backstop for cross-minor replays. (Pre-1.0 the fatal cross-`b` gate was correct — `b` was the breaking axis.)
+
+### Blessed (explicit non-changes)
+
+The `create*DebugProbe` factories (the documented bridge for attaching game-owned utilities to `WorldDebugger`) and `clearRunningState` (the documented BT imperative-interrupt) stay. Constructor-shape convention: pure-grid primitives take positional `(width, height)`; option-rich utilities take options objects (decision 8).
+
+### Freeze list (now policy, not just fact)
+
+Node >= 20; ESM-only; **zero runtime dependencies**; `export type` hygiene + no star-exports (pinned by test); JSON-only data discipline; the determinism contract (items 1–10); schema-version markers; the layered World internals stay non-public.
+
+### Validation
+
+10 new tests (`tests/v1-release.test.ts`: strict default + legacy clause + v6 round-trip both ways; v6 poison carry/inspection/restore/recover; mixed-version diffSnapshots with poison excluded; applyTickDiff v6; trim assertions). Measured strict-flip blast radius: 11 pre-existing tests across 7 files deliberately exercising non-strict flows got explicit `strict: false`; everything else passes unchanged under the new default (the setup window absorbs construct-and-populate). Full suite 1194 passed + 2 todo; all four gates + benchmark gate green. The `dist/index.d.ts` diff vs v0.8.25 (4 declaration files changed, all expected) was generated from a pinned worktree build and reviewed by the owner in-conversation; regeneration steps live in `docs/threads/done/v1-release/PLAN.md` step 7 (raw diff deliberately not committed — diff snapshots are barred from docs).
+
+## 0.8.25 - 2026-06-11
+
+Pre-1.0 full-review hardening (full review 2026-06-11, correctness lens; thread `docs/threads/done/full/2026-06-11/`). One repro-confirmed MEDIUM and four LOWs, all fixed.
+
+- **Fixed (MEDIUM): `applySnapshot` leaked old-timeline component data.** A component store registered on the target world but absent from the incoming snapshot kept its live entries through the in-place apply — old data surfaced on recycled entity ids, and ghost dead-entity rows made `serialize()` output un-loadable (`snapshot_dead_entity`). Preserved registrations now get fresh empty stores; the snapshot is the complete data truth for the new timeline. Factory replay and same-registration applies were never affected.
+- **Fixed: `EngineError` details sanitizer treated shared non-cyclic references as cycles** — a DAG (`{ a: o, b: o }`) now expands at every site, matching `assertJsonCompatible`; only true cycles become `'[Circular]'`.
+- **PlayerObserver hardening:** construction now rejects a visibility map whose dimensions differ from the world grid (`player_observer_grid_mismatch`) instead of failing ticks later with a misattributed bounds error; `snapshot()` now refuses a poisoned world (`player_observer_world_poisoned`) like `observeTick()` — a failed tick's torn state must not become an observation baseline. **Behavior callout:** code that snapshotted a poisoned world or constructed observers over mismatched maps now throws coded errors.
+- **PlayerObserver performance:** the registration manifest is built once per `snapshot()`/`observeTick()` call instead of once per visible entity; the redundant per-event re-clone is dropped (`getEvents()` already deep-clones).
+- **`getErrorCode` documented exception:** `WorldTickFailureError` deliberately returns `null` — it is a wrapper whose `failure.code` classifies the tick failure and `failure.error.code` carries the underlying error; collapsing either into one code would conflate the two levels (JSDoc + api-reference).
+
+### Validation
+
+3 new tests (cross-registration apply round-trip, grid-mismatch construction, poisoned-snapshot guard) plus DAG assertions in the existing sanitization test. Full suite green; all four gates + benchmark gate pass.
+
+## 0.8.24 - 2026-06-11
+
+CI/dev-tooling security fix — no engine code, API, or behavior change.
+
+- **CI was red on `npm audit --audit-level=high`**: vitest <3.2.6 (CRITICAL advisory GHSA-5xrq-8626-4rwp) and vite 7.0.0–7.3.1 (HIGH, path traversal + fs.deny bypass) in the dev tree. Lockfile re-resolved via `npm audit fix` to vitest 3.2.6 / vite 7.3.5 (existing `^3.0.0` range; package.json unchanged). The engine itself has zero runtime dependencies — `npm audit --omit=dev` was and remains clean.
+- Full suite re-validated on the upgraded test runner: 1181 passed + 2 todo; lint/typecheck/build/benchmark green.
+
+## 0.8.23 - 2026-06-11
+
+1.0 surface groundwork (objective `v1-surface`, 7/7 — final objective of the improvement wave; see `docs/threads/done/v1-surface/`). Ships every NON-breaking part of the reviewed 1.0 proposal now; the breaking decisions are packaged as a human menu in `docs/design/v1-checklist.md`.
+
+- **Explicit export curation**: `src/index.ts`'s 25 star-exports replaced with curated named lists (runtime surface verified byte-identical before/after: 106→106 exports; `export type` hygiene throughout). New `tests/public-surface.test.ts` pins the full sorted name list — runtime AND declared/type-only — against `tests/fixtures/public-surface.json`, plus a no-star-export invariant and a guard on the load-bearing `session-internals` side-effect import. Surface changes are now reviewed fixture diffs, never accidents.
+- **Cross-family error-code read-side mirror (ADR 47, supersedes ADR 45's deferral)**: `SessionRecordingError` gains `readonly code: string | null` extracted from `details.code` (construction shape unchanged; `details.code` stays the wire format forever). New public `getErrorCode(e): string | null` returns the machine-readable code from ANY engine error family — core, session, and strict-mode (`StrictModeViolationError` gains the same first-class mirror) — and `null` for foreign errors; agents branch one way everywhere. Session/strict errors thrown in-tick now surface their code as `TickFailure.error.code` (details sanitized at the boundary).
+- **Deprecation policy** documented in `docs/guides/public-api-and-invariants.md`: pre-1.0 no grace (remove before freeze); post-1.0 deprecate-in-minor, remove-in-next-major, tests kept until removal.
+- **`docs/design/v1-checklist.md`**: the 7-item breaking-decision menu (strict default flip WITH the legacy-snapshot compatibility clause; snapshot v6 inspection-only poison carry with opt-in restore; 4 trim candidates with `clearRunningState` pre-marked bless) + the 1.0 freeze list (Node>=20, ESM-only, zero runtime deps as policy, type hygiene).
+
+### Validation
+
+7 new tests (3 surface-pin + 4 mirror/cross-family incl. the in-tick TickFailure pass-through). Full suite green with the runtime surface proven byte-identical; all four gates + benchmark gate pass.
+
+## 0.8.22 - 2026-06-11
+
+Lockstep multiplayer — reviewed design (objective `lockstep`, 6/7 of the improvement wave; design-only by explicit gating — no code until a real networked consumer exists; 2 review iterations + docs round — see `docs/threads/done/lockstep/`).
+
+- **Architecture specced and frozen for the trigger**: deterministic lockstep-with-relay; `LockstepSession` coordinator (per-tick `InputFrame`s with mandatory empty frames; epoch-versioned relay-declared membership with a half-open `effectiveTick` contract covering joins AND leaves/timeouts; `(playerId, localSequence)` cross-peer ordering bound to the engine's verified submission-order-is-execution-order FIFO substrate; session-owns-submission with the direct-`world.submit()` footgun called out); join handshake = snapshot + registration manifest + version envelope (engineVersion under the replayer's reject policy, plus Node + V8 exact runtime fingerprint owned as a deliberate tightening of the warn-only precedent).
+- **One engine gap identified**: `world.stateDigest()` — component-key-sorted canonical FNV hash over serialized state for cheap online desync probes (in-repo precedents: `jsonFingerprint`, `seedToUint32`); desync post-mortem composes with the existing replay stack unchanged (per-peer bundles + `diffBundles` over the overlapping tick range).
+- **Rollback explicitly rejected** on engine-specific grounds: this engine's operators are AI agents that do not perceive a 2–5 tick input delay (rollback's entire benefit is void), and resimulation would force speculation-awareness onto every observer surface including the recorder.
+- Roadmap Spec 11 row (**Drafted**) under Post-1.0 / demand-gated.
+
+### Validation
+
+Docs-only (no behavior change; suite unchanged at 1175 passed + 2 todo). Design reviewed in two iterations (design-2: Codex 2 IMPORTANT wording-contract fixes adopted; Gemini + Claude CONVERGED) plus the shared docs round (two independent Gemini lenses, both CONVERGED).
+
+## 0.8.21 - 2026-06-11
+
+Intra-tick time-slicing — reviewed design + guide (objective `time-slicing`, 5/7 of the improvement wave; design-only by explicit gating, 2 review iterations — see `docs/threads/done/time-slicing/`). No engine code: the four slicing rules and the cursor-in-component pattern ARE the product until a consumer demonstrates the pain.
+
+- **New guide section** `docs/guides/systems-and-simulation.md` § "Amortizing heavy work": the four determinism-safe slicing rules (count budgets never milliseconds; deterministic work order; adaptive budgets flow through the command stream as recorded input; sliced-work state is simulation state), a worked cursor-in-component example, and the `PathRequestQueue` exemplar with its snapshot-safety caveat.
+- **Determinism contract item 10** (`docs/guides/session-recording.md`): sliced/deferred work state must live in components/state/resources — replay reconstructs from the NEAREST snapshot, so closure-held queues silently start empty mid-bundle even when items 1–9 are followed. Surfaced by design review as an engine-wide gap.
+- **Roadmap**: new "Post-1.0 / demand-gated" section; Spec 10 status **Drafted** with the explicit implementation trigger (sustained tick-budget overruns a consumer's cadence + game-side queues cannot absorb). The gated primitive is respecced as plain-data state + pure functions — never a class instance in a component (`serialize()` throws `json_incompatible` on non-plain prototypes at the first snapshot).
+
+### Validation
+
+Docs-only (no behavior change; suite unchanged at 1175 passed + 2 todo). Design reviewed in two iterations (design-2: Gemini + Claude CONVERGED with one factual parenthetical corrected; Codex quota-exhausted mid-review per the unreachable-CLI protocol).
+
+## 0.8.20 - 2026-06-10
+
+Per-player filtered observation (objective `player-observation`, 4/7 of the improvement wave; 3 design iterations to unanimous CONVERGED — see `docs/threads/done/player-observation/`). The full-review missing-pillar finding: every observation surface was omniscient; a fog-of-war agent had no engine support.
+
+- **New standalone `PlayerObserver` utility**: projects snapshot + per-tick changes + events + world state through a `VisibilityMap` per player. The load-bearing feature is visibility-transition semantics raw diff filtering cannot express: `entered` (full current data when an entity becomes visible), `updated` (per-entity diff projection across components/resources/tags/meta including removals), `exited` with honest `'fog'`-vs-`'destroyed'` attribution (destroyed only when the death is at the last OBSERVED position under post-tick visibility — the documented same-tick move-then-die mis-attribution is the honest reading of what the player could know, pinned by test).
+- **Lifecycle contract**: construction primes; `observeTick()` exactly once per successful step (after updating the VisibilityMap); coded throws `player_observer_world_poisoned` / `player_observer_tick_already_observed` / `player_observer_tick_skipped`; `reset()` after `recover()`/`applySnapshot()`.
+- **Safe defaults**: `positionless: 'hidden'`, `worldState: 'none'`, `events: 'none'` — omniscient globals are opted in explicitly. Event resolvers receive a TOTAL `isVisible` (false for out-of-grid and non-integer coordinates).
+- **Deterministic + isolated**: outputs ordered (ids ascending, keys sorted) and deep-cloned; identical (world, visibility) streams produce deep-equal observation streams.
+- **New `World.getStateKeys(): string[]`** (sorted) and **`World.getMetaEntries(entity)`** (fresh full meta map; throws `entity_not_alive`) — engine prerequisites, independently useful introspection.
+- Read-side-only: zero impact on simulation state, recording, replay, or the registration manifest (an `onDestroy`-based attribution design was rejected for exactly that reason).
+
+### Validation
+
+23 tests across `tests/player-observer.test.ts` + `tests/player-observer-modes.test.ts` (prerequisites, snapshot, enter/exit/update incl. removals and position-removal, attribution honesty pin, positionless/worldState/events modes, total-isVisible, lifecycle incl. poisoned-world, isolation across every returned surface, determinism). All four gates + benchmark gate pass.
+
+## 0.8.19 - 2026-06-10
+
+Coded engine errors (objective `engine-error-codes`, 3/7 of the improvement wave; full design pipeline — 2 design iterations, see `docs/threads/done/engine-error-codes/`). The core engine's entire throw surface — 130 sites across 31 files — now carries stable machine-readable codes.
+
+- **New public `EngineError` / `EngineRangeError` / `EngineTypeError` classes** (`code: string` first-class + `details: JsonValue | null`) and an instanceof-based `isEngineError()` guard (a duck-typed code check would false-positive on Node errno errors). Historical classes preserved: `RangeError` sites keep `instanceof RangeError`, `Layer`'s `TypeError` sites keep `instanceof TypeError`.
+- **Every core throw site migrated** (World layers, stores, json helpers, serializer boundary, CommandTransaction, GameLoop, and all standalone utilities: Layer/Noise/Occupancy/Subcell/PathService/VisibilityMap/SpatialGrid/Random/ResourceStore/ScenarioRunner/playtest harnesses/behavioral metrics). **Messages are byte-identical** — existing regex-based handling keeps working; the entire pre-existing test suite passed unmodified as the non-breakage proof. Where messages interpolate identifiers, the same values land in `details` (`{ entity }`, `{ key }`, `{ field }`, …). `details` is sanitized to strict JSON at construction (non-finite numbers become `'NaN'`/`'Infinity'` strings, cycles become `'[Circular]'`) so an error about a non-finite input can never break the JSON-asserted TickFailure path it is embedded in.
+- **`TickFailure.error` gains optional `code`/`details`**: engine errors thrown inside systems/handlers keep their code through the failure path (`failure.error.code === 'entity_not_alive'` under `failure.code === 'system_threw'`). Absent (not null) for plain user-thrown errors — existing failure payloads unchanged.
+- **Completeness gate**: `tests/engine-error.test.ts` scans `src/` and fails on any plain `throw new Error/RangeError/TypeError` outside the session-family modules, so new sites cannot regress to uncoded throws.
+- **Behavior callout — `error.name` wire delta:** errors escaping through `TickFailure.error.name`, recorded bundles, and `ClientAdapter` messages now read `'EngineError'`/`'EngineRangeError'`/`'EngineTypeError'` instead of `'Error'`/`'RangeError'`. Messages, classes, and control flow are unchanged; only consumers string-matching `name` need to adjust.
+- The session/corpus/viewer/strict-mode stack keeps its established `details.code` family (`SessionRecordingError` subclasses); discrimination across families is documented in the api-reference Engine Errors section. Unification deferred to the 1.0-surface objective.
+
+### Validation
+
+14 tests in `tests/engine-error.test.ts` (class behavior, details sanitization, guard semantics incl. errno rejection, per-domain migrated-site assertions of unchanged message + new code/details, TickFailure pass-through both ways incl. the NaN-input repro, completeness gate). Full suite 1152 passed + 2 todo with zero pre-existing test modifications. All four gates + benchmark gate pass. Multi-CLI implementation review (Codex + Gemini + Claude): impl-1 HIGH (non-JSON details could break the failure path) fixed via construction-time sanitization; details coverage extended to every interpolating site the table documents.
+
+## 0.8.18 - 2026-06-10
+
+worldFactory registration manifest — fail-fast replay verification (objective `registration-manifest`, 2/7 of the improvement wave; the full review called this "the single highest-leverage AI-native improvement available"). Full design pipeline: 2 design iterations to unanimous CONVERGED, including a design-1 HIGH that reshaped the comparison semantics (see ADR 44).
+
+- **Every new bundle records a `RegistrationManifest`** (`metadata.registration`): components with options (registration order), systems (registration order — execution-relevant — with phase/interval/offset/before/after), handler keys, validators (key + count), resource keys, destroy-callback count. Captured at `SessionRecorder.connect()`; synthetic/agent playtests and fork bundles inherit automatically; `runScenario` captures `ScenarioResult.registration` and `scenarioResultToBundle` copies it (override via `options.registration`).
+- **Replay fails fast on factory drift.** Every factory construction (`openAt`, `selfCheck` segments, `forkAt`, viewer materialization — one shared internal path) verifies the factory-owned categories and throws `BundleIntegrityError` with `details.code: 'registration_mismatch'` **before any stepping**: named missing/extra lists, full recorded/actual system order arrays, per-index detail mismatches — instead of the tick-N state divergence that ADR 16 admitted was indistinguishable from an engine determinism bug. Compared strictly: systems / handlers / validators / destroy-callback count / `positionKey`; components extras-only; options + resources never (they are healed from the snapshot by `applySnapshot` — comparing them yields dead checks or false positives; ADR 44).
+- **New public `World.getRegistrationManifest()`** for direct registration introspection by agents. New `ResourceStore.getRegisteredKeys()`.
+- **Escape hatch:** `skipRegistrationCheck` on `ReplayerConfig` and `BundleViewerOptions` for deliberately instrumented replay; `selfCheck` remains the backstop. Old bundles without the field behave exactly as before.
+- **Behavior changes:** a factory missing a handler now fails the eager check on new bundles (`ReplayHandlerMissingError` still guards legacy bundles and skipped checks); deliberately divergent factories that previously surfaced as selfCheck divergences now throw the structured error at construction. The corpus manifest validator now validates + preserves the `registration` field (it previously stripped unknown metadata).
+- Internal: replayer config/result types extracted to `session-replayer-types.ts`; comparison logic in new `session-registration.ts` (LOC budget).
+
+### Validation
+
+23 new tests, all failing-first (plus 3 pre-existing tests updated to the documented precedence): manifest construction/stability/isolation, all capture points incl. fork inheritance, every strict mismatch class with details assertions, snapshot-healing non-false-positives, call-order independence, escape hatches, legacy skip, corpus pass-through + malformed rejection. All four gates + benchmark gate pass. Design threads: `docs/threads/done/registration-manifest/`.
+
+## 0.8.17 - 2026-06-10
+
+Benchmark regression gate (objective `benchmark-gate`; first of the seven-objective improvement wave, full design + review pipeline — see `docs/threads/done/benchmark-gate/`).
+
+- **CI now gates on performance.** `node scripts/rts-benchmark.mjs --check` compares every run against the committed `benchmarks/baseline.json` in two tiers: **tier 1** — deterministic operation counters (query calls/results/cache hits+misses, the new `membershipChecks`, explicit syncs, diff bytes, path-cache second-pass hits, occupancy counters, churn totals) must match **exactly** (the engine's determinism makes them reproducible across machines and the Node 20/22 matrix; each scenario also runs 3× in-process and asserts identical counters as a free determinism self-check); **tier 2** — wall-clock per scenario, normalized by an in-process calibration workload, must stay within 3× of the baseline ratio (`BENCH_RATIO_MAX` overridable). Intended perf-relevant changes regenerate the baseline via `npm run benchmark:update-baseline` in the same commit, making them visible in review diffs.
+- **New `churn` benchmark scenario** measures the query-cache membership-maintenance wall identified by the 2026-06-10 full review: 150 projectile spawns + 150 destroys per tick under 8 pinned cached query shapes over a 4 000-entity world. The wall is now an exact number: 96 000 membership checks per 20-tick run in the committed baseline.
+- **New engine metric `WorldMetrics.query.membershipChecks`** (additive): cache entries examined by query-cache membership maintenance during in-tick signature changes. Gated tier-1, so maintenance regressions — and future optimizations — surface as exact, reviewed baseline changes.
+- **Fixed: `--format markdown` threw a `TypeError`** (the renderer read spatial-scan fields removed in the explicit-sync migration). The renderer moved to `scripts/benchmark-gate.mjs`, is unit-tested, and now reports explicit syncs, deterministic counters, time ratios, and churn lines.
+- New npm scripts `benchmark:check` / `benchmark:update-baseline` (both build first — a stale `dist` cannot mint a baseline); `--check`/`--update-baseline` refuse `--stress` (the committed baseline covers the default scenario set) and verify exact scenario-set equality.
+
+### Validation
+
+Sabotage-tested: deliberately doubling the membership counter produced `counter drift [churn.membershipChecks]: expected 96000, got 192000` and exit 1. All four gates pass (1115 passed + 2 todo; 12 new tests). Design reviewed in two iterations (Codex + Gemini + Claude; design-2 unanimous CONVERGED) and implementation multi-CLI reviewed per thread.
+
+## 0.8.16 - 2026-06-10
+
+Full-codebase review hardening (first full review since v0.7.6). Three independent reviewers (Codex + two Claude lenses) swept the engine; every accepted finding is fixed here. The core tick/ECS/determinism machinery had zero defects — the real bugs clustered in session-recording/replay **error paths**. See `docs/threads/done/full/2026-06-10/` for the full synthesis.
+
+### Fixed — session recording / replay
+
+- **`selfCheck()` no longer throws on failure-terminated bundles** (HIGH, repro-confirmed). The failure-segment skip guard was off-by-one at the terminal boundary (`ft >= a.tick && ft < b.tick` for a segment that replays `(a, b]`), and the default poisoned-stop layout puts the terminal snapshot exactly at the failed tick — so every poisoned `runSynthPlaytest` / `runAgentPlaytest` / fork bundle made `selfCheck()` re-throw the original `WorldTickFailureError` raw. Such segments are now reported in `skippedSegments` with reason `'failure_in_segment'`. **Behavior change:** code that relied on the documented re-throw must read `skippedSegments` instead.
+- **FileSink path-traversal guard** (HIGH). Attachment ids become sidecar file basenames and were joined into paths unvalidated, on both the write path and the untrusted-manifest read path. Ids must now match `[A-Za-z0-9][A-Za-z0-9._-]*`; `FileSink` rejects others with `SinkWriteError` code `invalid_attachment_id`, and the corpus manifest validator rejects them as `manifest_invalid`.
+- **`FileSink.open()` refuses reused bundle directories** (HIGH). Streams are append-only and `toBundle()` globs every snapshot, so recording into a previously-used directory silently merged two sessions into one corrupt bundle. `open()` now throws `SinkWriteError` code `bundle_dir_not_empty`; constructor preload for read access is unchanged. **Behavior change:** pass a fresh directory per recording (this was already the only correct usage).
+- **`scenarioResultToBundle` populates `metadata.failedTicks`** (MEDIUM). Replay guards (`openAt`'s `replay_across_failure`, `selfCheck`'s skip, `forkAt`) key off `failedTicks` exclusively and were silently disabled for scenario bundles; the integration test pinning this was vacuous (assertions behind an always-false guard) and now actually asserts it.
+- **`FileSink.writeSnapshot` is atomic** (MEDIUM): tmp+rename like the manifest, so a crash mid-write can no longer leave a torn snapshot that makes the whole bundle unloadable.
+- **`SessionRecorder.disconnect()` finalizes cleanly after a connect-time `open()` failure** (MEDIUM) instead of throwing `not_opened` from the metadata getter and leaving the recorder half-open. Iteration 2 hardened the same path further: a recorder pointed at an *existing* bundle directory could mutate and rewrite that bundle's manifest on disconnect (the FileSink constructor preloads it for read access) — finalization now requires that *this* recorder's `open()` succeeded, FileSink's `close()` only writes a manifest it opened for write, stream writes on a read-preloaded sink throw `not_opened`, and `open()` also refuses directories containing orphaned snapshots.
+- `BundleViewer` marker id `RegExp` filters reset `lastIndex` (stateless for `/g`/`/y` regexes, mirroring the corpus filter). `MemorySink` honors an explicit `ref: { dataUrl }` request regardless of size, as its docs always claimed.
+
+### Fixed — core engine
+
+- **`onDiff` listeners receive a per-listener defensive copy** (MEDIUM). Previously they received the live internal `TickDiff` with write-through references into component/state stores — inconsistent with `getDiff()`'s documented deep clone and the EventBus per-listener clone discipline. **Behavior change:** mutating the received diff no longer corrupts engine state (and no longer "works" as a back door); zero cost with zero listeners.
+- **`findNearest` rewritten to perimeter-ring scanning** (MEDIUM): O(R²) total cell probes on a full-map miss instead of O(R³) cumulative-disk rescans. **Behavior changes:** exact-distance ties now deterministically break on the lowest entity id (previously scan-order-dependent); out-of-bounds query points are now answered instead of throwing, with cost bounded by the grid; non-integer coordinates throw `RangeError` (iteration-2 fix — `±Infinity` would otherwise have looped forever).
+- Ordering constraints (`before`/`after`) that reference a duplicated system name now throw an explicit "ambiguous" error instead of silently binding to whichever system registered last; duplicate names without constraints keep working.
+- `PathRequestQueue` honors `passabilityVersion` for empty-string cache keys (truthiness bug pinned `''` entries to version 0 forever, serving stale paths across passability changes).
+- `applySnapshot` clears the per-tick event buffer, so `getEvents()` no longer returns the previous timeline's events after an in-place snapshot load.
+- `WorldHistoryRecorder` ids use a deterministic counter — the last `Math.random()` call in `src/` is gone.
+
+### Project setup
+
+- `prebuild` cleans `dist/` (five orphaned modules from pre-rename builds were still shipping) and `prepublishOnly` runs all four gates — publishing a stale build is no longer possible.
+- ESLint gains targeted type-aware rules: `no-floating-promises` / `no-misused-promises` / `await-thenable` for the async surface, and `consistent-type-imports` / `no-import-type-side-effects` which make the `World` layer chain's "upward imports are type-only" invariant (ADR 43) lint-enforced. `noImplicitOverride` enabled in tsconfig.
+- CI: Node 20/22 matrix, `npm audit --audit-level=high`, `npm pack --dry-run`, concurrency cancellation, least-privilege `permissions`, push runs limited to `main`. `engines` honestly bumped to `>=20` (Node 18 is EOL; README updated).
+- `.gitattributes` (`* text=auto`) ends the mixed-EOL churn; `vitest`'s inverted-safety `passWithNoTests` flag removed; `exports` gains `./package.json`.
+
+### Validation
+
+All four gates pass: `npm test` (1103 passed + 2 todo; +25 tests pinning every fix above, written failing-first), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI review iteration 2 (Codex + Claude) verified every iteration-1 fix and contributed the preloaded-sink manifest-protection HIGH, the orphaned-snapshots guard, and the findNearest input guard; iteration 3 verified those (see thread).
+
+## 0.8.15 - 2026-06-09
+
+Internal file reorganization enforcing the project's 500-line-per-file budget. **No public API or behavior changes** — the runtime export list was captured before and after the refactor and is byte-identical; the full 1080-test suite passes unchanged (plus 3 new budget tests).
+
+- **New regression test `tests/loc-budget.test.ts`:** every `src/*.ts` file must be ≤ 500 lines (no exceptions); oversized test suites are pinned at their current size by a shrink-only ratchet (entries must be deleted once a file drops under 500).
+- **`World` (was 2480 lines) is now composed from an internal layer chain** — `WorldCore → WorldQueries → WorldTagsMeta → WorldEntities → WorldObservers → WorldCommands → WorldSystems → WorldTick → World` — one file per layer, all ≤ 500 lines, with `src/world.ts` keeping serialization (`serialize` / `deserialize` / `applySnapshot`) and re-exporting the same public types as before. `World` remains the only concrete class; the layer classes are **not** exported from the package and are not API. Consumers who read `dist/*.d.ts` will notice two representational changes: internal state fields now appear as `protected` instead of `private` (TypeScript-level only — they were never runtime-private), and `World`'s members are spread across the layer declaration files. Subclassing `World` remains unsupported. See ADR 43.
+- **`occupancy-grid.ts` (was 1602 lines) is now a pure re-export barrel** over class-per-file modules: `occupancy-cell-grid.ts` (`OccupancyGrid`), `occupancy-subcell.ts` (`SubcellOccupancyGrid`), `occupancy-binding.ts` (`OccupancyBinding`), plus shared `occupancy-types.ts` / `occupancy-internal.ts` / `occupancy-binding-internal.ts`. All import paths and exported names are unchanged.
+- **Three borderline files trimmed under 500** by extracting self-contained pieces: `summarizeWorldHistoryRange` → `history-range-summary.ts`, `deepEqualWithPath` → `session-deep-equal.ts`, and the occupancy/visibility/path-queue debug probes → `world-debug-probes.ts`. All three remain importable from their original paths via re-exports.
+
+### Validation
+
+All four gates pass: `npm test` (1078 passed + 2 todo, including the 3 new budget tests), `npm run typecheck`, `npm run lint`, `npm run build`. Runtime export surface verified byte-identical pre/post refactor via `Object.keys(import('./dist/index.js'))` diff. Multi-CLI review per `docs/threads/done/loc-budget/`.
+
+## 0.8.14 - 2026-06-09
+
+Package-metadata hygiene release. No API or behavior changes.
+
+- Added an MIT `LICENSE` file. The README has always declared MIT, but the repository (and the published package) carried no license text and `package.json` had no `license` field — formally, that meant "all rights reserved" to downstream tooling. Both are now in place.
+- `package.json` gained standard registry metadata: `description`, `keywords`, `license`, `author`, `repository`, `homepage`, `bugs`, and `engines` (`node >= 18`, matching the long-documented requirement).
+- Trimmed the published `files` set. The npm package previously shipped the entire `docs/` tree — including internal process archives (`docs/threads/` review history alone is ~1.6 MB). The package now ships `dist`, `README.md`, `LICENSE`, and the consumer-relevant docs: `docs/README.md`, `docs/api-reference.md`, `docs/changelog.md`, `docs/guides/`, and `docs/architecture/`. AI agents reading engine docs from `node_modules` keep the prose docs they need (API reference, guides, architecture, changelog); dev-process archives (threads, devlogs, lessons, debugging templates, roadmap) remain in the GitHub repository only. Two known dangling-pointer classes inside the package: some links in the packaged `docs/README.md` index, and JSDoc/source comments in `dist/` that cite `docs/threads/done/.../DESIGN.md` or `docs/design/ai-first-dev-roadmap.md` pointers. Both resolve on GitHub, not inside `node_modules`.
+
+- Fixed a broken link in the (now-shipped) `docs/guides/getting-started.md`: the Architecture pointer linked `../ARCHITECTURE.md`; the file lives at `../architecture/ARCHITECTURE.md`.
+
+### Validation
+
+All four gates pass: `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`. Package contents verified with `npm pack --dry-run`. Multi-CLI review (Codex + Gemini + Claude) converged ACCEPT in 1 iteration; findings were doc-navigation minors, both addressed.
+
+## 0.8.13 - 2026-04-30
+
+`bundleHotspots(bundle, options?)` — first concrete incarnation of the "anomaly detection over the corpus" continuous capability mentioned in `docs/design/ai-first-dev-roadmap.md`. Per-bundle helper that returns a sorted-by-tick list of "interesting ticks" — tick failures, execution failures, per-tick metric outliers (z-score on `metrics.durationMs.total`), and (optionally) marker locations. Designed for AI agents investigating a recorded session: the output is a triage list pointing the agent at specific ticks to load via `SessionReplayer.openAt(tick)` or `BundleViewer.atTick(tick)`.
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`bundleHotspots(bundle, options?): BundleHotspot[]`** — pure synchronous function. Single-pass scan: collects tick failures, execution failures (`bundle.executions[i].executed === false`), per-tick metric outliers (z-score above `options.durationStdevThreshold ?? 3` on `metrics.durationMs.total`), and (optionally) markers. Sorted ascending by tick; within a tick, ordered by kind priority (failures → execution failures → duration outliers → markers).
+- **`BundleHotspot`** — `{ tick, kind, severity, message, details }`. `kind` ∈ `'tick_failure' | 'execution_failure' | 'duration_outlier' | 'marker'`. `severity` ∈ `'low' | 'medium' | 'high'`: tick failures are `high`; execution failures are `medium` (recorded `executions[i].executed === false` — emitted by the engine for missing handlers, thrown handlers, AND commands dropped because the tick already aborted, so an execution_failure hotspot may accompany a tick_failure at the same tick); duration outliers scale with z-score (`high` when z ≥ 2× threshold, else `medium`); markers are always `low`.
+- **`BundleHotspotsOptions`** — `{ durationStdevThreshold?, includeMarkers?, maxDurationOutliers? }`. Defaults: 3, true, 10. Setting `durationStdevThreshold: Infinity` disables duration outlier detection.
+
+### Behavior
+
+- Z-score requires ≥3 samples; bundles with <3 metric-bearing ticks return no duration outliers.
+- All-identical durations (stdev === 0) yield no outliers (no signal in the data).
+- Only the high tail of the distribution is flagged — fast ticks are not anomalies for a recorded session, slow ticks are.
+- Top-N capping applies to duration outliers only; tick failures and execution failures are always reported in full.
+
+### Validation
+
+All four engine gates pass: `npm test` (1075 passed + 2 todo, +12 from v0.8.12's 1063), `npm run typecheck`, `npm run lint`, `npm run build`. New file: `src/bundle-hotspots.ts` (225 LOC). New test: `tests/bundle-hotspots.test.ts` (12 tests). Multi-CLI implementation review (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max) ran in 5 iterations:
+- iter-1 found 5 real issues (missing api-reference section + README bullet, vacuous `maxDurationOutliers` test, inaccurate "failures are always high" wording, untested `execution_failure` code path, untested within-tick kind ordering) plus 2 NITs (dead `metrics` field, missing short-bundle z-score note); all addressed inline.
+- iter-2 found stale test-count wording (file went 10 → 13 → 12 across iter-1/iter-2 edits; counts now correct) plus 3 NITs (vacuous default-threshold cap test still present, inaccurate "deduped per tick" comment, ordering test missing duration_outlier kind); all addressed.
+- iter-3 found 2 doc-accuracy issues: `execution_failure` was documented as "handler threw, tick continued" but the engine also emits it for missing handlers and dropped commands after a tick aborted; short-bundle z-score formula was `(n-1)/√n` (wrong for population stdev — correct is `√(n-1)`). Both addressed across api-reference, changelog, source doc-comment, and test rationale.
+- iter-4 found that iter-3's `execution_failure` fix landed in 3 of 4 surfaces (missed `src/bundle-hotspots.ts:92-96`), and the devlog still cited the old `(n-1)/√n` formula in the iter-1 entry. Both addressed.
+- iter-5 found stale "ran in 2 iterations" wording in this very paragraph (now corrected to 5), an LOC drift in this paragraph (200 → 225 actual), and a parenthetical-attachment ambiguity in the source comment about which `executed: false` causes co-emit a TickFailure (now spelled out per-cause). All addressed.
+
+The "single-pass scan" framing is shorthand — the implementation has separate linear loops for failures, executions, duration-outlier mean/variance/candidate-collection, markers, and a final sort. Total cost is O(n_ticks + n_failures + n_executions + n_markers) plus the sort.
+
+## 0.8.12 - 2026-04-30
+
+Spec 5 — Counterfactual Replay / Fork. AI-first roadmap deliverable: `SessionReplayer.forkAt(targetTick)` for "what if the agent had submitted X here instead?" experiments, plus `diffBundles(a, b)` standalone utility for cross-bundle comparison. The full thread is at `docs/threads/done/counterfactual-replay/` (4 design iterations + 5 plan iterations to convergence; both reviewers ACCEPT).
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`SessionReplayer.forkAt(targetTick): ForkBuilder`** — opens a paused `World` at `targetTick` (using `openAt`'s logic) and returns a chainable builder. Inherits `openAt`'s preconditions (out-of-range, replay-across-failure, no-payload, incomplete-beyond-persistedEndTick).
+- **`ForkBuilder<TEventMap, TCommandMap>`** — single-use builder with:
+  - `replace(originalSequence, newCommand)` — swap an existing recorded command at `targetTick`. `originalSequence` is the source's `RecordedCommand.sequence`.
+  - `insert(newCommand)` — add a new command at `targetTick`, AFTER all source commands. Multi-insert preserves FIFO builder-call order.
+  - `drop(originalSequence)` — remove an existing recorded command at `targetTick`.
+  - `snapshot(): WorldSnapshot` — read-only snapshot of the paused world (cheap; safe pre-`run()`).
+  - `run({ untilTick, sink?, sourceLabel? }): ForkResult` — materialize the fork. Required: `untilTick > targetTick` (matches `openAt`'s contract). Default sink: `MemorySink({ allowSidecar: true })` (matches `runAgentPlaytest`).
+- **`Divergence`** summary returned in `ForkResult`:
+  - `firstDivergentTick: number | null` — earliest submission-tick with command/event divergence.
+  - `perTickCounts: Map<number, DivergenceCounts>` — split into `commandsSourceOnly`/`commandsForkOnly`/`commandsChanged`/`eventsSourceOnly`/`eventsForkOnly`/`eventsChanged`. Keyed by submission-tick.
+  - `commandSequenceMap` — `originalSequence ↔ assignedSequence` map covering ALL source commands at `targetTick` (preserved + replaced) plus inserts and drops. Used by `diffBundles` for source-vs-fork alignment.
+  - `equivalent: boolean` — true iff `firstDivergentTick === null` (ignores metadata, markers, and attachments per ADR 7).
+- **`diffBundles(a, b, { commandSequenceMap? }): BundleDiff`** — standalone utility. Walks the union of tick ranges and produces per-tick deltas (commands, events, state). State diffs covered all six dimensions `diffSnapshots` returns (entities, components, resources, state, tags, metadata). Without `commandSequenceMap`, the call is symmetric (alignment by per-tick submission-order index). With map, asymmetric: `a` MUST be source, `b` MUST be fork. `metadataDeltas`/`markersDeltas`/`attachmentsDeltas` are exposed separately and excluded from `equivalent`.
+- **Error classes:** `ForkSubstitutionError` (unknown sequence), `ForkBuilderConflictError` (codes: `duplicate_replace` / `duplicate_drop` / `replace_drop_conflict`), `BuilderConsumedError` (call after `run()`).
+- **Internal helper:** `applyTickDiff(snapshot, diff): WorldSnapshot` — folds a TickDiff into a snapshot over all six dimensions. Internal-only (NOT exported from `src/index.ts`); produces partial-hydration snapshots (rng/componentOptions don't appear in TickDiff). Safe inside `diffSnapshots` consumers, which exclude rng by design. External callers wanting "snapshot at tick N" should use `replayer.openAt(N).serialize()` (= `replayer.stateAtTick(N)`).
+
+### Equivalence invariant
+
+A no-substitution fork (`forkAt(midTick).run({ untilTick: source.persistedEndTick })`) produces a `ForkResult` with `divergence.equivalent === true`, and the fork's bundle is structurally equivalent to source's slice over `[midTick, persistedEndTick]` modulo per-recorder noise (sessionId, recordedAt, sequence range, metrics, etc. — see `tests/session-fork-equivalence.test.ts`). This is the strongest invariant; it isolates substitution effects.
+
+### Validation
+
+All four engine gates pass: `npm test` (1063 passed + 2 todo, +68 from v0.8.11's 995), `npm run typecheck`, `npm run lint`, `npm run build`. New tests: `tests/session-fork.test.ts` (42), `tests/session-fork-equivalence.test.ts` (5), `tests/session-bundle-diff.test.ts` (10), `tests/apply-tick-diff.test.ts` (11). Multi-CLI design + plan reached convergent ACCEPT after 4+5 review iterations (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max). Implementation review took 3 iterations: iter-1 caught 6+7 findings (engine-version constant stale, identity-replace counted as divergence, narrow `commandsEquivalent`, fork-vs-full-source overlap end, stale public docs, file > 500 LOC, helper duplication, hydrateAtTick proxy bug, dead code, Math.min spread); iter-2 caught a test failure due to non-numeric iteration directory naming (`impl-1` vs the `^(?:\d+|(?:design|plan)-\d+)$` regex), package-lock stale at 0.8.6, README missing public-surface entries, and `docs/guides/ai-integration.md` missing the agent-facing counterfactual section; iter-3 ACCEPTed after all fixes landed. Devlog: `docs/devlog/detailed/2026-04-29_2026-04-30.md`.
+
+## 0.8.11 - 2026-04-29
+
+Spec 9.1 — `AgentDriverContext` extension for in-flight agent marker emission. Coordinated PHASE 1 of the aoe2 annotation-ui Spec 2 thread; aoe2 v0.1.5 consumes this surface.
+
+### Public surface additions (additive; non-breaking c-bump)
+
+- **`AgentDriverContext.addMarker(input: NewMarker): string`** — agents emit markers into the playtest's recorder from inside `decide(ctx)`. Callers should typically OMIT `input.tick` so the recorder defaults to `world.tick` (the just-completed tick at the moment `decide` runs). Passing `input.tick = ctx.tick` (= `world.tick + 1`) throws `MarkerValidationError` code `'6.1.tick_future'`.
+- **`AgentDriverContext.attach(blob, options?): string`** — agents attach blobs (e.g., screenshots) and use the returned id in `Marker.attachments`. Sidecar policy follows the `MemorySink({ allowSidecar: true })` default below.
+- **`AgentPlaytestResult.source: SessionSink & SessionSource`** — exposes the sink the runner used. Default-sink callers can `result.source.readSidecar(id)` to recover sidecar-stored bytes for attachments stamped `ref: { sidecar: true }` in `bundle.attachments`. Without this surface, the new sidecar-tolerant default would yield descriptors with no public way to reach the bytes.
+
+### Behavior change (more permissive default)
+
+- **`runAgentPlaytest` default sink:** `new MemorySink()` → `new MemorySink({ allowSidecar: true })`. Oversize attachments (e.g., 100 KiB+ PNGs) now route to sidecar storage instead of throwing `oversize_attachment` and terminating the recorder. Callers that pass `config.sink` are unaffected; callers using the default get a strictly-more-permissive sink.
+
+### Backward compatibility
+
+The new methods are required on the interface (no `?`), but no shipping consumer constructs `AgentDriverContext` directly — only the runner does. Existing `AgentDriver.decide` implementations that destructure `{ world, tick, startTick, tickIndex }` are unaffected. Existing tests pass unchanged.
+
+### Validation
+
+All four engine gates pass: `npm test` (995 passed + 2 todo, +6 from v0.8.10's 989), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review iter-1 (Codex `gpt-5.5` xhigh + Gemini `gemini-3.1-pro-preview` plan + Claude `opus-4-7[1m]` max) found 1 HIGH (sidecar bytes unreachable for default callers — fixed by adding `result.source`), 1 MEDIUM (canonical user guide gap — fixed in `docs/guides/ai-playtester.md` + README), 1 LOW (future-tick test rigor — fixed by adding rule-code test). Iter-2 verifies the fixes landed. Devlog: `docs/devlog/detailed/2026-04-29_2026-04-29.md`.
+
+## 0.8.10 - 2026-04-29
+
+AGENTS.md tightening — removed the Tie-Breaker role and the hard-abort rule, moved the `docs/learning/lessons.md` rule into Documentation discipline, and trimmed redundancy between the Core-rules multi-CLI mandate and the Code review section.
+
+### Process changes
+
+- **Tie-Breaker role removed.** Same-model-family tie-breaking didn't add genuine independence (the tie-breaker was Claude reviewing Claude's review at higher effort). When engineer + reviewer can't reach consensus after 3 iterations, surface the disagreement to the user with both positions and let the user decide.
+- **Hard-abort rule removed.** The 3-iteration cap that triggered `git reset --hard` + a `docs/learning/lessons.md` write-up was an artifact of a multi-developer workflow; in solo mode the natural escalation is "ask the user."
+- **`docs/learning/lessons.md` rule moved.** Previously triggered only by hard abort (now removed). Now lives under Documentation discipline → "Update if applicable to the change's topic" with a clearer write trigger (non-obvious failure modes worth preserving for future sessions). The re-reviewer reference at the iteration-folder rule is unchanged.
+- **Redundancy trimmed.** The `Code review (mandatory; not optional)` section header and its intro paragraph re-stated the Core-rules multi-CLI mandate (same "no exceptions, no carve-outs" framing). The section is now just `## Code review` with a one-line operational pointer to the Core rule. The anti-rationalization armor stays in Core rules where it's the source of truth.
+
+### Validation
+
+No runtime engine behavior change. The only code-side touches are the `src/version.ts` constant bump (0.8.9 → 0.8.10) and a one-line regex tightening in `tests/docs-threads.test.ts` removing `tie-breaker` from the allowed iteration-folder name set (no historical thread used that folder name; verified via glob). All four engine gates pass: `npm test` (989 passed + 2 todo, unchanged from v0.8.9), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review (Codex `gpt-5.5` xhigh + Claude `opus-4-7[1m]` max) ran on the v0.8.10 diff; full reviewer findings and iteration history are in the devlog and `docs/threads/done/agents-md-tightening/`.
+
+## 0.8.9 - 2026-04-29
+
+Spec 9 - AI Playtester Agent. Tier-2 of the AI-first dev roadmap; engine-side substrate for LLM-driven (or any other async-decision) playtesters.
+
+### New (additive)
+
+- **`runAgentPlaytest(config)`**: async sibling to `runSynthPlaytest`. Loops up to `maxTicks`, calls `agent.decide(ctx)` once per tick (sync or async), submits returned commands, calls `world.step()`, optionally invokes `agent.report(bundle)` post-run. Records via `SessionRecorder` with `sourceKind: 'synthetic'`.
+- **`AgentDriver<TEventMap, TCommandMap>`**: user-implemented contract. `decide(ctx) => Promise<PolicyCommand[]> | PolicyCommand[]` plus optional `report(bundle)` for qualitative summaries. LLM integration is intentionally out of scope — game projects wire their own clients.
+- **`AgentPlaytestConfig`** / **`AgentPlaytestResult`**: config + result types. `stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError'` (matches Spec 3 taxonomy).
+- **`bundleSummary(bundle)`** + **`BundleSummary`**: pure helper turning a `SessionBundle` into a JSON-serializable structured snapshot designed to fit a small LLM context window.
+
+### Behavior callouts
+
+- **Async sibling, not async Policy.** Per ADR 41, `Policy` stays synchronous (Spec 3 ADR 21). `runAgentPlaytest` owns its own async tick loop and adapts an async driver via per-tick await.
+- **Per-tick `recorder.lastError` check.** Mirrors `runSynthPlaytest`'s sink-error guard so a FileSink failure mid-run stops the loop with `stopReason: 'sinkError'`.
+- **`agent.report` errors are captured, not propagated.** If `report(bundle)` throws, the rejection is captured in `result.report = { error: { name, message, stack } }`.
+
+### ADRs
+
+- ADR 41: Async runner is a sibling to `runSynthPlaytest`, not an extension of `Policy`.
+
+### Validation
+
+All four engine gates pass: `npm test` (989 passed + 2 todo, +19 new in `tests/ai-playtester.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Codex CLI was unreachable for the design review (sandbox-blocked PowerShell call); proceeded with Claude per AGENTS.md fallback rule.
+
+### Post-hoc code-review fixes (same v0.8.9)
+
+The original Spec 9 commit `3746a95` shipped without a multi-CLI code review — a process regression per AGENTS.md. The review ran post-commit (Codex + Claude on the staged HEAD; both reviewers landed substantive findings) and fixes were folded back into v0.8.9:
+
+- **Correctness:** `world.submit()` throws (e.g., user-validator throws) now classify as `agentError` rather than `sinkError`. `stopWhen` post-step ctx now passes `tick: world.tick` (just-completed tick) matching `runSynthPlaytest`'s sibling semantics; previously off-by-one. Connect-time `recorder.lastError` is now checked and thrown immediately, mirroring `runSynthPlaytest`; previously a connect-time sink failure burned the first agent decision before stopping. `ticksRun` increments after the per-tick `recorder.lastError` check (mirrors `runSynthPlaytest`). `ok` now also checks `recorder.lastError === null` so a finalize-time sink failure surfaces as `ok: false`. Poisoned-world rejection now throws `RecorderClosedError({ code: 'world_poisoned' })` for symmetry with `runSynthPlaytest` and `SessionRecorder.connect()`.
+- **Tests:** added 8 new tests covering sinkError per-tick path, connect-time rejection, validator-throws-as-agentError, async decide rejection, throwing stopWhen, post-step ctx tick semantics, deterministic content equality across runs, and SessionReplayer round-trip.
+- **Docs:** README Public Surface bullet now includes the Spec 9 exports; `docs/guides/ai-integration.md` no longer says AI playtester is future work; the `docs/threads/done/ai-playtester/DESIGN.md` §5 lifecycle text uses the camelCase taxonomy rather than the v1 strings; `docs/guides/ai-playtester.md` softens the "byte-for-byte" determinism claim to "deterministic content reproducible across runs"; `docs/guides/serialization-and-diffs.md` and `docs/guides/public-api-and-invariants.md` get strict-mode cross-references that were deferred during the v0.8.8 ship.
+- **Cleanup:** removed unused `JsonValue` import + misleading re-export comment from `src/ai-playtester.ts`.
+
+## 0.8.8 - 2026-04-29
+
+Spec 6 - Strict-Mode Determinism Enforcement. Tier-3 of the AI-first dev roadmap; opt-in `WorldConfig.strict` flag rejects content mutations called outside system phases / setup window / `runMaintenance(fn)` callbacks.
+
+### New (additive)
+
+- **`WorldConfig.strict?: boolean`** (default `false`): opt-in mutation-gate enforcement.
+- **`World.endSetup()`**: explicitly close the setup window before the first tick. Idempotent. No-op when `strict !== true`.
+- **`World.runMaintenance<T>(fn): T`**: out-of-tick mutation hatch. Reentrant via depth counter (no-op nesting). Returns `fn`'s return value.
+- **`World.isStrict()`**, **`World.isInTick()`**, **`World.isInSetup()`**, **`World.isInMaintenance()`**: introspection getters.
+- **`StrictModeViolationError`** (`src/world-strict-mode.ts`): thrown when a gated method is called outside a writable phase. `details = { code: 'strict_mode_violation', method, phase: 'between-ticks' | 'after-failure', advice }`.
+
+### Behavior callouts
+
+- **22 mutation methods are gated** when `strict: true`: createEntity, destroyEntity, addComponent, setComponent, removeComponent, patchComponent, setPosition, addResource, removeResource, setResourceMax, setProduction, setConsumption, addTransfer, removeTransfer, setState, deleteState, addTag, removeTag, setMeta, deleteMeta, emit, random. Each calls `assertWritable(this, 'methodName')` at the top.
+- **Registration is NOT gated** — registerComponent, registerSystem, registerHandler, registerValidator, registerResource work at any time (per ADR 38).
+- **Listener-side mutations stay in-tick** — `_inTickPhase` is cleared in an outer `runTick` finally that runs *after* both diff-listener emission AND `onTickFailure` listener emission. Listeners that mutate (e.g., `world.recover()` from inside `onTickFailure`) succeed.
+- **`CommandTransaction.commit()` does NOT auto-open maintenance** (per ADR 40). Inside-tick commit works via `_inTickPhase`; outside-tick callers must wrap explicitly: `world.runMaintenance(() => txn.commit())`.
+- **`applySnapshot` uses `_maintenanceDepth` increment** for forward-compat (per ADR 37). Today's path uses internal-only mutations that bypass the public gate; the increment makes a future refactor safe.
+- **`World.deserialize` is static** — the new world's `_inSetup` (when strict) covers internal state-loading mutations.
+- **Bundles are unchanged modulo `config.strict`**: a strict world produces a `SessionBundle` byte-identical to a non-strict world's for the same seed/inputs, except the snapshot's `config.strict: true` field (added so `World.deserialize` preserves the flag). Strict mode does not affect tick-content determinism — only enforcement.
+
+### ADRs
+
+- ADR 36: Strict mode is opt-in default-off.
+- ADR 37: applySnapshot uses `_maintenanceDepth` for forward-compat; deserialize relies on the fresh world's setup window.
+- ADR 38: Registration calls are not gated.
+- ADR 39: Reentrant maintenance via depth counter (no-op nesting).
+- ADR 40: `CommandTransaction.commit()` does NOT auto-open maintenance.
+
+### Implementation notes
+
+- New module `src/world-strict-mode.ts` (extracted to keep `src/world.ts` from compounding existing 2379-LOC overage). Exports `StrictModeViolationError`, `StrictModePhase`, `StrictModeViolationDetails`, and the `assertWritable` helper.
+- `src/types.ts` extended with `WorldConfig.strict?: boolean`.
+- `src/command-transaction.ts` `FORBIDDEN_PRECONDITION_METHODS` extended with `endSetup` and `runMaintenance` (state-management calls forbidden inside read-only precondition predicates).
+
+### Validation
+
+All four engine gates pass: `npm test` (966 passed + 2 todo, +22 new in `tests/strict-mode.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 0.8.7 - 2026-04-28
+
+Spec 4 - Standalone Bundle Viewer. Tier-3 of the AI-first dev roadmap; programmatic agent-driver API for navigating, slicing, and diffing a `SessionBundle`. Composes with `BundleCorpus` and `SessionReplayer`.
+
+### New (additive)
+
+- **`BundleViewer<TEventMap, TCommandMap, TDebug>`**: wraps a `SessionBundle`; exposes navigation by tick (`atTick`) / marker (`atMarker`) / timeline; iterators for events / commands / executions / markers / failures with eager bound validation; lazy memoized `SessionReplayer` constructed from supplied `worldFactory`.
+- **`BundleViewer.fromSource(source, options?)`**: materializes through `SessionSource.toBundle()` and constructs a viewer.
+- **`TickFrame`**: per-tick view with `events`, `commands`, `executions`, `markers`, `diff`, `metrics`, `debug`, plus `state()`, `snapshot()`, `diffSince(otherTick, options?)`. Selective runtime freezing — outer frame + per-tick arrays frozen one-time; array elements not individually frozen (documented bypass).
+- **`RecordedTickFrameEvent`** (frame-anchored, no per-event tick) and **`RecordedTickEvent`** (iterator-yielded, with tick).
+- **`BundleStateDiff`** with `fromTick`, `toTick`, `source: 'tick-diffs' | 'snapshot'`, and a `TickDiff`-shaped `diff`. `frame.diffSince` folds recorded `TickDiff`s by default, falls back to snapshot path under `options.fromSnapshot`, sparse `SessionTickEntry` in range, or entity-ID recycling.
+- **`diffSnapshots(a, b, opts?)`**: standalone snapshot-pair helper exported from `src/snapshot-diff.ts` and re-exported via `bundle-viewer.ts`. Returns a `TickDiff`-shaped object covering entity / component / resource / state / tags / metadata changes; intentionally excludes `WorldSnapshot.config`, `rng`, `componentOptions`, `entities.{generations,alive,freeList}` directly, and `version` (those are registration / determinism invariants).
+- **`BundleViewerError`** (codes: `marker_missing`, `tick_out_of_range`, `world_factory_required`, `query_invalid`) with JSON-shaped `details`.
+- **`BundleCorpusEntry.openViewer<TEventMap, TCommandMap, TDebug>(options?)`**: one-line corpus-to-viewer composition. Attached before `Object.freeze` in `makeEntry()`; entries remain frozen.
+- New query types: `MarkerQuery`, `EventQuery`, `CommandQuery`, `ExecutionQuery`, `TickRange`, `DiffOptions`.
+
+### Behavior callouts
+
+- **Content-bounded `recordedRange`**: for incomplete/terminated bundles where `metadata.endTick` overstates actual recorded content (recorder sets `endTick = world.tick` at disconnect even when `_terminated` short-circuits later writes), the viewer clamps `recordedRange.end = min(metadata.endTick, max stream tick)`. `replayableRange` matches `SessionReplayer.openAt`'s upper bound.
+- **Failure-in-range** for `frame.diffSince`: if any recorded `ft` satisfies `fromTick < ft <= toTick`, the viewer constructs `BundleIntegrityError({ code: 'replay_across_failure', failedTicks, fromTick, toTick })` at the call site. The class and `details.code` match what `openAt` throws so `instanceof` checks work uniformly; the details payload is enriched for the range.
+- **`SessionReplayer` is unchanged.** v1 considered (and dropped) a `bundle` getter and a BYO replayer option per ADR 35; the viewer constructs the replayer lazily and memoizes it.
+- **Eager query validation**: invalid `from`/`to`/`otherTick` (NaN, non-finite, non-integer) throws synchronously at the call site; iteration body is lazy.
+
+### ADRs
+
+- ADR 32: Viewer is a thin wrapper over `SessionReplayer` + bundle indices.
+- ADR 33: `TickFrame` is a value, not a reactive object; selective runtime freezing.
+- ADR 34: `diffSince` has two paths and the source is observable; failure-in-range constructs an enriched `BundleIntegrityError`.
+- ADR 35: No BYO `SessionReplayer` in v1.
+
+### Validation
+
+All four engine gates pass: `npm test` (936 passed + 2 todo, +69 new across `tests/snapshot-diff.test.ts`, `tests/bundle-viewer.test.ts`, `tests/bundle-corpus-viewer.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 0.8.6 - 2026-04-28
+
+Process documentation: bump code-reviewer CLI commands to the most-capable, largest-context models reachable under the project's standard auth (Claude account + Codex ChatGPT login).
+
+### Changed
+
+- AGENTS.md Code-review section: Codex command moved from `--model gpt-5.4` to `--model gpt-5.5`; added a note documenting the required Codex CLI ≥ 0.125.0 and that Codex caps reasoning effort at `xhigh` (no `max` value).
+- AGENTS.md Code-review section: Claude commands (both diff-piped and full-codebase variants) moved from `--model opus --effort xhigh` to `--model "claude-opus-4-7[1m]" --effort max`; added a note that the `[1m]` suffix selects the 1 M-token-context Opus 4.7 variant and that the model string must be quoted to suppress shell glob-expansion.
+- AGENTS.md Team-of-subagents section: Tie-breaker bumped to the same `claude --model "claude-opus-4-7[1m]" --effort max` invocation.
+- AGENTS.md Code-review section: added a "Keep model IDs current" bullet that mandates a one-line smoke test before committing future model bumps.
+
+### Validation
+
+- `npm test` (gates re-run after the doc bump)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- Smoke tests: `claude -p --model "claude-opus-4-7[1m]" --effort max` and `codex exec --model gpt-5.5 -c model_reasoning_effort=xhigh ...` both returned `ok` after upgrading the local Codex CLI from 0.121.0 to 0.125.0.
+
+## 0.8.5 - 2026-04-28
+
+Process and documentation archive cleanup for thread design artifacts.
+
+### Changed
+
+- Moved accepted thread-specific design docs and implementation plans from dated `docs/design/` filenames into their owning thread roots as `DESIGN.md` and `PLAN.md`.
+- Kept review iterations unchanged: date folders still contain iteration folders, and committed iterations still contain only `REVIEW.md`.
+- Updated AGENTS.md and the docs index so future threads store authoritative design/plan docs at `docs/threads/<current|done>/<objective>/`.
+- Tightened the docs-thread regression test so committed docs reject raw review captures, prompt/diff snapshots, and stdout/stderr/error-log artifacts.
+
+### Validation
+
+- `npm test -- tests/docs-threads.test.ts`
+- `npm test` (867 passed + 2 todo)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+
+## 0.8.4 - 2026-04-28
+
+Process and documentation archive cleanup for review/thread artifacts.
+
+### Changed
+
+- Renamed the committed review archive from `docs/reviews/` to `docs/threads/`.
+- Added the canonical thread split: `docs/threads/current/` for active objectives and `docs/threads/done/` for closed objectives.
+- Normalized thread objective folders to concise kebab-case names, preserving the date/iteration structure inside each objective.
+- Retired committed raw reviewer output, stderr/stdout logs, prompt files, and diff snapshots from thread iteration folders. Each committed iteration now keeps only the synthesized `REVIEW.md`.
+- Updated AGENTS.md review guidance so reviewers return concise but effective findings with enough evidence and impact to act, without preserving command chatter or repetitive transcript detail.
+
+### Validation
+
+- `npm test -- tests/docs-threads.test.ts`
+- `npm test` (866 passed + 2 todo)
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+
+## 0.8.3 - 2026-04-27
+
+Spec 7 - Bundle Search / Corpus Index. Tier-2 of the AI-first dev roadmap; turns closed FileSink bundle directories into a deterministic metadata query surface and lazy bundle iterable.
+
+### New (additive)
+
+- **`BundleCorpus(rootDir, options?)`**: scans closed FileSink bundle directories, validates manifest metadata, accepts an explicit symlink/junction root, skips symlinked descendants and symlinked manifests during traversal, and exposes deterministic sorted entries.
+- **`BundleCorpus.entries(query?)`**: metadata-only listing/filtering over manifest-derived fields. Does not read JSONL streams, snapshots, or sidecar bytes.
+- **`BundleCorpus.bundles(query?)`** and **`[Symbol.iterator]()`**: lazy full-bundle iteration through `FileSink.toBundle()`, directly composable with `runMetrics`.
+- **`BundleCorpusEntry`** and **`BundleCorpusMetadata`**: frozen metadata view with `key`, `dir`, readonly nested `metadata.failedTicks`, attachment summary fields, failure summary fields, `materializedEndTick`, `openSource()`, and `loadBundle()`.
+- **`BundleQuery`** plus helper types `OneOrMany`, `NumberRange`, and `IsoTimeRange`: filters by key, manifest metadata, duration/tick ranges, failure count, policy seed, recordedAt range, incomplete status, and attachment MIME.
+- **`CorpusIndexError`** and `CorpusIndexErrorCode`: JSON-safe machine-readable failures for missing roots, manifest parse/validation errors, unsupported schema, duplicate keys, invalid queries, and missing entries.
+
+### Behavior callouts
+
+- Corpus listing is manifest-first and for closed/frozen FileSink directories. Active-writer detection and persisted `corpus-index.json` files are not part of v1.
+- Query order is deterministic: `recordedAt`, then `sessionId`, then slash-normalized key, using JavaScript code-unit ordering.
+- Query validation rejects malformed JavaScript caller shapes with `CorpusIndexError` code `query_invalid` instead of silently widening filters.
+- `materializedEndTick` is a persisted-content horizon, not a replay guarantee. Replay integrity still belongs to `SessionReplayer`.
+- Sidecar bytes are not read during listing or `loadBundle()`; callers fetch them explicitly through `SessionSource.readSidecar(id)`.
+- Explicit `dataUrl` attachment bytes live in `manifest.json`, so they are part of manifest parse cost.
+
+### ADRs
+
+- ADR 28: Manifest-first over closed FileSink directories.
+- ADR 29: Corpus composes with `runMetrics` via `Iterable<SessionBundle>`.
+- ADR 30: Canonical corpus order is `recordedAt`, `sessionId`, `key`.
+- ADR 31: v1 query scope is manifest-derived only.
+
+### Validation
+
+All four engine gates pass: `npm test` (865 passed + 2 todo, +20 new in `tests/bundle-corpus.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+## 0.8.2 - 2026-04-27
+
+Spec 8 — Behavioral Metrics over Corpus. Tier-2 of the AI-first dev roadmap; pairs with Spec 3 (synthetic playtest) to define regressions for emergent behavior.
+
+### New (additive)
+
+- **`runMetrics(bundles, metrics)`**: pure-function corpus reducer over `Iterable<SessionBundle>`. Single-pass, multiplexed across all metrics. Throws `RangeError` on duplicate metric names. Iterates the iterable once.
+- **`compareMetricsResults(baseline, current)`**: thin delta helper. Returns deltas + percent changes + only-in-side variants; no regression judgment. Recurses through nested records (e.g., `commandTypeCounts`). Numeric leaves get `{ baseline, current, delta, pctChange }`; opaque (arrays, type mismatches) get `{ baseline, current, equal }`; `null` inputs propagate to `null` deltas.
+- **`Metric<TState, TResult>`**: accumulator-style contract — `create()`, `observe(state, bundle)`, `finalize(state)`, optional `merge`, optional `orderSensitive`. In-place mutation OK; functional purity (output depends only on inputs) is the contract.
+- **`Stats` shape**: `{ count; min; max; mean; p50; p95; p99 }` with `number | null` numeric fields. Empty corpus → `null` (JSON-stable; `NaN` would not be). NumPy linear (R type 7) percentiles, exact, deterministic.
+- **11 engine-generic built-in metric factories**:
+  - `bundleCount` — total bundles in corpus.
+  - `sessionLengthStats` — Stats over `metadata.durationTicks`.
+  - `commandRateStats` — Stats over per-bundle `commands.length / durationTicks` (0 for zero-duration).
+  - `eventRateStats` — Stats over per-bundle `sum(ticks[].events.length) / durationTicks`.
+  - `commandTypeCounts` — `Record<string, number>` over `bundle.commands[].type` (counts SUBMISSIONS).
+  - `eventTypeCounts` — `Record<string, number>` over `bundle.ticks[].events[].type`.
+  - `failureBundleRate` — ratio of bundles with non-empty `metadata.failedTicks`.
+  - `failedTickRate` — ratio of total failed ticks to total duration ticks (zero-tick corpus → 0).
+  - `incompleteBundleRate` — ratio of bundles with `metadata.incomplete === true`.
+  - `commandValidationAcceptanceRate` — ratio of `bundle.commands[].result.accepted === true` (submission-stage validator-gate signal).
+  - `executionFailureRate` — ratio of `bundle.executions[].executed === false` (execution-stage handler-failure signal).
+
+### Submission-stage vs execution-stage semantics
+
+`commandValidationAcceptanceRate` and `executionFailureRate` read different bundle sources by design. Validator-rejected commands appear in `bundle.commands[].result.accepted=false` but NEVER in `bundle.executions` (validators short-circuit before queueing per `world.ts:732-748`). Pair the two metrics to detect both regression types.
+
+### ADRs
+
+- ADR 23: Accumulator-style metric contract over reducer or per-bundle-map+combine.
+- ADR 24: Engine-generic built-ins only; game-semantic metrics are user-defined.
+- ADR 25: `compareMetricsResults` returns deltas, not regression judgments.
+- ADR 26: `Iterable<SessionBundle>` only in v1; `AsyncIterable` deferred to a separate `runMetricsAsync`.
+- ADR 27: Do NOT aggregate `stopReason` in v1.
+
+### Validation
+
+All four engine gates pass: `npm test` (842 passed + 2 todo, +44 new in `tests/behavioral-metrics.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
+### What's next on the AI-first roadmap
+
+Tier-1 (Specs 1, 3) and Tier-2 (Spec 8) implemented. Remaining: Spec 2 (Annotation UI), Spec 4 (Bundle Viewer), Spec 5 (Counterfactual Replay), Spec 6 (Strict-Mode Determinism), Spec 7 (Bundle Search / Corpus Index), Spec 9 (AI Playtester Agent).
+
+## 0.8.1 - 2026-04-27
+
+Synthetic Playtest T3: cross-cutting determinism integration tests + structural docs (closes Spec 3 implementation).
+
+### Tests added (`tests/synthetic-determinism.test.ts`, 7 cases)
+
+- **selfCheck round-trip:** non-poisoned bundle with `ticksRun >= 1` passes `replayer.selfCheck().ok`.
+- **Production-determinism dual-run:** same `policySeed` + same setup → deep-equal bundles modulo sessionId/recordedAt/durationMs.
+- **Sub-RNG isolation positive:** policy using `ctx.random()` is replay-deterministic.
+- **Sub-RNG isolation negative:** policy calling `ctx.world.random()` directly causes selfCheck to report state divergences (terminal-snapshot segment with default snapshotInterval) — proves the safety net works.
+- **Poisoned-bundle replay:** `SessionReplayer.selfCheck()` re-throws the original tick failure (the failed-tick-bounded final segment is replayed, not skipped — verified at session-replayer.ts:286).
+- **Pre-step abort vacuous case:** policy throws on tick 1 → `ticksRun === 0`, terminal == initial → selfCheck returns `ok:true` vacuously over zero-length segment.
+- **Bundle → script conversion regression:** record → `+1` formula on submissionTick → replay through `scriptedPolicy` → assert identical command stream (types + data + submissionTicks).
+
+### Structural docs
+
+- `docs/architecture/ARCHITECTURE.md`: Component Map row for Synthetic Playtest Harness.
+- `docs/architecture/drift-log.md`: 2026-04-27 entry describing the Spec 3 implementation chain (T1 v0.7.20 + T2 v0.8.0 + T3 v0.8.1).
+- `docs/design/ai-first-dev-roadmap.md`: Spec 3 status → Implemented; Spec 1 status corrected to Implemented (v0.7.7-pre → v0.7.19) with link to converged spec.
+- `docs/guides/ai-integration.md`: appended Tier-1 reference linking to the synthetic-playtest guide.
+
+### Validation
+
+All four engine gates pass: `npm test` (798 + 2 todo, 7 new in `tests/synthetic-determinism.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
+## 0.8.0 - 2026-04-27 — BREAKING (b-bump)
+
+Synthetic Playtest T2: `runSynthPlaytest` harness + b-bump-axis `SessionMetadata.sourceKind` union widening.
+
+### Breaking change
+
+`SessionMetadata.sourceKind` widened from `'session' | 'scenario'` to `'session' | 'scenario' | 'synthetic'`. Downstream consumers using `assertNever`-style exhaustive switches over `sourceKind` will fail to compile until they add a `case 'synthetic':` branch. This is the only breaking change in 0.8.0; engine-internal code is unaffected (verified — no engine consumers branch on `sourceKind` exhaustively).
+
+### New (additive)
+
+- **`runSynthPlaytest(config)`**: synchronous Tier-1 synthetic playtest harness. Drives a `World` via pluggable `Policy` functions for N ticks → SessionBundle. Stop conditions: `maxTicks`, `stopWhen`, built-in poison stop, policy throw, sink failure. Sub-RNG init via `Math.floor(world.random() * 0x1_0000_0000)` BEFORE `recorder.connect()` so initial snapshot reflects post-derivation `world.rng` state. `terminalSnapshot:true` hardcoded for non-vacuous selfCheck guarantee.
+- **`SynthPlaytestConfig`** + **`SynthPlaytestResult`** types.
+- **`SessionRecorderConfig.sourceKind?`** + **`SessionRecorderConfig.policySeed?`** (additive optional fields).
+- **`SessionMetadata.policySeed?`** field (populated when `sourceKind === 'synthetic'`).
+
+### Determinism guarantees
+
+- **Production-determinism:** same `policySeed` + same setup → structurally identical bundles modulo `metadata.sessionId`, `metadata.recordedAt`, and `WorldMetrics.durationMs`.
+- **Replay-determinism:** non-poisoned synthetic bundles with `ticksRun >= 1` pass `SessionReplayer.selfCheck()`.
+- **Sub-RNG isolation:** `PolicyContext.random()` is independent of `world.rng`; replay reproduces world RNG state because policies don't perturb it.
+
+### Failure mode taxonomy
+
+| `stopReason` | Bundle returned? | `ok` |
+|---|---|---|
+| `'maxTicks'`, `'stopWhen'`, `'poisoned'`, `'policyError'` | yes | `true` |
+| `'sinkError'` (mid-tick) | yes (incomplete) | `false` |
+| Connect-time sink failure | NO — `recorder.lastError` re-thrown | n/a |
+
+### ADRs
+
+- ADR 20: SessionMetadata.sourceKind extended, lands as b-bump.
+- ADR 20a: `sourceKind` set at SessionRecorder construction (no post-hoc sink mutation).
+- ADR 21: Harness is synchronous and single-process.
+- ADR 22: Composed policies do NOT observe each other within a tick.
+
+### Migration
+
+Downstream `assertNever(sourceKind)` consumers add `case 'synthetic':` next to existing branches. No engine changes required.
+
+### Validation
+
+All four engine gates pass: `npm test` (789 + 2 todo, 17 new in `tests/synthetic-playtest.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
+## 0.7.20 - 2026-04-27
+
+Synthetic Playtest T1: Policy interface + 3 built-in policies (Tier 1 of Spec 3 implementation, `docs/design/2026-04-27-synthetic-playtest-harness-design.md` v10).
+
+### New (additive)
+
+- **Policy types**: `Policy`, `PolicyContext`, `StopContext`, `PolicyCommand`, `RandomPolicyConfig`, `ScriptedPolicyEntry`. 4-generic shape matches `World<TEventMap, TCommandMap, TComponents, TState>`. `TComponents` and `TState` carry `World`-matching defaults; `TEventMap` and `TCommandMap` deliberately have no defaults (empty-record default would collapse `PolicyCommand` to `never`).
+- **`noopPolicy()`**: empty-emit baseline.
+- **`scriptedPolicy(sequence)`**: pre-grouped by tick at construction, O(1) per-tick lookup. `entry.tick` matches `PolicyContext.tick` (about-to-execute tick); bundle→script conversion requires `entry.tick = cmd.submissionTick + 1`.
+- **`randomPolicy(config)`**: deterministic catalog selection via `ctx.random()` (sub-RNG, NOT `world.random()`). Validates non-empty catalog, positive-integer `frequency` and `burst`, non-negative-integer `offset` < `frequency`.
+
+### Determinism contract
+
+Policies use `PolicyContext.random()`, a seeded sub-RNG independent of `world.rng` (ADR 19 in `docs/architecture/decisions.md`). Calling `world.random()` between ticks would advance world RNG state; replay (which doesn't re-invoke policies) would diverge at the next snapshot. Sub-RNG sandboxing eliminates this.
+
+### What's NOT here yet
+
+- The end-to-end harness `runSynthPlaytest` ships in v0.8.0 (T2). Policies are usable in tests with a manually-constructed `PolicyContext` (see `tests/synthetic-policies.test.ts`), but the autonomous-driver harness is the next task.
+- Determinism integration tests (selfCheck round-trip on synthetic bundles, production-determinism dual-run, sub-RNG negative-path, poisoned-bundle replay, bundle→script regression) ship in T3 (v0.8.1).
+
+### ADRs
+
+- ADR 17: Policy is a function, not a class hierarchy.
+- ADR 18: Policies receive read-only world; mutation via returned commands.
+- ADR 19: Policy randomness uses a separate seeded sub-RNG with literal seed expression.
+
+### Validation
+
+All four engine gates pass: `npm test` (772 passed + 2 todo, 13 new in `tests/synthetic-policies.test.ts`), `npm run typecheck`, `npm run lint`, `npm run build`. Multi-CLI code review converged.
+
+## 0.7.19 - 2026-04-27
+
+Session-recording followup 4: additional determinism-contract paired tests for clauses 1, 2, 7.
+
+### Tests
+
+- `tests/determinism-contract.test.ts` adds clean+violation pairs for spec §11.1 clauses:
+  - **Clause 1** (route input through `world.submit()` from outside the tick loop): violation = external `setComponent` between ticks during recording → terminal snapshot captures the mutation but `bundle.commands` doesn't reflect it; replay state diverges.
+  - **Clause 2** (no mid-tick `submit()` from systems): violation = a system submits a follow-up command during `step()` → recording's wrap captures the submission, replayer feeds it from `bundle.commands` AND the system re-submits during replay → double-submit; execution-stream divergence.
+  - **Clause 7** (no environment-driven branching inside a tick): violation = system reads `process.env.SESSION_RECORDING_TEST_FLAG`; test stubs different env values for record vs replay → state diverges.
+- **Clauses 4 (impure validators) and 6 (unordered Set iteration)** added as `it.todo` with rationale: clean fixtures for these are hard to construct without crossing into other clauses (e.g., clause 6 requires a Set whose iteration order differs across runs without using random / wall-clock). Coverage: 6 of 8 testable clauses (clause 9 is enforced at construction by `BundleVersionError` — covered separately in `session-replayer.test.ts`).
+
+### Validation
+
+759 tests pass (was 753) + 2 it.todo. Typecheck, lint, build clean.
+
+## 0.7.18 - 2026-04-27
+
+Session-recording followups 2 + 3: terminated-state guards, applySnapshot helper extraction, doc-section renames.
+
+### Bug fix (Opus L2)
+
+- `SessionRecorder.addMarker` / `attach` / `takeSnapshot` now reject calls on a terminated recorder via a new `_assertOperational(method)` guard. Previously the methods checked only `!_connected || _closed`, so a partial-`connect()` sink failure (which sets `_terminated = true` but keeps `_connected = true` so `disconnect()` can finalize cleanly) caused subsequent user calls to re-enter the failed sink path and re-throw `SinkWriteError` per call. Now they fail fast with `RecorderClosedError(code: 'recorder_terminated', lastErrorMessage)`. Regression test added.
+
+### Refactor (Opus L4)
+
+- `World.applySnapshot` extracts the field-by-field state transfer into a private `_replaceStateFrom(other: World)` helper. The body is now grouped by concern (entities / components / spatial / resources / RNG / state / tags+metadata / cached per-tick / failure / command queue / system order) with an explicit "NOT transferred (preserved)" comment block at the end. Adding a future state-bearing field surfaces clearly here and the preserved set is auditable in one place. No behavioral change.
+
+### Documentation (Opus L3)
+
+- `docs/api-reference.md` section headers renamed from `(T1: …)` / `(T2: …)` / etc. (implementation-plan task IDs that mean nothing to external readers) to descriptive feature labels: `Bundle Types & Errors`, `Sinks (SessionSink, SessionSource, MemorySink)`, `FileSink`, `SessionRecorder`, `SessionReplayer`, `scenarioResultToBundle`. TOC updated.
+
+### Validation
+
+753 tests pass (was 752; +1 regression test for L2). Typecheck, lint, build clean.
+
+## 0.7.17 - 2026-04-27
+
+Session-recording followup 1: pre-grouped per-tick lookup indices in `SessionReplayer`.
+
+### Performance
+
+- `SessionReplayer` constructor builds `Map<tick, RecordedCommand[]>`, `Map<tick, events>`, `Map<tick, CommandExecutionResult[]>` once at construction. Replaces O(N) filter/find per replayed tick with O(1) lookup. Closes iter-2 code review M1; lifts the §13.2 throughput target gate on long captures (~10k-tick × 50-command smoke). No behavioral change — same data, same ordering (commands sorted by sequence within a tick to preserve replay semantics).
+
+### Validation
+
+752 tests pass (unchanged). Typecheck, lint, build clean.
+
+## 0.7.16 - 2026-04-27
+
+Session-recording iter-1 code review fix-pass. Closes 2 Critical, 4 High, 1 Medium, 4 Low / Note findings from the multi-CLI code review (Codex + Opus; Gemini quota-out).
+
+### Critical fixes
+
+- **`World.applySnapshot` no longer drops registered-but-empty components.** Previously the wholesale `componentStores` swap deleted user pre-registrations of components that weren't in the snapshot. Now merges: snapshot components replace `this`'s, and user's pre-registered components not in the snapshot are preserved. Component bits are unioned. *(Codex C2 part 1)*
+- **`world.grid` delegate now reads through to the current `spatialGrid`.** Previously the constructor closed over a local `grid` reference that became stale after `applySnapshot` swapped the underlying `SpatialGrid`. Replaced the closure with a `getGrid()` accessor that reads `this.spatialGrid` on every call. *(Codex C2 part 2)*
+- **`FileSink` is now reusable as a `SessionSource` cross-process.** Constructor pre-loads `manifest.json` (if present) so a fresh `new FileSink(existingDir)` can read snapshots / sidecars / metadata without going through `open()`. `open()` resets in-memory state to match the new recording. *(Codex C1)*
+
+### High fixes
+
+- **`SessionRecorder.attach()` defaults to `{ sidecar: true }`** so each sink can apply its own default policy. Previously defaulted to `{ dataUrl: '' }` which forced FileSink to always embed in the manifest, defeating its documented default-sidecar behavior. Pass `{ sidecar: false }` to opt into manifest embedding. *(Codex H1)*
+- **`SessionRecorder.addMarker()` validates `refs.cells` against world bounds and `attachments` ids against registered attachments.** Previously only entity refs and tickRange were validated. *(Codex H2)*
+- **`SessionRecorder` now `cloneJsonValue`s captured commands and markers** to detach from caller-owned references. Previously memory-aliased — user code mutating after the call corrupted the recorded bundle. *(Codex H3)*
+- **`SessionReplayer.selfCheck()` execution comparison ignores `submissionSequence`.** Multi-segment selfCheck previously false-positived `executionDivergences` because `WorldSnapshotV5` doesn't carry `nextCommandResultSequence`, so each segment's replay reset the counter to 0 while the recording's executions had monotonic-across-session sequences. v6 snapshot would lift this caveat; for v1 we strip sequence from comparison. *(Opus H1)*
+
+### Medium fixes
+
+- **`SessionReplayer` checks `bundle.schemaVersion`** at construction. Previously only engine/node versions were checked. Throws `BundleVersionError(code: 'schema_unsupported')`. *(Codex M1)*
+- **`SessionReplayer.tickEntriesBetween()` uses `persistedEndTick` for incomplete bundles.** Previously used `endTick` universally, allowing callers to silently get truncated sets on incomplete bundles. *(Opus M2)*
+
+### Low / cleanup
+
+- **Extracted `bytesToBase64()` to `src/json.ts`.** Previously duplicated identically in `session-sink.ts` and `session-file-sink.ts`. *(Opus L1)*
+- **Removed dead-code import-pinning block in `session-replayer.ts`.** *(Opus M4)*
+- **`docs/api-reference.md`:** added missing `T5: SessionRecorder`, `T6: SessionReplayer`, `T7: scenarioResultToBundle` sections (per AGENTS.md doc discipline). *(Opus H2)* Updated `ENGINE_VERSION` literal to read "matches package.json" instead of a stale `'0.7.7'`. *(Opus M3, Codex L1)*
+
+### Validation
+
+751 tests pass (unchanged from T8 — all fixes preserve behavior of existing tests; new tests pending iter-2 review). Typecheck, lint, build clean.
+
+## 0.7.15 - 2026-04-27
+
+Session-recording T9: structural docs + final integration. Doc-only commit.
+
+### Documentation
+
+- `docs/guides/session-recording.md` (NEW): canonical user-facing guide. Quickstart, sinks (MemorySink + FileSink with their default attachment policies), markers (kinds + provenance + EntityRef), replay (worldFactory + applySnapshot pattern), selfCheck (3-stream comparison + skippedSegments), full §11 determinism contract, scenario integration via `scenarioResultToBundle()`, v1 limitations.
+- `docs/architecture/ARCHITECTURE.md`: Component Map rows for `SessionRecorder`, `SessionReplayer`, and the bundle/sink/source/marker/recorded-command type cluster. Boundaries paragraph for the session-recording subsystem covering ADRs, mutex semantics, applySnapshot worldFactory pattern, and v1 limitations.
+- `docs/architecture/decisions.md`: ADRs 13–16 (separate `SessionRecorder` vs extending `WorldHistoryRecorder`; strict-JSON shared `SessionBundle` with sidecar bytes external; documented-not-enforced determinism contract with selfCheck verification; worldFactory as part of the determinism contract).
+- `docs/architecture/drift-log.md`: 2026-04-27 entry for the session-recording subsystem.
+- `docs/guides/concepts.md`: standalone-utilities list updated to include the session-recording surface.
+- `docs/guides/ai-integration.md`: new "Session Recording for AI-Driven Debugging" section.
+- `docs/guides/debugging.md`: pointer to `session-recording.md` for replay-based debugging.
+- `docs/guides/getting-started.md`: brief "Recording Your First Session" example.
+- `docs/guides/building-a-game.md`: "Recording Sessions for Debugging" section.
+- `docs/guides/scenario-runner.md`: extended with the `scenarioResultToBundle()` pattern, `captureCommandPayloads` caveats, and the worldFactory replay pattern.
+- `README.md`: Feature Overview row + Public Surface bullet for Session Recording.
+- `docs/README.md`: Guides index entry.
+
+### Validation
+
+751 tests pass (unchanged from T8 — doc-only). Typecheck, lint, build clean.
+
+Implementation phase complete. Branch `agent/session-recording` ready for merge authorization.
+
+## 0.7.14 - 2026-04-27
+
+Session-recording T8: integration + clause-paired determinism tests (CI gate).
+
+### Tests added
+
+- `tests/scenario-replay-integration.test.ts`: 3 integration tests demonstrating the substrate-↔-scenario round-trip:
+  - move scenario produces a replayable bundle whose `selfCheck` returns `ok: true`.
+  - multi-step scenario with multiple commands replays cleanly.
+  - handler-crash scenario records `failedTicks`; selfCheck either skips affected segments or runs cleanly on remaining ones (per spec §9.3).
+- `tests/determinism-contract.test.ts`: 6 paired (clean + violating) tests for §11.1 determinism contract clauses:
+  - Clause 3 (route randomness through `world.random`): clean uses `world.random()`; violation uses `Math.random()` → `stateDivergences > 0`.
+  - Clause 5 (no wall-clock time inside systems): clean uses `world.tick`; violation uses `Date.now()` → `stateDivergences > 0`.
+  - Clause 8 (registration order matches between record and replay): clean uses identical setup function; violation swaps two-system order so last-writer-wins differs → `stateDivergences > 0`.
+
+Per spec §13.5 CI gate: `npm test` exercises selfCheck on the new integration corpus; the engine's existing `tests/scenario-runner.test.ts` is unchanged (ScenarioRunner-execution tests, not replay tests). The reusable-setup pattern (`registerMoveBehavior(world)` extracted from scenario.setup, called by both setup and worldFactory) is documented inline.
+
+### Validation
+
+751 tests pass (was 742). Typecheck, lint, build clean.
+
+## 0.7.13 - 2026-04-27
+
+Session-recording T7: `scenarioResultToBundle()` adapter — translates `ScenarioResult` to `SessionBundle`.
+
+### Added
+
+- `src/session-scenario-bundle.ts`: `scenarioResultToBundle(result, options?)` exported function.
+  - `metadata.sourceKind: 'scenario'`, `sourceLabel: result.name` (override via `options.sourceLabel`).
+  - `metadata.startTick: result.history.initialSnapshot.tick` (NOT hardcoded 0; respects scenarios on pre-advanced worlds).
+  - `metadata.endTick: result.tick`, `durationTicks` derived.
+  - `bundle.commands: result.history.recordedCommands ?? []`. Empty when scenario didn't opt into `captureCommandPayloads: true` → diagnostic-only bundle (replay refuses with `BundleIntegrityError(code: 'no_replay_payloads')` per spec §10.3).
+  - `bundle.snapshots: [{ tick: result.tick, snapshot: result.snapshot }]`. Single segment from `initialSnapshot` to terminal — selfCheck verifies the full scenario span.
+  - `bundle.markers`: one `{ kind: 'assertion', provenance: 'engine', tick: result.tick, text: outcome.name, data: { passed, failure } }` per `result.checks` outcome.
+- Throws `BundleIntegrityError(code: 'no_initial_snapshot')` when scenario was configured with `captureInitialSnapshot: false`.
+- New public type `ScenarioResultToBundleOptions`.
+
+### Validation
+
+742 tests pass (was 733). Typecheck, lint, build clean. Per spec §10. Closes the substrate-→-scenario integration loop.
+
+## 0.7.12 - 2026-04-27
+
+Session-recording T6: `SessionReplayer` + 3-stream `selfCheck`.
+
+### Added
+
+- `src/session-replayer.ts`:
+  - `SessionReplayer.fromBundle(bundle, config)` / `fromSource(source, config)` static factories.
+  - `metadata` getter, `markers()`, `markersAt(tick)`, `markersOfKind(kind)`, `markersByEntity(ref)`, `markersByEntityId(id)` query helpers.
+  - `snapshotTicks()`, `ticks()` introspection.
+  - `openAt(tick)`: range checks against `[startTick, endTick]` (or `persistedEndTick` for incomplete bundles), `BundleIntegrityError(code: 'replay_across_failure')` for tick at-or-after first `failedTicks` entry, `BundleIntegrityError(code: 'no_replay_payloads')` for replay-forward on empty `commands`. Replays via `submitWithResult` per spec §9.1; throws `ReplayHandlerMissingError` if a recorded command's handler isn't registered in the factory's world.
+  - `stateAtTick(tick)`: shortcut returning `world.serialize()` after `openAt`.
+  - `tickEntriesBetween(from, to)`: inclusive range filter on bundle ticks.
+  - `selfCheck(options)`: 3-stream comparison (state, events, executions) over snapshot pairs. Initial-to-first-snapshot segment included; segments containing recorded `TickFailure` skipped (`SkippedSegment[reason: 'failure_in_segment']`). Engine version compatibility per spec §11.1 clause 9: cross-`a` and cross-`b` throw `BundleVersionError`; within-`b` warns; cross-Node-major warns.
+  - `validateMarkers()`: re-validate retroactive (`validated: false`) markers against historical snapshots.
+  - `deepEqualWithPath(a, b)`: exported recursive deep-equal with best-effort `firstDifferingPath` for state-divergence triage. ~80 LOC, short-circuits, snapshot-key-order invariant.
+
+### Validation
+
+733 tests pass (was 711). Typecheck, lint, build clean. Per spec §9.
+
+## 0.7.11 - 2026-04-27
+
+Session-recording T5: `SessionRecorder` lifecycle.
+
+### Added
+
+- `src/session-recorder.ts`: `SessionRecorder<TEventMap, TCommandMap, TDebug>` class implementing the spec §7 lifecycle:
+  - **Construction:** generates `sessionId` (UUID v4 via `node:crypto.randomUUID()`); does NOT install wraps or subscribe listeners yet (deferred to `connect()` per spec §7.1).
+  - **`connect()`:** rejects if poisoned (`code: 'world_poisoned'`), already-attached payload-capturing recorder (`code: 'recorder_already_attached'`), or post-disconnect (`code: 'already_closed'`). Captures the `__payloadCapturingRecorder` mutex slot, opens sink, writes initial snapshot, installs single `submitWithResult` wrap, subscribes to `onDiff` / `onCommandExecution` / `onTickFailure`.
+  - **Per-tick:** `onDiff` builds `SessionTickEntry` (cloned via `cloneJsonValue`), forwards to sink. Periodic snapshot fires when `world.tick > startTick && world.tick % snapshotInterval === 0`.
+  - **Submission capture:** wrap captures `RecordedCommand` payloads; SOLE writer to commands stream (no `onCommandResult` listener — would double-write).
+  - **`addMarker(input)`:** validates per §6.1 (live-tick: strict entity ref via `world.isCurrent`; retroactive: lenient, sets `validated: false`). All recorder-added markers get `provenance: 'game'`.
+  - **`attach(blob, options)`:** generates UUID, forwards to `sink.writeAttachment` with the requested `ref` shape. `options.sidecar: true` opts into sidecar storage.
+  - **`takeSnapshot()`:** writes a manual snapshot at the current world tick.
+  - **`disconnect()`:** writes terminal snapshot (when `terminalSnapshot !== false`), uninstalls wrap, unsubscribes listeners, finalizes `metadata.endTick` / `durationTicks`, calls `sink.close()`. Clears the `__payloadCapturingRecorder` slot (defensively only if it's ours).
+  - **`toBundle()`:** delegates to `sink.toBundle()`.
+- `lastError` getter exposes any wrapped sink-write or serialize failure. Sink failures terminate the recorder (subsequent listener invocations short-circuit) and set `metadata.incomplete = true` — they do NOT propagate out of the engine listener invocation.
+- New public types: `SessionRecorderConfig`, `NewMarker`.
+
+### Validation
+
+711 tests pass (was 691). Typecheck, lint, build clean. Per spec §7 + §6.1 + §11.
+
+## 0.7.10 - 2026-04-27
+
+Session-recording T4: `WorldHistoryRecorder.captureCommandPayloads` option + `ScenarioConfig.history` plumbing.
+
+### Added (additive, non-breaking)
+
+- `WorldHistoryRecorder` constructor option `captureCommandPayloads?: boolean` (default `false`). When `true`:
+  - The recorder wraps `world.submitWithResult` (single wrap; `submit` delegates through it per spec §7.3) on `connect()` and uninstalls on `disconnect()`.
+  - Captured payloads are stored as `RecordedCommand<TCommandMap>` entries in a NEW additive field `WorldHistoryState.recordedCommands?: RecordedCommand[]`. The existing `WorldHistoryState.commands: CommandSubmissionResult[]` field is unchanged.
+  - Mutex enforced via `world.__payloadCapturingRecorder` slot — second `connect()` (any payload-capturing recorder, including `SessionRecorder` once T5 lands) throws `RecorderClosedError(code: 'recorder_already_attached')`.
+  - Default-config recorders (no payload capture) remain unrestricted and freely compose with payload-capturing recorders.
+- `WorldHistoryRecorder.clear()` now also resets `recordedCommandEntries` so post-setup scenario rebases produce clean replayable bundles.
+- `ScenarioConfig.history.captureCommandPayloads?: boolean` threads through `runScenario` → `WorldHistoryRecorder` constructor.
+- `WorldHistoryState.recordedCommands?` is the new optional field on the state shape.
+
+### Validation
+
+691 tests pass (was 682). Typecheck, lint, build clean. Per spec §10.2.
+
+## 0.7.9 - 2026-04-27
+
+Session-recording T3: `FileSink` reference implementation (disk-backed `SessionSink & SessionSource`).
+
+### Added
+
+- `src/session-file-sink.ts`:
+  - `FileSink(bundleDir: string)` constructor.
+  - On-disk layout: `manifest.json` + `ticks.jsonl` / `commands.jsonl` / `executions.jsonl` / `failures.jsonl` / `markers.jsonl` + `snapshots/<tick>.json` + `attachments/<id>.<ext>`.
+  - Manifest cadence: rewritten on `open()`, on each `writeSnapshot()`, and on `close()`. Atomic via `manifest.tmp.json` → `manifest.json` rename. Per-tick rewrites are NOT performed.
+  - **FileSink defaults to sidecar attachment storage** unconditionally — disk-backed sinks keep blobs as files. Pass `descriptor.ref: { dataUrl: '<placeholder>' }` to opt into manifest embedding for very small blobs only.
+  - MIME → file-extension table covering `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml`, `application/json`, `application/octet-stream`, `text/plain`, `text/csv`. Fallback `.bin`. Manifest carries the full MIME so readers can recover the original from the descriptor regardless of extension.
+  - `readSidecar(id)` reads bytes back from `attachments/<id>.<ext>`; `readSnapshot(tick)` from `snapshots/<tick>.json`. JSONL streams stream lazily via generators; tolerate a final partial line (crash recovery).
+  - `toBundle()` reads all snapshot files from disk, sorts by tick, exposes the first as `initialSnapshot`, the rest as `bundle.snapshots[]`.
+
+### Tooling
+
+- Added `@types/node` as a devDependency. Required for FileSink's `node:fs` / `node:path` / `node:os` imports. The engine now has full Node-typed surfaces for any future Node-flavored code (`BufferedSink`, etc.).
+
+### Validation
+
+682 tests pass (was 667). Typecheck, lint, build clean. Per spec §5.2 + §8.
+
+## 0.7.8 - 2026-04-27
+
+Session-recording T2: `SessionSink` / `SessionSource` interfaces + `MemorySink` reference implementation.
+
+### Added
+
+- `src/session-sink.ts`:
+  - `SessionSink` (write interface): `open` / `writeTick` / `writeCommand` / `writeCommandExecution` / `writeTickFailure` / `writeSnapshot` / `writeMarker` / `writeAttachment` / `close`. Synchronous throughout (per spec §8 — composes with `World`'s synchronous listener invariants; async sinks deferred).
+  - `SessionSource` (read interface): `metadata` / `readSnapshot` / `readSidecar` / `ticks()` / `commands()` / `executions()` / `failures()` / `markers()` / `attachments()` / `toBundle()`. All sync.
+  - `MemorySink` implementing both. Holds writes in arrays; sidecar attachments in a parallel `Map<string, Uint8Array>`. `MemorySinkOptions`: `allowSidecar` (default `false` — oversize attachments throw `SinkWriteError(code: 'oversize_attachment')` rather than silently using external state); `sidecarThresholdBytes` (default 64 KiB).
+  - `writeAttachment` returns the FINALIZED `AttachmentDescriptor` with `ref` resolved (sinks may rewrite a `dataUrl` placeholder to a populated data URL, or downgrade to sidecar). Recorders use the returned descriptor as the source of truth.
+  - Internal `bytesToBase64()` helper using the platform `btoa` global (Node 16+, browsers). Avoids the `@types/node` dependency `Buffer` would require.
+
+### Validation
+
+667 tests pass (was 652). Typecheck, lint, build clean. Per spec §8.
+
+## 0.7.7 - 2026-04-27
+
+Session-recording T1 (bundle types + error hierarchy). Types only; no runtime behavior. Foundation for `SessionRecorder` / `SessionReplayer` (next commits).
+
+### Added (additive, non-breaking)
+
+- `src/session-bundle.ts`:
+  - `SESSION_BUNDLE_SCHEMA_VERSION = 1` constant.
+  - `SessionBundle<TEventMap, TCommandMap, TDebug>` strict-JSON archive type.
+  - `SessionMetadata` (`sessionId`, `engineVersion`, `nodeVersion`, `recordedAt`, `startTick`, `endTick`, `persistedEndTick`, `durationTicks`, `sourceKind`, optional `sourceLabel`, `incomplete`, `failedTicks`).
+  - `SessionTickEntry`, `SessionSnapshotEntry`, `AttachmentDescriptor` (with `{ dataUrl } | { sidecar: true }` ref union), `RecordedCommand`, `EntityRef`.
+  - `Marker` with `kind: 'annotation' | 'assertion' | 'checkpoint'`, `provenance: 'engine' | 'game'`, optional `refs` (entity refs use `EntityRef` for id+generation matching), `data`, `attachments`, `validated: false` for retroactive markers.
+- `src/session-errors.ts`:
+  - `SessionRecordingError` base class.
+  - 7 subclasses: `MarkerValidationError` (with optional top-level `referencesValidationRule` field per spec §11.3), `RecorderClosedError`, `SinkWriteError`, `BundleVersionError`, `BundleRangeError`, `BundleIntegrityError`, `ReplayHandlerMissingError`.
+- `src/index.ts` exports all of the above plus `ENGINE_VERSION` from `src/version.ts`. Side-effect import of `src/session-internals.ts` to apply the `World.__payloadCapturingRecorder` declaration-merge.
+
+### Validation
+
+652 tests pass (up from 636). Typecheck, lint, build clean. Per spec sections §5, §6, §12.
+
+## 0.7.7-pre - 2026-04-27
+
+Session-recording T0 setup (no version bump). Pure refactor + additive World API surfaces in preparation for the session-recording subsystem (T1–T9, see `docs/design/2026-04-27-session-recording-implementation-plan.md`).
+
+### Refactored
+
+- Extracted `cloneJsonValue<T>(value, label): T` from private duplicates in `src/history-recorder.ts:430` and `src/scenario-runner.ts:474` into a single export from `src/json.ts`. Both call sites updated. Behavior identical (validates JSON-compat then deep-clones via JSON round-trip). Eliminates the pre-existing AGENTS.md anti-duplication-rule violation.
+
+### Added (additive, non-breaking)
+
+- `src/version.ts` exporting `ENGINE_VERSION = '0.7.6' as const`. Read by upcoming `SessionRecorder` / `scenarioResultToBundle()` for `metadata.engineVersion` in session bundles. Avoids `process.env.npm_package_version` (only set under `npm run`).
+- `src/session-internals.ts` declaration-merging an internal `World.__payloadCapturingRecorder?: { sessionId, lastError }` slot. Used by upcoming mutex (one payload-capturing recorder per world). Internal; user code MUST NOT touch it directly.
+- `World.applySnapshot(snapshot)` instance method. Loads a `WorldSnapshot` into an existing world in-place: replaces entity / component / resource / state / tag / metadata / RNG state from the snapshot; **preserves user-registered handlers, validators, systems, event/diff listeners, and the `__payloadCapturingRecorder` slot**. Required for the upcoming `SessionReplayer` `worldFactory` pattern (register first → `applySnapshot(snap)` to load state without `registerComponent` / `registerHandler` duplicate-throw). Listed in `FORBIDDEN_PRECONDITION_METHODS` so a `CommandTransaction` predicate can't bulk-mutate via it. 6 new tests in `tests/world-applysnapshot.test.ts`.
+
+### Validation
+
+636 tests pass (up from 630). Typecheck, lint, build clean. No version bump (T0 is preparatory; T1 is the first c-bump to v0.7.7).
+
+## 0.7.6 - 2026-04-26
+
+Multi-CLI iter-8 convergence check (Codex + Opus; Gemini quota-out 6th iter). Both verified all 7 iter-7 fixes landed cleanly with no regressions; no new Critical/High/Medium/Low. Opus flagged one Note (N3) on a parallel-class gap to L2 — taken in this iter to keep the L2 contract structurally uniform. Non-breaking. 630 tests pass (up from 627).
+
+### Fixed
+
+- **N3 (Opus, iter-8):** `ComponentStore.set` strict-path branch (taken when `wasPresent === false`, e.g. after `remove()` or on first insert with an existing baseline) did not check whether the new value matched the cached baseline. The L2 fix (iter-7) only covered the `wasPresent === true` branch — sequence `set(A) → clearDirty → remove() → set(A)` left the entity in `dirtySet`, so `getDirty()` emitted a redundant `[id, A]` entry. Same severity class as L2 (bandwidth waste, no incorrect end state); pre-existing, not an iter-7 regression. Closed in this iter to make the semantic-mode "skip dirty-marking when value matches baseline" contract uniform across both branches. Strict mode untouched (gated on `diffMode === 'semantic'`). 3 new regression tests.
+
+### README
+
+- Added a version badge and a pre-release alpha warning (already shipped in v0.7.5; restated here for completeness — the badge auto-tracks the package version).
+
+## 0.7.5 - 2026-04-26
+
+Multi-CLI iter-7 broader sweep (first sweep beyond the iter-1–6 `CommandTransaction` chain). Codex + Opus reviewed subsystems iters 1–6 didn't focus on; Gemini quota-exhausted (5th iter in a row). 7 real findings — 1 High, 3 Medium, 3 Low — all fixed. Non-breaking. 627 tests pass (up from 608).
+
+### Fixed
+
+- **H1 (Codex):** `World.deserialize` accepted component / resource records keyed by **dead** or **non-integer / negative** entity IDs. Snapshot loaders ran without entity-id validation, then `rebuildSpatialIndex` and `rebuildComponentSignatures` re-populated stores with rows whose `entityManager.isAlive(id)` was `false`, leaving them queryable through `world.grid` / `queryInRadius` / `query()`. Negative or fractional IDs were worse: `ComponentStore.set` wrote them as JS array properties (silent: `arr.length` doesn't grow), but `_size` did increment, so iteration / serialization / `size` disagreed forever. Fixed in `world.ts` by validating every key in `snapshot.components[*]`, `snapshot.resources.pools/production/consumption[*]`, and `snapshot.resources.transfers[*].from/to` against the alive-set + non-negative-integer check before any loader runs. Throws on violation, mirroring the v0.6.2 `snapshot.tick` validation precedent. 6 new regression tests.
+- **M1 (Codex):** `EventBus.emit` pushed the caller's `data` reference into the buffer and passed the same reference to every listener. A listener that mutated `data` (or made it circular) corrupted buffered history visible to later listeners and to `world.getEvents()`; `getEvents()` could throw on later calls. Fixed by deep-cloning `data` once for the buffer and once per listener. Mirrors the iter-6 atomicity discipline (engine-owned state structurally isolated from external callbacks). `getEvents()` still clones on read for caller-side defensive isolation. 3 new regression tests.
+- **M2 (Codex):** `ClientAdapter.handleMessage` unconditionally set `clientCommandIds.set(result.sequence, id)` after `safeSend` of `commandAccepted`, ignoring the return value. On transport failure `safeSend` already disconnected and cleared the map; the post-send `set` would then either leak (no reconnect) or surface `commandExecuted` / `commandFailed` against an unknown sequence on the next session. Fixed by gating the `set` on `safeSend`'s `boolean` return. 1 new regression test.
+- **M3 (Opus):** `docs/api-reference.md` sections "World State" and "Tags & Metadata" both said `(snapshot v4)`. Current `SCHEMA_VERSION` is 5. Replaced both labels with `(snapshot v5)`.
+- **L1 (Codex):** `octaveNoise2D` did not validate `octaves`, `persistence`, or `lacunarity`. `octaves <= 0` left `maxAmplitude = 0` → returns NaN; non-finite `persistence` / `lacunarity` could silently corrupt downstream map-gen. Public docs claim `[-1, 1]` without parameter constraints. Fixed: now throws `RangeError` on `octaves < 1` or non-integer, `persistence < 0` or non-finite, `lacunarity <= 0` or non-finite. `api-reference.md` updated with the constraint table. 6 new regression tests.
+- **L2 (Opus):** `ComponentStore` semantic-mode `set` did not clear `dirtySet` / `removedSet` when the new value matched the baseline — the early-return path skipped both. Sequence `set(A) → clearDirty → set(B) → set(A)` ended with the entity still in `dirtySet`, so `getDirty()` emitted a redundant entry. Diff bandwidth waste, no incorrect end state. Fixed: revert-to-baseline now clears both sets before returning. 1 new regression test.
+- **L3 (Opus):** `World.deserialize` validated `snapshot.tick` *after* `rebuildSpatialIndex()` already ran — wasted O(positionEntities) work on bad input. Hoisted the tick validation block to the top of `deserialize`, just after the `version` check. 1 new regression test.
+
+## 0.7.4 - 2026-04-26
+
+Followups on residuals from the iter-1 → iter-6 review chain. Non-breaking. 608 tests pass.
+
+### Fixed
+
+- **L_NEW6 (residual from v0.6.0):** `CommandTransaction.commit()`'s `world.emit` dispatch line dropped its `// eslint-disable-next-line @typescript-eslint/no-explicit-any` and `as any` casts. Replaced with narrower `as keyof TEventMap & string` / `as TEventMap[EmitKey]` casts that preserve the type-system shape across the loose-typed buffered event boundary. Runtime behavior unchanged.
+- **N1 (residual from v0.6.4):** `SYSTEM_PHASES` and `SystemPhase` moved from `src/world.ts` to `src/world-internal.ts`. Previously `world-internal.ts` imported `SYSTEM_PHASES` from `world.ts` while `world.ts` imported value functions from `world-internal.ts` — a circular value-import that worked only because `SYSTEM_PHASES` was read inside function bodies. Now one-way: `world.ts` imports from `world-internal.ts` (and re-exports for public API compatibility — `SYSTEM_PHASES` and `SystemPhase` remain importable from the package root via the existing `export * from './world.js'` barrel).
+
+### Still deferred (queued for dedicated follow-up)
+
+- **M3 deeper world.ts split:** `world.ts` is at 2227 LOC vs the 500 LOC cap. The deeper split (serialize, system scheduling, tick pipeline, tags/state into separate files) requires a composition redesign because those subsystems read/write many private fields. Mechanical extraction would either loosen `World`'s encapsulation broadly or require pervasive `as unknown as` casts. Out of scope for review-fix iterations; queued for a dedicated refactor branch.
+- **`occupancy-grid.ts` split:** 1602 LOC; same reasoning.
+
+## 0.7.3 - 2026-04-26
+
+Multi-CLI iter-6 verification caught one new High (Codex) plus one cleanup note (Opus). Both fixed. Non-breaking. 608 tests pass (up from 607).
+
+### Fixed
+
+- **High (Codex iter-6):** `world.grid` is a public field returning a plain object delegate, not a method on the prototype. The iter-5 precondition proxy intercepted method calls but did not protect the `grid` sub-object — a predicate could do `(w.grid as any).getAt = () => null;` to monkey-patch the engine-wide grid delegate, then return `false`. The mutation persisted on `world.grid` after the "failed" precondition. Fixed by `Object.freeze`ing `world.grid` in the constructor — the read-only-delegate promise from v0.5.0 is now structurally enforced. Predicates (and any other code) attempting to write to `world.grid` properties throw `TypeError` in strict mode.
+- **Cleanup (Opus iter-6 Note):** removed two ghost entries from `READ_METHODS_RETURNING_REFS` — `getResources` and `getPosition` were listed but neither method exists on `World`. The proxy `get` trap only fires on actual property access, so the ghost entries were runtime-harmless dead code. Cleaned up to keep the wrap set honest.
+
+## 0.7.2 - 2026-04-26
+
+Multi-CLI iter-5 verification caught one new Critical (Codex; Opus reported clean — split decision, Codex's was the right call). Closes the in-place-mutation hole that the C1/R1 denylist couldn't catch. Non-breaking. 607 tests pass (up from 604).
+
+### Fixed
+
+- **Critical (Codex iter-5):** even with the denylist exhaustive, a precondition could still mutate world state by editing a returned reference in place — `w.getComponent(e, 'hp')!.current = 0` then return `false`. The store's `get` returns the live `ComponentStore.data[entityId]` reference, so the predicate's mutation landed on engine state and `commit()` then reported `precondition_failed` over an already-mutated world. This bypassed dirty tracking too. The proxy now wraps a curated set of read methods (`getComponent`, `getComponents`, `getState`, `getResource`, `getResources`, `getPosition`, `getTags`, `getByTag`, `getEvents`) and `structuredClone`s their returns before the predicate sees them. Predicates pay one clone per read; preconditions are not the hot path. Closes the residual atomicity hole that the iter-1 C1 / iter-2 R1 / iter-3 R2_REG1 fixes did not address (those handled write methods; this handles in-place mutation of read returns). Three explicit regression tests pin the headline cases (component, state, resource).
+
+## 0.7.1 - 2026-04-26
+
+Multi-CLI iter-3 verification caught two iter-2 fix-quality regressions; both addressed in one commit. Codex + Opus reviewed; Gemini quota-exhausted post-iter-2. Non-breaking. 604 tests pass (up from 600).
+
+### Fixed
+
+- **R2_REG1 (Codex iter-2 regression of R1, Opus N1):** `World.warnIfPoisoned(api)` is public and stateful (mutates the `poisonedWarningEmitted` flag) but was not in `FORBIDDEN_PRECONDITION_METHODS`. A predicate could call `w.warnIfPoisoned('hijacked')` to consume the warn-once latch and suppress the next legitimate write surface's diagnostic. Added to the array. The iter-2 changelog claimed exhaustiveness; the claim is now true.
+- **R2_REG2 (Codex iter-2 regression of L_NEW3):** L_NEW3 removed `Layer.getState()`'s post-hoc default-equality filter on the assumption that all writers strip defaults. That assumption ignored `forEachReadOnly`, which deliberately exposes live object references for object T. A contract-violating caller can mutate a stored object to equal `defaultValue`; without the filter, `getState` then serializes the now-default-equal cell. Restored the filter for object T only (primitive T is immutable so no backstop is needed).
+- **L_REG1 (Opus Low):** `docs/api-reference.md:3454` still claimed `commit()` after `commit()` always throws "already committed". L_NEW1's fix made the message reflect `terminalReason`, so after `abort()` + `commit()` + `commit()` it throws "already aborted". Doc updated.
+- **L_REG3 (Opus Low):** added explicit regression test for L_NEW2's single-clone fix.
+
+### Added
+
+- **Meta-test for `FORBIDDEN_PRECONDITION_METHODS` exhaustiveness** — cross-checks the array against `Object.getOwnPropertyNames(World.prototype)`, filtering known read-only + private methods. Future World method additions that aren't classified will fail the suite, preventing R1-style holes from recurring silently. Also asserts no entries in the array reference non-existent World methods (catches typos / dead entries).
+
+## 0.7.0 - 2026-04-26
+
+Multi-CLI iter-2 review fix-up. Closes 1 iter-1 regression (R1: C1 was incomplete) + 2 new High + 2 new Medium + 4 new Low. Breaking — `CommandTransaction` preconditions now reject 9+ additional `World` methods at runtime that previously silently worked (most damaging: `random()`, which would have advanced the deterministic RNG even on `precondition_failed`). 600 tests pass (up from 592).
+
+### Breaking
+
+- **`CommandTransaction` preconditions now reject `random()`, `setResourceMax`, `setProduction`, `setConsumption`, `start`, `stop`, `pause`, `resume`, `setSpeed`, `onDestroy`/`offDestroy`, `onTickFailure`/`offTickFailure`, `onCommandResult`/`offCommandResult`, `onCommandExecution`/`offCommandExecution`.** Previously the v0.6.0 denylist was missing all of these. Code that called any of them from inside `tx.require((w) => ...)` will now throw `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. The most consequential gap was `random()` — it mutates `DeterministicRandom.state`, so a side-effecting predicate on the failure path was silently breaking the engine's determinism contract and snapshot-replay correctness.
+
+### Added
+
+- **`FORBIDDEN_PRECONDITION_METHODS` const array exported** from `src/command-transaction.ts`. Single source of truth for both the type-level `Omit` (deriving `ReadOnlyTransactionWorld`) and the runtime `FORBIDDEN_IN_PRECONDITION` set. Eliminates list-drift between compile-time and runtime by construction.
+- **api-reference.md** documents `World.warnIfPoisoned(api)` (was made public in v0.6.0 but undocumented).
+
+### Fixed
+
+- **R1 (3-reviewer consensus, iter-1 regression of C1):** the C1 `ReadOnlyTransactionWorld` denylist was incomplete. The new `FORBIDDEN_PRECONDITION_METHODS` array is exhaustive against `World`'s public mutating, lifecycle, listener, RNG, and sub-engine surface. 6 spurious entries (`registerComponentOptions`, `setTickFailureListener`, `setCommandResultListener`, `setCommandExecutionListener`, `setOnDestroy`, `rebuildSpatialIndex`) were dropped. New property-based regression test iterates the full list and asserts every method is blocked from inside a precondition; explicit tests pin `random()`, `setProduction`, and the lifecycle methods. Note: TypeScript `private` is type-only, so a determined caller can still cast to `any` and reach `gameLoop`/`rng` directly — the proxy doesn't block that escape and the doc explicitly notes this caveat.
+- **H_NEW1 (Gemini + Opus High):** `Layer.forEachReadOnly` used `??` for unset-cell fallback, treating `null` as nullish. `Layer<number | null>` with explicit `null` cells read back as `defaultValue`. Now uses `=== undefined` matching the `forEach` pattern.
+- **H_NEW2 (Codex High):** `Layer<T>` primitive fast-path was computed once from `defaultValue` and reused for every value, so `Layer<unknown>` with primitive default + later object write skipped the defensive clone. The fast-path now decides per-value via `isImmutablePrimitive(value)` rather than the cached `_defaultIsPrimitive`. The default-value primitivity check is still cached (it's used by `matchesDefault`), but value clone behavior is per-value.
+- **M_NEW1 (Opus Medium):** `Layer.setCell`/`setAt`/`fill` previously called `assertJsonCompatible` AND `jsonFingerprint` (which calls `assertJsonCompatible` internally) on every non-primitive write — paying validation twice. The explicit call now fires only on the primitive-default path where `matchesDefault` short-circuits to `===` without validating. Object-T writes pay one validation per write.
+- **M_NEW2 (Gemini Medium):** `Layer.fromState` previously stringified primitive values via `jsonFingerprint` to check default-equality; now uses direct `===` comparison for primitive-default layers, matching the writer fast path.
+- **L_NEW1 (Gemini Low):** `CommandTransaction.commit()` after `abort()` then double-`commit()` previously threw a hardcoded "already committed" message instead of using the `terminalReason` field. Now reads `terminalReason` and emits "already aborted" when appropriate, matching builder methods.
+- **L_NEW2 (Gemini Low):** `Layer.clone()` previously double-cloned `defaultValue` (once at the call site, once in the constructor). Pass-by-reference; the constructor handles the single clone.
+- **L_NEW3 (Opus Low):** `Layer.getState()` had a defensive `jsonFingerprint` filter that was dead code post-H2 strip-at-write. Removed; `getState` now trusts the writers.
+- **L_NEW5 (Opus Low):** stale test name `setCell with default value still stores the marker` referenced pre-H2 behavior; renamed to `setCell back to default value reads back as default (post-H2 strip-at-write)`.
+- **L_NEW7 (Codex Low):** added explicit `Number.MAX_SAFE_INTEGER + 1` regression test for `World.deserialize` tick validation. Behavior was already covered transitively by the existing safe-integer check; the explicit test pins it.
+
+### Acknowledged residual
+
+- **L_NEW6:** one `eslint-disable @typescript-eslint/no-explicit-any` survives in `CommandTransaction.commit()`'s `world.emit` dispatch because buffered events are stored as the loose `BufferedEvent = { type: string; data: unknown }` shape. Tightening this requires either a more invasive typed-event-store redesign or accepting the dispatch cast as the residual cost of buffering. The runtime is correct (`EventBus.emit` validates payloads). The L6 fix in v0.6.0 eliminated the `as unknown as` cast at `world.transaction()`, which was the headline; this lone `any` is colocated with the dispatch and not load-bearing.
+- **N1 (circular import smell):** `src/world-internal.ts` imports `SYSTEM_PHASES` from `world.js` while `world.ts` imports value functions from `world-internal.js`. Works today via ES module live bindings + use-inside-function-bodies. Cleanup queued for the deeper world.ts split.
+
+## 0.6.4 - 2026-04-26
+
+Multi-CLI full-review iter-1 batch 5 (partial M3): standalone helper extraction. Non-breaking. 592 tests pass.
+
+### Refactored
+
+- **M3 (Opus Medium, partial):** extracted ~265 LOC of standalone helper functions (`createMetrics`, `getImplicitMetricsProfile`, `normalizeCommandValidationResult`, `cloneMetrics`, `cloneTickFailure`, `cloneTickDiff`, `createErrorDetails`, `errorMessage`, `now`, `phaseIndex`, `isSystemPhase`, `describeIntervalValue`, `validateSystemInterval`, `validateSystemIntervalOffset`, `insertSorted`, `validateWorldConfig`, `asPosition`) from `src/world.ts` into `src/world-internal.ts`. `src/world.ts` is now 2232 LOC (down from 2481). The deeper architectural split (serialize, system scheduling, tick pipeline, tags/state) into separate files is **deferred** to a follow-up task — those subsystems use private World methods/fields whose extraction requires a deliberate composition redesign rather than a mechanical move. AGENTS.md's 500 LOC cap is still violated by `world.ts` (2232), `occupancy-grid.ts` (1602), and marginally by `world-debugger.ts` (509); these will be re-flagged by iter-2 reviewers and addressed in a dedicated refactor branch.
+- `TickMetricsProfile` is now exported (was internal) so the helper module can reference it.
+
+## 0.6.3 - 2026-04-26
+
+Multi-CLI full-review iter-1 batch 4: polish + doc fixes. Non-breaking. 592 tests pass (up from 591).
+
+### Fixed
+
+- **L1 (Opus Low):** `World.runTick` previously captured the executing tick in two places — `tick = metrics?.tick ?? this.gameLoop.tick + 1` for the in-progress paths (success + commands/systems/resources/diff failure), then re-derived `tick = metrics?.tick ?? this.gameLoop.tick` (no `+ 1`) in the listener-failure path because `gameLoop.advance()` had already run. The asymmetry was correct today but a maintenance hazard. Tick capture is now hoisted to a single declaration above the try block; both paths use the same value. Behavior unchanged.
+- **L4 (Codex Low):** `docs/guides/resources.md:194` referenced a nonexistent `setTransfer(...)` API. Replaced with the actual pattern: `world.removeTransfer(...)` followed by `world.addTransfer(...)` with the new rate.
+- **L7 (Gemini Low):** `GameLoop.advance()` previously incremented `_tick` without bound. After `Number.MAX_SAFE_INTEGER` ticks, modulo math used by interval scheduling silently corrupts. Practical concern is zero (~4.7 million years at 60 TPS), but the cost of a guard is one comparison. Now throws `RangeError('GameLoop tick counter saturated at Number.MAX_SAFE_INTEGER ...')` rather than silently producing a corrupted value.
+
+## 0.6.2 - 2026-04-26
+
+`World.deserialize` snapshot-tick validation. Multi-CLI full-review iter-1 batch 3. Non-breaking. 591 tests pass (up from 587).
+
+### Fixed
+
+- **M2 (Codex Medium):** `World.deserialize` previously passed `snapshot.tick` directly to `gameLoop.setTick()` without validation. A malformed snapshot containing `NaN`, a negative tick, a fractional tick, or `Infinity` would silently install the bad value, then propagate through `getObservableTick`, `TickDiff.tick`, and the new interval scheduling check `(tick - 1) % system.interval !== system.intervalOffset` — `(NaN - 1) % 5 === NaN`, so all interval-gated systems silently stop running. `deserialize` now validates `Number.isSafeInteger(snapshot.tick) && snapshot.tick >= 0` and throws `WorldSnapshot.tick must be a non-negative safe integer (got <value>)` on rejection.
+
+## 0.6.1 - 2026-04-26
+
+`Layer<T>` correctness + performance overhaul. Multi-CLI full-review iter-1 batch 2. Non-breaking — all changes are additive (`clear`, `clearAt`, `forEachReadOnly`) or internal optimization (strip-at-write, primitive fast-path, single-validate `fromState`, direct `clone`). 587 tests pass (up from 576).
+
+### Added
+
+- **`Layer.clear(cx, cy)` / `Layer.clearAt(wx, wy)`** — explicit "drop this cell back to default" methods. Both delete the underlying sparse-map entry; idempotent on already-default cells; bounds-validated.
+- **`Layer.forEachReadOnly(cb)`** — zero-allocation traversal. Yields the live stored reference for non-default cells (or the live `_defaultValue` for unset cells). Caller must not mutate the value — for object `T` the reference is shared with internal storage. Use `forEach` if you need a defensive copy.
+
+### Fixed
+
+- **H2 (Codex + Gemini High):** `setCell` / `setAt` / `fill` previously stored every value, including ones equal to `defaultValue`, into the underlying `Map<number, T>`. Although `getState()` filtered default-equal entries on serialization, the live in-memory map could grow up to `width × height` entries — `layer.fill(defaultValue)` on a 1000×1000 layer allocated 1,000,000 entries. The strip-at-write fix: writes that match `defaultValue` (by `===` for primitive `T`, or by JSON fingerprint for object `T`) now `delete` the entry instead of storing it. `fill(defaultValue)` short-circuits to `cells.clear()`. The in-memory and canonical-sparse representations now agree without a `getState` round-trip.
+- **H4 (Gemini High):** `Layer<T>` reads previously called `structuredClone` on every value, even for primitive `T` (`Layer<number>`, `Layer<boolean>`, `Layer<string>`, `Layer<null>`). The constructor now caches `_isPrimitive = isImmutablePrimitive(defaultValue)` and skips `structuredClone` on every read/write boundary when the value type is primitive. For object `T` the defensive-copy contract is unchanged. The new `forEachReadOnly` provides an explicit zero-allocation read path for object `T` consumers who own the no-mutate discipline.
+- **M4 (Opus Medium):** `Layer.fromState` previously called `assertJsonCompatible(value, ...)` then `jsonFingerprint(value)` per cell, and `jsonFingerprint`'s implementation also calls `assertJsonCompatible` — paying validation twice. The explicit call was removed; validation is handled inside `jsonFingerprint`.
+- **M5 (Gemini Medium):** `Layer.clone()` was implemented as `Layer.fromState(this.getState())`, paying two `structuredClone` passes per cell plus the intermediate `LayerState` object. Now implemented directly: instantiate a new layer, then iterate `this.cells` once with one clone per entry.
+
+## 0.6.0 - 2026-04-26
+
+`CommandTransaction` correctness + ergonomics overhaul. Multi-CLI full-review (Codex / Opus; Gemini quota-degraded but produced output) flagged a Critical (mutable preconditions broke the "all-or-nothing" guarantee) plus a three-reviewer consensus High (the new transaction surface dropped the v0.5.2 typed-component generics) plus several smaller hits. Breaking — `TransactionPrecondition` signature changed; `emit()` now validates JSON-compat at buffer time; `CommandTransaction` is now generic over `<TEventMap, TCommandMap, TComponents, TState>`. 576 tests pass (up from 569).
+
+### Breaking
+
+- **`TransactionPrecondition` receives a read-only world façade, not the live `World`.** The new `ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>` type is `Omit<World, ...write methods>`. Predicates that previously called `world.setComponent(...)` etc. inside the predicate now fail to typecheck, and (if the type is cast away) throw at runtime: `CommandTransaction precondition cannot call '<method>': preconditions must be side-effect free`. The contract docs already promised "world untouched on precondition failure"; the implementation now enforces it. Predicates may freely call read methods (`getComponent`, `hasResource`, `getState`, `getInRadius`, etc.).
+- **`CommandTransaction.emit(type, data)` validates JSON-compat at buffer time, not at `commit()`.** Calling `emit()` with a non-JSON-cloneable payload (e.g. `{ fn: () => 1 }`) throws immediately at the builder call. Previously the throw fired during `commit()` after all buffered mutations had already applied — partial-apply hazard. Buffer-time validation moves the failure to before any state change.
+- **`CommandTransaction` is now generic over four params:** `<TEventMap, TCommandMap, TComponents, TState>` (mirroring `World`'s generic order). `world.transaction()` returns `CommandTransaction<TEventMap, TCommandMap, TComponents, TState>` so typed component / state access works inside transactions. Callers using the inferred return type need no change. Callers that explicitly typed `CommandTransaction<TEventMap>` need to drop the explicit annotation or update to four generics.
+
+### Added
+
+- **`ReadOnlyTransactionWorld<TEventMap, TCommandMap, TComponents, TState>` type export** (`src/command-transaction.ts`) — covers the read surface available inside a precondition.
+- **Typed builder overloads** on `CommandTransaction.setComponent` / `addComponent` / `patchComponent` / `removeComponent` matching `World`'s typed/loose pattern. `world.transaction().setComponent(e, 'hp', { wrong: 5 })` against a `World<..., ..., { hp: { current: number } }, ...>` now produces a TypeScript error matching `world.setComponent`.
+- **`World.warnIfPoisoned(api)` is now public** (was private). The `CommandTransaction.commit()` path calls it with `api='transaction'` so a poisoned world emits the standard "warn-once-per-poison-cycle" diagnostic before applying any buffered mutation.
+
+### Fixed
+
+- **C1 (Critical, single-reviewer):** mutable preconditions could violate the transaction's atomicity guarantee. A predicate could call `setComponent` / `removeResource` / `emit` etc. on the live world, then return `false`; `commit()` would report `precondition_failed` while the predicate's writes stayed applied. The new read-only façade enforces side-effect freedom both at the type level (`Omit` excludes write methods) and at runtime (Proxy throws on forbidden method names + property writes).
+- **H1 (High, three-reviewer consensus):** `CommandTransaction` previously had only `<TEventMap>`. Generic threading is restored.
+- **H3 (High):** `world.transaction()` skipped the v0.5.1 `warnIfPoisoned` policy. `commit()` now emits the warning once per poison cycle.
+- **M1 (Medium):** mid-emit JSON-compat failure used to leave mutations applied. Validation moved to buffer time.
+- **L2 (Low):** after `abort()`, builder methods now throw "already aborted" (not "already committed"). A separate `terminalReason` field tracks the original terminal state so error messages stay honest.
+- **L6 (Low):** the `as unknown as World<TEventMap, any, any, any>` cast and two `eslint-disable @typescript-eslint/no-explicit-any` comments at the `world.transaction()` site were obsoleted by H1 and removed.
+
+### Documented
+
+- **`docs/architecture/ARCHITECTURE.md`** — `CommandTransaction` Boundaries paragraph updated: predicates receive a read-only façade; `commit()` warns on poisoned world; `emit()` validates payloads at buffer time.
+- **`docs/api-reference.md`** — `## Command Transaction` section updated with the new generic signature, `ReadOnlyTransactionWorld` type, and the buffer-time-validation note.
+
+## 0.5.11 - 2026-04-25
+
+`CommandTransaction` — atomic propose-validate-commit-or-abort builder over `World`. Inspired by MicropolisCore's `ToolEffects` (`MicropolisEngine/src/tool.h:171–305`), where a tool gathers a `WorldModificationsMap` of position-to-tile changes plus a cost, then `modifyIfEnoughFunding()` commits atomically or discards. For an AI-native engine this is the natural shape of "agent proposes an action, engine validates cost/preconditions, mutations + events apply or none do." 569 tests pass (up from 540).
+
+### Added
+
+- **`CommandTransaction<TEventMap>` class (`src/command-transaction.ts`)** — exported from package root.
+- **`world.transaction()` method** — returns a fresh transaction bound to the world. The returned transaction inherits the world's `TEventMap`.
+- **Builder methods (chainable):** `setComponent`, `addComponent`, `patchComponent`, `removeComponent`, `setPosition`, `addResource`, `removeResource`, `emit`, `require`. Each returns `this`. Each throws if the transaction has already been committed or aborted.
+- **`require(predicate)`** — buffers a precondition. `predicate(world)` returns `true` (pass), `false` (fail with default reason), or a `string` (fail with the string as reason). Predicates run in registration order at the start of `commit()` and short-circuit on first failure. Each predicate sees the **current live world state**, not the transaction's proposed mutations.
+- **`commit()`** — runs preconditions; on failure returns `{ ok: false, code: 'precondition_failed', reason }` with **no mutation or event applied**. On success applies every buffered mutation in order through the corresponding public `World` API, emits every buffered event through `EventBus`, and returns `{ ok: true, mutationsApplied, eventsEmitted }`.
+- **`abort()`** — marks a pending transaction as aborted. Subsequent `commit()` returns `{ ok: false, code: 'aborted' }`. Idempotent — `abort()` on a committed or already-aborted transaction is a no-op.
+- **`TransactionResult` type export** — discriminated union covering the three outcomes.
+- **`TransactionPrecondition` type export** — for callers that want to type predicates separately.
+
+### Atomicity guarantees
+
+- **Precondition failure → world untouched.** No buffered mutation, no buffered event runs. Verified by the `precondition failure leaves world untouched (no partial state)` test which buffers `removeResource` + two `setComponent` calls + a precondition that returns a string, and asserts every original value is unchanged after `commit()`.
+- **Preconditions see the pre-commit baseline.** Verified by the `all preconditions run before any mutation applies` test: a transaction sets `hp` to 999 and adds a precondition that reads `hp` from the world; the precondition observes the original value (50), not the proposed 999.
+- **Within a tick, transaction mutations all appear in the same `TickDiff`.** Verified by the `within a tick, transaction mutations all appear in the same TickDiff` test which runs a transaction inside a system and asserts both component types appear in the resulting diff.
+
+### v1 limitations (documented, not yet implemented)
+
+- **Unbuffered ops:** `createEntity`, `destroyEntity`, `addTag`, `removeTag`, `setMeta`, `deleteMeta`, `setState`, `deleteState`, and resource registration / `setResourceMax`. v1 covers components (set / add / patch / remove), position, events, and resource add / remove.
+- **Aliasing window.** Buffered values are stored by reference. Mutating a buffered object between the builder call and `commit()` is observable at apply time. Treat buffered values as owned by the transaction once handed over.
+- **Mid-commit throw → partial state, transaction consumed.** If a buffered mutation throws mid-commit, the error propagates and earlier mutations stay applied. The transaction is still consumed (status flips to `committed` in a `finally` block) so calling `commit()` again throws — the caller cannot retry and silently double-apply earlier mutations (e.g., double-debit a resource). Validate entity liveness via `require((w) => w.isAlive(entity) || 'entity dead')` before mutating.
+- **Mid-emit throw → partial event delivery.** Events fire synchronously in registration order after all mutations apply. If event N's listeners throw or the JSON-compat check rejects payload N, mutations 0..M and events 0..N-1 are already applied / fired. The transaction-level "all-or-nothing" promise covers preconditions, not emit-time exceptions.
+
+### Documented
+
+- **`docs/architecture/ARCHITECTURE.md`** — `CommandTransaction` added to the Component Map and a Boundaries paragraph describing the propose-validate-commit-or-abort contract, the "preconditions see live state, not the proposed projection" rule, and the v1 surface limits.
+- **`docs/api-reference.md`** — new `## Command Transaction` section between `## VisibilityMap` and `## Layer` covering `world.transaction()`, the builder methods table, the `TransactionPrecondition` and `TransactionResult` types, the `commit`/`abort` semantics, the v1 limitations, and a worked cost-checked build example.
+
+## 0.5.10 - 2026-04-25
+
+`Layer<T>` — generic typed overlay map utility for downsampled field data. Inspired by MicropolisCore's `Map<DATA, BLKSIZE>` template (`MicropolisEngine/src/map_type.h:111`), where pollution, traffic-density, fire-station influence, etc., are each typed maps at different downsampled resolutions of the world. Standalone utility, no `World` dependency. Sibling of `OccupancyGrid` / `VisibilityMap`. 540 tests pass (up from 491).
+
+### Added
+
+- **`Layer<T>` (`src/layer.ts`)** — exported from package root. Constructor takes `LayerOptions<T>`: `worldWidth`, `worldHeight`, optional `blockSize` (default `1`), and `defaultValue`. Cell grid dimensions derive as `Math.ceil(worldWidth / blockSize)` × `Math.ceil(worldHeight / blockSize)`.
+- **`Layer<T>.getCell(cx, cy)` / `setCell(cx, cy, value)`** — cell-coordinate access with bounds and integer-coordinate validation.
+- **`Layer<T>.getAt(worldX, worldY)` / `setAt(worldX, worldY, value)`** — world-coordinate access; auto-buckets to `Math.floor(world / blockSize)`. Bounds-validates against `worldWidth`/`worldHeight`.
+- **`Layer<T>.fill(value)`** — sets every cell to `value`.
+- **`Layer<T>.forEach(cb)`** — visits every cell in row-major order, including unset cells (which yield `defaultValue`).
+- **`Layer<T>.getState()` / `Layer.fromState<T>(state)`** — sparse JSON-serializable round-trip; cells matching `defaultValue` (by JSON fingerprint) are stripped from the snapshot; entries are sorted by cell index for determinism.
+- **`Layer<T>.clone()`** — independent deep copy.
+- **`LayerState<T>` and `LayerOptions<T>` type exports** — for consumers building higher-level abstractions on top.
+
+### Validated
+
+- `worldWidth`, `worldHeight`, `blockSize` must be **safe positive integers** (`Number.isSafeInteger`). The constructor also rejects `width * height` products that exceed `Number.MAX_SAFE_INTEGER`.
+- `defaultValue` and every written cell value must satisfy `assertJsonCompatible` — no functions, symbols, BigInt, circular references, or class instances.
+- Cell coordinates must be integers in `[0, width)` × `[0, height)`; world coordinates must be integers in `[0, worldWidth)` × `[0, worldHeight)`. Both out-of-range and non-integer inputs throw `RangeError` (consistent error type).
+- `Layer.fromState` validates state shape (non-null object, `state.cells` is an array of `[index, value]` tuples, `state.blockSize` is present), validates each cell index is a safe integer in range, rejects duplicates, JSON-compatibility-checks each value, and **canonicalizes** by stripping any cell whose value matches `defaultValue`.
+
+### Defensive-copy contract
+
+Inspired by the v0.4.0+ direction (`world.grid.getAt()` returns a fresh `Set` copy; `getDiff`/`getEvents`/`serialize` deep-clone), `Layer<T>` `structuredClone`s on every value boundary:
+
+- **Writes** (`setCell`, `setAt`, `fill`): the input value is cloned before storage. Mutating the original after the call cannot affect the Layer.
+- **Reads** (`getCell`, `getAt`, `forEach`, the `defaultValue` getter): the returned value is a fresh clone of internal storage. Mutating the returned value cannot affect the Layer or other readers.
+- **Serialization** (`getState`, `Layer.fromState`, `clone`): values are cloned at both ends.
+
+For primitive `T` (`number`, `string`, `boolean`, `null`) the clones are zero-cost. For object `T`, every read pays `structuredClone(value)` — if profiling shows this dominates a hot loop, batch reads via `getState()` (one bulk clone) instead.
+
+The default-value-strip comparison uses `jsonFingerprint` (canonical with `src/json.ts`), which under the hood is `JSON.stringify`. Two objects that are deeply equal but constructed with different key orders will not match — for object-typed `T` defaults, write your values with the same key order as `defaultValue` if you want them stripped on serialize.
+
+### Design notes
+
+- Storage is **sparse**: only cells that have been explicitly written are kept in the backing `Map`. Reads of unset cells return a fresh clone of `defaultValue`.
+- The fingerprint of `defaultValue` is computed once at construction and cached, so `getState()` and `Layer.fromState()` strip default-valued entries in O(n) `jsonFingerprint` calls (one per stored cell), not O(n²).
+- Layers are intentionally **not owned by `World`**. Game code instantiates a layer per concern (one for pollution, one for influence, one for danger) and ticks them from systems. This mirrors the existing pattern for `OccupancyGrid` / `VisibilityMap` / `Pathfinding`.
+
+### Documented
+
+- **`docs/architecture/ARCHITECTURE.md`** — Layer added to the Component Map and Boundaries sections, positioned next to `OccupancyGrid` and `VisibilityMap`.
+- **`docs/api-reference.md`** — new `## Layer` section between `## VisibilityMap` and `## Noise` covering `LayerOptions<T>`, `LayerState<T>`, the constructor, every method, properties, the defensive-copy contract, the `fromState` validation throw list, the fingerprint key-order caveat, and a worked pollution example.
+
+## 0.5.9 - 2026-04-25
+
+Per-system cadence scheduling. Inspired by MicropolisCore's `simCycle % speedTable[idx]` pattern (`MicropolisEngine/src/simulate.cpp:134–143`): different sub-systems should run at different rates without each one re-implementing modulo gating. Additive, no migration needed for callers using the legacy `if (w.tick % N !== 0) return;` pattern. 491 tests pass (up from 467).
+
+### Added
+
+- **`SystemRegistration.interval` and `LooseSystemRegistration.interval`** (default `1`). The engine skips the system on ticks where `(executingTick - 1) % interval !== intervalOffset`, where `executingTick` is the tick number being processed (equal to `world.tick + 1` while the system is running). With `interval: N` and the default `intervalOffset: 0`, the system fires on ticks 1, N+1, 2N+1, … This matches the legacy `if (world.tick % N !== 0) return;` schedule exactly, so existing periodic systems migrate to the field by direct substitution without changing when the first fire happens.
+- **`SystemRegistration.intervalOffset` and `LooseSystemRegistration.intervalOffset`** (default `0`, must satisfy `0 <= intervalOffset < interval`). Shifts the cadence so two interval-N systems can be staggered onto disjoint ticks. Three systems with `interval: 3` and offsets `0`/`1`/`2` partition every tick into a stable round-robin.
+- Skipped systems do not invoke their `execute` body and do not push a per-system entry into `WorldMetrics.systems`. The cheap `(tick - 1) % interval` check still runs across all registered systems, so `WorldMetrics.durationMs.systems` (the per-tick total measured around the whole systems pass) is not literally zero for skip ticks — the savings come from the body, not from the dispatch.
+
+### Validated
+
+- `interval` must satisfy `Number.isSafeInteger(interval) && interval >= 1`; rejected otherwise at `registerSystem` time with a descriptive error that quotes the offending value with its type. Bounding to safe-integer range avoids non-deterministic modulo results past `2^53`.
+- `intervalOffset` must satisfy `Number.isSafeInteger(intervalOffset) && 0 <= intervalOffset < interval`; rejected otherwise at `registerSystem` time.
+- Validation runs **before** the order counter and resolved-order cache mutate, so a rejected registration does not burn an order slot or invalidate the cached system order.
+- Ordering constraints (`before`/`after`) remain independent of cadence — topological sort still resolves intra-phase order, and skipped systems do not break the determinism of un-skipped systems' ordering.
+
+### Behavior callouts
+
+- **Failed ticks consume a cadence slot.** If a tick aligned with a periodic system's modulo fails, that fire opportunity is lost; the engine does not retry on the next successful tick. Tested by `failed tick consumes a cadence slot`.
+- **Mid-game registration is anchored to absolute tick numbering.** Registering `interval: 10, intervalOffset: 5` at tick 7 means the next fire is the next tick where `(tick - 1) % 10 === 5`, not "5 ticks from now."
+- **`metrics.systems[].name` shape becomes tick-variable** when periodic systems are registered: a periodic system is present in `metrics.systems` on its fire ticks and absent on skip ticks. Existing telemetry consumers that assumed a stable shape across ticks should note this.
+
+### Documented
+
+- **`docs/api-reference.md`** — `SystemRegistration` and `LooseSystemRegistration` interfaces include the new fields; `registerSystem` table lists `interval`/`intervalOffset`; throws list extended; example block shows a `Weather` system on `interval: 12` and a stagger pattern. The semantics of `executingTick` are pinned (equal to `world.tick + 1` during system execution).
+- **`docs/guides/systems-and-simulation.md`** — "Periodic systems" section rewritten to recommend the `interval` field over the manual `if (w.tick % N !== 0) return;` pattern, with a stagger example and explicit notes on (a) failed-tick cadence semantics, (b) mid-game registration anchoring, and (c) when the legacy manual form is still appropriate (runtime-varying cadence).
+
+## 0.5.8 - 2026-04-25
+
+Iter-2 fix-review iteration 5 — **Codex CLEAN, Gemini CLEAN, Opus** flagged one remaining inconsistency in `serialization-and-diffs.md:74` ("still accepts versions 1–4" — internally inconsistent with the file's own lines 116/120, which correctly say 1–5). Fixed.
+
+### Documented
+
+- **`docs/guides/serialization-and-diffs.md:74`** — corrected "still accepts versions 1–4" to "accepts versions 1–5" so it lines up with the deserialize description below it and `src/world.ts` validation (which accepts `1..5`).
+
+## 0.5.7 - 2026-04-25
+
+Iter-2 fix-review iteration 4 — Gemini CLEAN; Codex and Opus both flagged the same residual canonical-guide drift across 7 files (the v0.5.6 cleanup only covered the three files Codex iter-3 explicitly cited). All addressed.
+
+### Documented
+
+- **`docs/guides/concepts.md`** — corrected the "direct mutations are diff-detected" line; removed the `Sync spatial index` step from the tick-lifecycle ASCII art; rewrote the "Spatial grid syncs before systems" implication line.
+- **`docs/guides/spatial-grid.md`** — Overview rewritten (lock-step write-time sync, runtime-immutable read-only delegate, `getAt` returns a fresh `Set`); replaced the `Timing within a tick` block with the explicit-write contract.
+- **`docs/guides/systems-and-simulation.md`** — removed `syncSpatialIndex()` from the tick-lifecycle numbered list; added an explicit note that the grid is in sync at all times; replaced the "Spatial sync before systems" implication row with "Grid is updated at every position write".
+- **`docs/guides/getting-started.md`** — corrected the spatial-grid section ("direct position mutations are picked up by the next tick's spatial sync" → "Direct in-place mutation is not auto-detected and the grid will not reflect it").
+- **`docs/guides/entities-and-components.md`** — corrected the "Mutations are immediate and are detected for diffs" line.
+- **`docs/guides/serialization-and-diffs.md`** — corrected the "In-place mutation detection still works" line (no longer true in either mode); updated the deserialize version range to `1..5` and added the `references dead entity` throw to the list.
+- **`docs/guides/debugging.md`** — softened the wording on the in-place-position-mutation tip so it doesn't imply the mutation gets auto-synced later.
+
+## 0.5.6 - 2026-04-25
+
+Iter-2 fix-review iteration 3 — Gemini and Opus signed off CLEAN; Codex flagged remaining doc drift in canonical guides and the `api-reference.md` System / SystemRegistration / callback signatures (still 2-generic in docs even though src was updated to 4-generic in v0.5.2). All addressed.
+
+### Documented
+
+- **`docs/guides/public-api-and-invariants.md`** — corrected the prose describing component writes: in-place mutations of `getComponent()`-returned objects are NOT diff-detected; all changes must go through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. The pre-v0.5.0 wording suggesting otherwise is gone.
+- **`docs/guides/commands-and-events.md`** — removed `syncSpatialIndex()` from the tick-timing diagram (the per-tick scan was removed in v0.5.0).
+- **`docs/api-reference.md`** — `System`, `SystemRegistration`, `LooseSystem`, `LooseSystemRegistration` now show the four-generic signature with `TComponents` and `TState`; `ComponentRegistry` description mentions both registry generics; callback parameter signatures for `registerValidator`, `registerHandler`, `onDestroy`, `offDestroy` show the four-generic `World<TEventMap, TCommandMap, TComponents, TState>` form. The 2-generic form was the v0.5.1 baseline; v0.5.2 already updated the source.
+
+## 0.5.5 - 2026-04-25
+
+Iter-2 fix-review iteration 2 — multi-CLI re-review (Codex/Gemini/Opus). Gemini signed off CLEAN; Codex and Opus flagged remaining doc drift + missing regression tests. All addressed. 467 tests pass.
+
+### Fixed
+
+- **`cloneTickFailure` now uses `JSON.parse(JSON.stringify())`** to match `cloneTickDiff`. The previous `structuredClone` rationale (preserve Error stack) was incorrect: `createTickFailure` already normalizes `error` via `createErrorDetails` to a plain `{name, message, stack}` object before storage, so the `error` field is never an Error instance at clone time. Both helpers now use the same JSON path with a comment explaining why.
+- **`docs/architecture/ARCHITECTURE.md` Boundaries section** — three lines that still described removed v0.5.0 features cleaned up: `SpatialGrid` description now reflects lock-step write-time sync (no scan); snapshot description drops `detectInPlaceMutations`; metrics description drops "spatial scan counts" in favor of `spatial.explicitSyncs`.
+- **`docs/guides/debugging.md`** — `spatialSync` failure phase, `spatial_sync_threw` code, and `spatial-full-scan` debugger issue removed from the failure-codes / issue-codes tables; the bottleneck-finding example no longer reads removed metrics fields.
+- **`docs/guides/public-api-and-invariants.md`** — `getMetrics()` description updated to "explicit-sync counts".
+- **`docs/api-reference.md`** — `getMetrics()` description updated to mention `spatial.explicitSyncs` instead of "spatial scan counts".
+
+### Added
+
+- **Regression test for `world.grid.getAt()` Set isolation** — `mutating the Set returned by getAt does not corrupt the engine grid` directly tests the v0.5.4 fix.
+- **Regression test for `getLastTickFailure()` reference isolation** — `getLastTickFailure returns isolated copies; mutation does not bleed across calls` locks in the per-call clone contract.
+
+### Polish
+
+- Trailing blank lines inside `new World({ ... })` config literals removed in `tests/world-debugger.test.ts`, `tests/history-recorder.test.ts`, `tests/scenario-runner.test.ts` — left over after the v0.5.0 `detectInPlacePositionMutations` field removal.
+
+## 0.5.4 - 2026-04-25
+
+Iter-2 fix-review iteration 1 — multi-CLI review (Codex/Gemini/Opus) caught real issues in the v0.5.0–0.5.3 chain. 465 tests pass.
+
+### Fixed
+
+- **`world.grid.getAt()` no longer returns the live backing `Set`.** The delegate now returns a fresh `Set` copy (or `null`) so `(world.grid as any).getAt(x, y).clear()` cannot corrupt the spatial index. Closes the runtime read-only hardening hole that the v0.5.0 delegate left open.
+- **`getLastTickFailure()` returns a fresh defensive copy on every call.** Reverts the v0.5.3 cache that returned the same object reference to repeat callers — different consumers could mutate each other's view of the failure. Per-call `cloneTickFailure(...)` matches the contract of `getDiff`/`getEvents`.
+- **`cloneTickDiff()` reverts to `JSON.parse(JSON.stringify())`.** `TickDiff` is JSON-shaped by contract (assertJsonCompatible at write time), and the JSON round-trip is faster than `structuredClone` for plain objects on V8. `cloneTickFailure()` keeps `structuredClone` because `TickFailure.error` may carry an `Error` instance whose stack `JSON.stringify` would erase.
+- **`EventBus.getEvents()` reverts to `JSON.parse(JSON.stringify())`** for the same reason — emit-time validation guarantees JSON shape.
+
+### Added
+
+- **`World.serialize({ inspectPoisoned: true })` opt-out for the poisoned-world warn.** Engine-internal debug tooling (`WorldDebugger.capture()`, `scenario-runner.captureScenarioState()`, `WorldHistoryRecorder` snapshots) now passes this option so it doesn't trigger its own warning when inspecting a poisoned world. The default behavior — warn on `serialize()` and `submit()` from a poisoned world — is unchanged for normal callers.
+- **Regression tests:**
+  - `World.deserialize` rejects malformed snapshots whose `tags` or `metadata` reference dead entities (locks in L_NEW4).
+  - Legacy v0.4.x snapshot fields (`config.detectInPlacePositionMutations`, `componentOptions[*].detectInPlaceMutations`) are silently ignored on read (locks in the v0.5.0 backward-compat promise).
+  - Warn-once invariant: `submit + submit + serialize + serialize` after a single failure produces exactly one `console.warn`, and `recover()` re-arms the latch for the next poison cycle.
+  - `serialize({ inspectPoisoned: true })` does not warn.
+
+### Documented
+
+- **`docs/api-reference.md`** — removed `'spatialSync'` from `TickFailurePhase`; updated `World.deserialize` signature to four-generic form (with `LooseSystem`/`LooseSystemRegistration` in the systems-array union); updated `serialize()` docs with the new `inspectPoisoned` option and the deep-clone behavior; removed stale "submit fast path" prose under the instrumentation profile docs and the `submit()` reference; added the `references dead entity` throw to deserialize's `Throws` list.
+- **`docs/architecture/ARCHITECTURE.md`** — removed `World.syncSpatialIndex()` from the data-flow diagram and the `spatialSync` phase from the tick-failure list.
+- **`examples/debug-client/app.js`** — debug client metrics row now reads only `metrics.spatial.explicitSyncs`.
+- **`examples/debug-client/worker.js`** — removed the dead `detectInPlacePositionMutations: false` literal.
+- **`scripts/rts-benchmark.mjs`** — removed `metrics.spatial.fullScans`/`scannedEntities` reads (both `undefined` post-v0.5.0); removed the dead config field; benchmark report now publishes `spatialExplicitSyncs`.
+
+### Polish
+
+- `normalizeSystemRegistration` casts now use the four-generic `System<TEventMap, TCommandMap, TComponents, TState>` form, matching the rest of the v0.5.2 H_NEW3 refactor.
+- Trailing whitespace cleanup in `tests/world-debugger.test.ts`, `tests/history-recorder.test.ts`, `tests/scenario-runner.test.ts` left over from the v0.5.0 field removal.
+
+## 0.5.3 - 2026-04-25
+
+Iter-2 batch 5 — medium + polish items from the iter-2 review. 459 tests pass.
+
+### Fixed
+
+- **`setMeta` rejects non-finite numbers** (`NaN`, `Infinity`, `-Infinity`). Previously these were accepted and silently coerced to `null` by `JSON.stringify`, causing in-memory state to diverge from the persisted snapshot. (M_NEW2)
+- **`findPath` no longer pushes overcost neighbors onto the heap or `bestG`.** When a candidate's `newG > maxCost`, the loop now skips it before allocating heap/`cameFrom`/`bestG` entries. Pure efficiency win for path queries that exceed `maxCost`. (M_NEW3)
+- **`World.deserialize` rejects `tags`/`metadata` for dead entities.** Previously a malformed snapshot could create reverse-index entries that bled into recycled IDs when `createEntity()` reused them. (L_NEW4)
+- **`EntityManager.fromState` validates each `alive[i]` is a boolean and each `generations[i]` is a non-negative integer.** Previously only `freeList` shape was checked. (R4 from iter-2)
+- **`World.registerComponent` and `World.deserialize` clone `ComponentStoreOptions`** before storing them, so later caller mutation can't desync the snapshot's reported options from the constructed `ComponentStore`. (L_NEW7)
+- **Path cache no longer double-clones on cache miss.** The resolved path is cloned once for the cache; the original is yielded to the caller. ~3× → 2× allocation per miss. (L_NEW2)
+
+### Improved
+
+- **`getLastTickFailure()` is now O(1) on repeat calls.** The clone is cached on first read and invalidated on `recover()` or new failure. (M_NEW5)
+- **`cloneTickFailure` and `cloneTickDiff` use `structuredClone` instead of `JSON.parse(JSON.stringify())`.** Faster on hot listener paths; the JSON-shape contract is still enforced at the write side via `assertJsonCompatible`. (L_NEW1)
+- **`findNearest` early-out comment clarified** to call out the Chebyshev-bound vs Euclidean-distance distinction explicitly. (L_NEW6)
+
+### Documented
+
+- **`docs/guides/resources.md`** — added explicit FIFO priority semantics for transfers from a shared source. Per the iter-2 Q5 user decision: when demand exceeds supply, transfers drain the source in registration order. Game code that needs proportional/priority distribution must manage allocation manually. (M_NEW4)
+- **`docs/guides/rts-primitives.md`** — added a "Static blocks vs occupancy" section clarifying that `OccupancyBinding.block()` is for entity-less terrain only, `ignoreEntity` does not apply to static blocks, and entity-owned blocking should use `occupy()` instead. Per the iter-2 Q2 user decision (Option A). (R5/M10)
+
+## 0.5.2 - 2026-04-25
+
+Iter-2 batch 4 — typed registries thread through every callback boundary (H_NEW3). Type-only refactor; runtime behavior unchanged. 453 tests pass.
+
+### Changed
+
+- **`System`, `SystemRegistration`, and `RegisteredSystem` now accept `TComponents` and `TState` generics** (in addition to `TEventMap` / `TCommandMap`). Defaults match the previous behavior so existing call sites continue to compile.
+- **`registerSystem`, `registerValidator`, `registerHandler`, `onDestroy`/`offDestroy`, and `World.deserialize`** now thread the world's full generic signature into their callback parameters. Inside a system, validator, handler, or destroy hook, `world.getComponent`/`world.getState` and friends preserve the typed-registry signatures established at construction.
+- **`destroyCallbacks` field type** updated to match.
+
+### Migration
+
+No runtime change. Existing code without explicit type annotations continues to work. Code that wrote callbacks with the explicit `(world: World<Events, Commands>) => void` signature can now widen to `(world: World<Events, Commands, Components, State>) => void` to gain compile-time access to the typed component and state APIs inside the callback body.
+
+## 0.5.1 - 2026-04-25
+
+Iter-2 batch 3 — poison-contract integrity (H_NEW1 + H_NEW2). 452 tests pass.
+
+### Fixed
+
+- **Listener exceptions no longer bypass the fail-fast contract.** `commandExecutionListener`, `commandResultListener`, and `tickFailureListener` invocations are now wrapped in `try/catch`. A throwing listener logs to `console.error` and the engine continues. Previously, a synchronous listener throw inside `processCommands` propagated up through `runTick` past `finalizeTickFailure` — the world was partially mutated but `this.poisoned` was never set, so subsequent `step()` calls happily ran on inconsistent state. Listener bugs are observability bugs and no longer corrupt engine state.
+
+### Added
+
+- **`submit()` and `serialize()` warn (once per poison cycle) when called on a poisoned world.** The APIs remain available — debug/repair workflows often need to inspect or queue work against a poisoned world — but the engine now emits a single `console.warn` per `(poison → recover)` cycle so an AI-agent operator notices when their loop is missing the recovery step. The warning resets on `world.recover()`.
+
+## 0.5.0 - 2026-04-25
+
+Breaking release. Removes the in-place mutation auto-detection paths (component-store and spatial-index), tightens `world.grid` to a runtime-immutable delegate, and rejects non-JSON-compatible event payloads at `EventBus.emit`. All component and position writes must now go through `setComponent`/`addComponent`/`setPosition`. Iter-2 `R1` and `R3` from the same-day full-codebase review.
+
+### Breaking Changes
+
+- **Removed `ComponentStoreOptions.detectInPlaceMutations`.** `getDirty()` now reports only entries marked dirty via `set()` / `remove()`. `clearDirty()` only rebuilds the fingerprint baseline when `diffMode === 'semantic'`. Direct in-place mutation of component objects (`world.getComponent(id, 'pos').x = 5`) is no longer detected — game logic must call `setComponent` (or `setPosition`) for changes to land in the diff.
+- **Removed `WorldConfig.detectInPlacePositionMutations`.** The per-tick spatial index full-scan is gone. Position writes that go through `setPosition`/`setComponent` already update the grid and `previousPositions` immediately; the scan was only the fallback for in-place mutators.
+- **Removed `World.markPositionDirty()`.** It existed solely to flush in-place position mutations into the grid; without that pattern there's nothing to flush. Use `setPosition` instead.
+- **Removed `WorldMetrics.spatial.fullScans` and `.scannedEntities`.** The full-scan is gone. `WorldMetrics.spatial.explicitSyncs` (incremented by every `setPosition`-style write) and `WorldMetrics.durationMs.spatialSync` (likewise removed) are no longer reported.
+- **Removed `'spatialSync'` from `TickFailurePhase`.** No phase to fail in.
+- **`world.grid` is now a runtime-immutable read-only delegate.** Previously typed `SpatialGridView` but assigned `this.spatialGrid` directly, so `(world.grid as any).insert(...)` could mutate the index. Now `world.grid` is a small object exposing only `width`, `height`, `getAt`, `getNeighbors`, `getInRadius`. Mutating SpatialGrid methods are not present at runtime.
+- **`EventBus.emit` now rejects non-JSON-compatible payloads** (functions, symbols, BigInt, circular references, class instances) via `assertJsonCompatible`. The previous behavior was to accept anything and silently degrade `getEvents()` to a shared reference for unclonable payloads. Migration: ensure event payloads are plain JSON-shaped objects.
+- **`getEvents()` no longer falls back to a shared reference on clone failure.** It always returns a deep `structuredClone`. Combined with the emit-time validation above, this means `getEvents()` cannot return live engine references.
+
+### Migration
+
+Most consumers should be unaffected — `setPosition`, `setComponent`, and `addComponent` were already the documented write paths. Code that mutated component objects in place (`pos.x = 5`) and relied on the per-tick scan to find the change must switch to `setPosition`/`setComponent`. Snapshots from v0.4.0 still load: extra fields (`detectInPlacePositionMutations`, `componentOptions[*].detectInPlaceMutations`) are ignored on read.
+
+## 0.4.1 - 2026-04-25
+
+Iter-2 critical fixes from the same-day full-codebase review (`docs/threads/done/full/2026-04-25/2/`). Two correctness/isolation bugs the iter-1 fixes left open. 450 tests pass (up from 446 in 0.4.0).
+
+### Fixed
+
+- **`findNearest` returns the entity at the diagonal corner of any non-tiny grid.** Previously the loop bound was `Math.max(width, height)` (Chebyshev), but `getInRadius` filters by Euclidean distance — so on any grid where `hypot(W-1, H-1) > max(W, H)`, entities in the diagonal corner from the search point silently returned `undefined`. Bound is now `Math.ceil(Math.hypot(W-1, H-1))`. Reproducible repro: 4×4 grid, entity at `(3, 3)`, `findNearest(0, 0)` now returns the entity.
+- **`World.serialize()` and `World.deserialize()` no longer alias caller-owned objects.** Both boundaries `structuredClone` component data and state values; mutating the returned snapshot after `serialize()` no longer mutates live engine state, and mutating the snapshot input after `deserialize()` no longer mutates the deserialized world. Other public boundaries (`getDiff`/`getEvents`/`getByTag`) already had this property in 0.4.0.
+
+## 0.4.0 - 2026-04-25
+
+This release is the result of a multi-CLI full-codebase review (Codex `gpt-5.4`, Gemini `gemini-3.1-pro-preview`, and Claude Opus 4.7 1M-context). 25 distinct findings consolidated and addressed across the tick pipeline, snapshot fidelity, command pipeline, behavior tree, and defensive-view contracts. Two post-fix review iterations caught regressions in the fixes themselves; both were resolved before merge. 446 tests pass (up from 415).
+
+### Breaking Changes
+
+- **Tick failure semantics are now fail-fast.** Any tick failure marks the world as poisoned. `world.step()` throws `WorldTickFailureError` and `world.stepWithResult()` returns a `world_poisoned` failure result until `world.recover()` is called. Previously, callers could `step()` again immediately and observe a partially-mutated world.
+- **Failed ticks consume a tick number.** A failure at would-be tick N+1 advances `gameLoop.tick` to N+1; the next successful tick after `recover()` is N+2. Previously the failed tick number was reused by the next successful tick. Failed-tick events and successful-tick events are now disjoint by `tick`.
+- **`destroyEntity` callbacks observe `isAlive(id) === false`** for the dying entity. The entity is marked dying (alive=false, generation bumped) BEFORE callbacks run; the id is held off the free list until cleanup completes (try/finally), so a callback that calls `world.createEntity()` cannot recycle the dying id mid-cleanup. Cleanup also runs even if a callback throws.
+- **`setMeta` throws on duplicate `(key, value)` pairs.** Previously the second writer silently overwrote the reverse index, and `getByMeta(key, value)` returned only one of the entities sharing the value. The unique-reverse-index invariant is now enforced at write time.
+- **`getDiff()` returns a JSON deep-clone.** Mutations through the returned object no longer write through to the live engine. Callers that previously relied on mutating the live diff to influence engine state (always undocumented; types said `Readonly`) will silently observe no effect.
+- **`getEvents()` deep-clones each event payload.** Same as above — mutations through the returned array of events are no longer observable to the engine or to other consumers of `getEvents()`.
+- **Tag and metadata removal on entity destruction now appears in `TickDiff`** as `{ entity, tags: [] }` / `{ entity, meta: {} }`. Previously, consumers had to correlate `entities.destroyed` with the previous tick's `tags`/`metadata` to infer the cleanup. ARCHITECTURE.md documented this contract; the diff now matches it.
+- **`WorldSnapshot` is now version 5** and round-trips `WorldConfig.maxTicksPerFrame`, `WorldConfig.instrumentationProfile`, and per-component `ComponentStoreOptions` (`diffMode` and `detectInPlaceMutations`). Versions 1–4 still load for compatibility; v4 stores fall back to default `ComponentStoreOptions`.
+- **`submit()` always assigns a `submissionSequence`.** Previously, the non-`full` profile + no-listener fast path queued commands with `submissionSequence: null`, which `ClientAdapter` filtered out — so the same command could be invisible on the wire depending on profile and listener attachment. `submit()` now delegates to `submitWithResult()`; the listener-loop fast-path optimization remains inside `emitCommandResult` / `emitCommandExecution`.
+- **Failed ticks now emit `tick_aborted_before_handler` execution events** for every command queued for the failed tick that did not run, and record their `submissionSequence`s in `failure.details.droppedCommands`. Previously these commands were silently lost (the queue was drained before iteration).
+- **Reactive BT nodes (`reactiveSelector` / `reactiveSequence`) now clear the running-state slice of every child they skip past on a given tick.** A high-priority preemption that interrupts a stateful `Sequence` child no longer leaves that sequence at its mid-execution index; next time the reactive node falls back to it, the sequence restarts from child 0.
+- **`GameLoop.step()` no longer auto-advances the tick.** Callers (only `World` in this codebase — `GameLoop` is not exported from `src/index.ts`) call `gameLoop.advance()` explicitly. `World.runTick` advances on success before diff listeners fire so `world.tick === diff.tick` during the listener phase, and on failure inside `finalizeTickFailure` (so the failed tick consumes its number).
+
+### Added
+
+- **`World.isPoisoned()` and `World.recover()`** to inspect/clear the poison flag set by tick failures. `recover()` also clears `lastTickFailure`, `currentDiff`, and `currentMetrics`.
+- **`World.getAliveEntities()` and `World.getEntityGeneration(id)`** primitives. `RenderAdapter.connect()` now uses them instead of `world.serialize()` so connecting renderers no longer pay a snapshot-sized JSON-compat walk.
+- **`ComponentStoreOptions.detectInPlaceMutations`** (default `true`). When `false`, `getDirty()` and `clearDirty()` skip the per-tick all-entries fingerprint scan; callers commit to writing only through `setComponent`. Pairs with `diffMode` and is round-tripped in v5 snapshots.
+- **`SubcellOccupancyGrid`** for deterministic slot-based crowding on top of coarse cell blockers, including `bestSlotForUnit()`, `occupy()`, and `neighborsWithSpace()` for smaller-than-cell unit packing.
+- **`OccupancyBinding`** for higher-level passability ownership: blocker metadata (`building` / `resource` / `unit` etc.), destroy-time lifecycle cleanup via `world.onDestroy()`, optional sub-cell crowding, crowding-aware `isBlocked()` path queries, and a `GridPassability`-compatible surface that plugs directly into `findGridPath()`.
+- **`getMetrics()` / `resetMetrics()`** on `OccupancyGrid` and `SubcellOccupancyGrid`, plus occupancy-cost reporting in `npm run benchmark:rts`.
+- **`reactiveSelector` and `reactiveSequence`** BT builder methods that do not persist running state across ticks, plus a `clearRunningState(state, node?)` helper for imperative subtree resets. Existing `selector` / `sequence` semantics are unchanged.
+- **`ComponentOptions.diffMode: 'strict' | 'semantic'`** on `World.registerComponent`. Semantic mode fingerprints values in `set()` and skips dirty-marking on unchanged rewrites. Strict mode remains the default.
+- **Fourth `TState` generic on `World`** (default `Record<string, unknown>`). `setState`/`getState`/`hasState`/`deleteState` type against `TState` so state and components have separate type registries — the previous overload that aliased `TState` to `TComponents` was an accidental conflation.
+- **`SpatialGrid.assertBounds(x, y)`** is now public so `World.assertPositionInBounds` can validate explicitly instead of relying on `getAt`'s side effect.
+- **`GameLoop.advance()`, `GameLoop.getMaxTicksPerFrame()`, `DEFAULT_MAX_TICKS_PER_FRAME`** exported from `src/game-loop.ts`.
+- **`EntityManager.markDying()`, `releaseId()`, `aliveEntities()`** to support the split destroy lifecycle and the new `World.getAliveEntities()`.
+
+### Fixed
+
+- **`ComponentStore` strict-mode hot path** no longer computes `JSON.stringify` per `set()`; the fingerprint is only built when needed for semantic-mode rewrite suppression. JSON-compat validation still runs in both modes.
+- **`ComponentStore.set()` clears the entity from `removedSet`** so a `remove()` followed by `set()` in the same tick produces a single `set` entry in the diff (was producing both `set` and `removed`).
+- **`findNearest`** uses an expanding-radius walk with a `seen` set and an early-out when `bestDistSq <= (r-1)²`. The previous implementation was O(R³) for far targets; the prior fix made it O(W·H) on every call. The current implementation is O(R²) common-case with a clean early exit.
+- **Pathfinding** no longer aborts the search on the first node whose `g > maxCost`; it `continue`s past such nodes so inadmissible-heuristic paths still terminate correctly. Negative edge costs are filtered out (`continue`).
+- **`VisibilityMap.getState()`** now flushes dirty players via `update()` before reading, so a snapshot taken after `setSource()`/`removeSource()` reflects current data.
+- **`ResourceStore.fromState()`** rejects duplicate transfer ids, normalizes `nextTransferId` to be greater than every existing id, and clamps `pool.current` to `pool.max` on load.
+- **`EntityManager.fromState()`** validates `generations.length === alive.length`, that every freelist id is in range, dead, and unique.
+- **`World.deserialize`** rejects non-integer or negative entity-id keys in `snapshot.tags` / `snapshot.metadata`.
+- **`WorldHistoryRecorder.recordTick()`** deep-clones the user's debug payload at record time so a memoized live structure cannot retroactively corrupt the recorded tick history.
+- **`getByTag()` / `getTags()`** allocate fresh empty `Set`s on miss instead of returning a shared sentinel that could be mutated by a careless cast.
+- **Reactive BT nodes** are now wired to `BTState` so they can call `clearRunningState` on preempted children.
+- **`SelectorNode` / `SequenceNode`** default `state.running[index]` to `-1` via `?? -1` instead of relying on `Math.max(undefined, 0) === NaN`.
+- **`noise.GRAD2`** is `as const` with element type `readonly [number, number]`; index masking switched from `% 8` to `& 7` to make the length invariant explicit.
+- **`OccupancyBindingWorldHooks`** callback signature drops the unused `world: unknown` argument.
+
+### Documentation
+
+- New `docs/devlog/detailed/2026-04-25_2026-04-25.md` with the full per-batch breakdown.
+- New `docs/superpowers/plans/2026-04-25-full-review-fixes.md` plan file used to drive the implementation.
+- New `docs/threads/done/full/2026-04-25/1/` review artifacts (`review prompt (not retained)`, `REVIEW.md`, Codex summary, Gemini summary, Opus summary).
+- 5 new rows in `docs/architecture/drift-log.md` covering fail-fast semantics, `TState` generic, snapshot v5, `detectInPlaceMutations`, and the GameLoop tick-advance change.
+- ARCHITECTURE.md updated for snapshot v5, the new tick-failure section, the `TState` generic, and the `setMeta` uniqueness throw.
+- Updated the README, architecture notes, API reference, RTS primitives guide, and sub-grid movement guide to document the higher-level occupancy binding and the new occupancy benchmark metrics.
+
+### Known Deferred (not regressions)
+
+- **M10**: `OccupancyBinding` owner-aware blocks + `ignoreEntity` for static cells — needs a separate brainstorm; current behavior treats blocks as entity-less terrain.
+- Snapshot validation for component count > 64 (silent overflow today).
+- Reactive-BT deeper sibling cleanup (current implementation clears children at `> i`; deeper failed-branch interiors are not recursively cleared).
+- `getDiff()` clone-cost optimization (always clones today; an opt-in `getDiffReadOnly()` could skip the clone for read-only consumers).
+
+## 0.3.0 - 2026-04-12
+
+This release addresses six ergonomics friction points identified by game projects consuming the engine. All changes are additive and backwards-compatible.
+
+### Breaking Changes
+
+- `WorldSnapshot` is now version 4 and includes `state`, `tags`, and `metadata` fields. Version 1-3 snapshots still load for compatibility.
+- `TickDiff` now includes `state`, `tags`, and `metadata` fields.
+
+### Added
+
+- **Loose system typing:** `LooseSystem` and `LooseSystemRegistration` types allow systems typed against bare `World` or `World<any, any>` to be registered without casts into generic worlds. `registerSystem` accepts both strict and loose system types via overloads.
+- **Typed component registry:** Optional third type parameter `TComponents` on `World<TEventMap, TCommandMap, TComponents>`. When provided, `getComponent`, `setComponent`, `addComponent`, `patchComponent`, `removeComponent`, and `query` infer types from component keys. Falls back to the existing string-based API when omitted.
+- **World-level state store:** `setState(key, value)`, `getState(key)`, `deleteState(key)`, `hasState(key)` for non-entity structured state (terrain config, simulation parameters, etc.). Included in serialization and diffs. JSON-compatible values only.
+- **Spatial query helpers:** `queryInRadius(cx, cy, radius, ...components)` combines spatial proximity with component filtering. `findNearest(cx, cy, ...components)` returns the closest entity matching all components.
+- **System ordering constraints:** `SystemRegistration.before` and `SystemRegistration.after` accept arrays of system names. Constraints resolve via topological sort within each phase. Cycles, cross-phase constraints, and missing name references throw descriptive errors. Order re-resolves when systems are added dynamically.
+- **Entity tags:** `addTag`, `removeTag`, `hasTag`, `getByTag` (reverse-indexed), `getTags`. Multiple entities can share a tag. Tags cleaned up on entity destruction, included in serialization and diffs.
+- **Entity metadata:** `setMeta`, `getMeta`, `deleteMeta`, `getByMeta` (unique reverse-indexed). Designed for external IDs and stable gameplay IDs. Metadata cleaned up on entity destruction, included in serialization and diffs.
+
+## 0.2.0 - 2026-04-10
+
+This release hardens the engine API and package boundary while adding RTS-scale primitives, render/debug infrastructure, and a browser reference debug client for reusable 2D civilization simulation projects.
+
+### Breaking Changes
+
+- Resource pools now use `max: null` for unbounded capacity instead of `Infinity`.
+- Component data must be JSON-compatible. Components containing `undefined`, non-finite numbers, functions, symbols, bigints, class instances, or circular references are rejected.
+- Component and resource writes through `World` now validate entity liveness and throw for dead or never-created entities.
+- Position writes validate integer grid bounds before mutating component state.
+- `WorldSnapshot` is now version 3 and includes resource state plus deterministic RNG state. Version 1 and 2 snapshots still load for compatibility.
+
+### Added
+
+- `EntityRef`, `world.getEntityRef(id)`, and `world.isCurrent(ref)` for stale-reference checks across recycled entity IDs.
+- `world.setComponent()`, `world.patchComponent()`, and `world.setPosition()` as explicit write APIs.
+- In-place component mutation detection for tick diffs.
+- Read-only `world.grid` view, while `SpatialGrid` remains available as a standalone utility.
+- Resource store snapshot state, including registrations, pools, rates, transfers, and next transfer ID.
+- `world.random()` and `WorldConfig.seed` for deterministic pseudo-random simulation logic.
+- Phase-aware system registration with `input`, `preUpdate`, `update`, `postUpdate`, and `output` phases.
+- `world.getMetrics()` for per-tick timing, query cache, system, and spatial sync instrumentation.
+- `WorldConfig.detectInPlacePositionMutations` and `world.markPositionDirty()` for large simulations that want to avoid the compatibility full-scan spatial sync path.
+- `OccupancyGrid` for deterministic blocked-cell, footprint, occupancy, and reservation tracking.
+- `findGridPath`, `PathCache`, `PathRequestQueue`, and `createGridPathQueue` for RTS-scale deterministic grid path processing.
+- `VisibilityMap` for per-player visible and explored cell tracking.
+- `RenderAdapter` for renderer-facing projected snapshots and diffs with generation-aware entity refs.
+- `WorldDebugger` plus occupancy, visibility, and path queue probe helpers for headless inspection.
+- Machine-readable `WorldDebugger.issues` alongside compatibility `warnings`.
+- `world.submitWithResult()`, structured validator rejections, and command-result listeners.
+- `CommandExecutionResult`, `world.onCommandExecution()`, and submission-sequence tracking so queued commands can be matched to tick-time execution or failure.
+- `WorldHistoryRecorder` for short-horizon command outcomes and tick history capture.
+- `TickFailure`, `WorldStepResult`, `WorldTickFailureError`, `world.stepWithResult()`, and `world.getLastTickFailure()` for structured runtime failure handling without forcing AI loops through thrown exceptions.
+- `WorldDebugger.tickFailure` plus machine-readable runtime error issues derived from the latest failed tick.
+- `WorldHistoryRecorder` capture for command execution results and tick failures, plus range summaries that aggregate execution outcomes and failure codes.
+- Explicit AI contract version exports plus `schemaVersion` markers on command outcomes, debugger snapshots, history state, and scenario results.
+- `summarizeWorldHistoryRange()` for AI-facing tick-window summaries over command outcomes, changed entities, events, and issues.
+- `runScenario()` for headless setup, scripted stepping, checks, and structured AI-facing results.
+- A browser debug client example backed by a worker-owned simulation, `RenderAdapter`, and `WorldDebugger`.
+- `npm run benchmark:rts` for deterministic RTS-scale benchmark scenarios and metrics output.
+- Runtime validation for world config, game-loop config, resource amounts/rates/maxima, and spatial coordinates.
+- `ClientAdapter` runtime message guarding, structured `commandAccepted`/`commandRejected` outcomes, and optional `onError` callback for send failures.
+- `ClientAdapter` streaming for `commandExecuted`, `commandFailed`, and `tickFailed` messages so remote agents can distinguish queued commands from executed commands and read structured tick failures.
+- Client protocol version markers on server message envelopes.
+- Tick-budget metrics plus `tick-budget-exceeded` debugger issues with slow-system context.
+- `InstrumentationProfile` and `WorldConfig.instrumentationProfile` with `full`, `minimal`, and `release` modes for development, QA/staging, and shipping runtime overhead control.
+- Lazy command execution feedback allocation so runtime execution results are only built when listeners are attached.
+- Root package export barrel, declaration build config, npm package metadata, and CI workflow.
+
+### Documentation
+
+- Added `docs/README.md`.
+- Added `docs/threads/done/engine-hardening/2026-04-10/1/REVIEW.md`.
+- Added `docs/guides/public-api-and-invariants.md`.
+- Added `docs/guides/ai-integration.md`.
+- Added `docs/guides/scenario-runner.md`.
+- Added `docs/guides/rendering.md`.
+- Added `docs/guides/rts-primitives.md`.
+- Added `docs/guides/debugging.md`.
+- Added `docs/threads/done/ai-first-engine/2026-04-11/1/REVIEW.md`.
+- Added `docs/threads/done/ai-final-form/2026-04-11/1/REVIEW.md`.
+- Added `docs/threads/done/ai-runtime-feedback/2026-04-11/1/REVIEW.md`.
+- Renamed the completed render/debugger review doc to `docs/threads/done/render-contract-debugger/2026-04-10/1/REVIEW.md` and trimmed the root README back to an overview so `docs/api-reference.md` remains the single authoritative API surface.
+- Added the `examples/debug-client/` browser reference viewer and `npm run debug:client`.
+- Reorganized documentation entry points around the docs hub and focused plan/review docs.
+- Updated README, API reference, guides, and tutorials for package-root imports, explicit write APIs, `EntityRef`, structured command submission and execution outcomes, structured tick failures, AI-facing debugging/history tools, versioned machine contracts, client protocol version markers, JSON-compatible component data, resource `max: null`, snapshot v3, client-adapter message handling, render projection, and debugging helpers.
+- Documented the instrumentation profile model and the boundary between explicit AI diagnostics (`submitWithResult()`, `stepWithResult()`) and lower-overhead implicit runtime paths (`submit()`, `step()` in `minimal` and `release`).
