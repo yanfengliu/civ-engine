@@ -73,7 +73,7 @@ After green implementation, temporarily reintroduce the original missing coverag
 
 ## Status
 
-Accepted by root 2026-10-01: exact type/reason meanings, snapshot horizon normalization and existing continuity guard. M0 shipped at a839ad5 and its verified 2.4.2 dist is adopted. M1 is privately implemented in work 72 with focused checks and exact review green; full gates and shipping wait for root heavy/distribution release. The accepted original contract remains recoverable at a839ad5.
+Accepted by root 2026-10-01: exact type/reason meanings, snapshot horizon normalization and existing continuity guard. M0 shipped at a839ad5 and its verified 2.4.2 dist is adopted. M1 is privately committed in work 72 with focused checks, all eleven local gates and both exact independent reviews green; main merge/push and remote release acceptance remain required. The accepted original contract remains recoverable at a839ad5.
 # M2: coherent enclosing-step hook (accepted, no implementation)
 
 E15 belongs to civ-engine with AoE2 adoption owned by root. Base for implementation will be the accepted M1 release after its main/remote boundary is green. This proposal changes three public configurations together and the private fork continuation path. Scenario adapters remain outside this runner-specific milestone. No callback, bridge, new state field or format version is persisted in a bundle. Core retains zero runtime dependencies.
