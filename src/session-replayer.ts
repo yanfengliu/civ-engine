@@ -1,3 +1,4 @@
+import { advanceOneTick } from './playtest-advance.js';
 import type { JsonValue } from './json.js';
 import type {
   EntityRef,
@@ -198,6 +199,7 @@ export class SessionReplayer<
       world: world as unknown as World<TEventMap, TCommandMap>,
       sourceBundle: this._bundle as unknown as SessionBundle<TEventMap, TCommandMap>,
       sourceCommandsAtTargetTick,
+      advance: this._config.advance ? () => advanceOneTick(world, () => this._config.advance!(world)) : undefined,
       targetTick,
     });
   }
@@ -259,7 +261,8 @@ export class SessionReplayer<
         }
         world.submitWithResult(rc.type as keyof TCommandMap, rc.data as TCommandMap[keyof TCommandMap]);
       }
-      world.step();
+      if (this._config.advance) advanceOneTick(world, () => this._config.advance!(world));
+      else world.step();
     }
     return world;
   }
@@ -372,7 +375,8 @@ export class SessionReplayer<
           }
           world.submitWithResult(rc.type as keyof TCommandMap, rc.data as TCommandMap[keyof TCommandMap]);
         }
-        world.step();
+        if (this._config.advance) advanceOneTick(world, () => this._config.advance!(world));
+        else world.step();
         if (flags.checkEvents) {
           const expected = this._eventsByTick.get(t + 1) ?? [];
           const actual = [...world.getEvents()] as Array<{ type: PropertyKey; data: unknown }>;

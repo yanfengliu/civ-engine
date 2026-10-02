@@ -4,6 +4,7 @@
 // `bundleSummary` helper for feeding bundle facts to an LLM. Game projects (or
 // downstream tooling) wire their own LLM clients via `AgentDriver.decide`.
 
+import { advanceOneTick, describeAdvanceError, isAdvanceTickFailure } from './playtest-advance.js';
 import { EngineRangeError } from './engine-error.js';
 import { MemorySink } from './session-sink.js';
 import { SessionRecorder } from './session-recorder.js';
@@ -83,6 +84,9 @@ export interface AgentPlaytestConfig<
   stopWhen?(ctx: AgentDriverContext<TEventMap, TCommandMap, TComponents, TState>): boolean | Promise<boolean>;
   sink?: SessionSink & SessionSource;
   sourceLabel?: string;
+  /** Synchronous preparation + exactly one World.step. Finalize authoritative state
+   * before that step; after-step publication must be read-only. Async work is rejected. */
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   snapshotInterval?: number | null;
 }
 
@@ -91,7 +95,8 @@ export type AgentStopReason =
   | 'stopWhen'
   | 'poisoned'
   | 'agentError'
-  | 'sinkError';
+  | 'sinkError'
+  | 'advanceError';
 
 export interface AgentPlaytestResult<
   TEventMap extends Record<keyof TEventMap, unknown>,
@@ -109,6 +114,10 @@ export interface AgentPlaytestResult<
   ticksRun: number;
   stopReason: AgentStopReason;
   ok: boolean;
+  advanceError?: {
+    fromTick: number; toTick: number;
+    error: { name: string; message: string; stack: string | null; code: string | null };
+  };
   agentError?: {
     tick: number;
     error: { name: string; message: string; stack: string | null };
@@ -182,6 +191,7 @@ export async function runAgentPlaytest<
   const startTick = world.tick;
   let ticksRun = 0;
   let stopReason: AgentStopReason = 'maxTicks';
+  let advanceError: AgentPlaytestResult<TEventMap, TCommandMap>['advanceError'];
   let agentError: AgentPlaytestResult<TEventMap, TCommandMap>['agentError'];
 
   try {
@@ -222,10 +232,13 @@ export async function runAgentPlaytest<
         break;
       }
 
+      const fromTick = world.tick;
       try {
-        world.step();
-      } catch {
-        stopReason = 'poisoned';
+        if (config.advance) advanceOneTick(world, () => config.advance!(world));
+        else world.step();
+      } catch (error) {
+        if (!config.advance || isAdvanceTickFailure(error, world, fromTick)) stopReason = 'poisoned';
+        else { stopReason = 'advanceError'; advanceError = describeAdvanceError(error, fromTick, world.tick); }
         break;
       }
 
@@ -299,11 +312,13 @@ export async function runAgentPlaytest<
     // divergence is documented in api-reference.md § runAgentPlaytest
     // (full-review 2026-07-10 M2).
     ok:
+      stopReason !== 'advanceError' &&
       stopReason !== 'poisoned' &&
       stopReason !== 'agentError' &&
       stopReason !== 'sinkError' &&
       recorder.lastError === null,
     ...(agentError ? { agentError } : {}),
+    ...(advanceError ? { advanceError } : {}),
     ...(report !== undefined ? { report } : {}),
   };
 }

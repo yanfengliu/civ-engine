@@ -1,3 +1,4 @@
+import { advanceOneTick, describeAdvanceError, isAdvanceTickFailure } from './playtest-advance.js';
 import { EngineRangeError } from './engine-error.js';
 import type { World, ComponentRegistry } from './world.js';
 import type { JsonValue } from './json.js';
@@ -133,6 +134,9 @@ export interface SynthPlaytestConfig<
   sourceLabel?: string;
   policySeed?: number;
   stopWhen?: (ctx: StopContext<TEventMap, TCommandMap, TComponents, TState>) => boolean;
+  /** Synchronous preparation + exactly one World.step. Finalize authoritative state
+   * before that step; after-step publication must be read-only. Async work is rejected. */
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   snapshotInterval?: number | null;
 }
 
@@ -143,8 +147,12 @@ export interface SynthPlaytestResult<
 > {
   bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
   ticksRun: number;
-  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError';
+  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError' | 'advanceError';
   ok: boolean;
+  advanceError?: {
+    fromTick: number; toTick: number;
+    error: { name: string; message: string; stack: string | null; code: string | null };
+  };
   policyError?: {
     policyIndex: number;
     tick: number;
@@ -217,6 +225,7 @@ export function runSynthPlaytest<
   // Step 4: tick loop.
   let ticksRun = 0;
   let stopReason: SynthPlaytestResult<TEventMap, TCommandMap>['stopReason'] = 'maxTicks';
+  let advanceError: SynthPlaytestResult<TEventMap, TCommandMap>['advanceError'];
   let policyError: SynthPlaytestResult<TEventMap, TCommandMap>['policyError'];
 
   const failPolicy = (p: number, tick: number, err: unknown): void => {
@@ -263,10 +272,13 @@ export function runSynthPlaytest<
           break outer;
         }
       }
+      const fromTick = world.tick;
       try {
-        world.step();
-      } catch {
-        stopReason = 'poisoned';
+        if (config.advance) advanceOneTick(world, () => config.advance!(world));
+        else world.step();
+      } catch (error) {
+        if (!config.advance || isAdvanceTickFailure(error, world, fromTick)) stopReason = 'poisoned';
+        else { stopReason = 'advanceError'; advanceError = describeAdvanceError(error, fromTick, world.tick); }
         break;
       }
       if (recorder.lastError !== null) {
@@ -287,7 +299,7 @@ export function runSynthPlaytest<
     try { recorder.disconnect(); } catch { /* best-effort */ }
   }
   // Tighten ok: also flips false if disconnect-time sink failure occurred.
-  const ok = stopReason !== 'sinkError' && recorder.lastError === null;
+  const ok = stopReason !== 'advanceError' && stopReason !== 'sinkError' && recorder.lastError === null;
   const bundle = recorder.toBundle() as unknown as SessionBundle<TEventMap, TCommandMap>;
-  return { bundle, ticksRun, stopReason, ok, policyError };
+  return { bundle, ticksRun, stopReason, ok, policyError, ...(advanceError ? { advanceError } : {}) };
 }

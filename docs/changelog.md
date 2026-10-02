@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.6.0 - 2026-10-01
+
+Playtest runners and SessionReplayer accept an optional synchronous advance(world) callback for games that prepare authoritative state outside World.step. Replay reconstruction, self-check and fork continuation use the same callback on each current World. Omission retains existing direct stepping.
+
+- The callback must finish authoritative mutations before exactly one World tick. Post-step derived publication must be read-only; periodic snapshots happen inside the step. Supply the same callback when recording and replaying; it is not stored in bundles.
+- Both runner result unions add advanceError. Handle that case in exhaustive switches; ok is false and the serialized diagnosis records observed tick bounds. Foreign callback throws remain the original value in replay/fork, including hostile Proxy values. Live failures of the supplied World retain existing poison/failure handling and partial recordings; no rollback is promised.
+- Detected asynchronous returns fail with advance_async_unsupported; invalid tick deltas fail with advance_tick_delta. Scheduled work is not cancelled. Ordinary observable Promise rejections are consumed. If native constructor/species prevents intrinsic observation and then is noncallable, detection and containment are unsupported; matching tick counts do not establish synchronous work. No global rejection policy or caller-owned descriptor is changed.
+
 ## 2.5.0 - 2026-10-01
 
 SessionReplayer.selfCheck now always reports comparison coverage separately from divergence results. The optional-on-type coverage field preserves old consumer-created SelfCheckResult objects; three additive public types describe its ranges and reasons.

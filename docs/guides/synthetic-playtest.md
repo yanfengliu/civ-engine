@@ -2,6 +2,14 @@
 
 The synthetic playtest harness is a Tier-1 primitive of the AI-first feedback loop (Spec 3 of `docs/design/ai-first-dev-roadmap.md`). It drives a `World` autonomously via pluggable `Policy` functions for `N` ticks and produces a replayable `SessionBundle`.
 
+## Enclosing simulation advancement
+
+An optional synchronous `advance(world)` runs once after recorded commands are submitted and receives the exact typed current World. It must complete exactly one unpoisoned World tick. Finalize authoritative state before that one `World.step()`; after-step rendering or derived publication must be read-only because periodic recording snapshots occur inside the step. Omission retains direct `world.step()` and the existing runner behavior. Supply the matching callback to `SessionReplayer`; it is reused for `openAt`, `selfCheck`, `forkAt` reconstruction and fork continuation on each fresh replay World. No callback is persisted, and fork public generics remain unchanged.
+
+Asynchronous returns are unsupported: an identified returned thenable produces `advance_async_unsupported`; zero or multiple completed ticks produce `advance_tick_delta`. Already scheduled work is not cancelled. Ordinary observable native Promise and observer-return rejections are consumed, but hostile/frozen constructor or `Symbol.species` can prevent native handler attachment and leave an invalid return unhandled. The engine does not mutate returned objects or set process-global rejection policy. Successful intrinsic native handler attachment identifies the return without reading its caller-owned `then` property. Otherwise the candidate `then` property is read once, and a throwing getter remains the original callback error. If native constructor/species prevents attachment and `then` is noncallable, the portable observer cannot identify that native return; it follows ordinary unrecognized-value handling, so matching tick counts do not prove synchronous input or rejection containment for this unsupported compound case. An identified thenable whose observer throws retains the coded primary diagnosis. Replay/fork throw the corresponding `EngineError`, with safe observation failure in its `details`; runner results retain the serialized primary code/message and observed tick bounds. Foreign callback throws, including revoked Proxy values and throwing prototype traps, retain their identity in replay/fork; both runners serialize them safely as advanceError. Only a matching live failure of the supplied poisoned World uses existing tick-failure handling.
+
+Both runners report callback failure as `stopReason: 'advanceError'`, `ok: false`, no failed-callback tick count and optional serialized `advanceError` with observed from/to ticks. Retain the partial recording; no rollback is promised. Exhaustive result switches must handle the added union case. Default poison/policy/agent differences stay unchanged.
+
 ## Quickstart
 
 ```typescript

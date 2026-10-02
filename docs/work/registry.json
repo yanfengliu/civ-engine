@@ -1689,6 +1689,10 @@
     {
       "id": 72,
       "theme": "self-check-coverage"
+    },
+    {
+      "id": 73,
+      "theme": "playtest-advance-hooks"
     }
   ]
 }

@@ -3,6 +3,7 @@
 // PLAN.md (v5 ACCEPTED). This module hosts the public surface for
 // SessionReplayer.forkAt(targetTick) / ForkBuilder / Divergence.
 
+import { isAdvanceTickFailure } from './playtest-advance.js';
 import type { JsonValue } from './json.js';
 import type { RecordedCommand, SessionBundle } from './session-bundle.js';
 import { MemorySink, type SessionSink, type SessionSource } from './session-sink.js';
@@ -11,6 +12,7 @@ import { WorldTickFailureError, type World } from './world.js';
 import { SessionRecorder } from './session-recorder.js';
 import { SessionRecordingError } from './session-errors.js';
 import { computeInlineDivergence } from './session-fork-divergence.js';
+import { groupForkContinuationCommands } from './session-fork-commands.js';
 
 /** Caller passed a sequence to `replace()`/`drop()` that doesn't match any
  *  source command at the fork's `targetTick`. `details.code` is
@@ -194,6 +196,7 @@ export interface ForkBuilder<TEventMap, TCommandMap> {
 /** Internal — `SessionReplayer.forkAt()` is the only call site. */
 export interface ForkBuilderInit<TEventMap, TCommandMap> {
   readonly world: World<TEventMap, TCommandMap>;
+  readonly advance?: () => void;
   readonly sourceBundle: SessionBundle<TEventMap, TCommandMap>;
   readonly targetTick: number;
   readonly sourceCommandsAtTargetTick: ReadonlyMap<number, RecordedCommand<TCommandMap>>;
@@ -214,6 +217,7 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
   implements ForkBuilder<TEventMap, TCommandMap>
 {
   private readonly _world: World<TEventMap, TCommandMap>;
+  private readonly _advance?: () => void;
   private readonly _sourceBundle: SessionBundle<TEventMap, TCommandMap>;
   private readonly _targetTick: number;
   private readonly _sourceCommandsAtTargetTick: ReadonlyMap<number, RecordedCommand<TCommandMap>>;
@@ -225,6 +229,7 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
 
   constructor(init: ForkBuilderInit<TEventMap, TCommandMap>) {
     this._world = init.world;
+    this._advance = init.advance;
     this._sourceBundle = init.sourceBundle;
     this._targetTick = init.targetTick;
     this._sourceCommandsAtTargetTick = init.sourceCommandsAtTargetTick;
@@ -362,9 +367,9 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
 
       // Step targetTick.
       try {
-        this._world.step();
+        if (this._advance) this._advance(); else this._world.step();
       } catch (e) {
-        if (e instanceof WorldTickFailureError) {
+        if (this._advance ? isAdvanceTickFailure(e, this._world, this._targetTick) : e instanceof WorldTickFailureError) {
           failedAtTargetTick = true;
         } else {
           throw e;
@@ -374,7 +379,7 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
 
       // Continuation loop (skip if targetTick failed).
       if (!failedAtTargetTick) {
-        const sourceCommandsByTick = this._groupSourceCommandsByTick();
+        const sourceCommandsByTick = groupForkContinuationCommands(this._sourceBundle.commands, this._targetTick);
         while (this._world.tick < untilTick) {
           const t = this._world.tick;
           const sourceCmds = sourceCommandsByTick.get(t) ?? [];
@@ -385,9 +390,9 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
             );
           }
           try {
-            this._world.step();
+            if (this._advance) this._advance(); else this._world.step();
           } catch (e) {
-            if (e instanceof WorldTickFailureError) break;
+            if (this._advance ? isAdvanceTickFailure(e, this._world, t) : e instanceof WorldTickFailureError) break;
             throw e;
           }
           if (recorder.lastError !== null) break;
@@ -426,22 +431,6 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
       divergence,
       source: sink,
     };
-  }
-
-  /** Build a tick → source-commands map for the continuation loop, scoped to
-   *  ticks > targetTick (the targetTick walk uses a precomputed map already). */
-  private _groupSourceCommandsByTick(): Map<number, RecordedCommand<TCommandMap>[]> {
-    const out = new Map<number, RecordedCommand<TCommandMap>[]>();
-    for (const rc of this._sourceBundle.commands) {
-      if (rc.submissionTick <= this._targetTick) continue;
-      const list = out.get(rc.submissionTick);
-      if (list === undefined) {
-        out.set(rc.submissionTick, [rc]);
-      } else {
-        list.push(rc);
-      }
-    }
-    return out;
   }
 
   private _assertNotConsumed(): void {
@@ -491,6 +480,7 @@ export class ForkBuilderImpl<TEventMap, TCommandMap>
 export function createForkBuilder<TEventMap, TCommandMap>(
   init: {
     readonly world: World<TEventMap, TCommandMap>;
+    readonly advance?: () => void;
     readonly sourceBundle: SessionBundle<TEventMap, TCommandMap>;
     readonly sourceCommandsAtTargetTick: ReadonlyMap<number, RecordedCommand<TCommandMap>>;
     readonly targetTick: number;

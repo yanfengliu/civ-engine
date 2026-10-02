@@ -12,6 +12,7 @@
     "world"
   ],
   "AgentPlaytestConfig": [
+    "advance?",
     "agent",
     "maxTicks",
     "sink?",
@@ -21,6 +22,7 @@
     "world"
   ],
   "AgentPlaytestResult": [
+    "advanceError?",
     "agentError?",
     "bundle",
     "ok",
@@ -1051,6 +1053,7 @@
     "details"
   ],
   "ReplayerConfig": [
+    "advance?",
     "skipRegistrationCheck?",
     "worldFactory"
   ],
@@ -1440,6 +1443,7 @@
     "y"
   ],
   "SynthPlaytestConfig": [
+    "advance?",
     "maxTicks",
     "policies",
     "policySeed?",
@@ -1450,6 +1454,7 @@
     "world"
   ],
   "SynthPlaytestResult": [
+    "advanceError?",
     "bundle",
     "ok",
     "policyError?",

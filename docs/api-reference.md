@@ -5246,9 +5246,14 @@ class SessionReplayer<TEventMap, TCommandMap, TDebug, TComponents = Record<strin
 
 interface ReplayerConfig<TEventMap, TCommandMap, TComponents = Record<string, unknown>, TState = Record<string, unknown>> {
   worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap, TComponents, TState>;  // part of determinism contract per ADR 4
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   skipRegistrationCheck?: boolean;                   // default false; v0.8.18+
 }
 ```
+
+**Enclosing advancement.** An optional synchronous `advance(world)` runs once after recorded commands are submitted and receives the exact typed current World. It must complete exactly one unpoisoned World tick. Finalize authoritative state before that one `World.step()`; after-step rendering or derived publication must be read-only because periodic recording snapshots occur inside the step. Omission retains direct `world.step()` and the existing runner behavior. Supply the matching callback to `SessionReplayer`; it is reused for `openAt`, `selfCheck`, `forkAt` reconstruction and fork continuation on each fresh replay World. No callback is persisted, and fork public generics remain unchanged.
+
+Asynchronous returns are unsupported: an identified returned thenable produces `advance_async_unsupported`; zero or multiple completed ticks produce `advance_tick_delta`. Already scheduled work is not cancelled. Ordinary observable native Promise and observer-return rejections are consumed, but hostile/frozen constructor or `Symbol.species` can prevent native handler attachment and leave an invalid return unhandled. The engine does not mutate returned objects or set process-global rejection policy. Successful intrinsic native handler attachment identifies the return without reading its caller-owned `then` property. Otherwise the candidate `then` property is read once, and a throwing getter remains the original callback error. If native constructor/species prevents attachment and `then` is noncallable, the portable observer cannot identify that native return; it follows ordinary unrecognized-value handling, so matching tick counts do not prove synchronous input or rejection containment for this unsupported compound case. An identified thenable whose observer throws retains the coded primary diagnosis. Replay/fork throw the corresponding `EngineError`, with safe observation failure in its `details`; runner results retain the serialized primary code/message and observed tick bounds. Foreign callback throws, including revoked Proxy values and throwing prototype traps, retain their identity in replay/fork; both runners serialize them safely as advanceError. Only a matching live failure of the supplied poisoned World uses existing tick-failure handling.
 
 **Component/state typing (v1.2.0).** `SessionRecorder` / `SessionReplayer` thread `TComponents` / `TState` (mirroring `World`'s, appended after `TDebug` so existing explicit type arguments are non-breaking), so a component-typed world records and replays without erasing its registry: `new SessionRecorder({ world: gameWorld })` takes a `World<E, C, GameComponents, GameState>` with no cast, and `replayer.openAt(t)` returns a world where `getComponent(id, 'position')` is `Position` (not `unknown`). The typed path works via **inference** — call with no explicit type arguments (TypeScript has no partial type-argument specification; writing `<E, C>` defaults `TComponents` to `Record<string, unknown>`, the unchanged back-compat path). The bundle in between stays default-generic (`toBundle(): SessionBundle`); component typing is reasserted by `worldFactory`'s return type. `ForkBuilder` / `BundleViewer` remain default-generic (a future minor can thread them).
 
@@ -5413,10 +5418,10 @@ Lifecycle (per spec v10 §7.1):
 1. **Validate** `maxTicks >= 1`, `policySeed` is finite integer.
 2. **Init sub-RNG** from `policySeed` (default: `Math.floor(world.random() * 0x1_0000_0000)`). Happens BEFORE `recorder.connect()` so the initial snapshot captures post-derivation `world.rng` state.
 3. **Attach** `SessionRecorder` with `sourceKind: 'synthetic'` and `terminalSnapshot: true` hardcoded. If `recorder.lastError` is set after `connect()` (sink open failure), re-throw — no coherent bundle to return.
-4. **Tick loop**: per tick, build `policyCtx`, call each policy in array order, submit returned commands via `world.submitWithResult`, call `world.step()`, check `recorder.lastError`, increment `ticksRun`, evaluate `stopWhen` with a fresh `StopContext`. Stop conditions: `maxTicks`, `stopWhen`, `poisoned`, `policyError`, `sinkError` (mid-tick).
-5. **Disconnect** + return `{ bundle, ticksRun, stopReason, ok, policyError? }`.
+4. **Tick loop**: per tick, build `policyCtx`, call each policy in array order, submit returned commands via `world.submitWithResult`, invoke configured `advance(world)` or direct `world.step()`, validate the configured synchronous single tick, check `recorder.lastError`, increment `ticksRun`, evaluate `stopWhen` with a fresh `StopContext`. Stop conditions: `maxTicks`, `stopWhen`, `poisoned`, `policyError`, `sinkError` (mid-tick), `advanceError`.
+5. **Disconnect** + return `{ bundle, ticksRun, stopReason, ok, policyError?, advanceError? }`.
 
-`ok` is `true` for `'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError'` (bundle is valid up to the failure point); `false` for `'sinkError'`. **Edge case:** `ok` also flips to `false` if a sink failure occurs during `disconnect()` (e.g., the terminal-snapshot write throws). In that case `stopReason` reports the original loop-exit reason but `recorder.lastError !== null`. CI guards should check `result.ok` rather than just `stopReason !== 'sinkError'`.
+`ok` is `true` for `'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError'` (bundle is valid up to the failure point); `false` for `'sinkError'` or `'advanceError'`. **Edge case:** `ok` also flips to `false` if a sink failure occurs during `disconnect()` (e.g., the terminal-snapshot write throws). In that case `stopReason` reports the original loop-exit reason but `recorder.lastError !== null`. CI guards should check `result.ok` rather than just `stopReason !== 'sinkError'`.
 
 ### `SynthPlaytestConfig`
 
@@ -5429,6 +5434,7 @@ interface SynthPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
   sourceLabel?: string;                 // default: 'synthetic'
   policySeed?: number;                  // default: derived from world.random() at construction
   stopWhen?: (ctx: StopContext<...>) => boolean;
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   snapshotInterval?: number | null;    // default 1000; null disables periodic snapshots
 }
 ```
@@ -5441,18 +5447,22 @@ interface SynthPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
 interface SynthPlaytestResult<TEventMap, TCommandMap, TDebug = JsonValue> {
   bundle: SessionBundle<TEventMap, TCommandMap, TDebug>;
   ticksRun: number;
-  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError';
+  stopReason: 'maxTicks' | 'stopWhen' | 'poisoned' | 'policyError' | 'sinkError' | 'advanceError';
   ok: boolean;
   policyError?: { policyIndex: number; tick: number; error: { name; message; stack } };
+  advanceError?: { fromTick: number; toTick: number; error: { name: string; message: string; stack: string | null; code: string | null } };
 }
 ```
 
-`ticksRun` = count of `world.step()` invocations that completed AND were followed by a clean `recorder.lastError` check. With `K = world.tick - startTick`:
+`ticksRun` counts valid completed single-tick advancements followed by a clean `recorder.lastError` check. A callback failure contributes zero even if it already advanced or mutated the World; prior successful counts remain. With `K = world.tick - startTick`:
 
 | stopReason | ticksRun |
 |---|---|
 | `'maxTicks'`, `'stopWhen'`, `'policyError'` | `K` |
 | `'poisoned'`, `'sinkError'` (mid-tick) | `K - 1` |
+| `'advanceError'` | Prior valid advancements only; partial callback work is not counted. |
+
+`advanceError` is present only for callback failure. It is `ok: false`; the partial bundle retains observed work and no rollback is promised. Callback failure remains primary over recorder/disconnect errors, which still leave recording termination evidence. The additive `advanceError` union member requires a new case in exhaustive consumer TypeScript switches; it is not universally source-compatible. Existing synthetic/agent default `ok` differences remain.
 
 `policyError` is populated only when `stopReason === 'policyError'`. `bundle.failures` is NOT modified for policy throws — `failedTicks` is reserved for world-level tick failures.
 
@@ -5974,10 +5984,11 @@ interface AgentPlaytestConfig<TEventMap, TCommandMap, TComponents, TState> {
   // instead of throwing oversize_attachment.
   sink?: SessionSink & SessionSource;
   sourceLabel?: string;
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   snapshotInterval?: number | null;
 }
 
-type AgentStopReason = 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError';
+type AgentStopReason = 'maxTicks' | 'stopWhen' | 'poisoned' | 'agentError' | 'sinkError' | 'advanceError';
 
 interface AgentPlaytestResult<TEventMap, TCommandMap> {
   bundle: SessionBundle<TEventMap, TCommandMap>;
@@ -5988,13 +5999,16 @@ interface AgentPlaytestResult<TEventMap, TCommandMap> {
   stopReason: AgentStopReason;
   ok: boolean;
   agentError?: { tick: number; error: { name: string; message: string; stack: string | null } };
+  advanceError?: { fromTick: number; toTick: number; error: { name: string; message: string; stack: string | null; code: string | null } };
   report?: unknown;
 }
 
 function runAgentPlaytest<...>(config): Promise<AgentPlaytestResult<...>>;
 ```
 
-`ok` is a STRICTER health signal than `runSynthPlaytest`'s and deliberately diverges from it: `runAgentPlaytest` reports `ok: false` when the world was poisoned (`stopReason: 'poisoned'`), the agent driver threw (`stopReason: 'agentError'`, detail in `agentError`), or the sink errored (`stopReason: 'sinkError'`) — only a clean `maxTicks` / `stopWhen` stop yields `ok: true`. `runSynthPlaytest`, by contrast, reports `ok: true` on a poisoned world (a policy may legitimately drive a world into poison, so poison is not a runner failure there). A loop driver that keys off `result.ok` across both runners must account for this divergence.
+`ok` is a STRICTER health signal than `runSynthPlaytest`'s and deliberately diverges from it: `runAgentPlaytest` reports `ok: false` when the world was poisoned (`stopReason: 'poisoned'`), the agent driver threw (`stopReason: 'agentError'`, detail in `agentError`), the sink errored (`stopReason: 'sinkError'`), or configured advancement failed (`stopReason: 'advanceError'`) — only a clean `maxTicks` / `stopWhen` stop yields `ok: true`. `runSynthPlaytest`, by contrast, reports `ok: true` on a poisoned world (a policy may legitimately drive a world into poison, so poison is not a runner failure there). A loop driver that keys off `result.ok` across both runners must account for this divergence.
+
+The synchronous advancement and error/observation contract is the same as [SessionReplayer enclosing advancement](#session-recording--sessionreplayer). Agent decision and `stopWhen` may remain asynchronous; simulation advancement may not.
 
 ### `bundleSummary(bundle)`
 
@@ -6418,7 +6432,7 @@ Spec 5. Counterfactual primitive for "what if the agent had submitted X here ins
 
 ### `SessionReplayer.forkAt(targetTick): ForkBuilder`
 
-Eagerly calls `openAt(targetTick)` to materialize the paused world (so `.snapshot()` works pre-`run()`). Inherits `openAt`'s preconditions (`BundleRangeError`, `BundleIntegrityError`, `ReplayHandlerMissingError`).
+Eagerly calls `openAt(targetTick)` to materialize the paused world (so `.snapshot()` works pre-`run()`). Inherits `openAt`'s preconditions (`BundleRangeError`, `BundleIntegrityError`, `ReplayHandlerMissingError`) and configured advancement/errors. Fork continuation uses the same callback on that fork World; a callback error propagates with finally recorder cleanup, and the builder remains consumed. No new `ForkRunConfig` callback or public generic is added.
 
 ### `ForkBuilder<TEventMap, TCommandMap>`
 

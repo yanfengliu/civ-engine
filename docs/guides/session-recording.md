@@ -112,6 +112,8 @@ Marker references use `EntityRef` (id + generation) to handle entity recycling. 
 
 ## Replay
 
+When recording uses a custom step wrapper, supply the matching synchronous `advance(world)` callback in `ReplayerConfig` for `openAt()`, `selfCheck()`, `forkAt()` and fork continuation; callbacks are not persisted in bundles (see [AI integration](ai-integration.md)).
+
 ```ts
 const replayer = SessionReplayer.fromBundle(bundle, { worldFactory });
 

@@ -24,6 +24,9 @@ export interface ReplayerConfig<
    * `registerHandler` duplicate-throws.
    */
   worldFactory: (snapshot: WorldSnapshot) => World<TEventMap, TCommandMap, TComponents, TState>;
+  /** Synchronous preparation + exactly one World.step. Finalize authoritative state
+   * before that step; after-step publication must be read-only. Async work is rejected. */
+  advance?: (world: World<TEventMap, TCommandMap, TComponents, TState>) => void;
   /**
    * Skip the registration-manifest verification performed on every factory
    * construction (registration-manifest objective). For deliberately

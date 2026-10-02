@@ -6,6 +6,10 @@ LLM integration is intentionally out of scope. The engine ships the contract and
 
 For browser-game playtests where the agent should see screenshots, visible text, available controls, and optional audience-labeled hidden state, use the sibling [Visual Playtest Harness](visual-playtest-harness.md). `runAgentPlaytest` is for command-driving a `World`; `runVisualPlaytestLoop` is for player-surface UI/browser harnesses.
 
+## Enclosing simulation advancement
+
+Decision and stop predicates may be asynchronous, while optional `advance(world)` must synchronously perform exactly one unpoisoned World tick after commands are submitted. Finalize authoritative mutations before that step; post-step publication must be read-only. Use the matching `SessionReplayer` callback for deterministic reconstruction and fork continuation. [The synthetic guide](synthetic-playtest.md#enclosing-simulation-advancement) defines error precedence, the compound native-constructor/species and noncallable-then detection bound, unsupported asynchronous observation, partial recording and exhaustive-switch migration. `advanceError` always makes this runner return `ok: false`; existing default synthetic/agent health differences remain.
+
 ## Quickstart
 
 ```ts

@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.5.0-blue)
+![version](https://img.shields.io/badge/version-2.6.0-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. But no production deployment has exercised the engine end-to-end, and there is no published, pinnable release yet (see [Install](#install)) — so treat it as suitable for prototyping and AI-agent experiments, and read the [changelog](docs/changelog.md) before upgrading.
 
@@ -137,6 +137,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | **Bundle Corpus Index** | `BundleCorpus` turns disk corpora into a deterministic query surface: metadata-only listing, manifest-derived filtering, and lazy bundle loading ([guide](docs/guides/bundle-corpus-index.md)) |
 | **Behavioral Metrics** | `runMetrics()` over any bundle iterable with 11 engine-generic built-ins plus a `compareMetricsResults` delta helper — defines regressions for emergent behavior ([guide](docs/guides/behavioral-metrics.md)) |
 | **Synthetic Playtest** | `runSynthPlaytest` drives a world via pluggable policies (`noopPolicy`, `randomPolicy`, `scriptedPolicy`) with RNG sandboxed from `world.rng` ([guide](docs/guides/synthetic-playtest.md)) |
+| **Enclosing Simulation Advancement** | Optional synchronous `advance(world)` shares game-owned preparation across both playtest runners, replay and fork continuation; exactly one World tick per callback ([contract](docs/guides/synthetic-playtest.md#enclosing-simulation-advancement)) |
 | **AI Playtester** | `runAgentPlaytest` async sibling for LLM-driven playtesters — sync-or-async `AgentDriver.decide()`, in-flight markers/attachments, optional `report()`, and `bundleSummary()` for LLM context ([guide](docs/guides/ai-playtester.md)) |
 | **Visual Playtest Harness** | `runVisualPlaytestLoop` plus host/agent contracts for browser games driven through screenshots, visible text, controls, and explicitly labeled hidden-state channels. Agent-boundary redaction is **on by default**; core stays zero-dep, game repos own the Playwright/DOM/model adapters ([guide](docs/guides/visual-playtest-harness.md)) |
 | **Improvement Loop Contracts** | `ImprovementFinding` plus marker bridges, signatures, and run-manifest lifecycle give game repos a shared verified-finding payload. Proven-outcome claims (`verified`, `fixed`, `regressed`) require a replayable evidence ref plus a `verificationMethod` by default — an unproven "fixed" cannot enter the ledger |

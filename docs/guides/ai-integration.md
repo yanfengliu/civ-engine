@@ -289,6 +289,8 @@ const result = runSynthPlaytest({
 //           → expect(replayer.selfCheck().ok).toBe(true).
 ```
 
+An enclosing simulation can supply the same synchronous `advance(world)` to its runner and `SessionReplayer`, including forks. Finalize authoritative state before exactly one World tick; post-step publication is read-only. Returned asynchronous work is unsupported and not cancelled; ordinary observable rejections are consumed. Successful native attachment bypasses caller-owned then. Hostile native constructor/species can prevent attachment; combined with noncallable then, that invalid return is outside detection and containment and follows unrecognized-value handling. Exhaustive result switches must handle `advanceError`.
+
 See `docs/guides/synthetic-playtest.md` for the policy-authoring guide, determinism contract, and bundle→script regression workflow.
 
 ## Visual Playtest Harness (v1.3.0, hardened v1.5.0)
