@@ -1,9 +1,9 @@
 # Advance enclosing simulations coherently through playtests and replay
 
-Status: active
+Status: complete
 Owner: Codex engine-feedback worker
 Created: 2026-10-01
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Problem and outcome
 
@@ -106,3 +106,9 @@ Root confirmed the primary and worker registry are the same existing id73 reserv
 2026-10-01 local: independent clean-main [review4](reviews/4_integration.md) accepted exact37 staged paths/index patchfdefab44029d04ac869dad94a669f461fe53982a01b7c521c96bbb99d0c20965 and resolved M2-G1. Root inspected the one actual integrated ordinary full11 gate: native0/all11, root1653PASS+1 existing determinismTODO, MCP22PASS; root audits0/MCP1moderate below high threshold, exact benchmark counters/existing calibrated bounds, pack/build2.6.0. Gate39.7859114s; Job42.726s/CPU77.90625s, active0/cleanuptrue/0leftovers and lockabsent. All46 reviewed preimages matched. Prior prelaunch explicit-LockPath rejection had no child/test; its separate retained invocation correction omitted only that unsupported argument and made no product repair or test repeat.
 
 Product26 bytes remain unchanged. Complete authored review4 is permanent; prior rounds0-3 stay historical. Only this shipping provenance and fresh main-based devlog changed after integrated review/gate. A single maintained docs-only check validates final work-record structure/attributes; its native artifact stays ignored in integration/shipping-prep. Root still owns final documentation/index acceptance, exact primary registry/733-byte placeholder CAS, commit/FF/push and hosted Node20/22/24/publish-dist, followed by consumer engine-dist/adoption gates. Main has not changed and all21 dispositions remain OPEN. Both external provider lanes are unavailable. Five product repair attempts remain spent; a material new failure stops and reports.
+
+## Producer release closure
+
+2026-10-02 UTC: root accepted the exact39-path index tree303ca2506cdc97f235ffb2c00ce97921331c3daa, committed57de5ce5356781389c4ae9db3dde89f51b39f209, fast-forwarded main and pushed without force. Final independent documentation review5 passed; all earlier reports remain complete historical records. The owned registry/733-byte allocator preimages were retained, the ordinary empty review directory received accepted reports, and foreign learning-state deletion stayed absent. No shared primary dist or dependency tree was rebuilt or installed.
+
+Hosted36976228617 passed Node20/22/24 and publish-dist on that exact commit. Asset605024087 is656167 bytes with SHA256d060729a8634215b17ecf8b0b81740cf8c076e89090cb59c24bc97db35ad99fb; actual tarball package/runtime2.6.0 and422 entries were inspected. Complete upstream receipt remains ignored at aoe2/tmp/engine-feedback-resume-1001/m2-r5/integration/shipping-prep/ship-approved-empty-reviews/upstream-acceptance.json. Producer acceptance is complete; parent work71 and all21 consumer dispositions remain OPEN until their own adoption/contracts are verified. Both external provider CLI lanes are unavailable. The existing root determinism TODO and MCP Hono moderate advisory remain bounds, and the product repair budget is exhausted at5/5. Resource cleanup is separately held for preservation of the old private background work.

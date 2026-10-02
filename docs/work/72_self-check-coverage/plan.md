@@ -1,9 +1,9 @@
 # Report self-check comparison coverage
 
-Status: active
+Status: complete
 Owner: Codex engine-feedback worker
 Created: 2026-10-01
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Problem and outcome
 
@@ -37,5 +37,9 @@ Root accepted the exact work-71 design.md contract, recoverable at a839ad5, incl
 
 ## Outcome
 
-M1 is implemented and committed privately at e6ac46c2f8d7a307cc932f955bdd91a9286ba88c. Original tests went red on M0; the final focused selection passed 167 tests across 12 files, typecheck and scoped lint passed, and five seeded regressions failed meaningfully before exact source restoration. Same-tree base/M1 controls passed equal replay-work counts for clean nine-tick, unanchored-tail nine-tick and 1000-segment recordings. Review 0 (Codex 0.158.0 / gpt-6-astra xhigh) passed on the exact 21-file patch SHA256 1b350e9f58622bd204ffb8a0af1007e83b4e2862e4217e375ce87b636d95c30f with no material findings. The eleven-step npm run gates passed on the exact reviewed source in attempt 1: actual exit 0, 1477 root tests plus one todo in 96 files, 22 MCP tests, typecheck/lint/build/pack and exact benchmark counters/time bounds. Core full/production audits have no findings; MCP retains the accepted Hono moderate bound. The owned JobObject gate took 58.091 seconds with cleanupProof true and zero leftovers. Common work-doc validation passed for 73 units. The exact reviewed source is committed privately at e6ac46c2f8d7a307cc932f955bdd91a9286ba88c; main merge/push and publish-dist require root final acceptance and completion of its brief primary dependency-install preservation window. The game continues using verified 2.4.2. All 23 parent work-71 outcomes remain accountable. M2 read-only source audit is complete; no hook implementation has begun.
-Independent final integration review 1 passed on committed d7f9003 with all seven authored extra paths inspected and all 21 original blobs unchanged. No P1/P2 or required repair was found; one nonblocking stale design status sentence was corrected exactly as reported. Root confirmed all seven game remote fetches used 2.4.2 and lifted the distribution hold. Main merge/push, hosted gates/publish-dist and adoption remain pending acceptance.
+M1 shipped as engine2.5.0 at main eb61e448789a95ef907ae6f6e28e2dd33ae4c8a8. Root accepted the exact final integration and all21 original source blobs; review0 and final review1 are retained with their independent source/execution bounds. The original16 tests went red, final167 focused checks/type/lint passed, five seeded regressions failed before exact restoration, and equal base/new replay-work controls passed. All eleven local gates passed:1477 root tests plus one todo,22MCP,type/lint/build/pack and benchmark counters/time bounds; owned cleanup proved zero survivors. Core audits have no findings; accepted MCP Hono moderate remains explicit.
+
+Hosted36816404419 passed Node20/22/24 and publish-dist on exacteb61e448. Published tarball648792 bytes SHA256478d0aa36b49bd02a9a75df87ad08f6e672801011bee570887f84e5217c17fff matches GitHub asset602452190 digest. Safe private extraction verified all376 distribution files, actual ENGINE_VERSION2.5.0 and the coverage declaration. Primary source is accepted main; foreign AGENTS bytes remain unchanged, and primary372-file dist stays verified2.4.2 until root coordinates the separate game adoption. No dependency install/build or adoption was performed in primary. Complete here means this engine milestone's local/review/main/hosted boundary passed; parent work71 still owns all23 outcomes and root owns game feedback reconciliation/adoption. M2 proceeds privately in work73 while future distributions remain held through the next game fetch boundary.
+
+
+2026-10-02 reconciliation: the preceding complete outcome is recovered unchanged from privateHEAD192990f3d6fc8b482875f14c5c1572cebd09bd36:docs/work/72_self-check-coverage/plan.md and describes the historical M1 release boundary. Its source bytes are retained ignored in the closure/private-preimages packet. The historical M2 hold has since ended: work73 producer2.6.0 shipped57de5ce with hosted acceptance; work71/all21 remaining consumers stay OPEN. This closes the already-shipped M1 plan without re-running its gates or claiming current primary distribution/adoption state.
