@@ -62,6 +62,12 @@ const file = new FileSink('/path/to/bundle-dir');
 
 `FileSink` is **node-only** (module-scope `node:fs`/`node:path`) and since v2.2.0 lives only in the full barrel — bundlers resolving the browser entry (the exports-map `browser` condition or `civ-engine/browser`) do not see it, so in-page recorders use `MemorySink` and hand the bundle to game code for persistence. The only other node-only export is the `BundleCorpus` disk index (§ Indexing FileSink Bundles below); everything else on this page — `SessionRecorder`, `SessionReplayer`, `MemorySink`, markers, `scenarioResultToBundle` — is browser-safe.
 
+FileSink JSONL iterators open on first `next()`, capture a byte-length horizon and read UTF-8 in blocks of at most 65,536 bytes. They yield a valid prefix before later malformed completed lines fail. Only malformed final unterminated text is ignored.
+
+Later appends are excluded from a started iterator; each new iterator captures its own horizon. This is a byte boundary, not an atomic snapshot under rewrites/truncation. Valid unterminated final JSON yields normally. Every malformed LF-terminated line throws the existing `jsonl_parse` diagnostic; empty lines are skipped but whitespace-only lines/BOM retain their prior parse behavior. Consumers can now receive valid records before a later corruption fails; older eager readers could fail before yielding any prefix.
+
+Reader buffering follows the largest unfinished line and one block; parsing still materializes each record. Manifest/snapshot/sidecar reads remain whole-file, and `toBundle()`, corpus/viewer and MCP still materialize bundles. Exhaust or explicitly close a started iterator to release its descriptor; `for...of` break and iterator `return()`/`throw()` close it in finally. A suspended iterator retains its descriptor. Native open/fstat/read errors keep their identity; if close also fails, the primary failure wins, while a close-only failure remains visible.
+
 `FileSink` defaults to **sidecar** for attachments (disk-backed sink keeps blobs as files). Pass `attach(blob, { sidecar: false })` to opt into manifest embedding for very small attachments.
 
 `MemorySink` defaults to **dataUrl** for under-threshold attachments (default 64 KiB). Oversize attachments throw `SinkWriteError(code: 'oversize_attachment')` unless constructed with `MemorySinkOptions.allowSidecar: true`.

@@ -23,8 +23,14 @@
     "kind": "behavioral",
     "why": "A tick-lifecycle reorder landed in 2 of the 4 canonical copies and produced a four-way self-contradiction: two surfaces said `increment then notify`, two said the reverse. A partial fix is worse than none, because the corrected copies contradict the missed ones.",
     "surfaces": [
-      { "doc": "docs/guides/concepts.md", "quote": "world.tick === diff.tick" },
-      { "doc": "docs/api-reference.md", "quote": "`world.tick === diff.tick` while they run" },
+      {
+        "doc": "docs/guides/concepts.md",
+        "quote": "world.tick === diff.tick"
+      },
+      {
+        "doc": "docs/api-reference.md",
+        "quote": "`world.tick === diff.tick` while they run"
+      },
       {
         "doc": "docs/architecture/ARCHITECTURE.md",
         "quote": "[during listeners world.tick === diff.tick]"
@@ -65,7 +71,12 @@
     "id": "node-baseline",
     "kind": "process",
     "why": "A supported-runtime claim is what a prospective consumer acts on first. It is falsified by an `engines` edit or a CI-matrix edit, neither of which renames anything.",
-    "surfaces": [{ "doc": "README.md", "quote": "Requires Node.js 20+." }]
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "Requires Node.js 20+."
+      }
+    ]
   },
   {
     "id": "engine-dist-rolling",
@@ -97,6 +108,21 @@
       {
         "doc": "README.md",
         "quote": "additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike"
+      }
+    ]
+  },
+  {
+    "id": "file-sink-streaming",
+    "kind": "behavioral",
+    "why": "The public lazy generators used to eagerly read and parse entire JSONL files; naming generators did not establish streaming. The predicate observes actual FileSink reads and prefix/error ordering, while source predicates preserve its remaining bundle materialization bound.",
+    "surfaces": [
+      {
+        "doc": "docs/api-reference.md",
+        "quote": "FileSink JSONL iterators open on first `next()`, capture a byte-length horizon and read UTF-8 in blocks of at most 65,536 bytes. They yield a valid prefix before later malformed completed lines fail. Only malformed final unterminated text is ignored."
+      },
+      {
+        "doc": "docs/guides/session-recording.md",
+        "quote": "FileSink JSONL iterators open on first `next()`, capture a byte-length horizon and read UTF-8 in blocks of at most 65,536 bytes. They yield a valid prefix before later malformed completed lines fail. Only malformed final unterminated text is ignored."
       }
     ]
   }

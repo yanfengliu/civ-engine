@@ -8,6 +8,18 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-10-02 — FileSink iterators materialized whole JSONL and hid completed malformed rows
+
+**Symptom (downstream E11/E13):** advertised streaming iterators could exceed the native aggregate String limit. A malformed completed row could be ignored when its contents matched the final unterminated fragment.
+
+**Investigation and root cause:** the baseline readFileSync/split/parse-all path materialized a stream before yielding. Content equality classified tail tolerance; broken\nbroken therefore hid a physically completed malformed first row.
+
+**Class check and fix:** tests/file-sink-reader.test.ts exercises all five public generators against literal65536-byte positional reads, first-next fstat horizons, independent append exclusion, LF-vs-final-tail classification, valid prefix before corruption, Unicode/BOM/legacy replacement decoding and descriptor/error precedence. The private fixed-block StringDecoder reader yields records individually and closes in finally. tests/doc-claims.test.ts observes actual public reads and pins accurate API/guide claims plus largest-record/toBundle/corpus/MCP materialization bounds.
+
+**Evidence and instrument correction:** eager/parse-ahead/content-tail/no-finally/close-masking controls failed10/5/5/5/30 selected cases, with exact restored225/225 GREEN/typecheck/lint. The original six malformed-byte array rows were vacuous despite183/225 PASS; corrected object rows/count assertions prove13 seam comparisons, and the original callback-shape control fails six count assertions. Independent review2 retracts round1's mistaken coverage claim. The single reviewed native proof returned0/PASS on private compiled2.6.1: independent536870912 ASCII bytes and32768 bounded16384-byte LF rows exceed native Node24.12.0 MAX_STRING_LENGTH536870888. Eager readFileSync utf8 threw native ERR_STRING_TOO_LONG; all32768 public iterator records and generated/independent/candidate SHA256469d609bb6e2504e792581fa7b325e9fef72e24f33b0ee76cc4256576620b839 matched.101 source/config and388 compiled hashes were unchanged. Job5.633s/user2.140625s/kernel1.484375s had active0/cleanup true, with no timeout/cleanup errors and marker fixture absent. This is bounded-record correctness, not throughput/peak-memory or whole-bundle constant-memory evidence. Final full11/integrated/hosted gates and all21 game consumers, including E11/E13 adoption and E21 metrics/memory adoption, remain open.
+
+**Record protection:** an earlier CRLF-sensitive separator insertion silently failed to add this entry; this heading-anchored insertion is verified by rereading the resulting artifact and exact entry count. Complete authored reviews/control/native receipts remain preserved in work74 and ignored aoe2/tmp/engine-reader-m8-1002/.
+
 ## 2026-10-01 — Self-check success hid unverified recording intervals
 
 **Symptom (downstream feedback):** selfCheck could return ok true after checking only the snapshot-bounded prefix of a longer recording, and its zero-segment no-payload result looked like deterministic success.

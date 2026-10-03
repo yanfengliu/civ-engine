@@ -5177,7 +5177,9 @@ Manifest is rewritten on `open()`, on each `writeSnapshot()` (advancing `metadat
 `SessionSource` methods:
 - `readSnapshot(tick)`: reads from `snapshots/<tick>.json`. Throws if missing.
 - `readSidecar(id)`: reads from `attachments/<id>.<ext>`. Throws if the descriptor is `dataUrl`-mode rather than sidecar.
-- `ticks()`, `commands()`, `executions()`, `failures()`, `markers()`: lazy generators streaming the JSONL files. Tolerate a trailing partial line (e.g. a crash mid-write).
+- `ticks()`, `commands()`, `executions()`, `failures()`, `markers()`: FileSink JSONL iterators open on first `next()`, capture a byte-length horizon and read UTF-8 in blocks of at most 65,536 bytes. They yield a valid prefix before later malformed completed lines fail. Only malformed final unterminated text is ignored.
+- Each iterator excludes bytes appended after its first `next()`. Separate iterators capture separate horizons. Rewrites/truncation are native reads, not an atomic content snapshot; a premature native read-zero ends iteration. Valid unterminated JSON yields; LF-terminated malformed lines throw `SinkWriteError(code: 'jsonl_parse')` with file/physical-line diagnostics. Empty strings are skipped; whitespace-only lines and BOM are not silently stripped.
+- The reader buffers an unfinished line and a block; each record still needs its own string and `JSON.parse` memory. Individual snapshots, manifests and sidecars remain whole-file reads. `toBundle()`, corpus/viewer loading and MCP still materialize complete bundles. Iteration must be exhausted or closed (`return()`, `throw()` or a `for...of` break) to release its descriptor; leaving a started iterator suspended retains its open descriptor.
 - `toBundle()`: reads all snapshot files, sorts numerically, returns a `SessionBundle` whose `initialSnapshot` is the lowest-tick snapshot.
 
 ## Session Recording — SessionRecorder

@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { readJsonlRecords } from './session-jsonl-reader.js';
 import { assertSafeAttachmentId } from './session-attachment-id.js';
 import { join } from 'node:path';
 import { assertJsonCompatible, bytesToBase64 } from './json.js';
@@ -240,33 +241,6 @@ export class FileSink implements SessionSink, SessionSource {
     }
   }
 
-  private _readJsonlLines(file: string): unknown[] {
-    const path = join(this._dir, file);
-    if (!existsSync(path)) return [];
-    const raw = readFileSync(path, 'utf-8');
-    if (raw.length === 0) return [];
-    const lines = raw.split('\n');
-    const out: unknown[] = [];
-    for (const line of lines) {
-      if (line.length === 0) continue;
-      try {
-        out.push(JSON.parse(line));
-      } catch (e) {
-        // Tolerate trailing partial line (e.g. from a crash mid-write).
-        // A clean recorder always terminates lines with \n; if the LAST
-        // line is malformed, skip it. Internal lines are required to be
-        // well-formed.
-        if (line === lines[lines.length - 1]) {
-          continue;
-        }
-        throw new SinkWriteError(`malformed JSONL in ${file}: ${(e as Error).message}`, {
-          code: 'jsonl_parse', file,
-        });
-      }
-    }
-    return out;
-  }
-
   writeTick(entry: SessionTickEntry): void {
     this._assertOpen();
     assertJsonCompatible(entry, 'session tick entry');
@@ -417,19 +391,19 @@ export class FileSink implements SessionSink, SessionSource {
   }
 
   *ticks(): IterableIterator<SessionTickEntry> {
-    for (const line of this._readJsonlLines(TICKS_FILE)) yield line as SessionTickEntry;
+    yield* readJsonlRecords(this._dir, TICKS_FILE) as IterableIterator<SessionTickEntry>;
   }
   *commands(): IterableIterator<RecordedCommand> {
-    for (const line of this._readJsonlLines(COMMANDS_FILE)) yield line as RecordedCommand;
+    yield* readJsonlRecords(this._dir, COMMANDS_FILE) as IterableIterator<RecordedCommand>;
   }
   *executions(): IterableIterator<CommandExecutionResult> {
-    for (const line of this._readJsonlLines(EXECUTIONS_FILE)) yield line as CommandExecutionResult;
+    yield* readJsonlRecords(this._dir, EXECUTIONS_FILE) as IterableIterator<CommandExecutionResult>;
   }
   *failures(): IterableIterator<TickFailure> {
-    for (const line of this._readJsonlLines(FAILURES_FILE)) yield line as TickFailure;
+    yield* readJsonlRecords(this._dir, FAILURES_FILE) as IterableIterator<TickFailure>;
   }
   *markers(): IterableIterator<Marker> {
-    for (const line of this._readJsonlLines(MARKERS_FILE)) yield line as Marker;
+    yield* readJsonlRecords(this._dir, MARKERS_FILE) as IterableIterator<Marker>;
   }
   *attachments(): IterableIterator<AttachmentDescriptor> {
     for (const a of this._attachments) yield a;

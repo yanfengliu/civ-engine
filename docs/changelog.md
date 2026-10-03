@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.6.1 — 2026-10-02
+
+FileSink's five synchronous JSONL iterators now decode bounded UTF-8 blocks instead of reading an entire stream into one string. The first `next()` captures the file's byte horizon; later appends are excluded. Completed malformed lines throw `jsonl_parse`, including a repeated line matching a malformed tail, while only malformed final unterminated text is ignored. Consumers may receive a valid prefix before a later parse error.
+
+Descriptors close on exhaustion, explicit return/throw and errors; a primary failure keeps its identity if close also fails. Individual records/snapshots still need their own parsing memory, and `toBundle()`, corpus/viewer and MCP still materialize bundles. Public iterator/writer signatures and recording layout are unchanged.
+
 ## 2.6.0 - 2026-10-01
 
 Playtest runners and SessionReplayer accept an optional synchronous advance(world) callback for games that prepare authoritative state outside World.step. Replay reconstruction, self-check and fork continuation use the same callback on each current World. Omission retains existing direct stepping.

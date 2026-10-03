@@ -40,14 +40,33 @@
 // verbatim, still compiles, names all valid" as UNVERIFIED, not safe.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as nodeFs from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
   World,
+  FileSink,
+  SinkWriteError,
   assertImprovementFinding,
   type ImprovementFinding,
   type TickDiff,
   type WorldConfig,
 } from '../src/index.js';
+
+
+const claimOwned = vi.hoisted(() => ({ fds: new Set<number>(), close: null as null | ((fd: number) => void) }));
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof nodeFs>('node:fs');
+  claimOwned.close = actual.closeSync;
+  return { ...actual,
+    openSync: vi.fn((...args: Parameters<typeof actual.openSync>) => {
+      const fd = actual.openSync(...args); claimOwned.fds.add(fd); return fd;
+    }),
+    fstatSync: vi.fn(actual.fstatSync), readSync: vi.fn(actual.readSync),
+    readFileSync: vi.fn(actual.readFileSync),
+    closeSync: vi.fn((fd: number) => { actual.closeSync(fd); claimOwned.fds.delete(fd); }),
+  };
+});
 
 interface Surface {
   doc: string;
@@ -114,6 +133,39 @@ const mkConfig = (over: Partial<WorldConfig> = {}): WorldConfig => ({
  * an unverified claim.
  */
 const predicates: Record<string, () => void> = {
+  'file-sink-streaming': () => {
+    const dir = nodeFs.mkdtempSync(path.join(tmpdir(), 'civ-engine-doc-streaming-'));
+    let iter: IterableIterator<unknown> | undefined;
+    try {
+      nodeFs.writeFileSync(path.join(dir, 'ticks.jsonl'), '1\nbroken\n' + '2\n'.repeat(65_536));
+      vi.mocked(nodeFs.openSync).mockClear(); vi.mocked(nodeFs.readSync).mockClear();
+      vi.mocked(nodeFs.readFileSync).mockClear(); vi.mocked(nodeFs.closeSync).mockClear();
+      iter = new FileSink(dir).ticks();
+      expect(nodeFs.openSync).not.toHaveBeenCalled();
+      expect(iter.next()).toEqual({ done: false, value: 1 });
+      const calls = vi.mocked(nodeFs.readSync).mock.calls;
+      expect(calls).toHaveLength(1);
+      expect(Array.from(calls[0]).slice(2)).toEqual([0, 65_536, 0]);
+      expect(nodeFs.readFileSync).not.toHaveBeenCalled();
+      expect(() => iter!.next()).toThrow(SinkWriteError);
+      expect(nodeFs.closeSync).toHaveBeenCalledTimes(1);
+      nodeFs.writeFileSync(path.join(dir, 'ticks.jsonl'), '1\n');
+      iter = new FileSink(dir).ticks(); expect(iter.next().value).toBe(1);
+      nodeFs.appendFileSync(path.join(dir, 'ticks.jsonl'), '2\n');
+      expect([...iter]).toEqual([]);
+      // These predicates inspect the actual materializing operations, not just names.
+      expect(read('src/session-file-sink.ts')).toContain('ticks: [...this.ticks()]');
+      expect(read('src/bundle-corpus.ts')).toContain('new FileSink(dir).toBundle()');
+      expect(read('mcp/src/state.ts')).toContain('new BundleViewer(this.loadBundle(key))');
+    } finally {
+      try { iter?.return?.(); }
+      finally {
+        for (const fd of claimOwned.fds) claimOwned.close!(fd);
+        claimOwned.fds.clear(); nodeFs.rmSync(dir, { recursive: true });
+      }
+    }
+  },
+
   'transaction-atomicity': () => {
     // Half one: a precondition failure applies nothing.
     const world = new World(mkConfig({ strict: false }));

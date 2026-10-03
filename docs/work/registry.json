@@ -1693,6 +1693,10 @@
     {
       "id": 73,
       "theme": "playtest-advance-hooks"
+    },
+    {
+      "id": 74,
+      "theme": "file-sink-streaming"
     }
   ]
 }
