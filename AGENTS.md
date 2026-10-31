@@ -61,7 +61,7 @@ Node 24 is the baseline, pinned in `.nvmrc`; `engines.node` still promises `>=20
 
 ## Session start
 
-Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` before starting work.
+Read `docs/devlog/summary.md` and `docs/architecture/ARCHITECTURE.md` before starting work. Of the summary, read the newest ten entries, which are at its top; of ARCHITECTURE.md, read its section map, then only the sections the work needs.
 
 ## Invariants & boundaries
 

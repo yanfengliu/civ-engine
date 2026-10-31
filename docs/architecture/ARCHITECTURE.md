@@ -1,5 +1,15 @@
 # Architecture
 
+## Section map
+
+Read this map first, then only the sections the work needs.
+
+- [Overview](#overview): what the engine is (headless, AI-native, strict ECS), the recursive improvement loop it serves, and what it leaves to game projects.
+- [Component Map](#component-map): one table row per component, its file and its responsibility, from World through session recording, the playtest harnesses and the MCP server to the public exports; find a component by its name in the first column.
+- [Data Flow](#data-flow): the order of one `World.step()` tick, then [Spatial Index Sync](#spatial-index-sync) and [Entity Destruction](#entity-destruction).
+- [Boundaries](#boundaries), the largest: one bullet per component, saying what owns it, how code reaches it and what it must not do; find a component by its bold name, such as `**CommandTransaction**`.
+- [Technology Map](#technology-map): TypeScript, Vitest, ESLint and Node, and where the decisions and the drift log are.
+
 ## Overview
 
 Civ-engine is a general-purpose, headless, AI-native 2D grid-based game engine. Built in Node.js/TypeScript with a strict ECS (Entity-Component-System) architecture.
