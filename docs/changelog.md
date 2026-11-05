@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.6.2 — 2026-11-04
+
+Security and CI dependency repair; core simulation and public APIs are unchanged. The private MCP server is now 0.1.2. Existing bundle/replay formats remain unchanged.
+
+- Updated the MCP runtime packages: `@modelcontextprotocol/sdk` 1.29.0 to 1.32.2 (advisories fixed in 1.30.1 to 1.32.0) and zod 3.25.76 to 4.6.7 ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), memory exhaustion while validating oversized constrained collections; no zod 3 release is patched). Their transitive updates include proxy-addr 2.0.8 (critical IPv4-mapped IPv6 trust-subnet spoofing), body-parser 2.4.0, hono 4.13.16, @hono/node-server 2.1.6 (a major; only the SDK's HTTP transport imports it, not the stdio entry point), ip-address 10.7.6, qs 6.17.1 and fast-uri 3.1.9. No runtime package was added.
+- MCP tool behaviour under zod 4: valid calls return the same output, and unknown keys are still stripped. Tool input schemas no longer carry `additionalProperties: false`; integer fields carry ±(2^53−1) bounds, and an integer beyond them is now rejected with error -32602 instead of reaching the tool; an input-validation error is one line ("Invalid input: expected string, received number at key") instead of a JSON list of issues.
+- Updated development packages in the root lock: vite 8.3.5, vitest 4.1.12, source-map-js 1.2.2 and typescript-eslint 8.72.1. Manifests keep the same dependency ranges.
+- No game migration is required. Contributors should run npm ci in their root checkout and in mcp/, then npm run gates from the root; downstreams continue consuming the rolling engine-dist tarball only after engine CI is green.
+- Remaining audit bound: the root development tree keeps seven moderate findings, all minimatch [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) through typescript-eslint, whose latest release still requires a vulnerable minimatch. All configured high-severity audit gates pass; this release does not claim zero vulnerabilities.
+
 ## 2.6.1 — 2026-10-02
 
 FileSink's five synchronous JSONL iterators now decode bounded UTF-8 blocks instead of reading an entire stream into one string. The first `next()` captures the file's byte horizon; later appends are excluded. Completed malformed lines throw `jsonl_parse`, including a repeated line matching a malformed tail, while only malformed final unterminated text is ignored. Consumers may receive a valid prefix before a later parse error.

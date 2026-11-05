@@ -1,5 +1,7 @@
 # Devlog Summary
 
+- 2026-11-04: 2.6.2 / MCP 0.1.2 makes both `npm audit --audit-level=high` gates pass again, red since at least 2026-10-30 on advisories against unchanged dependencies: MCP SDK 1.32.2 and zod 4.6.7 in mcp/ (no zod 3 is patched), vite, vitest and source-map-js in the root lock. All 11 gates passed; an independent supply-chain review found nothing blocking (`docs/work/75_audit-repair/`). Seven moderate minimatch findings remain in the root dev tree.
+
 - 2026-11-04: The fleet canon is the slim core of fleet work unit 30, whose review rule is one bullet, so the review-posture claim check reads that bullet: scope, availability, the exact revision and the route to the review mechanics, with one mutation control each. The lessons header sends a repo-only lesson to local rules only when the owner asks. Tests and docs only, no version bump.
 
 - 2026-10-30: Start reading follows progressive disclosure: a session reads this summary's newest ten entries and `docs/architecture/ARCHITECTURE.md` (36,018 bytes)'s new section map, then only the sections the work needs. Docs only, no version bump.

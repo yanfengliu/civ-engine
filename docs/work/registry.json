@@ -1697,6 +1697,10 @@
     {
       "id": 74,
       "theme": "file-sink-streaming"
+    },
+    {
+      "id": 75,
+      "theme": "audit-repair"
     }
   ]
 }
