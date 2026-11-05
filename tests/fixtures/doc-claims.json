@@ -92,7 +92,7 @@
   {
     "id": "review-posture",
     "kind": "process",
-    "why": "The banner told consumers \"Invariants are hardened through **mandatory** multi-CLI review\" for 15 days after a policy commit falsified it. Three automated/adversarial passes missed it; a human reading the rendered page caught it. The 2026-09-05 fleet policy (AGENTS.md canon e2cb4ac06499) then called for independent review on substantial or high-risk changes when available, making the replacement promise about each change stale too. The predicate checks the substantive review paragraph and mechanics rule, not the unrelated model-pin mention.",
+    "why": "The banner told consumers \"Invariants are hardened through **mandatory** multi-CLI review\" for 15 days after a policy commit falsified it. Three automated/adversarial passes missed it; a human reading the rendered page caught it. The 2026-09-05 fleet policy (AGENTS.md canon e2cb4ac06499) then called for independent review on substantial or high-risk changes when available, making the replacement promise about each change stale too. Since the fleet's slim core of 2026-11-04 the policy is one review bullet; the predicate checks its scope, availability, exact-revision and mechanics clauses, not the unrelated model-pin mention.",
     "surfaces": [
       {
         "doc": "README.md",

@@ -85,29 +85,26 @@ const claims = JSON.parse(read(path.join('tests', 'fixtures', 'doc-claims.json')
 const readme = (): string => read('README.md');
 
 /**
- * Bounds: the generated constitution's review paragraph/rule and README banner.
- * This proves a stated policy, not that a reviewer actually ran. Incidental
- * model-pin mentions cannot satisfy the mechanics clause. Text mutations below
- * exercise the missing scope, availability, routing, and overclaim cases.
+ * Bounds: the generated constitution's review rule (one bullet since the fleet's
+ * slim core of 2026-11-04) and README banner. This proves a stated policy, not
+ * that a reviewer actually ran. Incidental model-pin mentions cannot satisfy the
+ * mechanics clause. Text mutations below exercise the missing scope,
+ * availability, revision, routing, and overclaim cases.
  */
 function assertReviewPosture(agents: string, readmeText: string): void {
   const canon = agents.match(
     /<!-- FLEET-CANON:BEGIN[^\n]*\r?\n([\s\S]*?)<!-- FLEET-CANON:END -->/,
   )?.[1];
   expect(canon, 'the review claim needs the generated fleet constitution').toBeDefined();
-  const reviewParagraph = canon!.match(/^Obtain independent,[^\r\n]+/m)?.[0];
-  expect(
-    reviewParagraph,
-    'the review policy must cover substantial or high-risk changes when available',
-  ).toContain('review for substantial or high-risk changes when available.');
-  expect(reviewParagraph, 'the review policy must assess the exact revision').toContain(
-    'Review the exact revision against acceptance criteria.',
-  );
-  const mechanicsRule = canon!.match(/^- For substantial or high-risk changes,[^\r\n]+/m)?.[0];
-  expect(mechanicsRule, 'the review convention must preserve availability').toContain(
+  const reviewRule = canon!.match(/^- For substantial or high-risk changes,[^\r\n]+/m)?.[0];
+  expect(reviewRule, 'the review policy must cover substantial or high-risk changes').toBeDefined();
+  expect(reviewRule, 'the review policy must preserve availability').toContain(
     'use independent review when available.',
   );
-  expect(mechanicsRule, 'the review rule must route to the fleet mechanics').toContain(
+  expect(reviewRule, 'the review policy must assess the exact revision').toContain(
+    'Review the exact revision against',
+  );
+  expect(reviewRule, 'the review rule must route to the fleet mechanics').toContain(
     '`../fleet/docs/skills/multi-cli-review.md` provides the review mechanics.',
   );
   const banner = readmeText.split(/\r?\n/).find((line) => line.startsWith('> **Post-1.0'));
@@ -394,26 +391,20 @@ describe('review-posture predicate controls', () => {
     {
       name: 'review scope',
       source: 'AGENTS.md',
-      remove: 'review for substantial or high-risk changes when available.',
+      remove: 'For substantial or high-risk changes, ',
       error: /review policy must cover/,
     },
     {
-      name: 'policy availability',
-      source: 'AGENTS.md',
-      remove: ' changes when available.',
-      error: /review policy must cover/,
-    },
-    {
-      name: 'revision acceptance criteria',
-      source: 'AGENTS.md',
-      remove: 'Review the exact revision against acceptance criteria.',
-      error: /review policy must assess the exact revision/,
-    },
-    {
-      name: 'convention availability',
+      name: 'availability',
       source: 'AGENTS.md',
       remove: 'use independent review when available.',
-      error: /review convention must preserve availability/,
+      error: /review policy must preserve availability/,
+    },
+    {
+      name: 'exact revision',
+      source: 'AGENTS.md',
+      remove: 'Review the exact revision against',
+      error: /review policy must assess the exact revision/,
     },
     {
       name: 'mechanics routing with model-pin mention still present',
