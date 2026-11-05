@@ -1,6 +1,6 @@
 # Both npm audit gates pass again
 
-Status: active
+Status: complete
 Owner: Claude (fleet session, 2026-11-04)
 Created: 2026-11-04
 Updated: 2026-11-04
@@ -23,15 +23,15 @@ No zod 3 release is patched, so zod moves to 4.6.7, a semver-major bump; SDK 1.3
 - [x] All 11 `npm run gates` steps pass.
 - [x] The MCP server's tools, as a client lists and calls them, keep their behaviour on valid input and still reject invalid input.
 - [x] An independent supply-chain review of the exact diff finds nothing blocking (`reviews/0_implementation.md`).
-- [ ] CI on main is green after the push.
+- [x] CI on main is green after the push.
 
 ## Implementation steps
 
 - [x] Apply `npm audit fix` in the root; install SDK `^1.32.2` and zod `^4.6.7` in `mcp/` and run `npm audit fix` there.
 - [x] Run the gates and list the tools through an in-memory MCP client.
 - [x] Review, then record the release: versions, changelog, ADR 50, devlog.
-- [ ] Merge to main, push, follow CI.
+- [x] Merge to main, push, follow CI.
 
 ## Outcome
 
-Both audits pass: `mcp/` has no findings, the root has seven moderate ones (minimatch GHSA-g3hv-75wg-m249 through typescript-eslint 8.72.1, the latest release), and all 11 gate steps passed (root 1,815 tests and 1 todo, `mcp/` 22 tests). Listed through an in-memory client, every tool keeps its properties, types, required fields, descriptions and enums; a wrong-type argument is rejected with a one-line error, and valid calls return what they did on 0.1.1 (the review compared 23 calls on both builds). The changes clients can see are in the 2.6.2 changelog entry. CI on main after the push is still to be read.
+Both audits pass: `mcp/` has no findings, the root has seven moderate ones (minimatch GHSA-g3hv-75wg-m249 through typescript-eslint 8.72.1, the latest release), and all 11 gate steps passed (root 1,815 tests and 1 todo, `mcp/` 22 tests). Listed through an in-memory client, every tool keeps its properties, types, required fields, descriptions and enums; a wrong-type argument is rejected with a one-line error, and valid calls return what they did on 0.1.1 (the review compared 23 calls on both builds). The changes clients can see are in the 2.6.2 changelog entry. Landed at `39570a2`; CI run 41969535986 on it passed every job, the tests on Node 20, 22 and 24 and `publish-dist`, so `engine-dist` carries 2.6.2.
