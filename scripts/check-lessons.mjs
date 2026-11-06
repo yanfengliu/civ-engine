@@ -31,8 +31,8 @@ import { readFileSync } from "node:fs";
  *
  * 2. A rule must NAME THE GATE IT IS WAITING FOR. The canon: "an entry that can
  *    name no gate is not a lesson" — fleet-wide knowledge goes to
- *    canon-candidates.md, repo-only knowledge to docs/policies/local-rules.md,
- *    and the rest is folklore and is dropped. An index that only grows is a list
+ *    canon-candidates.md, repo-only knowledge to docs/policies/local-rules.md
+ *    when the owner asks for it, and the rest is folklore and is dropped. An index that only grows is a list
  *    of things that failed to graduate.
  *
  * This module is executed as a CLI by `npm run lessons:check` AND asserted by
@@ -114,15 +114,15 @@ export function checkLessons(rulesText, evidenceText) {
   }
 
   // The canon's queue rule, made mechanical. A rule that can name no gate is
-  // not a lesson: promote it (canon-candidates.md), localise it
-  // (docs/policies/local-rules.md), or drop it.
+  // not a lesson: promote it (canon-candidates.md), ask the owner to localise
+  // it (docs/policies/local-rules.md), or drop it.
   for (const rule of rules) {
     if (!/\(gate:\s*\S[^)]*\)/.test(rule)) {
       problems.push(
         `A rule names no gate, so nothing will ever retire it: ${rule.slice(0, 120)}. ` +
           `Add "(gate: <test file / rule id / command>)" naming the gate it is waiting for. ` +
           `If no gate can be named, this is not a lesson — stage it in ` +
-          `docs/learning/canon-candidates.md if it is fleet-wide, put it in ` +
+          `../fleet/canon-candidates.md if it is fleet-wide, ask the owner about ` +
           `docs/policies/local-rules.md if it is repo-only, or drop it.`,
       );
     }
