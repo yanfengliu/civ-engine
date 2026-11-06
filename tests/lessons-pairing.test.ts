@@ -65,7 +65,7 @@ describe('lessons pairing (relations, so they hold over an empty queue and bite 
 
   it('rejects a rule that names no gate', () => {
     // The canon: an entry that can name no gate is not a lesson. Promote it,
-    // localise it, or drop it — an index that only grows is a list of things
+    // ask the owner to localise it, or drop it — an index that only grows is a list of things
     // that failed to graduate.
     const gateless = oneRule.replace(' (gate: tests/example.test.ts)', '');
     expect(checkLessons(gateless, oneEntry).join(' ')).toMatch(/names no gate/);
