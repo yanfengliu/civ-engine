@@ -1,5 +1,7 @@
 # Devlog Summary
 
+- 2026-11-07: Candidate 2.8.0 preserves typed World components/state through RenderAdapter and RenderProjector (work 78); failing-first typecheck and 20 focused render cases pass. Review, full gates and delivery pending; idle-life adoption remains separate.
+
 - 2026-11-07: Shipped 2.7.0 selected-entity RenderAdapter invalidation and the priority queue (work 76; main 1ff6118). Independent Astra review, all eleven gates (1827 root plus one TODO, 22 MCP), hosted Node20/22/24/publication and downloaded-package smoke passed. One external update among 10,000 entities needed one projection and matched a full rebuild. AoE2 adoption and shared-runtime repair are next.
 
 - 2026-11-04: 2.6.2 / MCP 0.1.2 makes both `npm audit --audit-level=high` gates pass again, red since at least 2026-10-30 on advisories against unchanged dependencies: MCP SDK 1.32.2 and zod 4.6.7 in mcp/ (no zod 3 is patched), vite, vitest and source-map-js in the root lock. All 11 gates passed; an independent supply-chain review found nothing blocking (`docs/work/75_audit-repair/`). Seven moderate minimatch findings remain in the root dev tree.
@@ -42,9 +44,7 @@
 - 2026-06-12: MCP server (engine 1.1.0 + civ-engine-mcp 0.1.0) - 14 read-only tools over bundle corpora via the MCP SDK; engine gains snapshotAtTick (pure-data hydration) + VisibilityMap metrics. 2 design + 1 impl review iterations; core stays zero-dep.
 - 2026-06-12: 1.x small-items batch (v1.0.2) - offDestroy Set, PlayerObserver.reset dim re-assert, recorder marker-validation extraction (LOC headroom), AGENTS versioning -> post-1.0 semver.
 - 2026-06-12: Replayer error-quality audit (v1.0.1) - two SILENT failure modes fixed (forgetful-factory applySnapshot incl. tick-0 fingerprints; poisoned factory worlds), bundle_malformed shape guard, coded until_tick_invalid, actionable messages throughout. 11 new tests.
-- 2026-06-11: 1.0.0 RELEASE - strict-by-default (+legacy-snapshot clause), snapshot v6 (inspection-only poison carry, restorePoison opt-in), surface trims, blesses, freeze list; same-major cross-b replay gate relaxed to warn under the freeze. 2 review iterations; d.ts diff owner-reviewed in-conversation. 1194 tests.
-- 2026-06-11: Pre-1.0 full review closed + hardening (v0.8.25) - 4-lens review converged at iter 2; fixed applySnapshot cross-timeline data leak (MEDIUM, repro-confirmed), sanitizer DAG bug, PlayerObserver dimension/poison guards + perf, getErrorCode exception documented. Surface judged ready to freeze.
-- 2026-06-11: CI audit fix (v0.8.24) - vitest CRITICAL + vite HIGH advisories in the dev tree resolved via lockfile (vitest 3.2.6 / vite 7.3.5); CI had been red on the audit step since the advisories published. Gates re-validated on the upgraded runner.
+- Three June 11 release/review entries are retained in [the detailed history](detailed/2026-10-02_2026-11-07.md#june-11-summary-entries-retained-at-the-50-line-cap).
 - Earlier work (2026-04-04 through 2026-04-30) is retained in [the detailed history](detailed/2026-10-01_2026-10-01.md#early-summary-history-retained-during-the-50-line-cap-cleanup).
 
 > Read the newest detailed devlog for reviewer reports, verification and reasoning.

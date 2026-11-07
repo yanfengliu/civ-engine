@@ -131,6 +131,8 @@ Unknown components should be ignored by the renderer. That lets game-specific sy
 
 ## Shipped Helpers
 
+`RenderAdapter` infers the World's component and state types in entity/frame callbacks. Explicit `RenderProjector` declarations can append `TComponents, TState` after `TFrame`; explicit adapter declarations append them after `TDebug`. This preserves typed component/state reads without erasing the World type or casting it back in each projector.
+
 The engine now ships two helpers for this boundary:
 
 - `RenderAdapter`: streams projected `renderSnapshot` and `renderTick` messages using generation-aware entity refs.

@@ -105,6 +105,8 @@ Probe payloads should stay JSON-compatible.
 
 ## Pairing with RenderAdapter
 
+The adapter preserves component and state types from its World in projector callbacks; adding a debug payload does not require erasing those types. For explicit generic declarations, `TComponents, TState` follow `TDebug`.
+
 `RenderAdapter` can include debugger payloads in the render stream:
 
 ```typescript

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.0 — 2026-11-07
+
+`RenderAdapter` and `RenderProjector` now preserve a World's component registry and state types. Constructor inference carries both through entity and frame callbacks without compatibility casts. Explicit declarations can append `TComponents, TState` after the existing generic parameters: after `TDebug` for the adapter and after `TFrame` for the projector. Both default to `Record<string, unknown>`, preserving existing callers and parameter positions.
+
+Remove casts that erase the World type at this boundary when adopting this release. Render messages, projection timing, validation and serialized formats are unchanged. Compile-time fixtures cover inferred and explicit typed worlds, legacy declarations, and command/event payload typing; existing render and invalidation behavior remains covered.
+
 ## 2.7.0 — 2026-11-07
 
 Added `RenderAdapter.invalidate(entityIds)` for views affected by data outside entity components/resources. Connected adapters queue live identities for the next world diff, merge duplicate and normal changes, and bypass `shouldProjectChange` for those entities. Existing callers and message/recording formats are unchanged.

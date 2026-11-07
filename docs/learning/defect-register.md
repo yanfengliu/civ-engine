@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-07 — Render projection erased typed components and state
+
+**Symptom:** idle-life's worker had to cast a fully typed World to an erased World for RenderAdapter and cast it back in its projectors. Its compatibility sentinel documented this upstream boundary, but engine tests only used the default registry/state types.
+
+**Class check and fix:** `tests/render-typed-world.test.ts` proves inferred and explicit typed worlds, entity/frame callback read types, command/event payload errors, existing generic positions and actual snapshot/tick messages. Typecheck first failed on the real World assignment and lost callback types. Trailing defaulted component/state parameters now carry the existing World type throughout the adapter and projector without changing runtime behavior. World's intentional generic component/state fallbacks remain. Consumer cast removal is tracked separately.
+
 ## 2026-11-07 — External render changes required whole-world projection
 
 **Symptom:** AoE2's November 6 large-map measurements attributed 59.6-68.5% of tick time to reconnecting RenderAdapter after external combat-state changes. One healing unit forced projection and JSON validation of every entity because only ordinary entity/component/resource diffs could request projection.

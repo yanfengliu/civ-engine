@@ -4369,24 +4369,24 @@ interface RenderEntityChange {
 
 Summary of why an entity was considered for re-projection on a tick.
 
-#### `RenderProjector<TEventMap, TCommandMap, TView, TFrame>`
+#### `RenderProjector<TEventMap, TCommandMap, TView, TFrame, TComponents, TState>`
 
 ```typescript
-interface RenderProjector<TEventMap, TCommandMap, TView, TFrame> {
+interface RenderProjector<TEventMap, TCommandMap, TView, TFrame, TComponents, TState> {
   projectEntity(
     ref: EntityRef,
-    world: World<TEventMap, TCommandMap>,
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
     change: RenderEntityChange | null,
   ): TView | null;
   projectFrame?(
-    world: World<TEventMap, TCommandMap>,
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
     diff: TickDiff | null,
   ): TFrame | null;
   shouldProjectChange?(change: RenderEntityChange): boolean;
 }
 ```
 
-Game-owned callbacks that map simulation state to render-facing state.
+Game-owned callbacks that map simulation state to render-facing state. `TComponents extends ComponentRegistry` and `TState extends Record<string, unknown>` both default to `Record<string, unknown>`. Entity and frame callbacks receive the same fully typed World.
 
 #### `RenderServerMessage<TView, TFrame, TDebug>`
 
@@ -4401,14 +4401,16 @@ Message union emitted by `RenderAdapter`.
 ### Constructor
 
 ```typescript
-new RenderAdapter<TEventMap, TCommandMap, TView, TFrame, TDebug>(config: {
-  world: World<TEventMap, TCommandMap>;
-  projector: RenderProjector<TEventMap, TCommandMap, TView, TFrame>;
+new RenderAdapter<TEventMap, TCommandMap, TView, TFrame, TDebug, TComponents, TState>(config: {
+  world: World<TEventMap, TCommandMap, TComponents, TState>;
+  projector: RenderProjector<TEventMap, TCommandMap, TView, TFrame, TComponents, TState>;
   send: (message: RenderServerMessage<TView, TFrame, TDebug>) => void;
   onError?: (error: unknown) => void;
   debug?: { capture(): TDebug | null };
 })
 ```
+
+The constructor infers `TComponents` and `TState` from `world`; the trailing parameters use the same constraints/defaults as `RenderProjector`. Existing generic positions are unchanged. No World-erasing compatibility cast is needed.
 
 ### Methods
 

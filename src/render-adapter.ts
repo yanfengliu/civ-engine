@@ -1,7 +1,7 @@
 import { assertJsonCompatible } from './json.js';
 import type { TickDiff } from './diff.js';
 import type { EntityId, EntityRef } from './types.js';
-import type { World } from './world.js';
+import type { World, ComponentRegistry } from './world.js';
 
 export interface RenderEntity<TView = unknown> {
   ref: EntityRef;
@@ -43,14 +43,16 @@ export interface RenderProjector<
   TCommandMap extends Record<keyof TCommandMap, unknown>,
   TView = unknown,
   TFrame = unknown,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
   projectEntity(
     ref: EntityRef,
-    world: World<TEventMap, TCommandMap>,
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
     change: RenderEntityChange | null,
   ): TView | null;
   projectFrame?(
-    world: World<TEventMap, TCommandMap>,
+    world: World<TEventMap, TCommandMap, TComponents, TState>,
     diff: TickDiff | null,
   ): TFrame | null;
   shouldProjectChange?(change: RenderEntityChange): boolean;
@@ -88,13 +90,17 @@ export class RenderAdapter<
   TView = unknown,
   TFrame = unknown,
   TDebug = unknown,
+  TComponents extends ComponentRegistry = Record<string, unknown>,
+  TState extends Record<string, unknown> = Record<string, unknown>,
 > {
-  private readonly world: World<TEventMap, TCommandMap>;
+  private readonly world: World<TEventMap, TCommandMap, TComponents, TState>;
   private readonly projector: RenderProjector<
     TEventMap,
     TCommandMap,
     TView,
-    TFrame
+    TFrame,
+    TComponents,
+    TState
   >;
   private readonly send: (
     message: RenderServerMessage<TView, TFrame, TDebug>,
@@ -108,8 +114,8 @@ export class RenderAdapter<
   private invalidated = new Map<EntityId, EntityRef>();
 
   constructor(config: {
-    world: World<TEventMap, TCommandMap>;
-    projector: RenderProjector<TEventMap, TCommandMap, TView, TFrame>;
+    world: World<TEventMap, TCommandMap, TComponents, TState>;
+    projector: RenderProjector<TEventMap, TCommandMap, TView, TFrame, TComponents, TState>;
     send: (message: RenderServerMessage<TView, TFrame, TDebug>) => void;
     onError?: (error: unknown) => void;
     debug?: RenderDebugCapture<TDebug>;
@@ -308,10 +314,12 @@ export class RenderAdapter<
 function collectEntityChanges<
   TEventMap extends Record<keyof TEventMap, unknown>,
   TCommandMap extends Record<keyof TCommandMap, unknown>,
+  TComponents extends ComponentRegistry,
+  TState extends Record<string, unknown>,
 >(
   diff: TickDiff,
   previousKnown: Map<EntityId, EntityRef>,
-  world: World<TEventMap, TCommandMap>,
+  world: World<TEventMap, TCommandMap, TComponents, TState>,
   invalidatedIds: ReadonlySet<EntityId>,
 ): RenderEntityChange[] {
   const byId = new Map<EntityId, RenderEntityChange>();
