@@ -26,11 +26,11 @@ Add RenderAdapter.invalidate(entityIds: Iterable<EntityId>): void. Connected cal
 
 ## Implementation steps
 
-- Active: priority list and RED contract tests.
-- Pending: minimal adapter implementation and public release documentation.
-- Pending: independent review, full gates, main merge/push and remote completion.
+- Complete: priority list, RED contract tests, adapter implementation and 2.7.0 release documentation in c63f4f5.
+- Complete: independent [review 0](reviews/0_implementation.md), eleven local gates (1827 root passes plus one TODO, 22 MCP passes), built-entry smoke and credential-pattern scan.
+- Active: integrated main gates, merge/push and remote completion. The only incoming main change is AGENTS.md canon commit 85f4254.
 - Pending: update producer/adoption status and clean owned resources.
 
 ## Outcome
 
-Pending. Source/package is 2.6.2 while the shared compiled runtime is 2.5.0; preserve that runtime until consumer adoption is checked. Existing work 71 and its history remain intact.
+Implementation c63f4f5 is verified and independently reviewed. Hosted publication and main acceptance remain pending. The shared compiled runtime is still 2.5.0 and is preserved until consumer adoption is checked. Existing work 71 and its history remain intact.
