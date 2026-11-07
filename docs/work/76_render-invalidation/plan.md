@@ -1,6 +1,6 @@
 # Selective render invalidation and engine priorities
 
-Status: active
+Status: complete
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -28,9 +28,11 @@ Add RenderAdapter.invalidate(entityIds: Iterable<EntityId>): void. Connected cal
 
 - Complete: priority list, RED contract tests, adapter implementation and 2.7.0 release documentation in c63f4f5.
 - Complete: independent [review 0](reviews/0_implementation.md), eleven local gates (1827 root passes plus one TODO, 22 MCP passes), built-entry smoke and credential-pattern scan.
-- Active: integrated main gates, merge/push and remote completion. The only incoming main change is AGENTS.md canon commit 85f4254.
-- Pending: update producer/adoption status and clean owned resources.
+- Complete: integrated main gates and merge/push at 1ff6118, retaining the incoming AGENTS.md canon commit 85f4254.
+- Complete: hosted CI 42411211525 passed Node 20/22/24 and publish-dist; actual published-package smoke passed. The priority list identifies consumer adoption as next; task-owned temporary resources are removed at session cleanup.
 
 ## Outcome
 
-Implementation c63f4f5 is verified and independently reviewed. Hosted publication and main acceptance remain pending. The shared compiled runtime is still 2.5.0 and is preserved until consumer adoption is checked. Existing work 71 and its history remain intact.
+Implementation c63f4f5 is verified and independently reviewed, integrated as main 1ff61186da3c5b7ab6ef22a18ff99a81c3c1e18e. All eleven integrated local gates passed with 1827 root passes plus one existing TODO and 22 MCP passes. [Hosted CI 42411211525](https://github.com/yanfengliu/civ-engine/actions/runs/42411211525) passed Node 20/22/24 and publish-dist. Published asset 721852179 was downloaded (662037 bytes, SHA256 f85d3b27711319edaa65600723d975b9d96052b9cfc91b782c0b69ad7f79878a); manifest and compiled runtime both report 2.7.0. A public-import smoke against the extracted tarball observed the expected external-health render update. Seven moderate root-development advisories remain; runtime/MCP audits passed.
+
+The shared compiled runtime is still 2.5.0 and is preserved until consumer adoption is checked. No game integration or map-throughput improvement is claimed. The priority list tracks those next, and existing work 71/history remain intact. Only the task's allocator placeholders were removed from primary before the fast-forward; the pre-existing Cursor-state deletion was preserved. Final closure changes documentation only and retains the reviewed implementation exactly.
