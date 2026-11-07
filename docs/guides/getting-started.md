@@ -6,12 +6,13 @@ This guide covers the core concepts and gets you running a minimal simulation in
 
 Requires Node.js 20+.
 
-To **use** the engine in a project, install the prebuilt tarball (it is not on npm yet — see the [README](../../README.md#install)):
+To **use** the engine in a project, install a retained prebuilt tarball (it is not on npm yet — see the [README](../../README.md#install)). Choose an existing commit-named asset from the engine-dist release and replace `FULL_SOURCE_COMMIT_SHA` with its 40-character SHA:
 
 ```bash
-gh release download engine-dist --repo yanfengliu/civ-engine --pattern civ-engine.tgz
-npm install ./civ-engine.tgz
+npm install --save-exact https://github.com/yanfengliu/civ-engine/releases/download/engine-dist/civ-engine-FULL_SOURCE_COMMIT_SHA.tgz
 ```
+
+Commit package.json and package-lock.json so `npm ci` uses the exact archive and verifies its integrity. The installed package includes `dist`; consumer builds need no engine source checkout. Remove source aliases that bypass the installed package when migrating an existing project. The rolling `civ-engine.tgz` asset remains for compatibility but does not pin a build.
 
 To **work on the engine itself**, clone it:
 

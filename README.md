@@ -1,8 +1,8 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.8.0-blue)
+![version](https://img.shields.io/badge/version-2.8.1-blue)
 
-> **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. But no production deployment has exercised the engine end-to-end, and there is no published, pinnable release yet (see [Install](#install)) — so treat it as suitable for prototyping and AI-agent experiments, and read the [changelog](docs/changelog.md) before upgrading.
+> **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. No production deployment has exercised the engine end-to-end, so treat it as suitable for prototyping and AI-agent experiments. Pin a verified prebuilt archive (see [Install](#install)) and read the [changelog](docs/changelog.md) before upgrading.
 
 A general-purpose, headless, AI-native 2D grid-based game engine. Built in TypeScript with a strict ECS (Entity-Component-System) architecture. Zero runtime dependencies.
 
@@ -20,14 +20,15 @@ The engine owns the shared machine contracts for that loop, and enforces its hon
 
 Requires Node.js 20+.
 
-Not on npm yet. CI packs the built engine on every push to `main` and refreshes a rolling `engine-dist` release, which is what downstream repos consume:
+Not on npm yet. After the full CI matrix passes on a push to `main`, CI retains a prebuilt archive named `civ-engine-<full-source-commit-SHA>.tgz` in the [engine-dist release](https://github.com/yanfengliu/civ-engine/releases/tag/engine-dist). Use an archive actually present in that release; commits predating this channel do not have retained assets. Replace `FULL_SOURCE_COMMIT_SHA` with that archive's 40-character SHA:
 
 ```bash
-gh release download engine-dist --repo yanfengliu/civ-engine --pattern civ-engine.tgz
-npm install ./civ-engine.tgz
+npm install --save-exact https://github.com/yanfengliu/civ-engine/releases/download/engine-dist/civ-engine-FULL_SOURCE_COMMIT_SHA.tgz
 ```
 
-The tarball installs under the package name, so `import { World } from 'civ-engine'` resolves. Note that `engine-dist` is a single rolling tag that always tracks `main` — there is no pinnable published release yet, so vendor the tarball you tested against and read the [changelog](docs/changelog.md) before refreshing it.
+The tarball installs as `civ-engine`, so `import { World } from 'civ-engine'` resolves without a sibling checkout or source alias. Commit both package manifests: the exact URL chooses the build, and lockfile integrity detects changed bytes during `npm ci`. Publication never overwrites a commit-named archive; a rerun with different bytes fails. GitHub administrators can still remove assets, so this is repository-managed retention, not an independent archival guarantee.
+
+For existing consumers, the rolling `civ-engine.tgz` asset remains available and tracks the latest successful publication from `main`. Its URL is unsuitable as a reproducible dependency. Archive upload must succeed before rolling replacement begins. Check the installed package version against runtime `ENGINE_VERSION` when upgrading and run the consumer's own gates.
 
 ## Quick Start
 

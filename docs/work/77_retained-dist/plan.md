@@ -11,7 +11,7 @@ Complete the P0 engine-consumption prerequisite: the sole rolling asset is repla
 
 ## Scope
 
-Producer publication workflow, offline command-contract tests, install documentation and a patch release. Based on main 44663f0 in codex/retained-dist-1107. Existing consumer worktrees and shared runtimes remain untouched. Publication of additional retained assets requires the owner's approval under AGENTS.md R14 after the change is concrete and reviewed. No new registry, token, dependency or game save format.
+Producer publication workflow, offline command-contract tests, install documentation and patch release 2.8.1. Updated to main 614c75a in codex/retained-dist-1107. Existing consumer worktrees and shared runtimes remain untouched. The owner approved additional retained assets on 2026-11-07 under AGENTS.md R14. No new registry, token, dependency or game save format.
 
 ## Approach
 
@@ -27,10 +27,10 @@ The existing engine-dist release keeps civ-engine.tgz for compatibility and adds
 ## Implementation steps
 
 - Approved: the owner explicitly answered "Approve retained release assets" on 2026-11-07. This authorizes implementing and publishing the retained archives after review and gates. Automatic approval review had rejected the initial patch before that approval; no portion was applied.
-- Done: test-only contract draft in the isolated retained-dist-1107 worktree; it fails on the absent implementation as expected.
-- Pending: implement, review and gate the minimal publisher after work 78 lands.
+- Done: tests first failed on the missing publisher. The implemented publisher and installation claim checks pass 52 focused cases, including cleanup on runner throws and archive mismatch refusal.
+- Active: independent supply-chain review and full gates for candidate 2.8.1.
 - Pending: main/push/CI and actual archive verification; then consumer adoption starting with the smallest consumer, farm.
 
 ## Outcome
 
-Pending. The owner asked to continue through the actionable priority backlog, tracked by the active Codex goal. No publication change has been applied yet. AoE2's existing render-projection-cost-1106 tree contains another owner's unmerged implementation and is preserved; npm run ci:status reports green remote gates but unrelated idle worktree housekeeping.
+Pending delivery. The owner asked to continue through the actionable priority backlog, tracked by the active Codex goal. Publication changes are implemented only in the isolated branch and have not run remotely. AoE2's existing render-projection-cost-1106 tree contains another owner's unmerged implementation and is preserved; npm run ci:status reports green remote gates but unrelated idle worktree housekeeping.

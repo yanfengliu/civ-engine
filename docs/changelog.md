@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.1 — 2026-11-07
+
+CI now retains `civ-engine-<full-source-commit-SHA>.tgz` beside the rolling `civ-engine.tgz` asset in the engine-dist release. The retained archive is uploaded without replacement before the rolling asset is refreshed. Identical reruns reuse the archive; changed bytes under an existing commit name fail publication.
+
+Consumers can pin an existing archive's exact GitHub release URL and commit npm's lockfile integrity, removing shared sibling-source/build dependencies. Old commits are not backfilled. Existing rolling downloads remain available; they do not reproduce an older build. Repository administrators can still delete assets. See the README installation steps. Runtime APIs and serialized formats are unchanged.
+
 ## 2.8.0 — 2026-11-07
 
 `RenderAdapter` and `RenderProjector` now preserve a World's component registry and state types. Constructor inference carries both through entity and frame callbacks without compatibility casts. Explicit declarations can append `TComponents, TState` after the existing generic parameters: after `TDebug` for the adapter and after `TFrame` for the projector. Both default to `Record<string, unknown>`, preserving existing callers and parameter positions.

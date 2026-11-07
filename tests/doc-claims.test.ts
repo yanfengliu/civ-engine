@@ -43,6 +43,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import * as nodeFs from 'node:fs';
 import { tmpdir } from 'node:os';
+import { publishDist } from '../scripts/publish-dist.mjs';
 import {
   World,
   FileSink,
@@ -298,9 +299,35 @@ const predicates: Record<string, () => void> = {
     expect(ci, 'the install path names a rolling engine-dist release').toContain('engine-dist');
     expect(
       /if:\s*github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/.test(ci),
-      'the README says engine-dist always tracks main, so the job must be gated on push-to-main',
+      'the rolling asset tracks successful publication from main, so the job must be gated on push-to-main',
     ).toBe(true);
-    expect(ci, 'the rolling tag is refreshed by re-uploading over it').toContain('--clobber');
+    expect(ci, 'the workflow invokes the contract-tested publisher').toContain('node scripts/publish-dist.mjs');
+    expect(read('scripts/publish-dist.mjs'), 'the rolling asset is refreshed by re-uploading over it').toContain("args.push('--clobber')");
+  },
+
+  'engine-dist-retained': () => {
+    const root = nodeFs.mkdtempSync(path.join(tmpdir(), 'engine-retention-claim-'));
+    try {
+      const artifactPath = path.join(root, 'input.tgz');
+      nodeFs.writeFileSync(artifactPath, 'original archive');
+      const config = { repository: 'owner/engine', sha: 'a'.repeat(40), artifactPath };
+      const uploads: string[][] = [];
+      publishDist({ ...config, run: (args) => {
+        if (args[1] === 'download') return { status: 1 };
+        uploads.push(args);
+        return { status: 0 };
+      } });
+      expect(uploads).toHaveLength(2);
+      expect(uploads[0]).not.toContain('--clobber');
+      expect(uploads[1]).toContain('--clobber');
+      expect(() => publishDist({ ...config, run: (args) => {
+        expect(args[1]).toBe('download');
+        nodeFs.writeFileSync(path.join(args[args.indexOf('--dir') + 1], `civ-engine-${config.sha}.tgz`), 'changed archive');
+        return { status: 0 };
+      } })).toThrow(/different bytes/);
+    } finally {
+      nodeFs.rmSync(root, { recursive: true, force: true });
+    }
   },
 
   'review-posture': () => {

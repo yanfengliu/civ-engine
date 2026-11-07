@@ -85,7 +85,18 @@
     "surfaces": [
       {
         "doc": "README.md",
-        "quote": "`engine-dist` is a single rolling tag that always tracks `main`"
+        "quote": "the rolling `civ-engine.tgz` asset remains available and tracks the latest successful publication from `main`"
+      }
+    ]
+  },
+  {
+    "id": "engine-dist-retained",
+    "kind": "process",
+    "why": "Reproducible archive URLs require non-overwriting publication; exercise first upload flags and mismatched existing bytes against the publisher.",
+    "surfaces": [
+      {
+        "doc": "README.md",
+        "quote": "Publication never overwrites a commit-named archive; a rerun with different bytes fails."
       }
     ]
   },
