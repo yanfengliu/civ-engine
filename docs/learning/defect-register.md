@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-07 — External render changes required whole-world projection
+
+**Symptom:** AoE2's November 6 large-map measurements attributed 59.6-68.5% of tick time to reconnecting RenderAdapter after external combat-state changes. One healing unit forced projection and JSON validation of every entity because only ordinary entity/component/resource diffs could request projection.
+
+**Class check and fix:** `tests/render-invalidation.test.ts` covers selected external-data changes, duplicate/ordinary changes, filters, hide/reveal, lifecycle/generation changes, callback requests and disconnected behavior. `RenderAdapter.invalidate()` queues generation-bound identities for the next diff without modifying authoritative state. The 10,000-entity case requires exactly one projector call and compares its applied result to a fresh full projection. All eleven initial cases failed on the missing API before implementation; a separate generation-reuse case verifies stale identities. This is a producer capability and work-count proof; AoE2 adoption and real map throughput remain separate acceptance.
+
 ## 2026-10-02 — FileSink iterators materialized whole JSONL and hid completed malformed rows
 
 **Symptom (downstream E11/E13):** advertised streaming iterators could exceed the native aggregate String limit. A malformed completed row could be ignored when its contents matched the final unterminated fragment.

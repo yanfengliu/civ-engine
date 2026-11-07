@@ -4426,7 +4426,21 @@ Immediately sends a `renderSnapshot` message, then subscribes to world diffs and
 disconnect(): void
 ```
 
-Stops streaming render messages.
+Stops streaming render messages and clears pending invalidations. Reconnecting sends a full current snapshot.
+
+#### `invalidate(entityIds)`
+
+```typescript
+invalidate(entityIds: Iterable<EntityId>): void
+```
+
+Queues live entities for re-projection on the next world diff. Use this when a projector reads data outside entity components/resources, such as game-owned combat state. Does not step the world, mutate its state or recorded diffs, or send a message immediately; paused games wait until a diff is emitted.
+
+Repeated IDs coalesce with each other and ordinary changes. Processing uses ascending numeric entity IDs and at most one projection per affected entity in that diff. Explicit invalidation bypasses `shouldProjectChange`; an invalidation-only `RenderEntityChange` has empty `componentKeys` and `resourceKeys`. Projectors that cache or partially update views must refresh their external-data fields on that path as well as when those lists are populated. Normal null-projection hide/reveal and generation-aware create/destroy behavior applies.
+
+Unknown/dead IDs are ignored. Each queued identity captures its current generation; it cannot independently invalidate a replacement with the same ID. Calls while disconnected do nothing. Disconnect clears the queue, and reconnect's full snapshot covers current data. Requests made during projection or send callbacks wait for a subsequent diff. Invalidation is local presentation state, not serialized or replayed; games must reproduce the authoritative data and invalidation calls when replaying. Existing projection/transport error behavior is unchanged; the batch is consumed when projection starts, with no automatic retry after a projector error.
+
+This avoids whole-world projection and JSON validation for a selected update. Existing adapter bookkeeping, frame/debug callbacks and ordinary world-diff costs still apply; it is not a guarantee of constant total tick time.
 
 ### Behavior Notes
 

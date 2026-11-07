@@ -1012,7 +1012,8 @@
   "RenderAdapter": [
     "connect",
     "constructor",
-    "disconnect"
+    "disconnect",
+    "invalidate"
   ],
   "RenderDebugCapture": [
     "capture"

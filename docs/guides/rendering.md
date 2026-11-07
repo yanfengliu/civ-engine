@@ -166,6 +166,10 @@ const adapter = new RenderAdapter({
 
 `projectEntity` also receives a third argument — `change: RenderEntityChange | null` — the specific component / position / lifecycle delta for that entity this tick (`null` on a full projection or initial sync). The example above ignores it and re-projects fully (correct, but more work than necessary on large worlds); use `change` to project only what moved, and add an optional `shouldProjectChange(change): boolean` to the projector to skip entities whose change you don't care about.
 
+When a view reads data outside entity components/resources, call `adapter.invalidate([entityId])` after changing that data. On the next world diff, the adapter re-projects that live entity without reconnecting and rebuilding every view. Duplicate IDs coalesce, and explicit invalidation bypasses `shouldProjectChange`. For an invalidation-only change the component/resource key lists are empty: refresh external-data fields even if a partial projector normally updates only named keys. A null projection hides the entity; a later non-null projection reveals it again.
+
+Invalidation does not advance a paused game or immediately send a message, and it is not recorded in world state. Replay code must reproduce the data and invalidation calls. Requests during a projection/send callback wait for the following diff; disconnection clears pending requests and reconnection sends a complete snapshot. Per-entity projection work is bounded by the selected and normally changed entities, while the adapter's existing bookkeeping and frame/debug costs remain. See the [API contract](../api-reference.md#invalidateentityids) for generation and error semantics.
+
 This is the intended split:
 
 - engine: world state, projection transport, debugging helpers

@@ -1,0 +1,15 @@
+# Engine priorities
+
+Updated: 2026-11-07. Owner: Codex. Ordered by consumer impact; shipped engine capability and verified game adoption are separate acceptance steps. This is the owner's requested priority list, not a new repository policy.
+
+| Priority | Task | Status | Acceptance / next action |
+| --- | --- | --- | --- |
+| P0 | Selective render invalidation | Active: [work 76](../work/76_render-invalidation/plan.md) | Re-project selected entities without a whole-world reconnect; preserve identity, filtering and lifecycle behavior; prove bounded projector calls and unchanged rendered results. Ship engine capability, then verify AoE2 adoption on its measured map-size workload. |
+| P0 | Reproducible engine consumption and runtime adoption | Queued; follows the next green release | Six sibling installs link to this checkout whose package/source is 2.6.2 but compiled runtime is 2.5.0. Inventory each consumer's actual artifact, adopt a verified artifact through its own gates, and detect manifest/runtime mismatch. Keep python_mini_metro's deliberate 2.2.0 pin unless its migration is separately justified. No shared runtime replacement before consumer checks. |
+| P1 | Measured validation, state-scan and visibility costs | Queued | Profile current consumer artifacts; preserve safe defaults and recording contracts. Optimize measured work first; any validation opt-out needs explicit bounds and invalid-value tests. Existing requests: [work 71](../work/71_engine-feedback/plan.md), E01/E02/E17-E20. |
+| P1 | Human command persistence across paused saves | Queued | Resume work 71 M3's accepted precheck design, then prove the whole submit/pause/save/load class in AoE2; an engine API alone does not close E03. |
+| P2 | Remaining consumer contract and documentation gaps | Queued | Triage work 71 against current consumers: movement versus placement claims, direct component-write documentation, idle-life typed RenderAdapter compatibility, and pathing requests. Separate game-owned state omissions from engine defects. |
+| P2 | Finish adopting existing recording/playtest tools | Queued | Verify real use of advance hooks, streaming readers and replay coverage before claiming shipped capabilities solved consumer problems. Retain whole-bundle memory limits. |
+| P3 | Existing-engine comparison for a new small game | Deferred until a concrete new-game candidate | Compare implementation effort, headless testing, replay/evidence requirements and licensing on one representative slice. No migration of existing games is approved by this list. |
+
+Evidence: [AoE2 current feedback](../../../aoe2/docs/engine-feedback/current.md), especially the 2026-11-06 render and validation measurements; [engine feedback inventory](../work/71_engine-feedback/plan.md). The initial inventory found simulation users aoe2, city, farm, civ-sim-web and idle-life, plus tooling users townscaper and python_mini_metro. Consumer performance figures remain downstream reports until remeasured on the adopted artifact.

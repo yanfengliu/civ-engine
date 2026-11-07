@@ -48,6 +48,8 @@ The API reference is the authoritative public surface. The root `README.md` is i
 
 ## Plans and Threads
 
+- [Engine Priorities](design/engine-priorities.md) - Current consumer-focused task queue, with producer delivery and consumer adoption tracked separately.
+
 Active work and review syntheses live under `threads/current/`; closed objectives live under `threads/done/`. Each objective folder is a concise kebab-case thread name. Authoritative thread designs and implementation plans live directly under that folder as `DESIGN.md` and `PLAN.md`; review iterations stay one level deeper under date and iteration folders, with `REVIEW.md` as the committed summary.
 
 ### Implemented

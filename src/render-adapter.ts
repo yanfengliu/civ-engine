@@ -105,6 +105,7 @@ export class RenderAdapter<
   private readonly renderedRefs = new Map<EntityId, EntityRef>();
   private connected = false;
   private diffListener: ((diff: TickDiff) => void) | null = null;
+  private invalidated = new Map<EntityId, EntityRef>();
 
   constructor(config: {
     world: World<TEventMap, TCommandMap>;
@@ -122,6 +123,7 @@ export class RenderAdapter<
 
   connect(): void {
     if (this.connected) return;
+    this.invalidated.clear();
     this.connected = true;
 
     if (
@@ -151,9 +153,21 @@ export class RenderAdapter<
   disconnect(): void {
     if (!this.connected) return;
     this.connected = false;
+    this.invalidated.clear();
     if (this.diffListener) {
       this.world.offDiff(this.diffListener);
       this.diffListener = null;
+    }
+  }
+
+  /** Queue live entities for re-projection on the next diff, bypassing the change filter.
+   * Does not change the World or emit a message immediately. Disconnected calls are ignored.
+   */
+  invalidate(entityIds: Iterable<EntityId>): void {
+    if (!this.connected) return;
+    for (const id of entityIds) {
+      const ref = this.world.getEntityRef(id);
+      if (ref !== null) this.invalidated.set(id, ref);
     }
   }
 
@@ -184,9 +198,16 @@ export class RenderAdapter<
   }
 
   private buildDiff(diff: TickDiff): RenderDiff<TView, TFrame> {
+    // Detach before calling projectors: callback requests belong to the next diff.
+    const pending = this.invalidated;
+    this.invalidated = new Map();
+    const invalidatedIds = new Set<EntityId>();
+    for (const [id, ref] of pending) {
+      if (this.world.getEntityRef(id)?.generation === ref.generation) invalidatedIds.add(id);
+    }
     const previousKnown = new Map(this.knownRefs);
     const previousRendered = new Map(this.renderedRefs);
-    const changes = collectEntityChanges(diff, previousKnown, this.world);
+    const changes = collectEntityChanges(diff, previousKnown, this.world, invalidatedIds);
     const created: Array<RenderEntity<TView>> = [];
     const updated: Array<RenderEntity<TView>> = [];
     const destroyed: EntityRef[] = [];
@@ -213,7 +234,8 @@ export class RenderAdapter<
 
       this.knownRefs.set(change.id, currentRef);
 
-      const shouldProjectChange = this.projector.shouldProjectChange?.(change) ?? true;
+      const shouldProjectChange = invalidatedIds.has(change.id)
+        || (this.projector.shouldProjectChange?.(change) ?? true);
       if (
         !change.created &&
         !change.destroyed &&
@@ -290,6 +312,7 @@ function collectEntityChanges<
   diff: TickDiff,
   previousKnown: Map<EntityId, EntityRef>,
   world: World<TEventMap, TCommandMap>,
+  invalidatedIds: ReadonlySet<EntityId>,
 ): RenderEntityChange[] {
   const byId = new Map<EntityId, RenderEntityChange>();
 
@@ -309,6 +332,8 @@ function collectEntityChanges<
     }
     return change;
   };
+
+  for (const id of invalidatedIds) ensure(id);
 
   for (const id of diff.entities.created) {
     ensure(id).created = true;

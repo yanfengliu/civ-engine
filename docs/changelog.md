@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.7.0 — 2026-11-07
+
+Added `RenderAdapter.invalidate(entityIds)` for views affected by data outside entity components/resources. Connected adapters queue live identities for the next world diff, merge duplicate and normal changes, and bypass `shouldProjectChange` for those entities. Existing callers and message/recording formats are unchanged.
+
+Replace whole-world reconnects used solely to refresh selected views with invalidation calls. An invalidation-only projector change has empty component/resource key lists, so partial projectors must refresh external fields on that path. This is queued until a diff, not immediate paused rendering. Disconnect clears pending requests; reconnect still sends a complete snapshot. Queued generations prevent requests following recycled IDs. Replay callers own reproducing external data and invalidation calls.
+
+Regression coverage includes lifecycle/filter behavior, callback requests and a 10,000-entity fixture requiring one projection for one external-data change with the same resulting view as a full rebuild. This measures projection work, not downstream game throughput; adapter bookkeeping and frame/debug costs remain. No consumer adoption is implied by this release.
+
 ## 2.6.2 — 2026-11-04
 
 Security and CI dependency repair; core simulation and public APIs are unchanged. The private MCP server is now 0.1.2. Existing bundle/replay formats remain unchanged.
