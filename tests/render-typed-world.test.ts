@@ -79,11 +79,21 @@ describe('typed render projection', () => {
 // These calls are checked by tsc, never executed: preserving inference must not
 // widen commands or events into unchecked values. World intentionally retains
 // explicit generic fallbacks for unregistered component and state keys.
-function rejectedWrites(projector: RenderProjector<Events, Commands, View, Frame, Components, State>, world: GameWorld) {
-  // @ts-expect-error command payloads retain their declared type
-  world.submitCommand('move', { dx: 'invalid' });
-  // @ts-expect-error event payloads retain their declared type
-  world.emit('alert', { code: 'invalid' });
-  projector.projectEntity({ id: 0, generation: 0 }, world, null);
+function rejectedWrites() {
+  new RenderAdapter({
+    world: createWorld(),
+    projector: {
+      projectEntity(_ref, world) {
+        world.submit('move', { dx: 1 });
+        // @ts-expect-error inferred callback world rejects invalid command payloads
+        world.submit('move', { dx: 'invalid' });
+        world.emit('alert', { code: 1 });
+        // @ts-expect-error inferred callback world rejects invalid event payloads
+        world.emit('alert', { code: 'invalid' });
+        return null;
+      },
+    },
+    send: () => {},
+  });
 }
 void rejectedWrites;
