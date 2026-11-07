@@ -28,7 +28,8 @@ The existing engine-dist release keeps civ-engine.tgz for compatibility and adds
 
 - Approved: the owner explicitly answered "Approve retained release assets" on 2026-11-07. This authorizes implementing and publishing the retained archives after review and gates. Automatic approval review had rejected the initial patch before that approval; no portion was applied.
 - Done: tests first failed on the missing publisher. The implemented publisher and installation claim checks pass 52 focused cases, including cleanup on runner throws and archive mismatch refusal.
-- Active: independent supply-chain review and full gates for candidate 2.8.1.
+- Done: independent supply-chain review found no material issues; all eleven gates passed (1847 root plus one TODO, 22 MCP), final focused checks 58 passes. Full authored review retained in round 0.
+- Active: integrate and publish approved 2.8.1.
 - Pending: main/push/CI and actual archive verification; then consumer adoption starting with the smallest consumer, farm.
 
 ## Outcome

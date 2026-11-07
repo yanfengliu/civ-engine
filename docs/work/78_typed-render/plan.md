@@ -1,6 +1,6 @@
 # Preserve typed worlds through render projection
 
-Status: active
+Status: complete
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -27,9 +27,9 @@ Append TComponents and TState to RenderProjector and RenderAdapter and propagate
 
 - Done: reproduced compiler failure before implementation; propagated generics; typecheck and 20 focused render cases pass.
 - Done: independent Astra review and F0 test repair/re-review (rounds 0 and 1); all eleven gates pass, 1830 root plus one existing TODO and 22 MCP. Candidate and repair retained as 50fa994 and efe4048.
-- Active: integration, push and hosted acceptance.
+- Done: main 614c75a pushed; CI 42425193412 passed Node20/22/24 plus publish-dist. Actual archive package/runtime 2.8.0 and inferred/explicit typed consumer compilation verified.
 - Pending: idle-life adopts verified artifact and removes casts through its own gates.
 
 ## Outcome
 
-Pending delivery. The owner approved work 77's retained release assets on 2026-11-07; that implementation follows this milestone, which does not change publication behavior.
+Delivered at main 614c75a3ca4955f10083e552bf2217c6a221f955 with hosted CI 42425193412 successful. Downloaded rolling asset 722271045 is 662792 bytes, SHA256 92c1c95e973d1fd15821c0289084f806c6ead1a0877d394eb17606609f488cf4; actual manifest/runtime both 2.8.0. A consumer fixture compiled against the published declarations with inferred and explicit typed projectors/adapters. Full local gates and both authored review rounds are recorded above. idle-life cast removal belongs to the separate consumer adoption milestone. The shared primary dist remains untouched.

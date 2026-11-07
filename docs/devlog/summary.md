@@ -1,7 +1,7 @@
 # Devlog Summary
 
-- 2026-11-07: Candidate 2.8.1 retains commit-named prebuilt archives before refreshing the rolling download (work 77); owner publication approval received, 52 focused publisher/doc-claim tests pass. Full gates, review and published-archive verification pending; consumer pin migrations follow separately.
-- 2026-11-07: Candidate 2.8.0 preserves typed World components/state through RenderAdapter and RenderProjector (work 78; efe4048). Independent Astra review caught a vacuous type test; corrected inference checks, two-error RED control, re-review and all eleven gates pass (1830 root plus one TODO, 22 MCP). Hosted delivery and idle-life adoption remain separate.
+- 2026-11-07: Candidate 2.8.1 retains commit-named prebuilt archives before refreshing the rolling download (work 77; 4c4e989); owner publication approval, independent Astra review and all eleven gates passed (1847 root plus one TODO, 22 MCP). Hosted archive verification and consumer pin migrations follow.
+- 2026-11-07: Shipped 2.8.0 typed World components/state through RenderAdapter and RenderProjector (work 78; main 614c75a). Independent Astra review caught a vacuous type test; repair/control/re-review, all eleven gates and hosted CI42425193412 passed. Published manifest/runtime and typed consumer compilation verified; idle-life adoption remains separate.
 
 - 2026-11-07: Shipped 2.7.0 selected-entity RenderAdapter invalidation and the priority queue (work 76; main 1ff6118). Independent Astra review, all eleven gates (1827 root plus one TODO, 22 MCP), hosted Node20/22/24/publication and downloaded-package smoke passed. One external update among 10,000 entities needed one projection and matched a full rebuild. AoE2 adoption and shared-runtime repair are next.
 
