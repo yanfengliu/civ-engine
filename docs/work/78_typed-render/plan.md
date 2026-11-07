@@ -26,7 +26,8 @@ Append TComponents and TState to RenderProjector and RenderAdapter and propagate
 ## Implementation steps
 
 - Done: reproduced compiler failure before implementation; propagated generics; typecheck and 20 focused render cases pass.
-- Active: independent review, full gates and delivery.
+- Done: independent Astra review and F0 test repair/re-review (rounds 0 and 1); all eleven gates pass, 1830 root plus one existing TODO and 22 MCP. Candidate and repair retained as 50fa994 and efe4048.
+- Active: integration, push and hosted acceptance.
 - Pending: idle-life adopts verified artifact and removes casts through its own gates.
 
 ## Outcome
