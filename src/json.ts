@@ -7,37 +7,42 @@ export type JsonValue =
 
 export function assertJsonCompatible(value: unknown, label = 'value'): void {
   const seen = new WeakSet<object>();
+  // Successful validation needs no diagnostic string. Numeric breadcrumbs are
+  // array indexes; object keys remain strings, including keys such as "0".
+  const breadcrumbs: Array<string | number> = [];
 
-  function visit(current: unknown, path: string): void {
+  function reject(reason: string): never {
+    let path = label;
+    for (const part of breadcrumbs) {
+      path += typeof part === 'number' ? `[${part}]` : `.${part}`;
+    }
+    throw new EngineError('json_incompatible', `${path} ${reason}`, { details: { context: path } });
+  }
+
+  function visit(current: unknown): void {
     if (current === null) return;
 
     const type = typeof current;
     if (type === 'string' || type === 'boolean') return;
     if (type === 'number') {
-      if (!Number.isFinite(current)) {
-        throw new EngineError('json_incompatible', `${path} must be a finite JSON number`, { details: { context: path } });
-      }
+      if (!Number.isFinite(current)) reject('must be a finite JSON number');
       return;
     }
-    if (type === 'undefined') {
-      throw new EngineError('json_incompatible', `${path} must not be undefined`, { details: { context: path } });
-    }
+    if (type === 'undefined') reject('must not be undefined');
     if (type === 'bigint' || type === 'function' || type === 'symbol') {
-      throw new EngineError('json_incompatible', `${path} is not JSON-compatible`, { details: { context: path } });
+      reject('is not JSON-compatible');
     }
-    if (type !== 'object') {
-      throw new EngineError('json_incompatible', `${path} is not JSON-compatible`, { details: { context: path } });
-    }
+    if (type !== 'object') reject('is not JSON-compatible');
 
     const object = current as object;
-    if (seen.has(object)) {
-      throw new EngineError('json_incompatible', `${path} contains a circular reference`, { details: { context: path } });
-    }
+    if (seen.has(object)) reject('contains a circular reference');
     seen.add(object);
 
     if (Array.isArray(current)) {
       for (let i = 0; i < current.length; i++) {
-        visit(current[i], `${path}[${i}]`);
+        breadcrumbs.push(i);
+        visit(current[i]);
+        breadcrumbs.pop();
       }
       seen.delete(object);
       return;
@@ -45,16 +50,18 @@ export function assertJsonCompatible(value: unknown, label = 'value'): void {
 
     const prototype = Object.getPrototypeOf(current);
     if (prototype !== Object.prototype && prototype !== null) {
-      throw new EngineError('json_incompatible', `${path} must be a plain object, array, or primitive`, { details: { context: path } });
+      reject('must be a plain object, array, or primitive');
     }
 
     for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
-      visit(child, `${path}.${key}`);
+      breadcrumbs.push(key);
+      visit(child);
+      breadcrumbs.pop();
     }
     seen.delete(object);
   }
 
-  visit(value, label);
+  visit(value);
 }
 
 export function jsonFingerprint(value: unknown, label = 'value'): string {

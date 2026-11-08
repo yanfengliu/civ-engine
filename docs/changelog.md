@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.10.1 — 2026-11-07
+
+Reduces temporary diagnostic-string work during JSON validation. Validation remains enabled and checks the same values, in the same order, with the same rejection codes, messages and contexts. No API, configuration or saved-format migration is required; component publication, complete tick diffs and state fingerprints retain their existing contracts.
+
+Fifteen literal contract cases and the existing component/state/serialization checks cover nested diagnostics, getter ordering and exceptions, sparse arrays, cycles versus shared references and detached results. A bounded five-pair benchmark on retained AoE2 saved components used12.35% less validation CPU with identical fingerprints; this is not a whole-game speedup claim, and smaller workloads were noisy.
+
 ## 2.10.0 — 2026-11-08
 
 Adds `OccupancyBindingOccupyOptions.blocksMovement` to `occupy()`. Pass `false` to claim exclusive placement while admitting movement and subcell units, including units already beneath the footprint. Omission or `true` remains solid on every call. Placement and reservations from other entities still fail; reservations retain their own blocking behavior and `includeReservations:false` ignores only reservations. No dependency or persistent-format change is required.
