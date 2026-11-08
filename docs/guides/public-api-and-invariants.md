@@ -117,6 +117,8 @@ const adapter = new ClientAdapter({
 
 `WorldConfig.strict?: boolean` (**default `true` as of 1.0**; pass `strict: false` to opt out) is the mutation-gate invariant. When `true`, 22 mutation methods on `World` (createEntity, destroyEntity, setComponent et al., setPosition, all resource methods, setState/deleteState, addTag/removeTag, setMeta/deleteMeta, emit, random) throw `StrictModeViolationError` when called outside a system phase / setup window / `runMaintenance(fn)` callback. Registration calls (`registerComponent`/`registerSystem`/etc.), `submit`/`submitWithResult`, `step`/`stepWithResult`, listener add/remove, and read methods are NOT gated.
 
+`precheckCommand` is ungated, but its validators and JSON accessors run under the caller's actual phase, with no rollback or temporary mutation window. It observes validation without engine-owned queue, sequence, listener, warning or tick effects; callbacks are responsible for their own side effects. Transaction predicates forbid it because validators receive the actual mutable World. Precheck acceptance is neither queued work nor a reservation; later submission revalidates.
+
 `applySnapshot` and `deserialize` work at any phase regardless of strict mode. See `docs/guides/strict-mode.md` for escape hatches (`endSetup`, `runMaintenance`), the depth-counted reentrant maintenance contract, and the submit-time callback caller-phase semantics.
 
 ## Surface curation and deprecation policy (v0.8.23+)

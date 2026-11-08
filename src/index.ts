@@ -126,7 +126,7 @@ export {
 } from './visibility-map.js';
 export {
   SYSTEM_PHASES, World, WorldTickFailureError, type CommandExecutionResult,
-  type CommandSubmissionResult, type CommandValidationRejection, type CommandValidationResult,
+  type CommandPrecheckResult, type CommandSubmissionResult, type CommandValidationRejection, type CommandValidationResult,
   type ComponentOptions, type ComponentRegistry, type LooseSystem, type LooseSystemRegistration,
   type System, type SystemPhase, type SystemRegistration, type TickFailure,
   type TickFailurePhase, type TickMetricsProfile, type WorldMetrics, type WorldStepResult,

@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-07 — Paused intentions lacked a validation-only engine entry point
+
+**Symptom:** AoE2 E03 reports human commands disappearing across paused save/load. Its game-owned pending intentions differ from engine queued commands; calling submission merely to validate allocates sequences, emits results and queues execution, so it cannot safely stage a saved intention.
+
+**Engine class check and fix:** `tests/world-command-precheck*.test.ts` and `tests/command-precheck-types.test.ts` cover all accepted P01–P26 contracts: original-input/current validators, JSON clone and hostile callback failures, detached rejection details, no engine-owned queue/sequence/observer/history/warning effects, strict caller phase, readonly transaction exclusion, revalidation and unchanged legacy submission. Twelve temporary regression controls fail their named discriminators and are restored. `World.precheckCommand()` supplies the missing observation without changing a persistence format. The whole paused-submit/save/load consumer class remains open until AoE2 adopts staged intentions and passes its own parity/save checks; this engine capability alone does not close E03.
+
 ## 2026-11-07 — Visibility state reads repeatedly sorted unchanged collections
 
 **Symptom:** AoE2 E19 measured visibility serialization taking more CPU on a live-grown world than the same loaded state. Current source still sorted player/source/explored collections on every read, including repeated unchanged reads and movement that changed no membership or explored cells.

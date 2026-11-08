@@ -3,9 +3,11 @@
 Status: active
 Owner: Codex engine-feedback worker
 Created: 2026-10-01
-Updated: 2026-10-02
+Updated: 2026-11-07
 
 ## Problem and outcome
+
+November 7 M3 update: accepted precheck Option A is implemented as candidate 2.9.0 in [work 80](../80_command-precheck/plan.md), with all eleven local gates, focused tests, controls and the P25 fixture correction recorded there. Independent review and delivery remain pending; E03 game paused-save adoption stays OPEN. The October 2 checkpoint below is historical preparation context, not the current allocation or implementation status.
 
 The owner explicitly assigned all current aoe2 engine feedback for investigation and repair. Each comment receives a fresh source-backed disposition and a bounded acceptance check. Actionable changes ship in independent milestones rather than one broad engine rewrite. AoE2 work 106 remains independently owned by the game orchestrator.
 

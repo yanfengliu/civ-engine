@@ -2,6 +2,8 @@
 
 This guide covers system design, tick execution, real-time vs. deterministic stepping, and speed control.
 
+`precheckCommand()` does not advance the simulation or queue work. It uses the existing observable tick (published metrics/diff/failure and completed loop tick), which can remain the preceding tick inside a running system. Validators keep the caller's strict-mode phase and may have side effects; later submission always validates again.
+
 ## Table of Contents
 
 1. [Writing Systems](#writing-systems)

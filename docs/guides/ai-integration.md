@@ -29,6 +29,8 @@ It also exports explicit version markers through `getAiContractVersions()`, so a
 
 ## Command Submission
 
+Use `world.precheckCommand(type, data)` to observe current validator acceptance before submitting an intention. It returns the seven-field `CommandPrecheckResult` (`accepted`, `commandType`, `code`, `message`, detached `details`, observable `tick`, `validatorIndex`) without queueing, sequence allocation, warning emission or recorder/history output. It has no `schemaVersion` or identity and grants no reservation. A later submission revalidates. Accepted input crosses the normal JSON clone boundary; callback/getter errors propagate, and callbacks retain their caller-phase side effects. The game owns staging, save/load and eventual submission; see [Commands and Events](commands-and-events.md).
+
 Use `world.submitWithResult()` instead of `world.submit()` when the agent needs more than a pass/fail bit:
 
 ```typescript
@@ -176,12 +178,12 @@ In `minimal` mode:
 
 - implicit `step()` keeps counts and total tick duration
 - detailed phase timings and per-system timing entries are skipped
-- `submit()` uses the lower-overhead boolean fast path when no command-result listeners are attached
+- `submit()` remains the boolean compatibility wrapper over `submitWithResult()`
 
 In `release` mode:
 
 - implicit `step()` skips per-tick metrics collection
-- `submit()` uses a boolean fast path when no command-result listeners are attached
+- `submit()` remains the boolean compatibility wrapper over `submitWithResult()`
 - explicit AI/debug APIs such as `submitWithResult()` and `stepWithResult()` still produce structured results when you call them
 
 ## Transport Protocol

@@ -21,6 +21,8 @@ export const FORBIDDEN_PRECONDITION_METHODS = [
   'setResourceMax', 'setProduction', 'setConsumption',
   // Events / commands
   'emit', 'submit', 'submitWithResult',
+  // Precheck invokes validators with the real World, so callbacks may write.
+  'precheckCommand',
   // Tick / engine lifecycle
   'step', 'stepWithResult', 'recover',
   'start', 'stop', 'setSpeed', 'pause', 'resume',

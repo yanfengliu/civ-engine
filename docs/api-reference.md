@@ -278,7 +278,7 @@ interface CommandValidationRejection {
 }
 ```
 
-Structured validator rejection used by `registerValidator()` and `submitWithResult()`.
+Structured validator rejection used by `registerValidator()`, `precheckCommand()` and `submitWithResult()`.
 
 ### `CommandValidationResult`
 
@@ -288,6 +288,22 @@ type CommandValidationResult = boolean | CommandValidationRejection;
 ```
 
 Validators may still return `true` or `false`. Returning a rejection object preserves stable machine-readable details.
+
+### `CommandPrecheckResult<TCommandType>`
+
+```typescript
+interface CommandPrecheckResult<TCommandType extends PropertyKey = string> {
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  validatorIndex: number | null;
+}
+```
+
+The seven-field observation returned by `world.precheckCommand()`. Acceptance uses `code: 'accepted'`, `message: 'Command passed validation'`, and null details/index. Rejection preserves the first validator's normalized code, message and zero-based index, with detached JSON details. It has no submission sequence, schema version or durable identity. `tick` follows the existing observable tick helper: the latest completed loop tick, published metrics/diff tick or failure tick; inside a system it can still be the preceding completed tick.
 
 ### `CommandSubmissionResult<TCommandType>`
 
@@ -1685,6 +1701,21 @@ Submits a command. All registered validators for this command type are run immed
 const accepted = world.submit('moveUnit', { entityId: 0, targetX: 5, targetY: 3 });
 // accepted: true if validation passed
 ```
+
+#### `precheckCommand<K>(type, data)`
+
+```typescript
+precheckCommand<K extends keyof TCommandMap>(
+  type: K,
+  data: TCommandMap[K],
+): CommandPrecheckResult<K>
+```
+
+Runs current validators once, in registration order, against the original input and actual World, stopping at the first rejection. Rejected payloads are not traversed; rejection details must be JSON and are cloned. After all validators pass, the existing submission JSON clone boundary runs on the payload and its copy is discarded. Invalid JSON, getters, `toJSON`, validator errors and invalid returns propagate normally, including original thrown-value identity.
+
+The method itself allocates no sequence, queues no command, emits no command result, advances no tick, and does not warn about or recover poison. No handler is required. Callback side effects are not rolled back: validators and JSON accessors can mutate caller data or the World under the caller's existing strict-mode phase. Precheck opens no mutation window and is forbidden in transaction predicates for this reason.
+
+This is a current observation, not reserved acceptance. Store a detached intention in game-owned state if needed; later `submitWithResult()` revalidates and reports actual queue acceptance, and `onCommandExecution()` reports handler execution. Already queued commands retain their existing execution semantics. Prechecks do not appear in session recordings or history unless callbacks explicitly perform recorded operations.
 
 #### `submitWithResult<K>(type, data)`
 

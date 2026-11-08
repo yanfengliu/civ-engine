@@ -43,12 +43,14 @@ The following methods throw `StrictModeViolationError` when called outside a sys
 What is **NOT** gated (allowed at any time, even in strict mode):
 
 - Registration: `registerComponent`, `registerSystem`, `registerHandler`, `registerValidator`, `registerResource`
-- Loop / submission: `submit`, `submitWithResult`, `step`, `stepWithResult`, `pause`, `resume`, `setSpeed`, `recover`
+- Loop / command observation and submission: `precheckCommand`, `submit`, `submitWithResult`, `step`, `stepWithResult`, `pause`, `resume`, `setSpeed`, `recover`
 - Reads: `serialize`, `getDiff`, `getMetrics`, `getEvents`, `getState`, all `get*`/`is*`/`has*` methods
 - Listener add/remove: `on`/`off`/`onDiff`/`offDiff`/`onCommandResult`/`onCommandExecution`/`onTickFailure`/etc.
 - `applySnapshot` (uses an internal maintenance increment)
 
 ## Escape hatches
+
+`precheckCommand()` is also callable at any phase, but runs validators with the original input and actual World in the caller's current phase. It opens no setup, tick or maintenance window and rolls back no callback writes. A validator that calls `setState()` after `endSetup()` throws the same `StrictModeViolationError` under precheck as under submission. Because validators may write, transaction predicates exclude `precheckCommand()` both in their readonly type and at runtime.
 
 ### The setup window
 

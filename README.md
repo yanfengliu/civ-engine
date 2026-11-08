@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.8.2-blue)
+![version](https://img.shields.io/badge/version-2.9.0-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. No production deployment has exercised the engine end-to-end, so treat it as suitable for prototyping and AI-agent experiments. Pin a verified prebuilt archive (see [Install](#install)) and read the [changelog](docs/changelog.md) before upgrading.
 
@@ -87,7 +87,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | **Typed Components** | Optional `ComponentRegistry` type param for type-safe `getComponent`/`setComponent`/`query` without manual generics |
 | **Systems** | Pure `(world) => void` functions with optional phase and `before`/`after` ordering constraints |
 | **System Cadence** | Optional `interval` / `intervalOffset` fires periodic systems at engine level, replacing `if (w.tick % N) return;` boilerplate |
-| **Commands** | Typed input buffer with validators, queue-time submission results, tick-time execution results, and handlers — how AI agents send instructions |
+| **Commands** | Typed validators, `World.precheckCommand()` / `CommandPrecheckResult` for current acceptance observation, queue-time submission results, tick-time execution results, and handlers |
 | **Events** | Typed pub/sub — how systems communicate and how observers read what happened |
 | **Resources** | Numeric pools (current/max) per entity with production, consumption, and transfers |
 | **Atomic Transactions** | `world.transaction()` chainable propose-validate-commit-or-abort builder — buffer mutations, events, and `require()` preconditions, then apply all-or-nothing on precondition failure or abort (a mutation that *throws* mid-commit consumes the transaction and can leave partial state) |

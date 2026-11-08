@@ -1,6 +1,6 @@
 # Avoid repeated visibility serialization sorting
 
-Status: active
+Status: complete
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -30,11 +30,11 @@ Cache sorted player/source IDs until membership changes, reading current source 
 - Done: private caches and bounded native benchmark against the verified2.8.1 archive. Source/value semantics, snapshots and existing metrics match the independent oracle.
 - Done: candidate2.8.2 passes all eleven gates (1855 root plus one existing TODO,22 MCP); no high/critical audit findings, seven moderate dev findings remain.
 - Done: independent Astra/xhigh review of exact tree0a55ac7c5184f32a0d352b4999d175ceafc3a367, now recoverable at commit0e3e78f. No material findings; minor V1 complexity wording corrected and content-checked. Full authored report is retained in reviews/0_implementation.md.
-- Active: integration, push/hosted acceptance and cleanup.
+- Done: main228380beb3673189ea9a6cc848362076777e6440 pushed; CI42428958354 passed Node20/22/24 and publish-dist. Root verified downloaded retained archive, package/runtime2.8.2 and cleanup.
 
 ## Outcome
 
-Pending engine delivery. Work77's retained artifact producer passed hosted CI42425758281; Farm adopted verified2.8.1 at main87c70e9 with its own gates/review. City is the next consumer. Validation/state scan requests remain open until fresh consumer measurements justify their own changes.
+Engine producer delivered at main228380beb3673189ea9a6cc848362076777e6440. Retained asset722374253 is civ-engine-228380beb3673189ea9a6cc848362076777e6440.tgz, rolling asset722374282,664600 bytes,SHA256dac3543c7037a2fb33c6b3528d4bcacb54fce0d6505a548e2584ea34017a8bf8; root inspected downloaded archive and package/runtime2.8.2. Root removed work79's worktree/branch after scanning and detaching its MCP junction; zero task processes remained. The required archive was copied to the AoE2 private proof. These delivery/cleanup facts were supplied by root on2026-11-07. Visibility ordering is a shipped producer improvement, not a measured game speedup. Validation/state scan requests remain open until fresh consumer measurements justify their own changes.
 
 ## Measurement
 

@@ -239,6 +239,15 @@
     "submissionSequence",
     "tick"
   ],
+  "CommandPrecheckResult": [
+    "accepted",
+    "code",
+    "commandType",
+    "details",
+    "message",
+    "tick",
+    "validatorIndex"
+  ],
   "CommandQuery": [
     "from?",
     "outcome?",
@@ -1840,6 +1849,7 @@
     "poisoned",
     "poisonedWarningEmitted",
     "positionKey",
+    "precheckCommand",
     "previousPositions",
     "processCommands",
     "query",

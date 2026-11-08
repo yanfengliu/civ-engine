@@ -100,6 +100,17 @@ export interface CommandValidationRejection {
 
 export type CommandValidationResult = boolean | CommandValidationRejection;
 
+/** Current validation observation; not a submission, reservation, or durable record. */
+export interface CommandPrecheckResult<TCommandType extends PropertyKey = string> {
+  accepted: boolean;
+  commandType: TCommandType;
+  code: string;
+  message: string;
+  details: JsonValue | null;
+  tick: number;
+  validatorIndex: number | null;
+}
+
 export interface CommandSubmissionResult<
   TCommandType extends PropertyKey = string,
 > {

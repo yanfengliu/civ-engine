@@ -4,6 +4,8 @@ This guide covers the core concepts and gets you running a minimal simulation in
 
 ## Installation
 
+When an interface needs feedback before queueing a command, `world.precheckCommand(type, data)` observes current validation. Actual submission still uses `submit()` or `submitWithResult()` and validates again; see [Commands and Events](commands-and-events.md).
+
 Requires Node.js 20+.
 
 To **use** the engine in a project, install a retained prebuilt tarball (it is not on npm yet — see the [README](../../README.md#install)). Choose an existing commit-named asset from the engine-dist release and replace `FULL_SOURCE_COMMIT_SHA` with its 40-character SHA:

@@ -20,6 +20,7 @@ import {
 } from './world-internal.js';
 import type {
   CommandExecutionResult,
+  CommandPrecheckResult,
   CommandSubmissionResult,
   CommandValidationResult,
   ComponentRegistry,
@@ -41,6 +42,38 @@ export abstract class WorldCommands<
 
   transaction(): CommandTransaction<TEventMap, TCommandMap, TComponents, TState> {
     return new CommandTransaction<TEventMap, TCommandMap, TComponents, TState>(this.asWorld());
+  }
+
+  /** Observe current validation without submitting. Validator side effects are not rolled back. */
+  precheckCommand<K extends keyof TCommandMap>(
+    type: K,
+    data: TCommandMap[K],
+  ): CommandPrecheckResult<K> {
+    const rejection = this.validateCommand(type, data);
+    if (rejection) {
+      return {
+        accepted: false,
+        commandType: type,
+        code: rejection.code,
+        message: rejection.message,
+        details: cloneJsonValue(rejection.details, `command precheck details for '${String(type)}'`),
+        tick: this.getObservableTick(),
+        validatorIndex: rejection.validatorIndex,
+      };
+    }
+
+    // Match submission's JSON clone failure boundary, including getters/toJSON,
+    // without retaining a payload, allocating a sequence, or emitting a result.
+    cloneJsonValue(data, `command '${String(type)}'`);
+    return {
+      accepted: true,
+      commandType: type,
+      code: 'accepted',
+      message: 'Command passed validation',
+      details: null,
+      tick: this.getObservableTick(),
+      validatorIndex: null,
+    };
   }
 
   submitWithResult<K extends keyof TCommandMap>(

@@ -166,6 +166,7 @@
     "ClientAdapter",
     "ClientMessage",
     "CommandExecutionResult",
+    "CommandPrecheckResult",
     "CommandQuery",
     "CommandSequenceMap",
     "CommandSubmissionResult",

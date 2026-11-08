@@ -2,6 +2,8 @@
 
 This guide explains the fundamental design patterns and principles behind civ-engine.
 
+Command intent has three stages: `precheckCommand()` optionally observes current validation, `submitWithResult()` validates and queues, and `onCommandExecution()` reports execution. Precheck reserves nothing; the game owns any staged intention and its persistence. See [Commands and Events](commands-and-events.md).
+
 ## Table of Contents
 
 1. [Design Philosophy](#design-philosophy)

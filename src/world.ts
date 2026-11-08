@@ -51,6 +51,7 @@ export type {
   SystemRegistration,
   WorldMetrics,
   CommandSubmissionResult,
+  CommandPrecheckResult,
   CommandExecutionResult,
   TickFailure,
   WorldStepResult,

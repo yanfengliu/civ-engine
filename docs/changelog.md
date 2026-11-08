@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.0 — 2026-11-07
+
+Adds `World.precheckCommand(type, data)` and the Node/browser type `CommandPrecheckResult` to observe current command validation before submission. Its seven fields carry acceptance or the first normalized rejection, detached details and the existing observable tick. It does not enqueue, allocate a sequence, emit a command result, advance a tick, consume a poison warning or create a recording/history entry by itself. No migration or persistent-format change is required.
+
+Precheck acceptance is temporary: the game owns staged intentions and their save/load behavior, and later submission revalidates. Validators receive the original data and actual World in the caller's strict-mode phase; their side effects are not rolled back. Accepted inputs cross the existing submission JSON clone boundary, including getter/`toJSON` failures. Transaction predicates exclude precheck because validators can write. Existing submission and validator-normalization behavior is unchanged.
+
 ## 2.8.2 — 2026-11-07
 
 VisibilityMap reuses canonical player/source order until membership changes and explored-cell order until the explored set grows. Repeated `getState()` and `getSources()` calls avoid redundant sorting; moving a source still reads its current values. State bytes, query/update behavior, validation and metrics are unchanged, with no migration needed.

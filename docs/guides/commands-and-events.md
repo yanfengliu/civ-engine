@@ -31,14 +31,28 @@ External code  ──submit()──▶  Validators  ──pass──▶  Queue  
                                   └──fail──▶  returns false
 ```
 
-There are now two distinct command feedback stages:
+There are three distinct command feedback stages:
 
-1. submission time: `submitWithResult()` / `onCommandResult()`
-2. tick execution time: `onCommandExecution()`
+1. optional current observation: `precheckCommand()`
+2. submission time: `submitWithResult()` / `onCommandResult()`
+3. tick execution time: `onCommandExecution()`
 
 For AI or transport integrations, do not treat queue acceptance as proof that the command logic succeeded.
 
 ## Defining Command Types
+
+`world.precheckCommand(type, data)` runs the current validator pipeline without enqueueing, allocating a submission sequence, emitting a result or advancing the tick. Its `CommandPrecheckResult` has exactly `accepted`, `commandType`, `code`, `message`, `details`, `tick` and `validatorIndex`. Accepted observations say `Command passed validation`; they need no handler. Rejection details are detached. Accepted payloads cross the same JSON clone boundary as submission, so getters, `toJSON` and invalid JSON can throw normally.
+
+For a paused intention, precheck first, then keep a detached copy in game-owned saved state. This example's `staged` belongs to the game; the engine does not persist it:
+
+```typescript
+const observation = world.precheckCommand('moveUnit', input);
+if (observation.accepted) staged.push(structuredClone(input));
+// Later, after resume/load, validation runs again against current state:
+for (const intention of staged) world.submitWithResult('moveUnit', intention);
+```
+
+Acceptance can become stale before submission. Already queued commands are not revalidated at execution. Validators receive the original input and actual World: side effects remain visible on success, rejection or throw, with normal strict-mode restrictions. Precheck itself leaves warnings, poison, queues, recorders and history untouched; a callback that submits work or changes state remains responsible for those effects. Use pure validators for observational use, and do not call precheck inside a transaction predicate.
 
 Define command types as a TypeScript record mapping command names to their payload types:
 
@@ -55,7 +69,7 @@ const world = new World<Record<string, never>, GameCommands>({
 });
 ```
 
-The second type parameter of `World` is the command map. This gives you type-safe `submit()`, `submitWithResult()`, `registerValidator()`, and `registerHandler()` calls.
+The second type parameter of `World` is the command map. This gives you type-safe `precheckCommand()`, `submit()`, `submitWithResult()`, `registerValidator()`, and `registerHandler()` calls.
 
 ### Stale entity references
 
@@ -79,7 +93,7 @@ Bare `EntityId` is still fine for short-lived internal system work where the ID 
 
 ## Validators
 
-Validators run synchronously when `submit()` or `submitWithResult()` is called. They decide whether a command is valid and should be queued.
+Validators run synchronously when `precheckCommand()`, `submit()` or `submitWithResult()` is called. They decide whether a command is currently valid; only submission can queue it.
 
 ```typescript
 world.registerValidator('moveUnit', (data, w) => {

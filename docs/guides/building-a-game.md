@@ -6,6 +6,8 @@ This tutorial walks through building a small but complete real-time colony survi
 
 ## Table of Contents
 
+For a UI that stages commands while paused, use `world.precheckCommand(type, data)` for current feedback, store detached intentions in game-owned saved state, and submit them after resume. Submission revalidates; precheck alone cannot make a command survive save/load. See [Commands and Events](commands-and-events.md).
+
 1. [Setup](#1-setup)
 2. [Map Generation](#2-map-generation)
 3. [Spawning Units](#3-spawning-units)

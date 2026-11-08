@@ -1,10 +1,10 @@
 # AoE2 engine adoption scope
 
-Prepared 2026-11-07 by Codex for the active engine priority backlog. This is a task proposal, not a change to AoE2's ownership or worktree rules.
+Prepared and approved in scope2026-11-07 for the active engine priority backlog. This records the owner's task decision, not a permanent change to AoE2's ownership or worktree rules.
 
-## Required owner decision
+## Owner decision — 2026-11-07
 
-AoE2 docs/policies/rules/work-records.md retains the October11 direction that Codex is not working on AoE2 and the Claude coordinator owns all its work until the owner says otherwise. Its worktrees.md requires controlWorktree.mjs and forbids npm install/ci in worktrees because their entire node_modules directory links to primary. Engine work can continue independently; implementing the AoE2 part requires a scoped owner override for this backlog and an isolated-dependency exception.
+The owner explicitly approved this scoped AoE2 adoption work and private dependencies on2026-11-07, superseding the October11 Codex ownership restriction for this task. Root owns AoE2 work153/engine-pin-1107 and uses controlWorktree.mjs. Detach only the task-created node_modules junction and install isolated dependencies; never install or build through shared junctions. The standing rules remain unchanged outside this scope.
 
 ## Concrete first change
 
@@ -14,7 +14,7 @@ Adapt existing civEngineInternalHelpers.test.ts and ciDownloadRetry.test.ts to c
 
 ## Isolation and acceptance
 
-Create/remove only through controlWorktree.mjs. With the requested exception, detach only the task-created node_modules junction non-recursively and install private dependencies. Establish a private, verified voxel input where necessary; do not run installation or producer builds through a shared dependency junction or alter shared primary dist. Preserve all existing peer worktrees, especially render-projection-cost-1106; no liveness claim is inferred from their age.
+Create/remove only through controlWorktree.mjs. With the approved scoped exception, detach only the task-created node_modules junction non-recursively and install private dependencies. Establish a private, verified voxel input where necessary; do not run installation or producer builds through a shared dependency junction or alter shared primary dist. Preserve all existing peer worktrees, especially render-projection-cost-1106; no liveness claim is inferred from their age.
 
 Run ci:status, scoped package/workflow contracts and audits, then take the primary gate lock for final integration/verify/push. Use a unique preview port, headless browsers, owned process cleanup and the actual verify-receipt check. Independently review the exact candidate, merge/push only after gates pass, follow CI and corpus to terminal results, then retire the task through the controller.
 
