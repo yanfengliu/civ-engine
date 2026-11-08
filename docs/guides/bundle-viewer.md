@@ -245,3 +245,7 @@ No persistent state is written; constructing N viewers over the same bundle pays
 | `ReplayHandlerMissingError` | `handler_missing` | replay needs a command handler not registered by `worldFactory` |
 
 `BundleViewerError` codes are scoped to that class; other subsystems (e.g., `CorpusIndexError`) reuse some code strings (`query_invalid`) but the class differs, so `instanceof` checks separate them cleanly.
+
+## Pure-data snapshot ordering
+
+`snapshotAtTick(bundle, tick)` reconstructs recorded component changes without a World factory. Changed component rows are emitted in ascending numeric entity-ID order, matching `World.serialize()` even after lower-ID insertion, removal/re-addition or ID reuse. This ordering correction does not extend the fold beyond recorded diffs: RNG, configuration, component options and non-pool resource bookkeeping still come from the selected checkpoint. Use `SessionReplayer.openAt(tick).serialize()` for fully replayed state.

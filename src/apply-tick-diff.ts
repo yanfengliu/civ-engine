@@ -64,7 +64,8 @@ export function applyTickDiff(snapshot: WorldSnapshot, diff: TickDiff): WorldSna
     if (map.size === 0) {
       delete components[type];
     } else {
-      components[type] = Array.from(map);
+      // Match ComponentStore.entries()/World.serialize after lower-ID insertion or reuse.
+      components[type] = Array.from(map).sort(([a], [b]) => a - b);
     }
   }
 

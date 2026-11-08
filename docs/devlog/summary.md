@@ -1,5 +1,6 @@
 # Devlog Summary
 
+- 2026-11-08: Prepared2.13.1 numeric component-order repair after work157 exposed a pure-data fold mismatch; six genuine RED cases and81 focused/type/lint/build checks pass. Work89/game160 setter observation is rejected by its unchanged24-pair CPU rule; favorable medians did not meet all-sign consistency. Review/full delivery remain.
 - 2026-11-08: Rejected work88 empty-store guard after54 native A/A/A-B comparisons: output parity and avoided containers hold, but saved-input cost benefit is small/noisy. Independent review agrees; candidate retained, production stays2.13.0. No game speedup claimed.
 - 2026-11-08: Fractional visibility2.13.0 delivered atca5e15a with full11, exact review, CI42461575774 and actual retained Node/browser runtime. Both owned worktrees/branches are cleaned; rejected optimizer research is hash-retained, no speedup accepted. AoE2 work158 adoption and E02 work88 experiment remain separate.
 - 2026-11-07: Prepared2.13.0 approved fractional visibility centers (work85) using the shipped algorithm. Genuine17RED/3controls,66focused passes, five faults and600 integer-parity boundaries passed; independent source review accepted, one guide error-code sentence corrected. Rejected five-attempt optimizer retained separately; full delivery/game adoption remain.

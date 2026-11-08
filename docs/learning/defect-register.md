@@ -8,6 +8,13 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-08 — Folded component snapshots changed entity order
+
+**Observed during the engine backlog acceptance:** AoE2 work157 retained a complete168-map recording with matching played state and raw replay, then its unchanged Resource component comparison failed at24501. Both arrays contained3,113 identical entity rows, but lower ID31076 appeared last in the fold;447 array positions differed.
+
+**Root cause and class check:** ComponentStore serialization traverses numeric IDs, while the pure-data fold emitted insertion-ordered Map entries. Sort changed component arrays numerically before returning them; resource pools and bundle data remain untouched. `tests/snapshot-component-order.test.ts` exercises late lower-ID insertion, component removal/re-addition and destroyed-ID reuse from initial and real periodic checkpoints, with literal IDs2/10/11, complete live values, unaffected stores and detached inputs. All six failed the intended order assertion before repair; all six and75 existing fold/viewer/release cases passed afterward. Full gates, retained-artifact follow-up and delivery remain pending at this preparation checkpoint.
+
+
 ## 2026-11-08 — Visibility source validation rejected true fractional centers
 
 **Symptom:** E17 requires vision circles centered on moving units' true positions. Source input and restored source values shared the integer cell-query validator, rejecting finite fractions even though the existing inclusive raster equation can evaluate them.

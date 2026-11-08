@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.13.1 — 2026-11-08
+
+Fixes component-row order in snapshots reconstructed from recorded tick diffs. When a lower entity ID gains or regains a component, `snapshotAtTick` now emits the changed component store in ascending numeric entity-ID order, matching `World.serialize()`. Complete component values and recorded bundle bytes are unchanged; no caller migration, new API or saved field is required. The existing partial-hydration limits remain: use `SessionReplayer.openAt(tick).serialize()` when replayed RNG, configuration or resource bookkeeping is required.
+
 ## 2.13.0 — 2026-11-07
 
 `VisibilityMap.setSource` and `VisibilityMap.fromState` now accept finite fractional vision-source x/y coordinates within the existing map bounds. Sight circles use those values directly against integer grid-cell coordinates, with no rounding or half-cell offset. Radius validation, batching, exploration, canonical output ordering, integer point queries and the existing three metrics are unchanged. No new exports or state fields are added.

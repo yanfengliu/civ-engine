@@ -6854,6 +6854,8 @@ function snapshotAtTick(bundle: SessionBundle, tick: number): WorldSnapshot
 
 Pure-data state materialization: the world snapshot at submission-tick `tick` (i.e. BEFORE stepping `tick`), folded from the bundle's nearest recorded snapshot plus `TickDiff`s — **zero World construction, no `worldFactory`**. Throws `BundleRangeError` (`too_low`/`too_high`) outside `[startTick, max(endTick, persistedEndTick)]` (incomplete bundles use `persistedEndTick`; the `max` recovers a legacy understated `endTick`), `BundleIntegrityError` `replay_across_failure` when any recorded failed tick precedes or equals the requested tick (folding across a failure is meaningless — inspect the terminal snapshot directly instead), and `missing_tick_entries` when the fold range has gapped tick entries (a truncated/tampered bundle body must error, not yield silently wrong state). Powers the MCP server's state tools (`docs/guides/mcp-server.md`) and `BundleViewer.diffSince`-style comparisons without game code.
 
+Changed component rows are emitted in ascending numeric entity-ID order, matching `World.serialize()` even after lower-ID insertion, removal/re-addition or ID reuse. This ordering correction does not extend the fold beyond recorded diffs: RNG, configuration, component options and non-pool resource bookkeeping still come from the selected checkpoint. Use `SessionReplayer.openAt(tick).serialize()` for fully replayed state.
+
 ## VisibilityMap metrics (v1.1.0)
 
 ```typescript

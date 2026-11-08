@@ -276,3 +276,5 @@ The fork builder is single-use (call after `.run()` throws `BuilderConsumedError
 ## Strict mode (v0.8.8+)
 
 `SessionReplayer.selfCheck()` is the post-hoc determinism verification. Strict mode (`WorldConfig.strict`, Spec 6) is the **structural complement**: violations throw at the call site rather than surfacing as replay divergences. See `docs/guides/strict-mode.md`. Bundle output is byte-identical between strict and non-strict worlds for the same seed/inputs (modulo the `config.strict` flag in the snapshot).
+
+Pure-data `snapshotAtTick` reconstruction preserves numeric entity-ID order for changed component arrays, including lower-ID insertion and reuse. This is separate from full replay; RNG/configuration and other fields absent from tick diffs still require `SessionReplayer.openAt(tick).serialize()`.
