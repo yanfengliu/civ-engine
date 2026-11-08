@@ -203,6 +203,8 @@ The map tracks:
 - Serializable state via `getState()` / `fromState()`
 - Deterministic metrics via `getMetrics()` / `resetMetrics()` (recomputes, computed cells, visibility queries — parity with `OccupancyGrid`)
 
+Repeated `getState()` and `getSources()` calls reuse private canonical orderings. Membership changes invalidate key order; genuinely new explored cells invalidate cell order. Returned arrays/source objects are still fresh, and snapshot construction still copies O(output size) data. The tradeoff is retained ID/cell arrays; source rasterization, validation and existing metrics are unchanged.
+
 ## Benchmarking
 
 Run the built-in RTS benchmark harness with:

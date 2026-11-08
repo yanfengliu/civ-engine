@@ -1713,6 +1713,10 @@
     {
       "id": 78,
       "theme": "typed-render"
+    },
+    {
+      "id": 79,
+      "theme": "visibility-order"
     }
   ]
 }

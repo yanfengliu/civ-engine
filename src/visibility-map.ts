@@ -44,12 +44,15 @@ interface PlayerVisibilityState {
   sources: Map<VisionSourceId, VisionSource>;
   visible: Set<number>;
   explored: Set<number>;
+  sortedSourceIds: VisionSourceId[] | null;
+  sortedExplored: number[] | null;
 }
 
 export class VisibilityMap {
   readonly width: number;
   readonly height: number;
   private players = new Map<VisibilityPlayerId, PlayerVisibilityState>();
+  private sortedPlayerIds: VisibilityPlayerId[] | null = null;
   private metrics = createVisibilityMapMetrics();
   private dirtyPlayers = new Set<VisibilityPlayerId>();
 
@@ -79,6 +82,7 @@ export class VisibilityMap {
       return;
     }
 
+    if (!current) player.sortedSourceIds = null;
     player.sources.set(sourceId, {
       x: source.x,
       y: source.y,
@@ -91,12 +95,14 @@ export class VisibilityMap {
     const player = this.players.get(playerId);
     if (!player) return;
     if (player.sources.delete(sourceId)) {
+      player.sortedSourceIds = null;
       this.dirtyPlayers.add(playerId);
     }
   }
 
   clearPlayer(playerId: VisibilityPlayerId): void {
     if (this.players.delete(playerId)) {
+      this.sortedPlayerIds = null;
       this.dirtyPlayers.delete(playerId);
     }
   }
@@ -109,13 +115,15 @@ export class VisibilityMap {
         continue;
       }
 
-      const visible = this.computeVisible(player.sources);
+      const visible = this.computeVisible(player);
       this.metrics.recomputes++;
       this.metrics.computedCells += visible.size;
       player.visible = visible;
+      const exploredSize = player.explored.size;
       for (const cell of visible) {
         player.explored.add(cell);
       }
+      if (player.explored.size !== exploredSize) player.sortedExplored = null;
       this.dirtyPlayers.delete(playerId);
     }
   }
@@ -153,24 +161,17 @@ export class VisibilityMap {
   ): Array<[VisionSourceId, VisionSource]> {
     const player = this.peekUpdated(playerId);
     if (!player) return [];
-    return [...player.sources.entries()]
-      .sort(compareByNormalizedKey)
-      .map(([sourceId, source]) => [sourceId, { ...source }]);
+    return this.copySources(player);
   }
 
   getState(): VisibilityMapState {
     this.update();
-    const players: VisibilityMapState['players'] = [...this.players.entries()]
-      .sort(compareByNormalizedKey)
-      .map(([playerId, player]) => [
-        playerId,
-        {
-          sources: [...player.sources.entries()]
-            .sort(compareByNormalizedKey)
-            .map(([sourceId, source]) => [sourceId, { ...source }]),
-          explored: [...player.explored].sort((a, b) => a - b),
-        },
-      ]);
+    const ids = this.sortedPlayerIds ??= [...this.players.keys()].sort(compareNormalizedKeys);
+    const players: VisibilityMapState['players'] = ids.map((playerId) => {
+      const player = this.players.get(playerId)!;
+      const explored = player.sortedExplored ??= [...player.explored].sort((a, b) => a - b);
+      return [playerId, { sources: this.copySources(player), explored: [...explored] }];
+    });
 
     return {
       width: this.width,
@@ -207,8 +208,11 @@ export class VisibilityMap {
         sources: new Map(),
         visible: new Set(),
         explored: new Set(),
+        sortedSourceIds: null,
+        sortedExplored: null,
       };
       this.players.set(playerId, player);
+      this.sortedPlayerIds = null;
     }
     return player;
   }
@@ -225,13 +229,21 @@ export class VisibilityMap {
     return player;
   }
 
-  private computeVisible(
-    sources: Map<VisionSourceId, VisionSource>,
-  ): Set<number> {
-    const visible = new Set<number>();
-    const sortedSources = [...sources.entries()].sort(compareByNormalizedKey);
+  private orderedSourceIds(player: PlayerVisibilityState): VisionSourceId[] {
+    // Store identities, not values: moving an existing source replaces its value.
+    return player.sortedSourceIds ??= [...player.sources.keys()].sort(compareNormalizedKeys);
+  }
 
-    for (const [, source] of sortedSources) {
+  private copySources(player: PlayerVisibilityState): Array<[VisionSourceId, VisionSource]> {
+    return this.orderedSourceIds(player)
+      .map((sourceId) => [sourceId, { ...player.sources.get(sourceId)! }]);
+  }
+
+  private computeVisible(player: PlayerVisibilityState): Set<number> {
+    const visible = new Set<number>();
+
+    for (const sourceId of this.orderedSourceIds(player)) {
+      const source = player.sources.get(sourceId)!;
       const minX = Math.max(0, Math.floor(source.x - source.radius));
       const maxX = Math.min(this.width - 1, Math.ceil(source.x + source.radius));
       const minY = Math.max(0, Math.floor(source.y - source.radius));
@@ -270,16 +282,16 @@ export class VisibilityMap {
   }
 }
 
-function compareByNormalizedKey<T extends string | number>(
-  a: [T, unknown],
-  b: [T, unknown],
+function compareNormalizedKeys<T extends string | number>(
+  a: T,
+  b: T,
 ): number {
   // Code-unit comparison, NOT localeCompare: getState()'s canonical player/source
   // ordering must be deterministic across V8/ICU versions so a cross-runtime
   // stateDigest of visibility state stays stable for non-ASCII ids
   // (full-review 2026-07-10 L8).
-  const ka = normalizeKey(a[0]);
-  const kb = normalizeKey(b[0]);
+  const ka = normalizeKey(a);
+  const kb = normalizeKey(b);
   return ka < kb ? -1 : ka > kb ? 1 : 0;
 }
 

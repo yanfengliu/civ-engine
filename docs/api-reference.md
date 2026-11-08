@@ -3489,7 +3489,7 @@ Returns explored cells as positions.
 getSources(playerId: VisibilityPlayerId): Array<[VisionSourceId, VisionSource]>
 ```
 
-Returns the player's current sources in deterministic order.
+Returns the player's current sources in deterministic order, with new tuples and source objects. Source ordering is reused internally until source membership changes; moved sources return their current values.
 
 #### `getState()`
 
@@ -3497,7 +3497,7 @@ Returns the player's current sources in deterministic order.
 getState(): VisibilityMapState
 ```
 
-Returns a JSON-safe visibility snapshot.
+Returns a JSON-safe visibility snapshot after flushing pending updates. Player/source keys retain normalized code-unit ordering and explored cells retain numeric order. Private ordering caches avoid repeated sorting when membership/exploration is unchanged. Each call still returns new arrays and source objects and costs O(output size); caches retain additional ID/cell arrays. Metrics and the saved-state format are unchanged.
 
 #### `VisibilityMap.fromState(state)`
 

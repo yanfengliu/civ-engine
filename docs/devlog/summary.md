@@ -1,8 +1,8 @@
 # Devlog Summary
 
-- 2026-11-07: Candidate 2.8.1 retains commit-named prebuilt archives before refreshing the rolling download (work 77; 4c4e989); owner publication approval, independent Astra review and all eleven gates passed (1847 root plus one TODO, 22 MCP). Hosted archive verification and consumer pin migrations follow.
+- 2026-11-07: Candidate2.8.2 caches canonical visibility ordering (work79). Seeded cell oracle, ordering regression control and matching-state native benchmark pass; final live moving-batch median65.4ms to44.7ms, about79KiB extra retained heap/map. Review/full gates pending; no game speedup claim.
+- 2026-11-07: Shipped2.8.1 retained archives (work77; main6a8ae8f). Local/hosted gates and exact archive/runtime verification passed. Farm adopted pinned2.8.1 at main87c70e9 with500 tests, audits and independent review; shared old installations require npm ci. City adoption is active.
 - 2026-11-07: Shipped 2.8.0 typed World components/state through RenderAdapter and RenderProjector (work 78; main 614c75a). Independent Astra review caught a vacuous type test; repair/control/re-review, all eleven gates and hosted CI42425193412 passed. Published manifest/runtime and typed consumer compilation verified; idle-life adoption remains separate.
-
 - 2026-11-07: Shipped 2.7.0 selected-entity RenderAdapter invalidation and the priority queue (work 76; main 1ff6118). Independent Astra review, all eleven gates (1827 root plus one TODO, 22 MCP), hosted Node20/22/24/publication and downloaded-package smoke passed. One external update among 10,000 entities needed one projection and matched a full rebuild. AoE2 adoption and shared-runtime repair are next.
 
 - 2026-11-04: 2.6.2 / MCP 0.1.2 makes both `npm audit --audit-level=high` gates pass again, red since at least 2026-10-30 on advisories against unchanged dependencies: MCP SDK 1.32.2 and zod 4.6.7 in mcp/ (no zod 3 is patched), vite, vitest and source-map-js in the root lock. All 11 gates passed; an independent supply-chain review found nothing blocking (`docs/work/75_audit-repair/`). Seven moderate minimatch findings remain in the root dev tree.

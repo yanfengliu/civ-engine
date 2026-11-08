@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-07 — Visibility state reads repeatedly sorted unchanged collections
+
+**Symptom:** AoE2 E19 measured visibility serialization taking more CPU on a live-grown world than the same loaded state. Current source still sorted player/source/explored collections on every read, including repeated unchanged reads and movement that changed no membership or explored cells.
+
+**Class check and fix:** `tests/visibility-order.test.ts` covers warm read ordering work, movement with stable exploration, mixed numeric/string/non-ASCII IDs, membership churn, player recreation, duplicate loaded state, output copies and batched edits. Three tests first failed with 80/4/4 redundant sorts; restoring per-read player sorting then failed three cases again. `tests/visibility-oracle.test.ts` compares full state, visible/explored cells and existing metrics to an independent cell-scan oracle across three seeded 60-batch churn/load sequences. Private caches preserve canonical state while eliminating redundant sorting. Work79's retained benchmark compares verified2.8.1 with the candidate on 128x128 cells, 279 sources and 60 moving batches; states/digests/metrics match, with explicit retained-memory cost and no game-throughput claim.
+
 ## 2026-11-07 — Render projection erased typed components and state
 
 **Symptom:** idle-life's worker had to cast a fully typed World to an erased World for RenderAdapter and cast it back in its projectors. Its compatibility sentinel documented this upstream boundary, but engine tests only used the default registry/state types.

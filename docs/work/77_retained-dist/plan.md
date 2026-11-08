@@ -1,6 +1,6 @@
 # Reproducible prebuilt engine consumption
 
-Status: active
+Status: complete
 Owner: Codex
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -29,9 +29,9 @@ The existing engine-dist release keeps civ-engine.tgz for compatibility and adds
 - Approved: the owner explicitly answered "Approve retained release assets" on 2026-11-07. This authorizes implementing and publishing the retained archives after review and gates. Automatic approval review had rejected the initial patch before that approval; no portion was applied.
 - Done: tests first failed on the missing publisher. The implemented publisher and installation claim checks pass 52 focused cases, including cleanup on runner throws and archive mismatch refusal.
 - Done: independent supply-chain review found no material issues; all eleven gates passed (1847 root plus one TODO, 22 MCP), final focused checks 58 passes. Full authored review retained in round 0.
-- Active: integrate and publish approved 2.8.1.
-- Pending: main/push/CI and actual archive verification; then consumer adoption starting with the smallest consumer, farm.
+- Done: main 6a8ae8f pushed; CI42425758281 passed Node20/22/24 and publication. Retained and rolling assets have identical inspected bytes and manifest/runtime2.8.1.
+- Done: Farm's clean private npm ci consumes the exact retained URL with SHA512 integrity, physical package directory and matching manifest/Node/browser runtime. Consumer gates and migration delivery continue in Farm work1_engine-pin.
 
 ## Outcome
 
-Pending delivery. The owner asked to continue through the actionable priority backlog, tracked by the active Codex goal. Publication changes are implemented only in the isolated branch and have not run remotely. AoE2's existing render-projection-cost-1106 tree contains another owner's unmerged implementation and is preserved; npm run ci:status reports green remote gates but unrelated idle worktree housekeeping.
+Producer delivered at main 6a8ae8fa4e65c8d49c933956592e1a088c32a78b. Retained asset722286624 is civ-engine-6a8ae8fa4e65c8d49c933956592e1a088c32a78b.tgz, 663627 bytes, SHA256b6f766fff065941c221497d4623cd8b2d8d2e7d1c4849076a62e63df213d2878; rolling asset722286666 matches. Actual downloaded manifest/runtime both2.8.1. npm integrity is sha512-Ga0WkDVK6oVDv53VQZJNJDOVjDB4OCt92YTSx1MCKdeytlUtGalyzOQmY/34RWTASTLp+wd4bbT0HUkTINtREw==. Root independently verified Farm's installed physical package, exact URL, lock integrity and runtime; full Farm delivery remains separate and its inherited dev audit findings are being repaired. No shared runtime was changed. AoE2's peer render-projection-cost-1106 worktree remains untouched. Archive retention does not make rolling replacement atomic or prevent administrators deleting archives.

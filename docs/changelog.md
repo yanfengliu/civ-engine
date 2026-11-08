@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.8.2 — 2026-11-07
+
+VisibilityMap reuses canonical player/source order until membership changes and explored-cell order until the explored set grows. Repeated `getState()` and `getSources()` calls avoid redundant sorting; moving a source still reads its current values. State bytes, query/update behavior, validation and metrics are unchanged, with no migration needed.
+
+Each state read still copies output, costing O(output size). Private caches retain an additional explored-cell array and player/source ID arrays. They do not change snapshot ownership: returned arrays and source objects remain fresh. The cache improves repeated state reads at the cost of this bounded retained memory; it does not make visibility recomputation incremental.
+
 ## 2.8.1 — 2026-11-07
 
 CI now retains `civ-engine-<full-source-commit-SHA>.tgz` beside the rolling `civ-engine.tgz` asset in the engine-dist release. The retained archive is uploaded without replacement before the rolling asset is refreshed. Identical reruns reuse the archive; changed bytes under an existing commit name fail publication.
