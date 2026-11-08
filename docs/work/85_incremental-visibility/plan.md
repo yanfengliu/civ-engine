@@ -1,6 +1,6 @@
 # Support fractional visibility centers on the shipped algorithm
 
-Status: active
+Status: complete
 Owner: Codex adoption worker; root acceptance and integration
 Created: 2026-11-08
 Updated: 2026-11-08
@@ -62,3 +62,8 @@ Independent integration review found F5 before publication: the controller's glo
 ## Accepted repaired release
 
 Root read and accepted the complete native Astra/xhigh review4 (11032 bytes, SHA256 d4435d9948e5e14a5b4c6c5edc2de37019a579ceea04e1d3753974c181d40c4b). It preserves the initial metadata/link findings and independently closes F4/F5/F6 at corrected tree5556363. The fresh eleven-step gate passed that tree in22.278seconds:2,113 root tests plus one existing TODO and22 MCP tests, Node24.22.1/npm11.6.2. Both audit thresholds pass; seven moderate development advisories remain, with none in production/MCP. The owned runner observed141 process instances, zero stopped/leftovers. Actual built Node/browser2.13.0 exports pass literal fractional circles, saved-state roundtrips, old integer states, detached sources, explored preservation, write batching and error classes. No runtime/test/metadata bytes changed after that gate; only review and delivery records follow. Main/push, terminal hosted CI, downloaded-package checks and cleanup remain pending. E18 optimization stays rejected at five attempts; no performance or game-adoption claim.
+
+
+## Delivery and cleanup
+
+Delivered2.13.0 at main/origin ca5e15a5ef134e3fff52c7200f8924b8ee2cbca5, tree0e91afb9710295d493724c0ad8138d6e35a79bfc. CI42461575774 completed all Node20/22/24 and publish-dist jobs successfully. Actual retained asset723331564 is688,295bytes/442entries, SHA256bb6cbab69296d38fd609f6942dc43391471302507e79fee384485925d86b8784; downloaded Node/browser exports passed literal fractional geometry, saved-state/old-integer compatibility, detachment, explored preservation, batching and errors. The earlier repaired full11 passed2,113 root tests plus TODO and22 MCP tests. Independent reports remain intact. Hash-retained6,821 files/37,131,022bytes include all5,145 rejected research artifacts and46 final rejected working files, with manifestA44E5391589F2DF2713B2FC892024627FC113B01D9BC616F1C2EB730F8B775FC. Both owned fractional/rejected-optimizer worktrees and branches were removed after full retention checks, one self-junction detached, zero task process matches and five protected shared hashes unchanged; foreign cursor deletion preserved. Initial cleanup stopped before deletion on a nested-array count guard, then the corrected guard verified28 tracked plus18 new paths. E18 remains rejected at five attempts; only fractional centers shipped. Game adoption is separate work158, now using the verified private archive.
