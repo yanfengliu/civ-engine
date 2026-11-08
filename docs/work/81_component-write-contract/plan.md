@@ -1,6 +1,6 @@
 # Document and pin explicit component publication
 
-Status: active
+Status: complete
 Owner: Codex component-contract worker; root owns review and integration
 Created: 2026-11-07
 Updated: 2026-11-07
@@ -26,7 +26,7 @@ Tests first against unchanged implementation, then correct docs: a callback retu
 - [x] Root accepted independent P2 re-review of corrected tree 34b86118379af0daf9de464b1f7a9b363ec1bcc1: no new material findings. Root retains the full authored reports.
 - [x] Corrected tree b16af5fdec81a699c01258d08d47269dae86ba1d, including both authored review reports, passed npm run gates with native exit 0 on Node 24.12.0/npm 11.7.0: all eleven steps, 1,926 root tests plus one existing TODO across 115 files, 22 MCP tests, build/pack/native benchmark. Seven moderate root dev advisories remain; production/MCP audits are clean. Heavy slot released and zero task-owned Node processes remain.
 - [x] Root integrated and pushed main e8ada69ad7344aeb78211d355999042cce9c20ea. CI 42433332914 completed successfully for Node 20/22/24 and publish-dist. Actual retained archive bytes, SHA256/SRI, package and both runtime entry-point versions, plus nullable patch behavior were verified.
-- [ ] Root lands the delivery records, then authorizes private worktree/branch cleanup; detach only the owned MCP junction nonrecursively and preserve the foreign primary cursor-state deletion.
+- [x] Root landed delivery records at379eccdf6f453232c5c9b9d240a7a2cb42fa2be1; closureCI42435128951 passed. The owned MCP junction was detached nonrecursively and the private component-contract-1107 worktree/branch removed, preserving the foreign primary cursor-state deletion.
 
 ## Implementation steps
 
@@ -38,4 +38,4 @@ Tests first against unchanged implementation, then correct docs: a callback retu
 
 ## Outcome
 
-Shipped docs/test patch 2.9.1 at main e8ada69ad7344aeb78211d355999042cce9c20ea after exact independent re-review, all eleven corrected local gates, successful hosted matrix/publication and actual retained-archive verification. Source/tests match accepted tree 34b86118379af0daf9de464b1f7a9b363ec1bcc1; both authored reports remain under reviews/. The full native gate log is tmp/component-contract-1107/corrected-full-gates.log. Only delivery-record integration and private-resource cleanup remain, so this plan stays active until those occur. E23's engine documentation gap is distinct from AoE2's unrecorded Gatherer writes and chosen-route state omission; neither consumer class is closed here. E03 paused-save adoption is also open despite work 80 API delivery.
+Shipped docs/test patch 2.9.1 at main e8ada69ad7344aeb78211d355999042cce9c20ea after exact independent re-review, all eleven corrected local gates, successful hosted matrix/publication and actual retained-archive verification. Source/tests match accepted tree 34b86118379af0daf9de464b1f7a9b363ec1bcc1; both authored reports remain under reviews/. The full native gate log is tmp/component-contract-1107/corrected-full-gates.log. Delivery records are integrated/pushed at379eccdf6f453232c5c9b9d240a7a2cb42fa2be1 and closureCI42435128951 passed. Root confirmed private-resource cleanup; fresh engine worktree inventory contains no component-contract tree. This producer work unit is complete. E23's engine documentation gap is distinct from AoE2's unrecorded Gatherer writes and chosen-route state omission; neither consumer class is closed here. E03 paused-save adoption is also open despite work 80 API delivery.

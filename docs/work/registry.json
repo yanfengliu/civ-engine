@@ -1725,6 +1725,10 @@
     {
       "id": 81,
       "theme": "component-write-contract"
+    },
+    {
+      "id": 82,
+      "theme": "townscaper-engine-pin"
     }
   ]
 }
