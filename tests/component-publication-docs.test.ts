@@ -35,6 +35,18 @@ describe('component publication documentation claims', () => {
     expect(section).toContain('before invoking the callback');
   });
 
+  it('qualifies nullish callback returns across the current replacement guidance', () => {
+    const paths = ['README.md', 'docs/api-reference.md', 'docs/changelog.md',
+      'docs/guides/entities-and-components.md', 'docs/guides/public-api-and-invariants.md',
+      'docs/guides/serialization-and-diffs.md', 'docs/guides/systems-and-simulation.md'];
+    for (const path of paths) {
+      const text = read(path);
+      expect(text, path).toContain('non-nullish');
+      expect(text, path).toContain('`null` or `undefined`');
+      expect(text, path).toContain('use `setComponent` to store an explicit `null`');
+    }
+  });
+
   it('names all three position publication APIs without an exclusive setPosition claim', () => {
     const guide = read('docs/guides/spatial-grid.md');
     expect(guide).toContain('`setPosition`, `setComponent`, and `patchComponent`');

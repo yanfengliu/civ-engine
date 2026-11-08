@@ -55,6 +55,32 @@ describe('explicit component publication contract', () => {
     expect(world.getDiff()?.components.health.set).toEqual([[id, { hp: 40 }]]);
   });
 
+  it('nullish patch returns keep the current nullable component; explicit set can store null', () => {
+    const { world, id } = setup();
+    world.registerComponent<Health | null>('nullable');
+    const held = { hp: 25 };
+    world.setComponent<Health | null>(id, 'nullable', held);
+    for (const result of [null, undefined]) {
+      expect(world.patchComponent<Health | null>(id, 'nullable', current => {
+        expect(current).toBe(held);
+        return result;
+      })).toBe(held);
+      expect(world.getComponent(id, 'nullable')).toBe(held);
+    }
+    world.setComponent<Health | null>(id, 'nullable', null);
+    expect(world.getComponent(id, 'nullable')).toBeNull();
+    expect(world.patchComponent<Health | null>(id, 'nullable', current => {
+      expect(current).toBeNull();
+      return undefined;
+    })).toBeNull();
+    const replacement = { hp: 40 };
+    expect(world.patchComponent<Health | null>(id, 'nullable', current => {
+      expect(current).toBeNull();
+      return replacement;
+    })).toBe(replacement);
+    expect(world.getComponent(id, 'nullable')).toBe(replacement);
+  });
+
   it.each(['strict', 'semantic'] as const)('raw reference writes are visible but unannounced (%s)', mode => {
     const { world, id } = setup(mode);
     world.registerSystem(active => { active.getComponent<Health>(id, 'health')!.hp = 60; });

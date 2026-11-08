@@ -52,7 +52,7 @@ Systems can:
 - Read the spatial grid
 - Read and modify resources
 
-Publish component writes through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. Raw mutations (e.g. `pos.x += 1`) create no dirty notification or spatial-grid update. `patchComponent` gives its callback the live object: a callback returning nothing preserves identity, and later systems see the published change in the same tick. The method returns the published value and applies the component's diff policy. Callback or subsequent validation failures do not roll back mutations already made; strict-mode checks happen before the callback.
+Publish component writes through `setComponent` / `addComponent` / `patchComponent` / `setPosition`. Raw mutations (e.g. `pos.x += 1`) create no dirty notification or spatial-grid update. `patchComponent` gives its callback the live value: a non-nullish return replaces it, while `null` or `undefined` preserves the current value and identity; use `setComponent` to store an explicit `null`. Later systems see the published change in the same tick. The method returns the published value and applies the component's diff policy. Callback or subsequent validation failures do not roll back mutations already made; strict-mode checks happen before the callback.
 
 ## System Execution Order
 

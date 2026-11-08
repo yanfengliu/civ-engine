@@ -142,7 +142,7 @@ world.patchComponent<Health>(entity, 'health', (hp) => {
 });
 ```
 
-`patchComponent` passes the actual stored value to the callback. Returning nothing preserves its identity; returning a replacement stores that replacement. The method returns the published value and uses the component's existing strict/semantic diff policy. Later systems see the change immediately. Strict-mode and existence checks precede the callback, but callback or JSON/position validation failures do not roll back mutations already made through the live reference. To leave the old value untouched when validation fails, return a new object without mutating the callback argument.
+`patchComponent` passes the actual stored value to the callback. A non-nullish callback return becomes the replacement; `null` or `undefined` keeps the current value and its identity; use `setComponent` to store an explicit `null`. An already-null component is a valid callback input. The method returns the published value and uses the component's existing strict/semantic diff policy. Later systems see the change immediately. Strict-mode and existence checks precede the callback, but callback or JSON/position validation failures do not roll back mutations already made through the live reference. To leave the old object untouched when validation fails, return a new object without mutating the callback argument.
 
 Returns `undefined` if the entity doesn't have this component:
 

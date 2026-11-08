@@ -159,7 +159,7 @@ World.step()
   -> notify diff listeners (fires after tick++; still in-tick, and can fail the tick with diff_listener_threw)
 ```
 
-Successful position writes (`setPosition`, `setComponent`, `patchComponent` on the configured position key) update the spatial grid immediately; there is no per-tick scan. Component reads return live references, so raw mutations need explicit publication for diff/grid updates. `patchComponent` returns the published value and preserves identity when its callback returns nothing; callback/validation failure does not roll back live mutations.
+Successful position writes (`setPosition`, `setComponent`, `patchComponent` on the configured position key) update the spatial grid immediately; there is no per-tick scan. Component reads return live references, so raw mutations need explicit publication for diff/grid updates. `patchComponent` returns the published value: a non-nullish callback return replaces it, while `null` or `undefined` keeps the current value; use `setComponent` to store an explicit `null`. Callback/validation failure does not roll back live mutations.
 
 Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 

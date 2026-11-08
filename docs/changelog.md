@@ -2,7 +2,7 @@
 
 ## 2.9.1 — 2026-11-07
 
-Corrects component-write documentation and examples to match existing behavior. `getComponent()` returns a live reference; mutating it alone creates no diff notification or grid synchronization. `patchComponent()` runs immediately on that value, publishes through `setComponent`, and returns the published value. A callback returning nothing preserves identity; returning a replacement stores it. Successful writes to the configured position key synchronize the grid. Strict-mode checks precede the callback, but callback or later validation failures do not roll back mutations already made through a live reference.
+Corrects component-write documentation and examples to match existing behavior. `getComponent()` returns a live reference; mutating it alone creates no diff notification or grid synchronization. `patchComponent()` runs immediately on that value, publishes through `setComponent`, and returns the published value. A non-nullish callback return replaces it; `null` or `undefined` preserves the current value and identity; use `setComponent` to store an explicit `null`. Successful writes to the configured position key synchronize the grid. Strict-mode checks precede the callback, but callback or later validation failures do not roll back mutations already made through a live reference.
 
 The snapshot error table now labels `applyTickDiff` as internal, with no new package export. Contract tests cover same-pass identity, replacement, recorded publication, strict/semantic dirty behavior, configured position keys and failure boundaries. No runtime behavior, public surface or persistent format changed; no migration is required.
 

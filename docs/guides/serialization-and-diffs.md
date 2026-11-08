@@ -289,7 +289,7 @@ In semantic mode, `set()` fingerprints the new value and skips the dirty flag wh
 
 `diffMode: 'strict'` (the default) preserves the per-write audit semantics that serialization consumers may depend on. Choose semantic only for components where the "identical rewrite" case is load-bearing noise.
 
-`patchComponent` publishes through `setComponent`, with the same diff policy. Its callback mutates live data; returning nothing preserves identity and returning a replacement publishes that replacement. A callback or validation failure publishes no new write, but does not undo earlier reference mutations. An unannounced mutation can appear in a value already marked dirty, so absence of its own notification is not a promise that it will never appear in output. For recorded per-tick publication, make successful explicit writes during the tick; setup/maintenance writes are not a durable event queue.
+`patchComponent` publishes through `setComponent`, with the same diff policy. Its callback receives live data: a non-nullish return publishes a replacement, while `null` or `undefined` keeps the current value and identity; use `setComponent` to store an explicit `null`. A callback or validation failure publishes no new write, but does not undo earlier reference mutations. An unannounced mutation can appear in a value already marked dirty, so absence of its own notification is not a promise that it will never appear in output. For recorded per-tick publication, make successful explicit writes during the tick; setup/maintenance writes are not a durable event queue.
 
 ## Patterns
 
