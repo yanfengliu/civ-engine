@@ -1,6 +1,7 @@
 # Devlog Summary
 
-- 2026-11-07: Prepared2.10.1 JSON diagnostic-path optimization (work84), preserving validation/traversal/errors and default observation. Baseline15/candidate96 contracts and three controls pass; actual saved-component validation uses12.35% less CPU across five pairs with equal fingerprints. Small samples are noisy; exact review/full11 (1985+TODO/22 MCP) pass; hosted delivery remains pending.
+- 2026-11-07: Prepared2.11.0 bounded occupancy-binding debugger probes (work86), preserving raw-grid totals and movement/placement semantics.61 focused contracts, three controls and independent source/integration reviews pass; full11 passed (2,006 root plus TODO,22 MCP), and built Node/browser smoke passed. Publication and game adoption remain pending.
+- 2026-11-07: Shipped2.10.1 JSON diagnostic-path optimization (work84), preserving validation/traversal/errors and default observation. Saved-component validation uses12.35% less CPU across five equal-fingerprint pairs; no whole-game claim. Exact review/full11 (1985+TODO/22 MCP), main22f3e197/CI42448132800 and downloaded Node/browser runtime passed.227 evidence files retained; private tree/branch/junction removed,0 owned processes and protected state unchanged.
 - 2026-11-07: Shipped2.10.0 placement-only occupancy claims (work83), sourceb0de80b/main2bbace65. Independent review, full11 (1970+TODO/22 MCP), Node20/22/24/publish CI42446777045 and downloaded runtime contracts passed. All62 evidence files are retained; private tree/branch/MCP junction removed,0 owned processes, protected shared state preserved. Game adoption and diagnostics remain separate.
 
 - 2026-11-07: Closed work81 delivery/cleanup at379eccdf (CI42435128951 passed) and refreshed the consumer priority list. Farm589d385, City670ad083, civ-sim-web6914e46 and idle-life5cecbc4 are delivered/cleaned; their canonical-path test-oracle follow-ups are planned. Townscaper work82 retained2.9.1 passed234 files/2029 tests, six gates,168 inspected GPU views and independent reviews; source ada08b5 is delivered, evidence retained and consumer cleanup complete. AoE2 work153 final repair acceptance and works154/155 remain root-owned.
@@ -45,6 +46,5 @@
 - Five June 11–13 summaries are retained unchanged in [the detailed history](detailed/2026-10-02_2026-11-07.md#june-summaries-retained-during-consumer-closure).
 - Three June 11 release/review entries are retained in [the detailed history](detailed/2026-10-02_2026-11-07.md#june-11-summary-entries-retained-at-the-50-line-cap).
 - Earlier work (2026-04-04 through 2026-04-30) is retained in [the detailed history](detailed/2026-10-01_2026-10-01.md#early-summary-history-retained-during-the-50-line-cap-cleanup).
-- Four June13 entries are retained verbatim in [the detailed history](detailed/2026-10-02_2026-11-07.md#june-summaries-retained-during-work84).
 
 > Read the newest detailed devlog for reviewer reports, verification and reasoning.

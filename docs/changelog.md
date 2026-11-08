@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.11.0 — 2026-11-07
+
+Adds `createOccupancyBindingDebugProbe` and its structural source, options and snapshot types. Attach a read-only `OccupancyBinding` directly to a debugger probe and request an explicit rectangular region. Captures retain a deterministic row-major prefix, with configurable cell and aggregate claim limits (defaults64/256), detached metadata and explicit omitted-cell/claim counts. Existing `createOccupancyDebugProbe` and its eight global grid counters are unchanged. No dependency or saved-format migration is required.
+
+Truncation preserves the source's actual blocked result and free subcell capacity. Placement-only movement policy, reservations, claim identities and subcell offsets remain visible. Capture performs ordinary source queries and increments their instrumentation; it does not mutate claims or versions. The source still materializes a complete visited cell before claim truncation, so the limits bound source calls and retained output, not arbitrary per-cell cost or constant memory.
+
 ## 2.10.1 — 2026-11-07
 
 Reduces temporary diagnostic-string work during JSON validation. Validation remains enabled and checks the same values, in the same order, with the same rejection codes, messages and contexts. No API, configuration or saved-format migration is required; component publication, complete tick diffs and state fingerprints retain their existing contracts.

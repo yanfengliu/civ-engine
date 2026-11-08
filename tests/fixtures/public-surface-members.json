@@ -780,6 +780,21 @@
   "OccupancyBindingClaimOptions": [
     "metadata?"
   ],
+  "OccupancyBindingDebugOptions": [
+    "maxCells?",
+    "maxClaims?",
+    "region"
+  ],
+  "OccupancyBindingDebugSnapshot": [
+    "cells",
+    "height",
+    "omittedCells",
+    "omittedClaims",
+    "region",
+    "requestedCells",
+    "version",
+    "width"
+  ],
   "OccupancyBindingMetrics": [
     "cellStatusQueries",
     "crowdedSlotChecks",
@@ -828,6 +843,12 @@
     "occupiedEntities",
     "reservedCells",
     "reservedEntities",
+    "version",
+    "width"
+  ],
+  "OccupancyDebugSource": [
+    "getCellStatus",
+    "height",
     "version",
     "width"
   ],

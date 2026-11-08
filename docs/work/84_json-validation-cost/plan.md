@@ -1,6 +1,6 @@
 # Measure JSON validation without weakening its contract
 
-Status: active
+Status: complete
 Owner: Codex root
 Created: 2026-11-08
 Updated: 2026-11-08
@@ -11,7 +11,7 @@ Work154's post-renderer profiles leave JSON validation around30% of sampled incl
 
 ## Scope
 
-Private json-validation-cost-1107 began at engine301dd868 and now follows delivered2.10.0 main2bbace65. Internal src/json.ts validation traversal, focused contract tests, comparable measurements and migration/validation notes only. No public API, dependency, persistent format, default safety change, World diff suppression or fingerprint cache. Root will refresh against preceding work83 before final gates and choose a patch version only if the optimization earns shipment.
+Private json-validation-cost-1107 began at engine301dd868 and now follows delivered2.10.0 main2bbace65. Internal src/json.ts validation traversal, focused contract tests, comparable measurements and migration/validation notes only. No public API, dependency, persistent format, default safety change, World diff suppression or fingerprint cache. Root refreshed onto preceding work83 and shipped the earned optimization as2.10.1.
 
 ## Approach
 
@@ -22,17 +22,17 @@ First pin exact invalid-value diagnostics, nested paths, traversal/getter timing
 - [x] Literal contract checks pass on the unchanged baseline and candidate, with deliberate diagnostic/validation controls failing.
 - [x] Comparable baseline/candidate valid and invalid payload measurements include real retained AoE2 state/component shapes, small records, deep structures and allocation/retained-memory limits; report noise and no unsupported whole-game claim.
 - [x] Actual caller values, fingerprints, exception identities and traversal side effects agree; existing World/component/serialization contracts pass.
-- [ ] Independent exact review, all11 gates, main/push and terminal CI/publication plus downloaded runtime verification if shipping.
+- [x] Independent exact review, all11 gates, main/push and terminal CI/publication plus downloaded runtime verification if shipping.
 
 ## Implementation steps
 
 - [x] Inspect measured cost and existing validator/state traversal; prepare scope without an unsafe policy change.
-- [ ] Pin contracts, implement the bounded hypothesis and measure after the shared expensive slot is free.
-- [ ] Review and ship an earned improvement, or record a rejected hypothesis with its evidence.
+- [x] Pin contracts, implement the bounded hypothesis and measure after the shared expensive slot is free.
+- [x] Review and ship an earned improvement, or record a rejected hypothesis with its evidence.
 
 ## Outcome
 
-The candidate passes96 focused cases and three deliberately failing controls. Five pairs on actual saved component data used12.35% less validation CPU with identical fingerprints; short families are noisy. See design.md for workload, memory and inference bounds. Exact source review and final integration/gates remain pending. State fingerprinting and diff-consumer questions remain separate; retaining default observation is not proof those costs are solved.
+The candidate passes96 focused cases and three deliberately failing controls. Five pairs on actual saved component data used12.35% less validation CPU with identical fingerprints; short families are noisy. See design.md for workload, memory and inference bounds. Exact source review, all11 gates, main/push, terminal hosted publication and downloaded runtime verification passed. State fingerprinting and diff-consumer questions remain separate; retaining default observation is not proof those costs are solved.
 
 ## Independent review
 
@@ -40,4 +40,10 @@ Native Astra/xhigh accepted exact staged tree178457a8bd117d38272d69f884e3bbb8d72
 
 ## Full gate
 
-Maintained npm run gates passed all11 steps on exact tree477175ec7f9fb5218fbdde2cac207b20dcb5e620 in24.503s:1,985 root tests plus1 existingTODO across120files,22 MCP tests, type/lint/build/pack, exact benchmark counters and unchanged calibrated bounds. Root audit has7moderate development findings; production/MCP audits report0. Node24.22.1 and explicit/nested npm11.6.2. The owned watcher tracked136 processes with0 forced stops/leftovers. Actual built Node/browser2.10.1 World state writes accept shared references, reject a nested nonfinite value at the correct context, and leave rejected state absent. Source/tests/version/locks remain identical to the reviewed target; later edits only record review/gate and already completed83/154 status. Ordinary source/test whitespace checks pass; exact CRLF document preimages are checked with CR-at-EOL recognition while retaining all other whitespace checks. No repository attribute or gate was weakened. Main/push, terminal hosted/publication and downloaded-runtime acceptance remain pending.
+Maintained npm run gates passed all11 steps on exact tree477175ec7f9fb5218fbdde2cac207b20dcb5e620 in24.503s:1,985 root tests plus1 existingTODO across120files,22 MCP tests, type/lint/build/pack, exact benchmark counters and unchanged calibrated bounds. Root audit has7moderate development findings; production/MCP audits report0. Node24.22.1 and explicit/nested npm11.6.2. The owned watcher tracked136 processes with0 forced stops/leftovers. Actual built Node/browser2.10.1 World state writes accept shared references, reject a nested nonfinite value at the correct context, and leave rejected state absent. Source/tests/version/locks remain identical to the reviewed target; later edits only record review/gate and already completed83/154 status. Ordinary source/test whitespace checks pass; exact CRLF document preimages are checked with CR-at-EOL recognition while retaining all other whitespace checks. No repository attribute or gate was weakened. Main/origin22f3e197 and terminal hosted/publication plus downloaded-runtime acceptance are complete.
+
+## Delivery and cleanup
+
+Engine2.10.1 is merged and pushed at22f3e19746cd50da264aaba259856d625b833e2a, tree3379ec046fefce80cc88110509f863d3cc0f75e8. CI42448132800 completed successfully: Node24 job128631330871, Node22 job128631331040, Node20 job128631331098 and publication128631684058. Retained asset722916627 is675957 bytes/434 entries, SHA2566858c24bdb71d6ffe89b5edb3522037ef1f0a62ab8309d6af9c6c6cc2334d754, SRI sha512-11d/ruw9kSaHTbJW4s+733CBJIJWyjr7HwbjdQEinkqidEw0zS2e4OE7b6ZmFw12SFnxY9m/p/xTW2vgGvZCyQ==. Its actual downloaded Node/browser2.10.1 entries pass the shared-reference/nested-rejection/no-partial-state contracts.
+
+All227 work84 evidence files/1513137 bytes were retained with matching hashes under primary tmp/work84-closure/json-validation; retention manifest SHA2567E7FA1060CC317507BB1E735F92E6B8A11AA817FE383C149FF061D877D048F86. The owned MCP junction was detached nonrecursively before removing the merged private worktree and branch. The gate reported136 owned processes and0 leftovers; the final worktree-path runtime census found0. Five protected primary inputs remained equal across cleanup, the foreign cursor deletion remained, and active85/foreign trees were untouched. Raw release, runtime, retention and cleanup receipts remain ignored under tmp/work84-closure. State observation/fingerprinting and downstream adoption are separate tasks, not hidden completion claims.

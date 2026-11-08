@@ -4990,6 +4990,25 @@ createPathQueueDebugProbe(
 
 These helpers expose standalone utility state through the same debugger surface.
 
+### OccupancyDebugSource
+
+Read-only structural input: readonly width, height and version numbers, plus getCellStatus(x: number, y: number): OccupancyCellStatus. OccupancyBinding satisfies it directly; no raw-grid accessor is needed. Queries may increment normal instrumentation counters.
+
+### OccupancyBindingDebugOptions
+
+Fields: region: Readonly<OccupancyRect>; maxCells?: number (default64); maxClaims?: number (default256, aggregate across captured cells). The rectangle must be explicit, positive and wholly in bounds; dimensions, coordinates and its area must be safe integers. Limits are nonnegative safe integers, including zero. Invalid input throws EngineError code occupancy_probe_options_invalid before any cell query. Region and limits are detached at probe creation.
+
+### OccupancyBindingDebugSnapshot
+
+Fields: width, height, version, requestedCells, omittedCells and omittedClaims (numbers); region: OccupancyRect; cells: Array<OccupancyCellStatus & { omittedClaims: number }>. Cells form a row-major prefix. Within each cell, blockedBy precedes crowdedBy for the aggregate claim budget; each list preserves source order. Omitted claim counts cover captured cells only; omittedCells names unvisited cells. Truncation never changes actual blocked or freeSubcellSlots values. Global occupied, reserved or blocked totals are deliberately absent. Returned positions, claims and offsets are detached.
+
+### createOccupancyBindingDebugProbe
+
+Signature: createOccupancyBindingDebugProbe(key: string, source: OccupancyDebugSource, options: OccupancyBindingDebugOptions): DebugProbe<OccupancyBindingDebugSnapshot>.
+
+Captures current binding metadata, entity identities, reservations, placement-only movement policy and subcell capacity. Each capture queries at most maxCells and retains at most maxClaims claim entries. The source still materializes a complete status for each visited cell, including a potentially large custom subcell layout. Normal query counters increase; claims, lifecycle and version do not change. Later captures observe release/destruction. Source exceptions propagate unchanged. The existing createOccupancyDebugProbe remains the exact eight-field raw-grid summary; sampled detail never replaces its global counts.
+
+
 ## Session Recording — Bundle Types & Errors
 
 The session-recording subsystem captures deterministic, replayable bundles of `World` runs. This section documents the bundle / marker / error type definitions; subsequent sections cover the sink interfaces, recorder, replayer, and scenario adapter.

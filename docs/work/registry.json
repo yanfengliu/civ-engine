@@ -1741,6 +1741,14 @@
     {
       "id": 85,
       "theme": "incremental-visibility"
+    },
+    {
+      "id": 86,
+      "theme": "occupancy-probes"
+    },
+    {
+      "id": 87,
+      "theme": "grid-distance-field"
     }
   ]
 }

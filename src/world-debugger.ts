@@ -438,3 +438,10 @@ export {
   createPathQueueDebugProbe,
   createVisibilityDebugProbe,
 } from './world-debug-probes.js';
+
+export {
+  createOccupancyBindingDebugProbe,
+  type OccupancyDebugSource,
+  type OccupancyBindingDebugOptions,
+  type OccupancyBindingDebugSnapshot,
+} from './occupancy-debug-probe.js';

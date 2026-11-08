@@ -49,6 +49,8 @@ const status = occupancy.getCellStatus(20, 20);
 status.blockedBy; // [{ entity: 100, kind: 'building', claim: 'occupied' }]
 ```
 
+For bounded blocker inspection, pass a binding to `createOccupancyBindingDebugProbe(key, binding, { region, maxCells, maxClaims })`. It reports detached identities/kinds/reservations/subcells and explicit truncation, with normal query metrics. It exposes no mutable grid or sampled counts presented as global totals.
+
 Useful `OccupancyBinding` APIs:
 
 - `block(area)` / `unblock(area)` — entity-less terrain (walls, cliffs, world geometry)

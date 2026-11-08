@@ -230,6 +230,8 @@ The engine ships several standalone data structures that game code instantiates 
 - **`BundleViewer` / `diffSnapshots` / `snapshotAtTick`** — programmatic agent-driver API over a `SessionBundle`: marker-anchored navigation, per-tick frames with selective runtime freezing, lazy memoized `SessionReplayer`, two-path `frame.diffSince` (folded TickDiffs vs snapshot-via-`diffSnapshots`), `BundleCorpusEntry.openViewer()` integration. `snapshotAtTick(bundle, tick)` materializes pure-data state at an in-range tick without a `worldFactory` (the fold the MCP server stands on; it refuses ticks that would cross a recorded failure). See `docs/guides/bundle-viewer.md`.
 - **`improvementFindingSignature` / `stateDigest`** — recursive-loop aggregation primitives (v2.1.0): a cross-run/cross-repo bug-class key (declared `data.class` or finding id, optional gameId prefix, strictly no lossy normalization) and a canonical sorted-key FNV-1a state digest with deep `omitKeys` for wall-clock noise. See `docs/api-reference.md` § "Improvement Loop Finding Contracts".
 
+`createOccupancyBindingDebugProbe` observes an explicit rectangle through a read-only cell-status source, with detached claims and omission counts. It adds no World tick subsystem or binding serialization.
+
 `SpatialGrid` answers proximity questions (which entities are near point P) and is owned by `World`. The standalone utilities answer different questions and let game code mix them as needed without paying for what it doesn't use.
 
 ## AI-Native Design

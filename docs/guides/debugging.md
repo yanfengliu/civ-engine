@@ -89,6 +89,21 @@ const debuggerView = new WorldDebugger({
 });
 ```
 
+
+For binding details, request a bounded rectangle directly:
+
+```typescript
+import { createOccupancyBindingDebugProbe } from 'civ-engine';
+
+debuggerView.addProbe(createOccupancyBindingDebugProbe('near-building', occupancyBinding, {
+  region: { x: 20, y: 20, width: 4, height: 4 },
+  maxCells: 16,
+  maxClaims: 64,
+}));
+```
+
+The report carries detached blocker identities/kinds, movement policy, reservations and subcell details. Row-major cells and omittedCells/omittedClaims make truncation explicit. These are sampled facts, not whole-grid totals. Queries increment normal metrics while leaving claims/version unchanged. Limits bound source calls and retained claims; one complete cell status is still materialized before truncation.
+
 You can also add your own probe:
 
 ```typescript

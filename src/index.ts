@@ -133,6 +133,8 @@ export {
 } from './world.js';
 export {
   WorldDebugger, createOccupancyDebugProbe, createPathQueueDebugProbe,
+  createOccupancyBindingDebugProbe,
+  type OccupancyDebugSource, type OccupancyBindingDebugOptions, type OccupancyBindingDebugSnapshot,
   createVisibilityDebugProbe, type DebugComponentSummary, type DebugDiffSummary,
   type DebugEventSummary, type DebugIssue, type DebugProbe, type DebugResourceSummary,
   type DebugSeverity, type DebugSpatialCell, type DebugSpatialSummary, type DebugWarning,
