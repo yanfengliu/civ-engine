@@ -31,7 +31,7 @@ Measure A/A and alternating A/B on clean, sparse and dense store workloads with 
 - [x] Allocate work88 and own isolated tree; inspect work71 proposal and current code.
 - [x] Prepare and execute discriminating tests, then implement only the accepted narrow branch.
 - [x] Measure, review and reject shipment under the declared criterion.
-- [ ] Complete delivery or record rejection with retained evidence.
+- [x] Complete delivery or record rejection with retained evidence.
 
 ## Outcome
 
@@ -49,3 +49,9 @@ Root read the complete [review0](reviews/0_implementation.md), authored report S
 ## Docs-only push gates
 
 The rejected code and its allocation-specific test are absent from the deliverable. All eleven required local push gates passed tree56d5b99c4e468638f17cc5cf409063ee57daadff, with2,113 root tests plus one existing TODO across126 files and22 MCP tests. Node24.22.1/npm11.6.2; seven moderate development advisories, none in production or MCP. A fresh private MCP install (141packages, scripts disabled) plus the full gate took39.228seconds. The owned watcher observed145 identities, zero stops/leftovers; a fresh task census was empty and the exact root lock was released at2026-11-08T20:01:11.4287214Z. Only this acceptance record follows that gated tree; code/tests/metadata are unchanged. Main/push and final retention/cleanup remain pending.
+
+## Delivered rejection and retained artifact
+
+Docs-only rejection shipped atmain/originf50e5d481308b28e5b97db9036c1ebd6654b9745, tree18804e85d93a999923df5f1959510fcf28c855a4. HostedCI42518280541 completed successfully in Node20/22/24 and publish-dist. The subsequent full docs gate had rebuilt local dist to baseline; an isolated60-second-bounded compilation reconstructed all404 originally measured candidate files exactly against the original manifest, native0, without changing shipped source or rerunning performance. Primary ignored tmp/work88-closure/evidence retains266 files/1,618,866 bytes with matching hashes; retention manifest12a854b5e0412af0defaf6f4b3e64968acfbe0d2443c4be8a04d5ad175d170dc. Candidate reconstruction and original retained baseline are kept separately. This worktree remains temporarily owned for the current backlog documentation checkpoint; final tree/branch cleanup is not yet claimed.
+
+The documentation checkpoint passed all11 push gates on tree06e728f856a74870b43033c6f050c12eeac8b654 in28.097seconds:2,113 root tests plus one existingTODO,22 MCP tests, types/lint/build/pack/benchmark and both root audits/MCP audit. The watcher observed149 owned identities, zero stops/leftovers, and released its exact lock. Only the latest owner decision and completed158 evidence disposition were added afterward; authored proposals/reviews and source/tests/metadata are unchanged.
