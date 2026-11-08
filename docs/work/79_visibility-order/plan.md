@@ -29,7 +29,8 @@ Cache sorted player/source IDs until membership changes, reading current source 
 - Done: three ordering tests failed with 80/4/4 sorts before implementation. Eight new ordering/oracle cases pass; 43 focused visibility/observer/hardening cases and typecheck pass. Restoring repeated player sorting fails three tests; exact source bytes restored in finally.
 - Done: private caches and bounded native benchmark against the verified2.8.1 archive. Source/value semantics, snapshots and existing metrics match the independent oracle.
 - Done: candidate2.8.2 passes all eleven gates (1855 root plus one existing TODO,22 MCP); no high/critical audit findings, seven moderate dev findings remain.
-- Active: independent exact review; then integration, push/hosted acceptance and cleanup.
+- Done: independent Astra/xhigh review of exact tree0a55ac7c5184f32a0d352b4999d175ceafc3a367, now recoverable at commit0e3e78f. No material findings; minor V1 complexity wording corrected and content-checked. Full authored report is retained in reviews/0_implementation.md.
+- Active: integration, push/hosted acceptance and cleanup.
 
 ## Outcome
 
