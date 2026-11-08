@@ -1,6 +1,6 @@
 # Multi-source weighted grid distance field
 
-Status: active
+Status: complete
 Owner: Codex root
 Created: 2026-11-08
 Updated: 2026-11-08
@@ -28,14 +28,14 @@ Use multi-source BFS for the default four-connected unit-cost case, and reverse 
 - [x] Actual mutations reversing directed costs, dropping passability and dropping equal-distance source tie propagation fail meaningful assertions; candidate bytes are restored after each.
 - [x] A bounded grid/consumer-shaped workload observes one multi-source computation and equal results. Compare runtime and peak/retained memory honestly; preserve AoE2's independent oracle if production adoption uses this primitive.
 - [x] Both curated exports, public surface fixture, standalone utility/API sections, spatial/RTS/map-generation guides, architecture boundaries/map/drift and external migration/version documentation agree.
-- [ ] Exact independent review, all eleven gates, main/push, terminal supported-Node/publication CI, downloaded immutable-archive runtime checks and task-owned cleanup complete.
+- [x] Exact independent review, all eleven gates, main/push, terminal supported-Node/publication CI, downloaded immutable-archive runtime checks and task-owned cleanup complete.
 
 ## Implementation steps
 
 - [x] Audit current engine path contracts and AoE2 production/independent BFS consumers; allocate87 and isolate the worktree.
 - [x] Write contract tests and run baseline RED; implement the additive primitive and independent oracle/mutation controls.
-- [ ] Measure the bounded workload, complete public docs and review the exact candidate.
-- [ ] Refresh onto accepted earlier milestones, run gates, land and verify publication; reconcile consumer disposition separately.
+- [x] Measure the bounded workload, complete public docs and review the exact candidate.
+- [x] Refresh onto accepted earlier milestones, run gates, land and verify publication; reconcile consumer disposition separately.
 
 ## Outcome
 
@@ -61,3 +61,8 @@ Delivery disposition: proceed as the already-scoped additive general primitive, 
 ## Accepted final review and gates
 
 Root read and accepted the complete final native Astra/xhigh review2 (15489 bytes, SHA256 37ef6bb044fe3f019d67dd7274a716128487b77cfac657546846b63c68bbbfff). It covers exact d7373c2's one-read maxCost follow-up and bounded measurement evidence. All eleven maintained gates passed that source in25.573seconds with2,093 root cases plus one existing TODO and22 MCP cases; Node24.22.1/npm11.6.2. Both audit thresholds pass, with seven moderate development advisories and none in production/MCP. The owned runner observed140 processes, zero stopped/leftovers. Actual built Node/browser2.12.0 exports passed directed weights, exact ties, corner policy, pre-callback cost rejection, single getter read, detached results, empty fields and actual result-buffer sizes. No runtime/test/metadata change followed the gated target; only delivery records/review are added. Main/push, hosted CI, downloaded archive and final cleanup remain pending; no game performance or adoption claim.
+
+
+## Delivered and cleaned
+
+Work87 delivered2.12.0 at main/origin a21a842ae051a39a0e523fd555f6be7eb9df53ce after exact final review, all11 gates (2,093 root plus existingTODO,22MCP) and actual built/downloaded Node/browser contracts. CI42460222937 completed Node20/22/24 and publish-dist successfully. Retained asset723289079 is686844bytes/442entries, SHA256E6B7642F61B91F0BF5A219AA8FACF9D5A335CACB18FD41807427E0A7D384B3DD. 255 evidence files/3089623bytes are hash-retained in primary tmp/work87-closure/evidence, manifest2337D06BD2CCDB56818330DDC4020DB04116C1DB0D1E47729CD0F9BCBB421DC2. Private self-junction/worktree/branch removed; zero task-path process matches and protected shared hashes/Cursor deletion preserved. Synthetic unit-cost results remain2.67–3.01x narrower-BFS wall time and50% larger returned arrays; no actual-game speedup or adoption is claimed.

@@ -68,7 +68,7 @@ export class VisibilityMap {
     sourceId: VisionSourceId,
     source: VisionSource,
   ): void {
-    assertGridPoint(source.x, source.y, this.width, this.height);
+    assertSourcePoint(source.x, source.y, this.width, this.height);
     assertNonNegativeFinite(source.radius, 'Vision radius');
 
     const player = this.ensurePlayer(playerId);
@@ -186,7 +186,7 @@ export class VisibilityMap {
     for (const [playerId, player] of state.players) {
       const target = map.ensurePlayer(playerId);
       for (const [sourceId, source] of player.sources) {
-        assertGridPoint(source.x, source.y, map.width, map.height);
+        assertSourcePoint(source.x, source.y, map.width, map.height);
         assertNonNegativeFinite(source.radius, 'Vision radius');
         target.sources.set(sourceId, { ...source });
       }
@@ -314,6 +314,15 @@ function assertNonNegativeFinite(value: number, label: string): void {
 function assertCellIndex(index: number, width: number, height: number): void {
   if (!Number.isInteger(index) || index < 0 || index >= width * height) {
     throw new EngineError('visibility_index_out_of_bounds', `Cell index ${index} is out of bounds`, { details: { index } });
+  }
+}
+
+function assertSourcePoint(x: number, y: number, width: number, height: number): void {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new EngineError('visibility_source_coords_invalid', 'Vision source coordinates x and y must be finite numbers', { details: { x, y } });
+  }
+  if (x < 0 || x >= width || y < 0 || y >= height) {
+    throw new EngineRangeError('visibility_out_of_bounds', `Grid coordinate (${x}, ${y}) is out of bounds`, { details: { x, y } });
   }
 }
 

@@ -976,7 +976,7 @@ interface VisionSource {
 }
 ```
 
-Circular reveal source used by `VisibilityMap`.
+Circular reveal source used by `VisibilityMap`. Centers may be finite fractional coordinates inside the map; radius is finite and nonnegative. Integer cells satisfy `(cellX - x)^2 + (cellY - y)^2 <= radius^2`, without rounding, snapping or a half-cell offset. Point-query coordinates remain integers.
 
 ### `VisibilityMapState`
 
@@ -997,7 +997,7 @@ interface VisibilityMapState {
 }
 ```
 
-Serializable visibility snapshot used by `VisibilityMap.getState()` and `VisibilityMap.fromState()`.
+Serializable visibility snapshot used by `VisibilityMap.getState()` and `VisibilityMap.fromState()`. Field names and integer-source values are unchanged. Fractional source values round-trip exactly, but require a reader supporting fractional centers; older integer-only readers reject them. Metrics and private ordering caches are not serialized.
 
 ### `CellGrid`
 
@@ -3510,7 +3510,7 @@ setSource(
 ): void
 ```
 
-Adds or updates a circular vision source for one player.
+Adds or updates a circular vision source for one player, copying x/y/radius. Centers must be finite with `0 <= x < width` and `0 <= y < height`. Nonfinite centers throw `visibility_source_coords_invalid` before bounds/radius validation; finite out-of-bounds centers throw `visibility_out_of_bounds`. Radius remains finite and nonnegative. Repeating unchanged geometry is a no-op. Edits remain batched until `update()` or an updating read, so intermediate moves do not explore cells before that boundary.
 
 #### `removeSource(playerId, sourceId)`
 
@@ -3590,7 +3590,7 @@ Returns a JSON-safe visibility snapshot after flushing pending updates. Player/s
 VisibilityMap.fromState(state: VisibilityMapState): VisibilityMap
 ```
 
-Restores a visibility map from serialized state.
+Restores a visibility map from serialized state, applying the same finite source-coordinate, bounds and radius validation as `setSource()`. Fractional source values are preserved. Existing explored cells, duplicate-entry handling, canonical output order and the three existing metrics retain their previous behavior.
 
 ---
 
@@ -6769,7 +6769,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `subcell_state_invalid`, `subcell_slots_empty`, `subcell_slot_offset_invalid`, `subcell_slot_offset_duplicate`, `subcell_slot_out_of_bounds` | SubcellOccupancyGrid | Subcell slot validation | `{ entity, x, y }`, `{ slot, x, y }`, `{ x, y }`, `{ slot }` per site (E/R) |
 | `path_budget_invalid`, `path_config_missing_grid`, `path_coords_not_integer`, `path_out_of_bounds`, `path_value_invalid` | Grid path utilities | Path/distance-field input validation | `{ label }`, `{ label, x, y }` or destination `{ index, x, y }` per site (E/R) |
 | `distance_field_size_invalid`, `distance_field_cost_invalid` | `gridDistanceField` | Unrepresentable dense field/source index or invalid maxCost | none (R/E) |
-| `visibility_value_invalid`, `visibility_index_out_of_bounds`, `visibility_coords_not_integer`, `visibility_out_of_bounds` | VisibilityMap | Visibility grid validation | `{ label }`, `{ index }`, `{ x, y }` per site (E/R) |
+| `visibility_value_invalid`, `visibility_index_out_of_bounds`, `visibility_coords_not_integer`, `visibility_source_coords_invalid`, `visibility_out_of_bounds` | VisibilityMap | Visibility grid validation | `{ label }`, `{ index }`, `{ x, y }` per site (E/R) |
 | `rng_state_invalid`, `rng_seed_invalid` | Random | Bad RNG state/seed | — (R) |
 | `resource_already_registered`, `resource_not_registered`, `resource_state_invalid`, `resource_value_invalid` | ResourceStore | Resource registry/state validation | `{ key }`, `{ id }`, `{ label }` per site (E) |
 | `scenario_failure_code_empty`, `scenario_steps_invalid` | ScenarioRunner | Scenario config validation | — (E) |

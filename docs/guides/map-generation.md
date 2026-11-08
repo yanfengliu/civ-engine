@@ -461,7 +461,7 @@ When to use which:
 | One-time map generation baked into tile components | `createTileGrid` + noise / cellular |
 | Static physical layout (terrain type per tile) | Tile component on the entity at that position |
 | Dynamic field that changes during simulation, varying spatial resolution | `Layer<T>` |
-| Per-player visibility / explored cells | `VisibilityMap` |
+| Per-player visibility / explored integer cells, with finite fractional source centers | `VisibilityMap` |
 | Blocked / occupied / reservation tracking | `OccupancyGrid` / `OccupancyBinding` |
 
 `Layer<T>` is JSON-serializable via `getState()` / `Layer.fromState()`, value writes are JSON-compat-validated, and reads / writes go through `structuredClone` defensive copies on every boundary so caller mutation cannot corrupt stored state. See [API Reference → Layer](../api-reference.md#layer) for the full surface.

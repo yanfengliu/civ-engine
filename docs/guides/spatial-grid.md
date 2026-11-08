@@ -284,6 +284,8 @@ function explode(world: World, centerX: number, centerY: number, radius: number,
 }
 ```
 
+Visibility is a separate spatial utility: `VisibilityMap` accepts finite fractional source centers while visible/explored queries address integer cells. Its inclusive source circles use those cell coordinates directly, with no half-cell offset. See [Fog and Visibility](rts-primitives.md#fog-and-visibility) for batching and saved-state reader compatibility.
+
 ### Distance to several destinations
 
 `gridDistanceField(sources, options)` computes travel costs for every grid cell using occupancy, obstacles, optional directed edge costs and diagonal rules. Read row-major `distances` and `sourceIndices`; unreachable cells are Infinity/-1. Use this when obstacles matter: geometric nearest-entity queries answer a different question. See the [RTS example](rts-primitives.md#grid-pathfinding-and-queues). The result uses memory proportional to grid area and is independent of World ticks.

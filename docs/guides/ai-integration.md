@@ -153,6 +153,8 @@ Every error the core engine throws is an `EngineError` / `EngineRangeError` / `E
 
 An AI playtester that should only "see" what its player sees holds a `PlayerObserver` over `ctx.world` and acts on observations instead of raw world reads: construct it once with the player's `VisibilityMap`, call `observeTick()` after each step, and branch on `entered` / `updated` / `exited` — entities entering view arrive with full data, entities leaving view produce an explicit exit notice with honest `'fog'`-vs-`'destroyed'` attribution. Defaults leak nothing (positionless entities, world state, and events are all opt-in). For networked clients, the same projection works per-`ClientAdapter`-client: send `observeTick()` output as the per-client tick message in place of the omniscient diff. Full surface: api-reference § "PlayerObserver".
 
+Vision-source centers may be finite fractions, but visibility queries and observed cells retain integer grid coordinates. Nonfinite source centers report `visibility_source_coords_invalid`, and finite out-of-bounds centers report `visibility_out_of_bounds`; integer point-query validation remains `visibility_coords_not_integer`. See [Fog and Visibility](rts-primitives.md#fog-and-visibility) for source bounds and saved-state reader compatibility.
+
 ## Runtime Profiles
 
 Keep AI loops on the default `instrumentationProfile: 'full'`.

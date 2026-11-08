@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-08 — Visibility source validation rejected true fractional centers
+
+**Symptom:** E17 requires vision circles centered on moving units' true positions. Source input and restored source values shared the integer cell-query validator, rejecting finite fractions even though the existing inclusive raster equation can evaluate them.
+
+**Class check and correction:** `tests/visibility-continuous.test.ts` covers literal cells, zero radius, clipped edges, exact source round trips, nonfinite/bounds/radius error order, atomic rejected setters and integer-only queries. `tests/visibility-incremental-oracle.test.ts` compares three seeded lifecycle/batch/load sequences with independent full-cell scans and old metrics, and preserves duplicate-load merges and extra-field behavior. The unchanged shipped algorithm first failed 17 of these 20 cases, with three controls passing. The correction changes only the setter/load coordinate checks and adds a finite/bounds helper; integer query validation, rasterization, ordering, batching and old metrics remain byte-identical. Five temporary controls fail real assertions and restore exact source bytes. Six untimed integer workloads match all 600 state/metric boundaries, including original returns from four captured game windows. This does not accept the separately rejected incremental optimization or prove game adoption or speed.
+
 ## 2026-11-08 — Whole-cell ownership could not admit movement, and metadata errors mutated claims
 
 **Symptom:** Downstream E06 required a farm or unstarted foundation to exclude new placement while admitting units, including a claim created beneath existing units. The binding treated every footprint as a movement blocker. No game-specific object policy belongs in the engine.

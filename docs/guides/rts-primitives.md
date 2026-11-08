@@ -208,12 +208,12 @@ visibility.isVisible('player-1', 42, 40);  // true
 visibility.isExplored('player-1', 42, 40); // true
 ```
 
-When a source moves, update only that source and recompute:
+Source centers may be finite fractions inside the map. Visibility is evaluated at integer cell coordinates using the inclusive circle equation, without rounding or a half-cell offset. Batch source edits before calling `update()`; only the final positions contribute to explored history. Point queries still require integers. For a moving source:
 
 ```typescript
 visibility.setSource('player-1', 'scout-17', {
-  x: 60,
-  y: 12,
+  x: 60.5,
+  y: 12.25,
   radius: 5,
 });
 visibility.update();
@@ -227,7 +227,7 @@ The map tracks:
 - Serializable state via `getState()` / `fromState()`
 - Deterministic metrics via `getMetrics()` / `resetMetrics()` (recomputes, computed cells, visibility queries — parity with `OccupancyGrid`)
 
-Repeated `getState()` and `getSources()` calls reuse private canonical orderings. Membership changes invalidate key order; genuinely new explored cells invalidate cell order. Returned arrays/source objects are still fresh, and snapshot construction still copies O(output size) data. The tradeoff is retained ID/cell arrays; source rasterization, validation and existing metrics are unchanged.
+Repeated `getState()` and `getSources()` calls reuse private canonical orderings. Membership changes invalidate key order; genuinely new explored cells invalidate cell order. Returned arrays/source objects are still fresh, and snapshot construction still copies O(output size) data. The tradeoff is retained ID/cell arrays. Source rasterization and the three existing metrics are unchanged. Saved-state fields and old integer values remain unchanged; fractional centers require a reader supporting them and are rejected by older integer-only readers.
 
 ## Benchmarking
 

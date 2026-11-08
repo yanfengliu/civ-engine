@@ -219,7 +219,7 @@ Use a transaction when an action needs an atomic cost / precondition check ("bui
 The engine ships several standalone data structures that game code instantiates and ticks itself. None are subsystems of `World`; each is independently testable. Persistence is specific to each utility: distance-field typed arrays and Infinity sentinels need explicit game-owned encoding.
 
 - **`OccupancyGrid` / `OccupancyBinding` / `SubcellOccupancyGrid`** — passability, exclusive footprints with an optional movement-passable binding policy, slot-based crowding
-- **`VisibilityMap`** — per-player visible / explored cells
+- **`VisibilityMap`** — per-player visible / explored integer cells, revealed by finite integer or fractional source centers
 - **`Layer<T>`** — typed downsampled-resolution overlay maps for field data (pollution, influence, danger, weather, faith)
 - **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing
 - **`gridDistanceField`** — multi-source costs from every grid cell to its nearest destination, with directed/weighted edges and earliest-input tie resolution

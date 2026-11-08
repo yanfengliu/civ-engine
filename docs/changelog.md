@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.13.0 — 2026-11-07
+
+`VisibilityMap.setSource` and `VisibilityMap.fromState` now accept finite fractional vision-source x/y coordinates within the existing map bounds. Sight circles use those values directly against integer grid-cell coordinates, with no rounding or half-cell offset. Radius validation, batching, exploration, canonical output ordering, integer point queries and the existing three metrics are unchanged. No new exports or state fields are added.
+
+Reader compatibility: new code loads old integer-source states; older integer-only engines reject states containing fractional centers. Keep consumers that exchange these states on a supporting engine. Nonfinite source centers now report `visibility_source_coords_invalid`; finite out-of-bounds centers retain `visibility_out_of_bounds`, and integer point-query errors remain unchanged. The incremental visibility optimization is not included.
+
 ## 2.12.0 — 2026-11-07
 
 Adds `gridDistanceField(sources, options)` plus its options/result types in Node and browser entry points. Compute each cell's distance to its nearest destination in one multi-source search. The default is four-connected unit-cost BFS; weighted or diagonal requests use reverse Dijkstra, evaluating directed costs in the direction of travel toward destinations. Exact ties choose the earliest original destination. Returned caller-owned arrays contain Float64 distances and Int32 source indices, with Infinity/-1 for unreachable cells.
