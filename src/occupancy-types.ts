@@ -109,6 +109,8 @@ export interface OccupancyCellClaim {
   entity: EntityId | null;
   kind: string;
   claim: OccupancyClaimType;
+  /** Present only for an occupied claim that admits movement. */
+  blocksMovement?: boolean;
   slot?: number;
   offset?: SubcellSlotOffset;
 }
@@ -123,6 +125,11 @@ export interface OccupancyCellStatus {
 
 export interface OccupancyBindingClaimOptions {
   metadata?: OccupancyMetadata;
+}
+
+export interface OccupancyBindingOccupyOptions extends OccupancyBindingClaimOptions {
+  /** Omitted or true blocks movement; false reserves placement but admits subcells. */
+  blocksMovement?: boolean;
 }
 
 export interface OccupancyBindingSubcellOptions

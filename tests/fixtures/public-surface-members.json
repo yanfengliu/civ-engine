@@ -787,6 +787,10 @@
     "occupancy",
     "version"
   ],
+  "OccupancyBindingOccupyOptions": [
+    "blocksMovement?",
+    "metadata?"
+  ],
   "OccupancyBindingOptions": [
     "crowding?",
     "world?"
@@ -803,6 +807,7 @@
     "onDestroy"
   ],
   "OccupancyCellClaim": [
+    "blocksMovement?",
     "claim",
     "entity",
     "kind",

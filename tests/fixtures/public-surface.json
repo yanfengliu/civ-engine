@@ -267,6 +267,7 @@
     "OccupancyBinding",
     "OccupancyBindingClaimOptions",
     "OccupancyBindingMetrics",
+    "OccupancyBindingOccupyOptions",
     "OccupancyBindingOptions",
     "OccupancyBindingSubcellOptions",
     "OccupancyBindingWorldHooks",

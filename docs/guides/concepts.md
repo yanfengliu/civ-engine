@@ -218,7 +218,7 @@ Use a transaction when an action needs an atomic cost / precondition check ("bui
 
 The engine ships several standalone data structures that game code instantiates and ticks itself. None are subsystems of `World`; all are pure data + methods, JSON-serializable, and independently testable:
 
-- **`OccupancyGrid` / `OccupancyBinding` / `SubcellOccupancyGrid`** — passability, footprints, slot-based crowding
+- **`OccupancyGrid` / `OccupancyBinding` / `SubcellOccupancyGrid`** — passability, exclusive footprints with an optional movement-passable binding policy, slot-based crowding
 - **`VisibilityMap`** — per-player visible / explored cells
 - **`Layer<T>`** — typed downsampled-resolution overlay maps for field data (pollution, influence, danger, weather, faith)
 - **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing

@@ -60,6 +60,16 @@ export function toSubcellNeighborOptions(
   };
 }
 
+export function getEntityMetadata(
+  entityStates: Map<EntityId, OccupancyBindingEntityState>,
+  entity: EntityId,
+  metadata: OccupancyMetadata | undefined,
+  fallbackKind: string,
+): OccupancyMetadata {
+  const current = entityStates.get(entity);
+  return normalizeOccupancyMetadata(metadata ?? current?.metadata, current?.metadata.kind ?? fallbackKind);
+}
+
 export function setEntityState(
   entityStates: Map<EntityId, OccupancyBindingEntityState>,
   entity: EntityId,
@@ -73,10 +83,7 @@ export function setEntityState(
 ): boolean {
   const current = entityStates.get(entity);
   const next: OccupancyBindingEntityState = {
-    metadata: normalizeOccupancyMetadata(
-      config.metadata ?? current?.metadata,
-      current?.metadata.kind ?? config.fallbackKind,
-    ),
+    metadata: getEntityMetadata(entityStates, entity, config.metadata, config.fallbackKind),
     occupied: config.occupied ?? current?.occupied ?? false,
     reserved: config.reserved ?? current?.reserved ?? false,
     subcell: config.subcell ?? current?.subcell ?? false,

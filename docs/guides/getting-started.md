@@ -121,6 +121,8 @@ const nearby = world.grid.getNeighbors(5, 3);
 const allNearby = world.grid.getNeighbors(5, 3, ALL_DIRECTIONS);
 ```
 
+For collision/path policy, use the separate `OccupancyBinding`: a footprint can reserve placement while allowing units with `occupy(entity, area, { blocksMovement:false })`. Default claims remain solid; see [RTS primitives](rts-primitives.md#occupancy-and-reservation).
+
 ## Commands (Player Input)
 
 Commands are the way external code (AI agents, UI) sends instructions to the simulation. They are validated immediately and processed at the start of the next tick.

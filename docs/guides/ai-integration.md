@@ -236,6 +236,8 @@ The runner gives the agent one structured result object containing final state, 
 
 For diagnostic workflows, error code reference, debugging scenarios, and the recommended closed loop, see the [Debugging Guide](./debugging.md).
 
+For occupancy observations, `OccupancyBinding.getCellStatus().blockedBy` includes placement-only claims tagged `blocksMovement:false`. Use `blocked` for movement and retain the tagged claim when explaining why another structure cannot be placed. Reservations and full subcell capacity remain independent blockers.
+
 ## MCP and Wrappers
 
 If you expose the engine through MCP later, keep the adapter thin.

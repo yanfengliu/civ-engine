@@ -21,6 +21,7 @@ export type {
   OccupancyCellClaim,
   OccupancyCellStatus,
   OccupancyBindingClaimOptions,
+  OccupancyBindingOccupyOptions,
   OccupancyBindingSubcellOptions,
   OccupancyBindingWorldHooks,
   OccupancyBindingOptions,

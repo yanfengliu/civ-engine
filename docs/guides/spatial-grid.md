@@ -24,6 +24,8 @@ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 // world.grid is a read-only SpatialGridView with dimensions 64x64
 ```
 
+Placement and movement ownership belong to `OccupancyBinding`, separately from this proximity index. Its `occupy(entity, area, { blocksMovement:false })` keeps a footprint exclusive while allowing movement and subcell units; see [RTS primitives](rts-primitives.md#occupancy-and-reservation).
+
 ## Automatic Synchronization
 
 The grid is updated lock-step with position writes. Calling `world.setPosition(id, { x, y })` (or `world.setComponent(id, 'position', { x, y })` when `position` is the configured `positionKey`) inserts/moves the entity in the grid and updates the engine's `previousPositions` record in the same call. `world.removeComponent(id, 'position')` removes the entity from the grid.

@@ -4,11 +4,11 @@ import type {
   GridPassability,
   OccupancyArea,
   OccupancyBindingClaimOptions,
+  OccupancyBindingOccupyOptions,
   OccupancyBindingMetrics,
   OccupancyBindingOptions,
   OccupancyBindingSubcellOptions,
   OccupancyBindingWorldHooks,
-  OccupancyCellClaim,
   OccupancyCellStatus,
   OccupancyMetadata,
   OccupancyQueryOptions,
@@ -24,13 +24,16 @@ import {
 } from './occupancy-internal.js';
 import {
   type OccupancyBindingEntityState,
-  createEntityClaim,
+  getEntityMetadata,
   normalizeOccupancyMetadata,
   sameOccupancyMetadata,
   setEntityState,
   toSubcellNeighborOptions,
   toSubcellOccupancyOptions,
 } from './occupancy-binding-internal.js';
+
+import { isMovementBlocked, normalizeMovementPolicy, setMovementPolicy } from './occupancy-binding-policy.js';
+import { type BindingStatusSources, getBindingCellStatus } from './occupancy-binding-status.js';
 
 export class OccupancyBinding implements GridPassability {
   readonly width: number;
@@ -39,6 +42,8 @@ export class OccupancyBinding implements GridPassability {
   private readonly crowding: SubcellOccupancyGrid | null;
   private staticMetadataByCell = new Map<number, OccupancyMetadata>();
   private entityStates = new Map<EntityId, OccupancyBindingEntityState>();
+  private readonly placementOnly = new Set<EntityId>();
+  private readonly statusSources: BindingStatusSources;
   private metrics = {
     cellStatusQueries: 0,
     crowdedSlotChecks: 0,
@@ -67,7 +72,7 @@ export class OccupancyBinding implements GridPassability {
       this.crowding = new SubcellOccupancyGrid(width, height, {
         ...options.crowding,
         isCellBlocked: (x, y, queryOptions) => {
-          if (this.occupancy.isBlocked(x, y, queryOptions)) {
+          if (isMovementBlocked(this.occupancy, this.placementOnly, x, y, queryOptions)) {
             return true;
           }
           return userBlocked?.(x, y, queryOptions) ?? false;
@@ -75,6 +80,10 @@ export class OccupancyBinding implements GridPassability {
       });
     }
 
+    this.statusSources = {
+      occupancy: this.occupancy, crowding: this.crowding, entityStates: this.entityStates,
+      staticMetadataByCell: this.staticMetadataByCell, placementOnly: this.placementOnly, metrics: this.metrics,
+    };
     if (options.world) {
       this.attachWorld(options.world);
     }
@@ -85,7 +94,7 @@ export class OccupancyBinding implements GridPassability {
   }
 
   isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean {
-    if (this.occupancy.isBlocked(x, y, options)) {
+    if (isMovementBlocked(this.occupancy, this.placementOnly, x, y, options)) {
       return true;
     }
     if (!this.crowding) {
@@ -152,13 +161,12 @@ export class OccupancyBinding implements GridPassability {
   occupy(
     entity: EntityId,
     area: OccupancyArea,
-    options: OccupancyBindingClaimOptions = {},
+    options: OccupancyBindingOccupyOptions = {},
   ): boolean {
-    const crowdedCell = this.findCrowdingConflictCell(
-      normalizeOccupancyArea(area, this.width, this.height),
-      entity,
-    );
-    if (crowdedCell !== null) {
+    const cells = normalizeOccupancyArea(area, this.width, this.height);
+    const metadata = getEntityMetadata(this.entityStates, entity, options.metadata, 'occupied');
+    const blocksMovement = normalizeMovementPolicy(options.blocksMovement);
+    if (blocksMovement && this.findCrowdingConflictCell(cells, entity) !== null) {
       return false;
     }
 
@@ -168,13 +176,14 @@ export class OccupancyBinding implements GridPassability {
       return false;
     }
 
-    let changed = beforeOccupancyVersion !== this.occupancy.version;
+    let changed = setMovementPolicy(this.placementOnly, entity, blocksMovement)
+      || beforeOccupancyVersion !== this.occupancy.version;
     if (this.crowding) {
       this.crowding.release(entity);
       changed = this.crowding.version !== beforeCrowdingVersion || changed;
     }
     changed = setEntityState(this.entityStates, entity, {
-      metadata: options.metadata,
+      metadata,
       fallbackKind: 'occupied',
       occupied: true,
       reserved: false,
@@ -190,10 +199,9 @@ export class OccupancyBinding implements GridPassability {
     area: OccupancyArea,
     options: OccupancyBindingClaimOptions = {},
   ): boolean {
-    const crowdedCell = this.findCrowdingConflictCell(
-      normalizeOccupancyArea(area, this.width, this.height),
-      entity,
-    );
+    const cells = normalizeOccupancyArea(area, this.width, this.height);
+    const metadata = getEntityMetadata(this.entityStates, entity, options.metadata, 'reserved');
+    const crowdedCell = this.findCrowdingConflictCell(cells, entity);
     if (crowdedCell !== null) {
       return false;
     }
@@ -205,7 +213,7 @@ export class OccupancyBinding implements GridPassability {
 
     const changed =
       setEntityState(this.entityStates, entity, {
-        metadata: options.metadata,
+        metadata,
         fallbackKind: 'reserved',
         reserved: true,
       }) || beforeVersion !== this.occupancy.version;
@@ -252,6 +260,8 @@ export class OccupancyBinding implements GridPassability {
     options: OccupancyBindingSubcellOptions = {},
   ): SubcellPlacement | null {
     const crowding = this.requireCrowding();
+    assertGridPoint(position.x, position.y, this.width, this.height);
+    const metadata = getEntityMetadata(this.entityStates, entity, options.metadata, 'subcell');
     const beforeCrowdingVersion = crowding.version;
     const beforeOccupancyVersion = this.occupancy.version;
     const placement = crowding.occupy(
@@ -264,15 +274,16 @@ export class OccupancyBinding implements GridPassability {
     }
 
     this.occupancy.release(entity);
+    const policyChanged = this.placementOnly.delete(entity);
     const changed =
       setEntityState(this.entityStates, entity, {
-        metadata: options.metadata,
+        metadata,
         fallbackKind: 'subcell',
         occupied: false,
         reserved: false,
         subcell: true,
       }) ||
-      crowding.version !== beforeCrowdingVersion ||
+      policyChanged || crowding.version !== beforeCrowdingVersion ||
       this.occupancy.version !== beforeOccupancyVersion;
     this.bumpVersion(changed);
     return placement;
@@ -295,6 +306,7 @@ export class OccupancyBinding implements GridPassability {
     const beforeCrowdingVersion = this.crowding?.version ?? 0;
     this.occupancy.release(entity);
     this.crowding?.release(entity);
+    const policyChanged = this.placementOnly.delete(entity);
 
     const changed =
       setEntityState(this.entityStates, entity, {
@@ -304,7 +316,7 @@ export class OccupancyBinding implements GridPassability {
         subcell: false,
       }) ||
       this.occupancy.version !== beforeOccupancyVersion ||
-      (this.crowding?.version ?? 0) !== beforeCrowdingVersion;
+      (this.crowding?.version ?? 0) !== beforeCrowdingVersion || policyChanged;
     this.bumpVersion(changed);
   }
 
@@ -313,63 +325,7 @@ export class OccupancyBinding implements GridPassability {
     y: number,
     options?: OccupancyQueryOptions,
   ): OccupancyCellStatus {
-    assertGridPoint(x, y, this.width, this.height);
-    this.metrics.cellStatusQueries++;
-
-    const blockedBy: OccupancyCellClaim[] = [];
-    const crowdedBy: OccupancyCellClaim[] = [];
-    const ignoreEntity = options?.ignoreEntity;
-    const includeReservations = options?.includeReservations ?? true;
-    const cell = this.toIndex(x, y);
-
-    const staticMetadata = this.staticMetadataByCell.get(cell);
-    if (staticMetadata) {
-      blockedBy.push({
-        entity: null,
-        kind: staticMetadata.kind,
-        claim: 'blocked',
-      });
-    }
-
-    const occupant = this.occupancy.getOccupant(x, y);
-    if (occupant !== null && occupant !== ignoreEntity) {
-      blockedBy.push(createEntityClaim(this.entityStates, occupant, 'occupied'));
-    }
-
-    if (includeReservations) {
-      const reservationOwner = this.occupancy.getReservationOwner(x, y);
-      if (reservationOwner !== null && reservationOwner !== ignoreEntity) {
-        blockedBy.push(createEntityClaim(this.entityStates, reservationOwner, 'reserved'));
-      }
-    }
-
-    if (this.crowding) {
-      for (let slot = 0; slot < this.crowding.slots.length; slot++) {
-        this.metrics.crowdedSlotChecks++;
-        const crowdedEntity = this.crowding.getSlotOccupant(x, y, slot);
-        if (crowdedEntity === null || crowdedEntity === ignoreEntity) {
-          continue;
-        }
-        crowdedBy.push(
-          createEntityClaim(this.entityStates, crowdedEntity, 'subcell', {
-            slot,
-            offset: { ...this.crowding.slots[slot]! },
-          }),
-        );
-      }
-    }
-
-    const freeSubcellSlots = this.crowding
-      ? this.crowding.slots.length - crowdedBy.length
-      : null;
-
-    return {
-      position: { x, y },
-      blocked: blockedBy.length > 0 || freeSubcellSlots === 0,
-      blockedBy,
-      crowdedBy,
-      freeSubcellSlots,
-    };
+    return getBindingCellStatus(this.statusSources, x, y, options);
   }
 
   getMetrics(): OccupancyBindingMetrics {
@@ -383,10 +339,8 @@ export class OccupancyBinding implements GridPassability {
   }
 
   resetMetrics(): void {
-    this.metrics = {
-      cellStatusQueries: 0,
-      crowdedSlotChecks: 0,
-    };
+    this.metrics.cellStatusQueries = 0;
+    this.metrics.crowdedSlotChecks = 0;
     this.occupancy.resetMetrics();
     this.crowding?.resetMetrics();
   }
@@ -471,11 +425,6 @@ export class OccupancyBinding implements GridPassability {
     if (changed) {
       this._version++;
     }
-  }
-
-  private toIndex(x: number, y: number): number {
-    assertGridPoint(x, y, this.width, this.height);
-    return y * this.width + x;
   }
 
   private toPosition(index: number): Position {

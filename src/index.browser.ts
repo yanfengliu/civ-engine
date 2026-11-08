@@ -80,7 +80,7 @@ export {
 } from './noise.js';
 export {
   OccupancyBinding, OccupancyGrid, SubcellOccupancyGrid, type GridPassability,
-  type OccupancyArea, type OccupancyBindingClaimOptions, type OccupancyBindingMetrics,
+  type OccupancyArea, type OccupancyBindingClaimOptions, type OccupancyBindingOccupyOptions, type OccupancyBindingMetrics,
   type OccupancyBindingOptions, type OccupancyBindingSubcellOptions,
   type OccupancyBindingWorldHooks, type OccupancyCellClaim, type OccupancyCellStatus,
   type OccupancyClaimType, type OccupancyGridMetrics, type OccupancyGridState,

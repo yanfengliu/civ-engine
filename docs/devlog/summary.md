@@ -1,5 +1,7 @@
 # Devlog Summary
 
+- 2026-11-07: Prepared2.10.0 placement-only OccupancyBinding claims (work83): exclusive footprints can admit movement/subcells, metadata errors are atomic, defaults and raw persistence stay unchanged. Literal RED21, expanded affected79/type/lint and seven deliberate controls passed; independent exact implementation review accepted with one minor guide correction. Full11 passed1970+TODO/22; delivery/publication and game adoption remain pending.
+
 - 2026-11-07: Closed work81 delivery/cleanup at379eccdf (CI42435128951 passed) and refreshed the consumer priority list. Farm589d385, City670ad083, civ-sim-web6914e46 and idle-life5cecbc4 are delivered/cleaned; their canonical-path test-oracle follow-ups are planned. Townscaper work82 retained2.9.1 passed234 files/2029 tests, six gates,168 inspected GPU views and independent reviews; source ada08b5 is delivered, evidence retained and consumer cleanup complete. AoE2 work153 final repair acceptance and works154/155 remain root-owned.
 
 - 2026-11-07: Shipped 2.9.1 component publication docs/tests (work 81; main e8ada69). Exact re-review, all eleven local gates (1,926 root plus TODO, 22 MCP) and CI 42433332914 Node 20/22/24/publication passed; retained archive/runtime/nullish-contract smoke verified. Private cleanup awaits delivery records. civ-sim-web adoption delivered; four consumer CLI-alias guard repairs stay active. Townscaper remains blocked on historical work-record recovery.

@@ -23,7 +23,7 @@ Use `OccupancyBinding` when the game also needs:
 - one passability surface that owns both whole-cell blockers and optional sub-cell crowding
 - measurable occupancy and crowding scan counters for benchmarks
 
-When crowding is enabled, the binding treats fully packed sub-cell slots as blocked for passability and rejects whole-cell blockers that would be stamped on top of crowded units.
+When crowding is enabled, the binding treats fully packed subcell slots as blocked for passability and rejects solid whole-cell claims over other crowded units. An opt-in `occupy(entity, area, { blocksMovement:false })` claim can reserve placement beneath those units while allowing them to move.
 
 It is intentionally separate from `SpatialGrid`:
 
@@ -56,17 +56,30 @@ Useful `OccupancyBinding` APIs:
 - `reserve(entity, area)` — short-lived entity-owned hold
 - `clearReservation(entity)`
 - `release(entity)`
-- `isBlocked(x, y, options?)` — `options.ignoreEntity` only ignores `occupy`/`reserve` claims of that entity, not static blocks
+- `isBlocked(x, y, options?)` — `options.ignoreEntity` ignores that entity’s footprint, reservation and subcell claims for movement/capacity queries, not static blocks
 - `getCellStatus(x, y, options?)`
 - `attachWorld(world)` / `detachWorld()`
 - `getMetrics()` / `resetMetrics()`
 
 **Static blocks vs occupancy.** `block()` is for terrain — cells that are impassable to everyone, with no notion of an owner. It does not accept an entity argument and is not affected by `options.ignoreEntity`. If you want a cell that blocks others but not the entity that placed it (a barricade, a construction site, an entity's own footprint), use `occupy(entity, area)` with an appropriately long lifetime — that path tracks the owner and `ignoreEntity` works correctly. Modeling all entity-blocking as occupancy keeps the passability surface simple and deterministic.
 
-Use raw `OccupancyGrid` when you need deterministic serialization snapshots:
+For a farm or unstarted foundation that excludes new structures but admits units, select the policy explicitly; metadata labels never select it:
 
 ```typescript
-const snapshot = occupancy.getState();
+occupancy.occupy(300, [{ x: 30, y: 20 }], {
+  metadata: { kind: 'farm' }, blocksMovement: false,
+});
+occupancy.occupySubcell(400, { x: 30, y: 20 }); // succeeds when a slot is free
+occupancy.occupy(500, [{ x: 30, y: 20 }]); // false: placement remains owned
+```
+
+The false-tagged occupied entry stays in `getCellStatus().blockedBy`; read `blocked` for movement. A same-owner reservation remains a separate blocker, unless the query sets `includeReservations:false`. Omit the policy on a later occupy call to restore a solid footprint; this fails unchanged if another unit remains beneath it. Identical claims do not increment the version. Invalid metadata is checked before mutations/conflicts in occupy/reserve/occupySubcell. Release, destroy cleanup and conversion to a slot clear the movement policy. Games own which objects are passable and reapply this runtime choice after loading.
+
+Use raw `OccupancyGrid` when you need deterministic serialization snapshots (`OccupancyBinding` has no getState):
+
+```typescript
+const rawOccupancy = new OccupancyGrid(128, 128);
+const snapshot = rawOccupancy.getState();
 const restored = OccupancyGrid.fromState(snapshot);
 ```
 

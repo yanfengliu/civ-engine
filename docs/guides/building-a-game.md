@@ -351,6 +351,8 @@ if (path) {
 }
 ```
 
+To include placement and crowding in pathfinding, pass an `OccupancyBinding` as `occupancy`. Use `occupy(farmId, cells, { blocksMovement:false })` for a game-selected footprint that excludes other structures but admits units. Default footprints remain solid; the binding does not infer policy from metadata kind.
+
 ## 9. Diffs (Observing State)
 
 Diffs tell you what changed each tick — essential for rendering or client sync.

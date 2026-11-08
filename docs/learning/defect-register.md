@@ -8,6 +8,14 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-08 — Whole-cell ownership could not admit movement, and metadata errors mutated claims
+
+**Symptom:** Downstream E06 required a farm or unstarted foundation to exclude new placement while admitting units, including a claim created beneath existing units. The binding treated every footprint as a movement blocker. No game-specific object policy belongs in the engine.
+
+**Root cause and correction:** Exclusive placement and movement consulted the same raw claim without a binding policy. Add occupy-only blocksMovement:false while retaining raw placement ownership, independent reservations and capacity. Inspection also found metadata normalization after mutation in occupy/reserve/occupySubcell; preflight now makes these errors atomic, with explicit changed invalid-input conflict precedence.
+
+**Class checks:** tests/occupancy-placement-only.test.ts covers all movement/subcell queries, placement exclusion, under-unit claims, reservations, normalized repeats, policy/metadata versions, failed moves/transitions and release/destroy/ID reuse. tests/occupancy-claim-atomicity.test.ts checks all three mutations on legal/conflicting/invalid-coordinate targets. tests/occupancy-movement-queries.test.ts forbids full-state/status recursion and extra default-path identity lookups, and checks actual reset/preflight counters. tests/occupancy-claim-types.test.ts pins both entries and disallows policy on reserve/block. Literal unchanged-source RED:21 failures/8 passes; first affected GREEN:52 passes; expanded GREEN:79. Seven deliberate controls independently break raw subcell filtering, placement exclusion, solid crowding conflict, reservation independence, policy versioning, metadata preflight and release cleanup, then restore exact bytes. No consumer behavior, throughput or persistence proof is claimed.
+
 ## 2026-11-07 — Component docs promised mutation detection that the store does not perform
 
 **Symptom:** E23's API reference said direct mutations are detected for diffs, contradicting the component-registration contract and existing ComponentStore negative test. Its read example and several tutorial systems mutated live components without publishing. The spatial guide also called setPosition the only movement write despite setComponent and patchComponent synchronizing the configured position key.

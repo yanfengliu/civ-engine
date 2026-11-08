@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.9.1-blue)
+![version](https://img.shields.io/badge/version-2.10.0-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. No production deployment has exercised the engine end-to-end, so treat it as suitable for prototyping and AI-agent experiments. Pin a verified prebuilt archive (see [Install](#install)) and read the [changelog](docs/changelog.md) before upgrading.
 
@@ -103,7 +103,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | Feature | What it does |
 | --- | --- |
 | **Spatial Grid** | 2D grid auto-synced with position components; neighbor queries, `queryInRadius`, `findNearest` |
-| **Occupancy & Crowding** | Deterministic blocked-cell footprints, blocker metadata, lifecycle bindings, crowding-aware passability, reservations, and sub-cell slot packing. See [sub-grid movement](docs/guides/sub-grid-movement.md) for fine-grid simulation, coarse building placement, and renderer-owned smooth motion |
+| **Occupancy & Crowding** | Deterministic footprints with optional movement passability, blocker metadata, lifecycle bindings, crowding-aware queries, reservations, and sub-cell slot packing. See [sub-grid movement](docs/guides/sub-grid-movement.md) for fine-grid simulation, coarse building placement, and renderer-owned smooth motion |
 | **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
 | **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |

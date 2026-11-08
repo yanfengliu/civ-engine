@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.10.0 — 2026-11-08
+
+Adds `OccupancyBindingOccupyOptions.blocksMovement` to `occupy()`. Pass `false` to claim exclusive placement while admitting movement and subcell units, including units already beneath the footprint. Omission or `true` remains solid on every call. Placement and reservations from other entities still fail; reservations retain their own blocking behavior and `includeReservations:false` ignores only reservations. No dependency or persistent-format change is required.
+
+`getCellStatus().blockedBy` remains the complete placement ledger and tags opt-in occupied entries with `blocksMovement:false`; use `blocked` for movement. Existing solid claim shapes are unchanged. Full subcell capacity and custom subcell vetoes remain effective. Repeated equivalent claims are idempotent; policy changes increment the binding version, and failed transitions preserve old claims, metadata and policy. Release, attached-world destruction and conversion to subcell occupancy clear the policy.
+
+`occupy`, `reserve` and `occupySubcell` now validate metadata before mutating claims. Empty metadata on a conflicting target throws instead of returning false/null, and invalid inputs may perform fewer counted queries. Coordinates are validated first; a supplied nonboolean movement policy is rejected. Valid existing inputs retain their behavior. Consumers selecting passable game objects must persist/reapply that choice themselves because the binding adds no serialization surface.
+
 ## 2.9.1 — 2026-11-07
 
 Corrects component-write documentation and examples to match existing behavior. `getComponent()` returns a live reference; mutating it alone creates no diff notification or grid synchronization. `patchComponent()` runs immediately on that value, publishes through `setComponent`, and returns the published value. A non-nullish callback return replaces it; `null` or `undefined` preserves the current value and identity; use `setComponent` to store an explicit `null`. Successful writes to the configured position key synchronize the grid. Strict-mode checks precede the callback, but callback or later validation failures do not roll back mutations already made through a live reference.

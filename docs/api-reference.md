@@ -771,12 +771,13 @@ interface OccupancyCellClaim {
   entity: EntityId | null;
   kind: string;
   claim: 'blocked' | 'occupied' | 'reserved' | 'subcell';
+  blocksMovement?: boolean;
   slot?: number;
   offset?: SubcellSlotOffset;
 }
 ```
 
-One occupancy or crowding claim returned by `OccupancyBinding.getCellStatus()`.
+One occupancy or crowding claim returned by `OccupancyBinding.getCellStatus()`. Only an opt-in passable occupied claim emits `blocksMovement:false`; the field is absent on default occupied, reserved, static and subcell claims.
 
 ### `OccupancyCellStatus`
 
@@ -791,7 +792,7 @@ interface OccupancyCellStatus {
 }
 ```
 
-Combined whole-cell and sub-cell view for one cell. `blockedBy` carries building/resource/unit-style metadata without requiring multiple parallel grids, while `blocked` also flips to `true` when sub-cell crowding has no free slots left for the query.
+Combined whole-cell and sub-cell view for one cell. `blockedBy` is the complete placement ledger, including passable occupied claims. `blocked` answers movement: solid/static/included reservation claims or no free subcell slots make it true; a false-tagged occupied claim alone does not. `ignoreEntity` and `includeReservations` filter the corresponding claims.
 
 ### `OccupancyBindingClaimOptions`
 
@@ -802,7 +803,18 @@ interface OccupancyBindingClaimOptions {
 }
 ```
 
-Metadata wrapper used by `OccupancyBinding.block()`, `occupy()`, and `reserve()`.
+Metadata wrapper used by `OccupancyBinding.block()` and `reserve()`, and inherited by `OccupancyBindingOccupyOptions`. Metadata kind does not select movement behavior.
+
+### `OccupancyBindingOccupyOptions`
+
+```typescript
+// src/occupancy-grid.ts
+interface OccupancyBindingOccupyOptions extends OccupancyBindingClaimOptions {
+  blocksMovement?: boolean;
+}
+```
+
+Options for `OccupancyBinding.occupy()`. Omission or true blocks movement on every call. False retains exclusive placement ownership while admitting movement and subcell occupants. It does not relax static, competing footprint or reservation conflicts, or subcell capacity. Only `occupy()` accepts this option; there is no movement policy on `reserve()` or raw `OccupancyGrid`.
 
 ### `OccupancyBindingSubcellOptions`
 
@@ -2920,6 +2932,7 @@ Higher-level occupancy ownership built on top of `OccupancyGrid` and optional `S
 import {
   OccupancyBinding,
   type OccupancyBindingClaimOptions,
+  type OccupancyBindingOccupyOptions,
   type OccupancyBindingMetrics,
   type OccupancyBindingOptions,
   type OccupancyBindingSubcellOptions,
@@ -2945,7 +2958,7 @@ Creates a higher-level occupancy surface for a fixed grid size.
 |---|---|---|
 | `width` | `number` | Grid width (read-only) |
 | `height` | `number` | Grid height (read-only) |
-| `version` | `number` | Monotonic passability version incremented on binding-level mutations |
+| `version` | `number` | Monotonic binding version: changed claims, metadata or movement policy increment once; equivalent repeats do not |
 
 ### Methods
 
@@ -2987,11 +3000,13 @@ Clears blocked cells and any stored static blocker metadata for them.
 occupy(
   entity: EntityId,
   area: OccupancyArea,
-  options?: OccupancyBindingClaimOptions,
+  options?: OccupancyBindingOccupyOptions,
 ): boolean
 ```
 
-Claims a whole-cell footprint and records metadata such as `building`, `resource`, or `unit`.
+Claims a whole-cell footprint and records metadata such as `building`, `resource`, or `unit`. `blocksMovement:false` admits movement/subcells and may claim beneath other units without moving them; default/true rejects those units. Placement stays exclusive. A failed conflict returns false without replacing old claims, metadata or policy. Success replaces the footprint and clears the owner's old reservation/subcell. Equivalent normalized cells, metadata and policy are idempotent; omission restores solid behavior even after a false claim.
+
+The area is validated before metadata, then movement policy, then conflicts. Empty metadata (`occupancy_metadata_kind_empty`) or a nonboolean policy (`occupancy_movement_policy_invalid`) throws before mutation, including on a conflicting target. Metadata omission inherits the existing owner kind.
 
 #### `reserve(entity, area, options?)`
 
@@ -3003,7 +3018,7 @@ reserve(
 ): boolean
 ```
 
-Creates or replaces a reservation with optional blocker metadata. Returns `false` if the requested cells are blocked, claimed, or still occupied by crowded sub-cell units.
+Creates or replaces a reservation with optional blocker metadata. Returns `false` if the requested cells are blocked, claimed by another entity, or still occupied by other crowded subcell units. The same owner may reserve its passable footprint; that reservation still blocks unrelated movement unless `includeReservations:false`. Area and metadata are validated before conflicts or mutation, so invalid metadata throws even on a conflicting target.
 
 #### `clearReservation(entity)`
 
@@ -3019,7 +3034,7 @@ Clears only the reservation state for the entity.
 isBlocked(x: number, y: number, options?: OccupancyQueryOptions): boolean
 ```
 
-Implements `GridPassability` across both owned whole-cell occupancy and sub-cell crowding. Fully crowded cells are treated as blocked for path queries.
+Implements `GridPassability` across solid/static/included reservation claims and subcell crowding. Passable occupied claims alone do not block movement. Fully crowded cells remain blocked for path queries. `ignoreEntity` ignores the owner's footprint, reservation and slot; `includeReservations:false` ignores only reservations. Custom crowding predicates retain their existing scope in subcell allocation, not this query.
 
 #### `canOccupySubcell(entity, position, options?)`
 
@@ -3055,7 +3070,7 @@ occupySubcell(
 ): SubcellPlacement | null
 ```
 
-Claims the best available sub-cell slot and records metadata such as `unit`.
+Claims the best available subcell slot and records metadata such as `unit`. With crowding enabled, coordinates and metadata are validated before slot selection or mutation; invalid metadata throws even when the target conflicts. A null result preserves the prior claim. Success clears that entity's whole-cell footprint, reservation and movement policy, preserving other occupants.
 
 #### `neighborsWithSpace(entity, origin, options?)`
 
@@ -3075,7 +3090,7 @@ Returns neighboring cells with room for the entity, along with free-slot counts 
 release(entity: EntityId): void
 ```
 
-Clears all whole-cell, reservation, and sub-cell claims owned by the entity.
+Clears all whole-cell, reservation, subcell and movement-policy state owned by the entity. Repeated release is idempotent; attached-world destruction uses the same cleanup.
 
 #### `getCellStatus(x, y, options?)`
 
@@ -3087,7 +3102,7 @@ getCellStatus(
 ): OccupancyCellStatus
 ```
 
-Returns combined `blockedBy` and `crowdedBy` metadata for the cell. `blocked` is `true` when either a whole-cell blocker exists or no sub-cell slots remain for the query.
+Returns combined `blockedBy` and `crowdedBy` metadata for the cell. `blockedBy` includes false-tagged passable occupied claims as placement ownership; do not infer movement from its length. `blocked` is true for solid/static/included reservation claims or no remaining subcell slots. Output objects and offsets are detached from internal state.
 
 #### `getMetrics()`
 
@@ -3095,7 +3110,7 @@ Returns combined `blockedBy` and `crowdedBy` metadata for the cell. `blocked` is
 getMetrics(): OccupancyBindingMetrics
 ```
 
-Returns aggregate binding, whole-cell, and crowding scan counters.
+Returns aggregate binding, whole-cell, and crowding scan counters. Movement filtering uses local identities without full-grid snapshots or cell-status recursion; the no-passable-claims path delegates directly to the raw grid. Metadata prevalidation may avoid raw claim/slot scans on invalid input, so counters can differ from earlier invalid-input behavior.
 
 #### `resetMetrics()`
 

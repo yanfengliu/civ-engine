@@ -76,7 +76,7 @@ That is the niche for `SubcellOccupancyGrid`, or for `OccupancyBinding` when the
 - pathfinding and `position` stay on integer cells
 - building footprints and hard blockers still live in occupancy primitives
 - smaller-than-cell units can pack into deterministic slots inside a coarse cell
-- a higher-level binding can expose `blockedBy` metadata without forcing game code to maintain parallel grids
+- a higher-level binding can expose `blockedBy` placement metadata without parallel grids; `occupy(..., { blocksMovement:false })` keeps placement exclusive while admitting subcells, even beneath existing units. Read status `blocked` for movement because the false-tagged occupied claim remains in `blockedBy`
 - fully crowded cells report as blocked to grid pathfinding, so routing and slot placement stay aligned
 
 ```typescript
