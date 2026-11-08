@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.9.0-blue)
+![version](https://img.shields.io/badge/version-2.9.1-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. No production deployment has exercised the engine end-to-end, so treat it as suitable for prototyping and AI-agent experiments. Pin a verified prebuilt archive (see [Install](#install)) and read the [changelog](docs/changelog.md) before upgrading.
 
@@ -159,7 +159,7 @@ World.step()
   -> notify diff listeners (fires after tick++; still in-tick, and can fail the tick with diff_listener_threw)
 ```
 
-Position writes (`setPosition`, `setComponent` on the configured position key) update the spatial grid lock-step; there is no per-tick scan.
+Successful position writes (`setPosition`, `setComponent`, `patchComponent` on the configured position key) update the spatial grid immediately; there is no per-tick scan. Component reads return live references, so raw mutations need explicit publication for diff/grid updates. `patchComponent` returns the published value and preserves identity when its callback returns nothing; callback/validation failure does not roll back live mutations.
 
 Use `world.stepWithResult()` when an AI loop needs a structured runtime failure instead of an exception. `world.step()` remains the compatibility path and throws `WorldTickFailureError` on tick failure.
 

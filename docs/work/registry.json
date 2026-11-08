@@ -1721,6 +1721,10 @@
     {
       "id": 80,
       "theme": "command-precheck"
+    },
+    {
+      "id": 81,
+      "theme": "component-write-contract"
     }
   ]
 }

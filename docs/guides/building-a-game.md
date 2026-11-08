@@ -167,12 +167,10 @@ function movementSystem(w: World<GameEvents, GameCommands>): void {
   for (const id of w.query('position', 'moveTo', 'colonist')) {
     const pos = w.getComponent<Position>(id, 'position')!;
     const moveTo = w.getComponent<MoveTo>(id, 'moveTo')!;
-    const colonist = w.getComponent<Colonist>(id, 'colonist')!;
-
     if (moveTo.step >= moveTo.path.length) {
       // Arrived — remove the moveTo component
       w.removeComponent(id, 'moveTo');
-      colonist.state = 'idle';
+      w.patchComponent<Colonist>(id, 'colonist', (colonist) => { colonist.state = 'idle'; });
       w.emit('colonistArrived', { entityId: id, x: pos.x, y: pos.y });
       continue;
     }
@@ -180,8 +178,8 @@ function movementSystem(w: World<GameEvents, GameCommands>): void {
     // Move one step along the path
     const next = moveTo.path[moveTo.step];
     w.setPosition(id, next);
-    moveTo.step++;
-    colonist.state = 'moving';
+    w.patchComponent<MoveTo>(id, 'moveTo', (order) => { order.step++; });
+    w.patchComponent<Colonist>(id, 'colonist', (colonist) => { colonist.state = 'moving'; });
   }
 }
 
@@ -210,11 +208,11 @@ function gatheringSystem(w: World<GameEvents, GameCommands>): void {
 
       // Gather up to 5 units
       const amount = Math.min(5, source.remaining);
-      source.remaining -= amount;
+      w.patchComponent<ResourceSource>(otherId, 'resourceSource', (resource) => { resource.remaining -= amount; });
 
       // Add to settlement's food pool
       w.addResource(settlement, 'food', amount);
-      colonist.state = 'gathering';
+      w.patchComponent<Colonist>(id, 'colonist', (worker) => { worker.state = 'gathering'; });
 
       w.emit('resourceGathered', {
         entityId: id,

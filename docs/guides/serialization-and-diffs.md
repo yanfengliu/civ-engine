@@ -277,7 +277,7 @@ world.onDiff((diff) => {
 
 ## Filtering blind rewrites with semantic diffMode
 
-By default, every `addComponent` / `setComponent` call marks the entity dirty, even if the new value is identical to the prior value. For components whose sync systems rewrite unchanged values every tick (e.g. `position` or `transform` from a render-side sync) this pollutes `TickDiff` and masks real liveness signals.
+By default, every successful `addComponent` / `setComponent` / `patchComponent` call marks the entity dirty, even if the value is identical to the prior value. For components whose sync systems rewrite unchanged values every tick (e.g. `position` or `transform` from a render-side sync) this pollutes `TickDiff` and masks real liveness signals.
 
 Opt in to semantic dirty-marking per component at registration:
 
@@ -288,6 +288,8 @@ world.registerComponent<Transform>('transform', { diffMode: 'semantic' });
 In semantic mode, `set()` fingerprints the new value and skips the dirty flag when it matches the baseline captured at the last tick. As of v0.5.0, in-place mutation of `getComponent`-returned objects is **not** detected in either mode — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key).
 
 `diffMode: 'strict'` (the default) preserves the per-write audit semantics that serialization consumers may depend on. Choose semantic only for components where the "identical rewrite" case is load-bearing noise.
+
+`patchComponent` publishes through `setComponent`, with the same diff policy. Its callback mutates live data; returning nothing preserves identity and returning a replacement publishes that replacement. A callback or validation failure publishes no new write, but does not undo earlier reference mutations. An unannounced mutation can appear in a value already marked dirty, so absence of its own notification is not a promise that it will never appear in output. For recorded per-tick publication, make successful explicit writes during the tick; setup/maintenance writes are not a durable event queue.
 
 ## Patterns
 

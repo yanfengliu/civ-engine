@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.9.1 — 2026-11-07
+
+Corrects component-write documentation and examples to match existing behavior. `getComponent()` returns a live reference; mutating it alone creates no diff notification or grid synchronization. `patchComponent()` runs immediately on that value, publishes through `setComponent`, and returns the published value. A callback returning nothing preserves identity; returning a replacement stores it. Successful writes to the configured position key synchronize the grid. Strict-mode checks precede the callback, but callback or later validation failures do not roll back mutations already made through a live reference.
+
+The snapshot error table now labels `applyTickDiff` as internal, with no new package export. Contract tests cover same-pass identity, replacement, recorded publication, strict/semantic dirty behavior, configured position keys and failure boundaries. No runtime behavior, public surface or persistent format changed; no migration is required.
+
 ## 2.9.0 — 2026-11-07
 
 Adds `World.precheckCommand(type, data)` and the Node/browser type `CommandPrecheckResult` to observe current command validation before submission. Its seven fields carry acceptance or the first normalized rejection, detached details and the existing observable tick. It does not enqueue, allocate a sequence, emit a command result, advance a tick, consume a poison warning or create a recording/history entry by itself. No migration or persistent-format change is required.

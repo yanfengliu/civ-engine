@@ -39,16 +39,16 @@ world.patchComponent<{ hp: number }>(unit, 'health', (health) => {
 });
 ```
 
-`getComponent()` returns the stored object directly, but in-place mutations are **not** picked up by the diff system. All component changes must go through `setComponent()` / `addComponent()` / `patchComponent()` (or `setPosition()` for the configured position component) for the engine to mark the entity dirty and update derived structures like the spatial grid.
+`getComponent()` returns the stored object directly. Direct component-reference mutations are not automatically tracked for diffs. Publish component changes through `setComponent()` / `addComponent()` / `patchComponent()` (or `setPosition()` for the configured position component). A callback returning nothing from `patchComponent()` preserves the live object's identity; returning a replacement publishes that value. The method returns the published value. It checks strict mode before the callback, but does not roll back live-reference writes when the callback or later validation throws.
 
-Use `setPosition()` when same-tick grid correctness matters:
+`setPosition()`, `setComponent()` and `patchComponent()` synchronize the configured position key immediately, including for queries from later systems in the same tick:
 
 ```typescript
 const pos = world.getComponent<Position>(unit, 'position')!;
 world.setPosition(unit, { x: pos.x + 1, y: pos.y });
 ```
 
-In-place mutation of position objects (`pos.x += 1`) is not auto-detected — neither the diff nor the grid will see the change. Always use `setPosition`/`setComponent` for movement.
+Raw position mutation (`pos.x += 1`) creates no diff notification or grid synchronization. Use `setPosition`, `setComponent` or `patchComponent` for movement. A failed patch can leave a mutated live position behind with the grid still at its old cell; validation is not rollback.
 
 ## Systems and Metrics
 

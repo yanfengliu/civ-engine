@@ -8,6 +8,12 @@ Each entry: the symptom as the user reported it, what the investigation found, t
 
 ---
 
+## 2026-11-07 — Component docs promised mutation detection that the store does not perform
+
+**Symptom:** E23's API reference said direct mutations are detected for diffs, contradicting the component-registration contract and existing ComponentStore negative test. Its read example and several tutorial systems mutated live components without publishing. The spatial guide also called setPosition the only movement write despite setComponent and patchComponent synchronizing the configured position key.
+
+**Class check and correction:** `tests/component-publication-contract.test.ts` proves same-pass identity, return/replacement, recorded publication, strict/semantic raw-write negatives, an already-dirty alias bound, configured position grid sync, strict checks before callbacks and non-rollback callback/JSON/position failures. `tests/component-publication-docs.test.ts` pins the corrected live claims against actual store behavior and package barrels, including E12's internal applyTickDiff table label. Four documentation checks failed before correction; nine selected source/doc mutations fail their discriminators and restore exact bytes. Runtime behavior is unchanged. AoE2's separate unrecorded Gatherer writes and chosen-route persistence omission remain game-owned acceptance work.
+
 ## 2026-11-07 — Paused intentions lacked a validation-only engine entry point
 
 **Symptom:** AoE2 E03 reports human commands disappearing across paused save/load. Its game-owned pending intentions differ from engine queued commands; calling submission merely to validate allocates sequences, emits results and queues execution, so it cannot safely stage a saved intention.

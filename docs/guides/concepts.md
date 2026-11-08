@@ -77,9 +77,10 @@ A system is a plain function `(world: World) => void`. It runs once per tick, in
 ```typescript
 function healingSystem(w: World): void {
   for (const id of w.query('health', 'regeneration')) {
-    const hp = w.getComponent<Health>(id, 'health')!;
     const regen = w.getComponent<Regeneration>(id, 'regeneration')!;
-    hp.hp = Math.min(hp.maxHp, hp.hp + regen.rate);
+    w.patchComponent<Health>(id, 'health', (hp) => {
+      hp.hp = Math.min(hp.maxHp, hp.hp + regen.rate);
+    });
   }
 }
 
@@ -135,7 +136,7 @@ World.step()
 - **The spatial grid is always in sync with explicit position writes.** Every `setPosition`/`setComponent` on the configured position key updates the grid in the same call — there is no per-tick scan. In-place mutation of a position object is not auto-detected and the grid will not see it.
 - **Resources process after systems.** Production, consumption, and transfers happen after your code. If a system adds food to an entity, the production rate still fires on top of that.
 - **Events from the current tick are available during the tick.** A system that emits an event can trigger listeners in the same tick. Events are cleared at the **start** of the next tick.
-- **Diffs capture everything.** The diff includes changes from commands, systems, and resource processing — everything that happened in the tick.
+- **Diffs capture published changes.** Commands and systems publish component writes through explicit APIs. Mutating a component reference alone creates no diff notification; world-state slots have a separate mutation-detection contract.
 
 ## Determinism
 

@@ -15,7 +15,7 @@ This guide covers the 2D spatial grid, how automatic synchronization works, and 
 
 ## Overview
 
-The spatial grid is a sparse occupied-cell structure that tracks which entities are at each (x, y) cell. It is owned by the World. Use `world.setPosition()` (or `world.setComponent` on the configured position key) — the grid is updated lock-step with each write. In-place mutation of position objects is not auto-detected and will leave the grid out of sync; `setPosition` is the only supported write path for movement.
+The spatial grid is a sparse occupied-cell structure owned by World. `setPosition`, `setComponent`, and `patchComponent` synchronize the grid immediately when writing the configured position key (`addComponent` aliases `setComponent`). Raw reference mutations do not synchronize it. A successful patch that mutates its argument preserves the component object's identity while moving its grid membership.
 
 The grid exposed as `world.grid` is a runtime-immutable read-only delegate. Mutating methods such as `insert()`, `remove()`, and `move()` are not available through the World API. `getAt()` returns a fresh `Set` copy on every call so even mutating the returned cell view cannot corrupt the underlying grid.
 
@@ -28,7 +28,7 @@ const world = new World({ gridWidth: 64, gridHeight: 64, tps: 10 });
 
 The grid is updated lock-step with position writes. Calling `world.setPosition(id, { x, y })` (or `world.setComponent(id, 'position', { x, y })` when `position` is the configured `positionKey`) inserts/moves the entity in the grid and updates the engine's `previousPositions` record in the same call. `world.removeComponent(id, 'position')` removes the entity from the grid.
 
-In-place mutation of a position object (`world.getComponent(id, 'position').x = 5`) is **not** detected and the grid will not see the change. Game code must use `setPosition`/`setComponent` for movement to take effect.
+In-place mutation of a position object (`world.getComponent(id, 'position').x = 5`) creates no grid synchronization or dirty notification. Use `setPosition`/`setComponent`/`patchComponent` for published movement. `patchComponent` does not roll back callback mutations if its callback or subsequent position/JSON validation fails: the live position may change while grid membership remains at the old cell. Return a new position without changing the input when the old value must survive validation failure.
 
 ```typescript
 function movementSystem(w: World): void {

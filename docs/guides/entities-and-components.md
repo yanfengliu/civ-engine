@@ -125,22 +125,24 @@ No-op if the entity doesn't have the component.
 
 ### Single component read
 
-`getComponent` returns a **direct reference** to the stored object, not a copy. In-place mutations are NOT detected by the diff system — every component change must go through `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key) for the engine to mark the entity dirty and update derived structures like the spatial grid.
+`getComponent` returns a **live reference** to the stored object. Direct component-reference mutations are not automatically tracked for diffs. Publish changes with `setComponent` / `addComponent` / `patchComponent` (or `setPosition` for the configured position key). A raw mutation is immediately visible through aliases and can appear in an already-dirty value, but it creates no dirty notification and does not synchronize the grid or enforce strict mode.
 
 ```typescript
 const hp = world.getComponent<Health>(entity, 'health');
 if (hp) {
-  hp.hp -= 10; // mutates the stored component directly
+  console.log(hp.hp); // reading does not copy the object
 }
 ```
 
-For clearer write intent, prefer:
+For an immediate published write:
 
 ```typescript
 world.patchComponent<Health>(entity, 'health', (hp) => {
   hp.hp -= 10;
 });
 ```
+
+`patchComponent` passes the actual stored value to the callback. Returning nothing preserves its identity; returning a replacement stores that replacement. The method returns the published value and uses the component's existing strict/semantic diff policy. Later systems see the change immediately. Strict-mode and existence checks precede the callback, but callback or JSON/position validation failures do not roll back mutations already made through the live reference. To leave the old value untouched when validation fails, return a new object without mutating the callback argument.
 
 Returns `undefined` if the entity doesn't have this component:
 

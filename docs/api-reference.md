@@ -1349,7 +1349,9 @@ patchComponent<T>(
 ): T
 ```
 
-Reads an existing component, lets the callback mutate it or return a replacement, then marks it dirty.
+Passes the existing live component to the callback, publishes through `setComponent`, and returns the published value. A callback returning `void` keeps the same object; a returned replacement becomes the stored and returned value. Changes are visible immediately to existing references when that object is mutated, and to later systems in the same tick. Successful publication follows the component's strict/semantic diff policy and synchronizes the spatial grid when `key` is the configured `positionKey`.
+
+Strict-mode and entity/component existence checks happen before invoking the callback. The callback runs synchronously on live data: the method does not roll back mutations if the callback throws or subsequent JSON/position validation fails. A failed position patch can leave the component changed while the grid still contains its previous cell. For a replacement that leaves the old object untouched on validation failure, construct the replacement without mutating the callback argument. Use this inside a system or another permitted mutation phase.
 
 #### `setPosition(entity, position, key?)`
 
@@ -1365,12 +1367,12 @@ Sets position data and updates the spatial grid immediately when the key is the 
 getComponent<T>(entity: EntityId, key: string): T | undefined
 ```
 
-Returns the component data for the given entity and key, or `undefined` if the entity does not have this component. The returned object is a direct reference, so mutations are reflected immediately. Direct mutations are detected for diffs, but `setComponent()` and `patchComponent()` are the preferred write APIs for clearer intent and immediate position/grid synchronization.
+Returns the component data for the given entity and key, or `undefined` if absent. The returned object is a live reference, so mutations are immediately visible through other references. Direct component-reference mutations are not automatically tracked for diffs. Publish changes with `setComponent()`, `addComponent()` or `patchComponent()`; all three also synchronize the configured position key's grid. An unannounced mutation may appear in an already-dirty value, but it creates no dirty notification of its own. Raw references do not enforce strict-mode writes.
 
 ```typescript
 const hp = world.getComponent<Health>(unit, 'health');
 if (hp) {
-  hp.hp -= 10; // mutate in-place
+  world.patchComponent<Health>(unit, 'health', (current) => { current.hp -= 10; });
 }
 ```
 
@@ -6684,7 +6686,7 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `position_invalid_shape`, `position_not_integer`, `position_out_of_bounds` | position writes (World, SpatialGrid) | Malformed/out-of-grid position | `{ x, y }` on grid sites (E/R) |
 | `query_coords_not_integer` | `findNearest` | Non-integer query coordinates | `{ cx, cy }` (R) |
 | `meta_not_finite`, `meta_not_unique` | `setMeta` | Non-finite number / unique-index collision | `{ key, value }` / `{ key, value, owner }` (E) |
-| `snapshot_unsupported_version` | `applySnapshot`, `diffSnapshots`, `applyTickDiff` | Snapshot version mismatch | `{ version }` / `{ a, b }` on diffSnapshots (E) |
+| `snapshot_unsupported_version` | `applySnapshot`, `diffSnapshots`; `applyTickDiff` (internal; not a package export) | Snapshot version mismatch | `{ version }` / `{ a, b }` on diffSnapshots (E) |
 | `snapshot_invalid_tick`, `snapshot_invalid_entity_key`, `snapshot_dead_entity` | `applySnapshot` / `World.deserialize` | Malformed snapshot payload | `{ tick }` / `{ key, context? }` / `{ entity, context? }` (E) |
 | `json_incompatible` | `assertJsonCompatible` (setState, component data, validator rejection details, …) | Value is not plain JSON | `{ context }` (E) |
 | `transaction_precondition_side_effect`, `transaction_precondition_set`, `transaction_precondition_delete` | CommandTransaction | Precondition attempted a mutation | `{ property }` (E) |

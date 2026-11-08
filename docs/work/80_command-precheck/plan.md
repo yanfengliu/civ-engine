@@ -24,7 +24,8 @@ Invoke the existing validator pipeline once; clone rejection details; run/discar
 - [x] Twelve individually failing/restored controls; explicit negative consumer types and surface fixture.
 - [x] All eleven local gates: 1,907 root passes plus one existing TODO across 113 files; 22 MCP passes. Production/MCP audits clean; seven moderate root dev advisories remain. Build, pack and native benchmark checks pass. Private MCP engine junction resolves inside this worktree.
 - [x] Independent exact Astra/xhigh review found no material issues; full authored report retained in round0, target preserved ata7a846c.
-- [ ] Integration/push, hosted artifact verification and cleanup.
+- [x] Integration/push and hosted artifact verification: main c78a3b3, CI 42430952599, retained archive/package/runtime and actual precheck/submission smoke verified by root.
+- [ ] Root-owned worktree cleanup.
 
 ## Implementation steps
 
@@ -34,4 +35,4 @@ Invoke the existing validator pipeline once; clone rejection details; run/discar
 
 ## Outcome
 
-Implementation, focused controls, all eleven local gates and independent exact review pass. `legacy-body-proof.json` confirms unchanged Git-blob bodies for submitWithResult, validateCommand and normalizeCommandValidationResult against base228380b. `full-gates.log` retains the successful gate run. Each mutation ran its selected discriminator; no claim covers every additional discriminator listed in the preparation table. Integration, hosted delivery and cleanup remain pending. E03 game paused-save adoption stays OPEN. Retained worktree/private dependencies, build outputs and evidence are owned resources for root handoff; no server or browser was launched.
+Implementation, focused controls, all eleven local gates and independent exact review pass. Each mutation ran its selected discriminator; no claim covers every additional discriminator in the preparation table. Root delivered main c78a3b3162a3674b8e42204fed66cbabcdabf5ac; CI 42430952599 passed Node 20/22/24 and publish-dist. Retained asset 722423931 (civ-engine-c78a3b3162a3674b8e42204fed66cbabcdabf5ac.tgz) and rolling asset 722423995 are 667840 bytes with SHA256 9d9fce7970e9ddebbef0edd13b9ea68accf685229f3fe349c2e417dcb8e5a483. Root verified downloaded package/runtime 2.9.0, the accepted seven-field precheck and first subsequent submission sequence 0. Two initial smoke harness calls omitted required World configuration; using the accepted fixture configuration corrected the harness without a product change. The archive is retained in AoE2 task tmp/engine-pin/release-2.9.0. These delivery facts were supplied by root on November 7. Root owns final worktree cleanup; E03 game paused-save adoption stays OPEN.
