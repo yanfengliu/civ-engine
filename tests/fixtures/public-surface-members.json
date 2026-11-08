@@ -487,6 +487,12 @@
     "data",
     "type"
   ],
+  "GridDistanceFieldResult": [
+    "distances",
+    "height",
+    "sourceIndices",
+    "width"
+  ],
   "GridPassability": [
     "height",
     "isBlocked",

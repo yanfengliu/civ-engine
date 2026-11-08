@@ -170,6 +170,7 @@ export {
 } from './session-errors.js';
 // Side-effect import: declaration-merge for hidden World.__payloadCapturingRecorder slot
 import './session-internals.js';
+export { gridDistanceField, type GridDistanceFieldOptions, type GridDistanceFieldResult } from './grid-distance-field.js';
 export { ENGINE_VERSION } from './version.js';
 // T2: Session sinks
 export {

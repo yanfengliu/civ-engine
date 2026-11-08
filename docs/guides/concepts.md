@@ -216,12 +216,13 @@ Use a transaction when an action needs an atomic cost / precondition check ("bui
 
 ### Standalone Utilities (not owned by World)
 
-The engine ships several standalone data structures that game code instantiates and ticks itself. None are subsystems of `World`; all are pure data + methods, JSON-serializable, and independently testable:
+The engine ships several standalone data structures that game code instantiates and ticks itself. None are subsystems of `World`; each is independently testable. Persistence is specific to each utility: distance-field typed arrays and Infinity sentinels need explicit game-owned encoding.
 
 - **`OccupancyGrid` / `OccupancyBinding` / `SubcellOccupancyGrid`** — passability, exclusive footprints with an optional movement-passable binding policy, slot-based crowding
 - **`VisibilityMap`** — per-player visible / explored cells
 - **`Layer<T>`** — typed downsampled-resolution overlay maps for field data (pollution, influence, danger, weather, faith)
 - **`findGridPath` / `PathCache` / `PathRequestQueue`** — A* and queued path processing
+- **`gridDistanceField`** — multi-source costs from every grid cell to its nearest destination, with directed/weighted edges and earliest-input tie resolution
 - **`createNoise2D` / `octaveNoise2D` / `stepCellGrid`** — map-generation primitives
 - **`createBehaviorTree` / `BTState`** — behavior-tree framework
 - **`PlayerObserver`** — per-player fog-of-war observation: filtered snapshot + per-tick entered/updated/exited feed keyed by a `VisibilityMap`. See `docs/api-reference.md` § "PlayerObserver".

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.12.0 — 2026-11-07
+
+Adds `gridDistanceField(sources, options)` plus its options/result types in Node and browser entry points. Compute each cell's distance to its nearest destination in one multi-source search. The default is four-connected unit-cost BFS; weighted or diagonal requests use reverse Dijkstra, evaluating directed costs in the direction of travel toward destinations. Exact ties choose the earliest original destination. Returned caller-owned arrays contain Float64 distances and Int32 source indices, with Infinity/-1 for unreachable cells.
+
+Options reuse existing grid geometry, occupancy, reservation, corner and cost vocabulary. All destination and maximum-cost validation precedes user callbacks; JavaScript maximum costs must be nonnegative numbers or Infinity. Callbacks must remain stable during the synchronous search. The helper is standalone and dense, with no cache, World lifecycle or persistent-format change. Typed arrays and Infinity are transient results, not JSON state values; consumers own conversion and invalidation. Existing path helpers remain unchanged.
+
 ## 2.11.0 — 2026-11-07
 
 Adds `createOccupancyBindingDebugProbe` and its structural source, options and snapshot types. Attach a read-only `OccupancyBinding` directly to a debugger probe and request an explicit rectangular region. Captures retain a deterministic row-major prefix, with configurable cell and aggregate claim limits (defaults64/256), detached metadata and explicit omitted-cell/claim counts. Existing `createOccupancyDebugProbe` and its eight global grid counters are unchanged. No dependency or saved-format migration is required.

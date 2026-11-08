@@ -136,6 +136,15 @@ You can provide a custom `slots` array if your game wants a different packing pa
 
 The generic `findPath()` utility still exists, but RTS code usually wants a grid-first helper and a request queue.
 
+For many origins sharing destinations, compute one `gridDistanceField` instead of asking for a separate path per origin. It accepts the same occupancy/blocking, corner and cost vocabulary as `findGridPath`; asymmetric `cost(from, to)` retains the direction of travel towards the destination. Recompute when those inputs change, since the helper owns no invalidation cache.
+
+```typescript
+import { gridDistanceField } from 'civ-engine';
+const field = gridDistanceField([{ x: 12, y: 8 }, { x: 40, y: 25 }], { occupancy });
+const index = cell.y * field.width + cell.x;
+const travelCost = field.distances[index]; // Infinity if unreachable
+const destinationIndex = field.sourceIndices[index]; // -1 if unreachable
+```
 Use `findGridPath()` for one-off grid paths:
 
 ```typescript

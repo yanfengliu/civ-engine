@@ -606,7 +606,7 @@ interface GridPassability {
 }
 ```
 
-Minimal passability surface used by `findGridPath()`. `OccupancyGrid` and `OccupancyBinding` both satisfy this contract.
+Minimal passability surface used by `findGridPath()` and `gridDistanceField()`. `OccupancyGrid` and `OccupancyBinding` both satisfy this contract.
 
 ### `OccupancyGridState`
 
@@ -3280,7 +3280,7 @@ Restores a crowding model from serialized state. The slot layout comes from the 
 
 ## Path Service
 
-Grid-first path utilities and deterministic request processing built on top of the generic `findPath()` implementation.
+Grid path and multi-source distance utilities, plus deterministic request processing over the generic `findPath()` implementation.
 
 ```typescript
 import {
@@ -3323,6 +3323,43 @@ const result = findGridPath({
 });
 ```
 
+### `gridDistanceField(sources, options)`
+
+```typescript
+gridDistanceField(
+  sources: readonly Position[],
+  options: GridDistanceFieldOptions,
+): GridDistanceFieldResult
+```
+
+Computes the minimum travel cost from every cell to any input destination. The field is row-major: read `distances[y * width + x]` and `sourceIndices[y * width + x]`. A blocked or unreachable cell has `Infinity` and `-1`. Equal-cost destinations choose the earliest original input index; duplicate coordinates retain their earliest index. Blocked destinations are ignored. Empty or entirely blocked destinations return an unreachable field. Every destination must have integer in-bounds coordinates, including blocked destinations.
+
+The default four-connected unit-cost case uses multi-source breadth-first search. Weighted or diagonal inputs use reverse Dijkstra: an expansion from a reached cell to its predecessor calls `cost(predecessor, reachedCell)`, so one-way/asymmetric costs retain their forward travel meaning. Negative and nonfinite edge costs are excluded, zero-cost cycles are supported, and overflowing sums are unreachable. Callback errors propagate unchanged. Callbacks and occupancy must remain stable during the synchronous call.
+
+This is a complete field within `maxCost`, with no heuristic or iteration-budget approximation. Dimensions and row-major area must be positive safe integers; area is limited to `2**32 - 1`, and the destination count to `2**31 - 1`. These are representation bounds, not a promise that the machine can allocate that much memory. Invalid geometry/destinations/maxCost fail before callbacks. Result arrays use 12 bytes per grid cell; scratch arrays and the priority queue require additional memory. For S input destinations, V cells and E grid edges, default work is O(S + V + E); weighted/diagonal work is O(S + (V + E) log V). Destination validation/seeding also retains O(S) temporary indices, including duplicate inputs. No cache, World state, chosen route or path-suffix guarantee is created.
+
+### `GridDistanceFieldOptions`
+
+```typescript
+type GridDistanceFieldOptions = Pick<GridPathConfig,
+  'width' | 'height' | 'occupancy' | 'movingEntity' | 'includeReservations'
+  | 'allowDiagonal' | 'preventCornerCutting' | 'blocked' | 'cost' | 'maxCost'>;
+```
+
+Supply dimensions directly or infer them from `occupancy`. Occupancy and custom `blocked(x, y)` are combined with OR. `movingEntity` is ignored by occupancy checks and `includeReservations` defaults to true. Movement is orthogonal by default; `allowDiagonal: true` uses eight neighbors, with default cost `Math.SQRT2` diagonally and 1 orthogonally. Diagonal corner cutting is prevented unless `preventCornerCutting: false`. A custom `cost(from, to)` overrides edge costs. `maxCost` defaults to Infinity when omitted/undefined and must be a nonnegative number or Infinity; paths equal to the bound are included. No `start`, `goal`, `heuristic`, `trackExplored` or `maxIterations` option is needed.
+
+### `GridDistanceFieldResult`
+
+```typescript
+interface GridDistanceFieldResult {
+  width: number;
+  height: number;
+  distances: Float64Array;
+  sourceIndices: Int32Array;
+}
+```
+
+The arrays belong to the caller and are independent of inputs and later calls. `sourceIndices` refers to the original destination array, including indices before skipped blocked/duplicate entries. These working arrays and Infinity sentinels are not an engine JSON state format; encode any persisted representation explicitly in the game.
 ### `PathCache<TResult>`
 
 Reusable cache keyed by request identity and passability version. The cache is unbounded — entries are bypassed (not deleted) when their passability version goes stale, and default keys include the moving entity id, so long sessions with roaming units grow until you call `clear()` (or `clearCache()` on a grid queue). Schedule periodic clears in long-running processes.
@@ -6730,7 +6767,8 @@ Every error the core engine throws carries a stable machine-readable `code` as a
 | `grid_radius_invalid`, `grid_dimension_invalid` | SpatialGrid | Bad radius/dimensions | `{ radius }` / `{ label }` (R) |
 | `occupancy_*` (`area_empty`, `footprint_empty`, `index_out_of_bounds`, `value_invalid`, `coords_not_integer`, `out_of_bounds`, `block_occupied`, `block_crowded`, `crowding_disabled`, `state_invalid`, `metadata_kind_empty`) | OccupancyGrid / OccupancyBinding | Occupancy validation & invariants | `{ index }`, `{ label }`, `{ x, y }`, `{ entity }` per site (E/R) |
 | `subcell_state_invalid`, `subcell_slots_empty`, `subcell_slot_offset_invalid`, `subcell_slot_offset_duplicate`, `subcell_slot_out_of_bounds` | SubcellOccupancyGrid | Subcell slot validation | `{ entity, x, y }`, `{ slot, x, y }`, `{ x, y }`, `{ slot }` per site (E/R) |
-| `path_budget_invalid`, `path_config_missing_grid`, `path_coords_not_integer`, `path_out_of_bounds`, `path_value_invalid` | PathService | Path request validation | `{ label }`, `{ label, x, y }` per site (E/R) |
+| `path_budget_invalid`, `path_config_missing_grid`, `path_coords_not_integer`, `path_out_of_bounds`, `path_value_invalid` | Grid path utilities | Path/distance-field input validation | `{ label }`, `{ label, x, y }` or destination `{ index, x, y }` per site (E/R) |
+| `distance_field_size_invalid`, `distance_field_cost_invalid` | `gridDistanceField` | Unrepresentable dense field/source index or invalid maxCost | none (R/E) |
 | `visibility_value_invalid`, `visibility_index_out_of_bounds`, `visibility_coords_not_integer`, `visibility_out_of_bounds` | VisibilityMap | Visibility grid validation | `{ label }`, `{ index }`, `{ x, y }` per site (E/R) |
 | `rng_state_invalid`, `rng_seed_invalid` | Random | Bad RNG state/seed | — (R) |
 | `resource_already_registered`, `resource_not_registered`, `resource_state_invalid`, `resource_value_invalid` | ResourceStore | Resource registry/state validation | `{ key }`, `{ id }`, `{ label }` per site (E) |

@@ -1,6 +1,6 @@
 # Bounded read-only occupancy binding diagnostics
 
-Status: active
+Status: complete
 Owner: Codex root
 Created: 2026-11-08
 Updated: 2026-11-08
@@ -26,13 +26,13 @@ The factory calls getCellStatus normally, so its documented query counters incre
 - [x] Row-major prefix, zero/default/explicit limits and aggregate claim truncation are literal; counts never masquerade as global totals.
 - [x] Creation validates invalid regions/limits before reads; options and returned nested values are detached.
 - [x] Captures observe real occupy/reserve/subcell/release/destruction transitions while preserving gameplay state/version and honestly accounting query metrics.
-- [ ] Public Node/browser types and surface pins, API/debugging/RTS guides and relevant architecture maps match; meaningful tests, exact independent review, all11 gates, main/push/CI and retained-package smoke complete.
+- [x] Public Node/browser types and surface pins, API/debugging/RTS guides and relevant architecture maps match; meaningful tests, exact independent review, all11 gates, main/push/CI and retained-package smoke complete.
 
 ## Implementation steps
 
 - [x] Allocate86 and inspect current raw probe/binding contracts in a private worktree.
 - [x] Write baseline contracts, execute RED after the shared runtime lane is free, then implement the small separate factory.
-- [ ] Complete release records, review the exact integration delta, gate and deliver the independent2.11.0 milestone.
+- [x] Complete release records, review the exact integration delta, gate and deliver the independent2.11.0 milestone.
 
 ## Outcome
 
@@ -52,3 +52,8 @@ First full gate on17a0025a ran all eleven steps: ten passed, and the root test s
 ## Accepted precommit gates
 
 Root accepted independent repair review2 (10,891 bytes, SHA256 DB52FA51FFF0E7740B08C35555ABB619881AE75A092067E7368F9E31FF0291E3) after reading the full report. Repaired tree e62a8de7 passed all eleven maintained gates in 24.384 seconds with 2,006 root tests plus one existing TODO and 22 MCP tests, Node24.22.1 and npm11.6.2. Both audits passed their high-severity thresholds; seven moderate development advisories remain, with none in production or MCP. All 129 observed task-owned processes exited, with no forced stops or leftovers. Built Node/browser2.11.0 smoke verified actual placement-only and subcell claims, bounded cells/claims, detached results, old raw fields and unchanged logical version. Source/API/version are unchanged by the fixture repair. The earlier failed gate remains retained as a failure. Main/push, hosted CI, downloaded-archive runtime, final evidence retention and worktree cleanup remain delivery acceptance, with game adoption separate.
+
+
+## Delivered and cleaned
+
+Work86 shipped as2.11.0 at main/origin8c774d692957ab91b16d894d954b79dd398ff2c0. Hosted CI42458526351 completed Node20/22/24 and publish-dist successfully. Downloaded retained asset723231541 is679,885 bytes/438 entries with SHA256 d4c8acf9f7ec18a85226321c0443a26e1dcb843af5876e7c79ef49021a0ba338; actual Node/browser runtime passed bounded claims, detachment, old raw fields and logical-version invariants. The66 evidence files/426,645 bytes are retained under primary tmp/work86-closure/evidence (manifest1C6F9D97D28B6368162DF8411B884CB5ABA52C30FAD91F02FBB92B7B8B20267D). Private self-dependency junction, worktree and branch are removed; privileged process census is zero, five protected shared hashes and foreign Cursor deletion are unchanged. Actual game adoption remains separate.

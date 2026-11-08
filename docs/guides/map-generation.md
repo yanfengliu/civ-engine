@@ -16,13 +16,14 @@ This guide covers procedural map generation using civ-engine's standalone utilit
 
 ## Overview
 
-Map generation in civ-engine uses three standalone modules that have no dependency on World:
+Map generation uses standalone modules without a World dependency. After generating terrain, `gridDistanceField` can compute obstacle-aware accessibility or travel cost to multiple spawn/resource destinations; its row-major arrays are transient field data, and its directed cost callback runs in the direction from each cell towards a destination.
 
 | Module | Purpose |
 |---|---|
 | `noise.ts` | Seedable simplex noise for smooth, continuous terrain |
 | `cellular.ts` | Cellular automata for structured, organic patterns |
 | `map-gen.ts` | Tile grid creation helper |
+| `grid-distance-field.ts` | Multi-source accessibility/travel-cost fields over generated terrain |
 
 The typical workflow:
 1. Create tile entities with `createTileGrid()`

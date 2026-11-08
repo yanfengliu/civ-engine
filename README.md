@@ -1,6 +1,6 @@
 # civ-engine
 
-![version](https://img.shields.io/badge/version-2.11.0-blue)
+![version](https://img.shields.io/badge/version-2.12.0-blue)
 
 > **Post-1.0, validated only by the sibling game repos that consume it.** The public API surface is frozen under semver as of `1.0.0`: additions ship as minors; breaking changes ship only as majors — removals through the deprecation policy, and behavior or default changes alike ([public API & invariants](docs/guides/public-api-and-invariants.md)). For substantial or high-risk changes, the policy calls for independent review when available; the fleet's multi-CLI review skill provides the review mechanics. No production deployment has exercised the engine end-to-end, so treat it as suitable for prototyping and AI-agent experiments. Pin a verified prebuilt archive (see [Install](#install)) and read the [changelog](docs/changelog.md) before upgrading.
 
@@ -106,6 +106,7 @@ Capabilities at a glance. Signatures and options live in the [API Reference](doc
 | **Occupancy & Crowding** | Deterministic footprints with optional movement passability, blocker metadata, lifecycle bindings, crowding-aware queries, reservations, and sub-cell slot packing. See [sub-grid movement](docs/guides/sub-grid-movement.md) for fine-grid simulation, coarse building placement, and renderer-owned smooth motion |
 | **Pathfinding** | Generic A* on any graph — provide neighbors/cost/heuristic/hash callbacks |
 | **Queued Grid Pathfinding** | `findGridPath`, `PathCache`, and `PathRequestQueue` for deterministic batched path processing |
+| **Grid Distance Fields** | `gridDistanceField` computes every cell's cost to the nearest destination, including weighted and directed edges |
 | **Visibility Maps** | Per-player visible and explored cell tracking for fog-of-war style mechanics |
 | **Layered Field Maps** | `Layer<T>` typed overlay at configurable downsampled resolution (pollution, influence, weather); sparse storage with default-value semantics, JSON-serializable |
 | **Map Generation** | Seedable simplex noise, octave layering, cellular automata, and a tile grid helper |
@@ -198,7 +199,7 @@ The detailed file map lives in [Architecture](docs/architecture/ARCHITECTURE.md)
 - **Monolithic World** — flat API, internals are hidden
 - **Zero runtime deps** — pure TypeScript, nothing to break
 - **Dirty-set change tracking** — per-tick dirty/removed sets (plus fingerprint baselines in semantic diff mode) drive diff and serialization; separate entity **generation counters** make recycled entity IDs detectable through stale refs
-- **Standalone utilities** — noise, cellular, map-gen, pathfinding are not World subsystems
+- **Standalone utilities** — noise, cellular, map-gen, pathfinding and multi-source distance fields are not World subsystems
 
 ## Contributing
 
