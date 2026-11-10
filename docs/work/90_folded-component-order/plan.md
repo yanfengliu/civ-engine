@@ -3,7 +3,7 @@
 Status: active
 Owner: Codex root
 Created: 2026-11-08
-Updated: 2026-11-08
+Updated: 2026-11-09
 
 ## Problem and outcome
 
@@ -33,7 +33,7 @@ First prepare public recorder/snapshotAtTick regression cases with literal ascen
 
 ## Outcome
 
-Patch 2.13.1 is prepared after six genuine regression failures and 81 focused passes, typecheck, lint and build. Independent exact review, full gates, original-artifact verification, main/push/hosted delivery and cleanup remain. The conditional setter-observation candidate was separately rejected; it is not part of this release.
+Engine2.13.1 is delivered at36c350fae0da7e222d1ac1f50ae69a9814f400cf after six genuine RED cases,81 focused passes, exact independent review, all eleven gates and successful Node20/22/24/publish CI42533377749. The downloaded retained archive and compiled contracts passed. Final recovery5 completed all1,002 live comparisons, five raw seeks and four unchanged ordered-component/full-economy folds. No performance result or setter-observation feature is included. Closure-document delivery and owned evidence/worktree cleanup remain; the broader AoE2 controls and human-match acceptance are tracked separately in the priority list.
 
 ## Focused result and patch preparation
 
@@ -48,3 +48,12 @@ Independent exact review accepted tree dac39f20d84382c5b4ca3736b7d5ea5453f77634 
 ## Final local acceptance
 
 All eleven final2.13.1 release gates passed on2026-11-08T23:02:37Z:2,119 root tests plus one existing TODO,22 MCP tests, typecheck/lint/build/pack/benchmark and required audits. Seven moderate development advisories remain below the high-severity gate; production and MCP audits report zero. Gate2 preserved the failed gate1 and unchanged code/tests. The owned watcher reports zero remaining processes and released its exact lock. Independent round0 accepted the exact implementation; only owner-authored structural wrappers and acceptance records followed that reviewed source. Main/push, hosted CI, actual retained archive and unchanged game-artifact acceptance remain pending.
+
+
+## Published delivery and retained-artifact checkpoint
+
+Engine2.13.1 landed at36c350fae0da7e222d1ac1f50ae69a9814f400cf; CI42533377749 passed Node20/22/24 and publish-dist. The actual commit-named archive SHA2567e21e74dba3b797e8f1eeb6194cd6620510be71afc284a5e721313e85259eb79 was downloaded, safely extracted and verified across all442 files. Twelve literal compiled API cases passed across Node/browser entries loaded in Node. AoE2 private adoption matches every installed file and the install guard passes. Recovery4 passed the original ordered Gatherer/Resource arrays at24001/24002/24501, including the formerly failing24501 Resource order, then found a separate preexisting game technology-upgrade publication gap in whole economy. AoE2 work163 owns that gap; later recovery4 checks did not run, so the complete four-fold game claim remains open. No original artifact or expected array was normalized or rewritten. Engine source is delivered; final retained evidence/cleanup and consumer closure remain.
+
+## Consumer proof completed, 2026-11-08
+
+After the independently reviewed game technology-publication fix, final recovery5 completed successfully at2026-11-09T06:32:45Z. Its1,002 live World/economy/history comparisons all match, five raw replay seeks match, and all four unchanged ordered-component/full-economy folds pass, including the prior24501 failures. Raw three-stream self-check reports two checked segments, complete horizon24000–25002 and no divergences/skips. Raw simulation/hydration remains2.10.1 while only the pure-data fold uses the actual published2.13.1 archive. This verifies the bounded consumer scenario without rewriting prior artifacts, expected values or cost denominators. All three native children and controller exited0; no owned leftovers remain and the lane released. Engine closure-document delivery and owned cleanup remain.

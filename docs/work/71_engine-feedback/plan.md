@@ -3,7 +3,7 @@
 Status: active
 Owner: Codex engine-feedback worker
 Created: 2026-10-01
-Updated: 2026-11-08
+Updated: 2026-11-09
 
 ## Problem and outcome
 
@@ -167,3 +167,7 @@ Owner decision,2026-11-08: approved the independently reviewed scoped setter-obs
 ### Current execution checkpoint, 2026-11-08 21:58UTC
 
 Work157 follow-up completed all1,002 paired observations at ticks24001..25002, then failed both whole-document recording writes with Invalid string length; raw checks did not run. All publication rows and five full live observations remain. Four profiles and the clean small AA/AB lane completed separately. Two fresh hard-problem branches compared evidence composition with an unchanged-producer chunked writer. Root chose the latter; exact independent review required loss-preserving JSON checks and forced-stop synthetic cleanup, both now source-accepted. A bounded greater-than-string-cap serializer premise is running on seal3cd3e2ee; no third full observation attempt or raw success is claimed. Work159 lifecycle repair is independently accepted with42 focused cases/types/lint; six controls and the fixed24-measurement experiment remain unrun. Work161 has19 focused passes/types/lint and two real one-sided failures; exact independent review is active. All these game changes remain unshipped.
+
+## 2026-11-09 delivery checkpoint
+
+The current priority list supersedes the earlier execution checkpoints: engine2.13.1 is shipped and the bounded168 recording recovery is complete. Setter observation and FileSink adoption failed their unchanged usefulness criteria and will not ship. The final AoE2 source passes5,963 unit/346 browser cases and the maintained two-scenario corpus. Its13-stage route-cost matrix has bounded parity but no nonempty route/FIFO measurements. All three renewed native attempts are exhausted after the latest queued ground click selected a tree; the reviewed narrow one-attempt renewal awaits the owner. The complete human match has not run, and game clean certification/main/push/hosted delivery remain. Voxel capability dispositions are retained in review6 and its exact source proposal; the later bounded fixture proof does not authorize a production renderer rewrite.
