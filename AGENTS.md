@@ -50,7 +50,7 @@ The designated coordinator reads `../fleet/docs/skills/coordinator.md` before pl
 
 ## Gates
 
-`npm run gates` before every commit that touches code, and before every push — eleven steps, exactly what CI runs, in CI's order: both audits (`npm audit --audit-level=high`, full tree and `--omit=dev`), test, typecheck, lint, build, pack, the benchmark gate, then the `mcp/` subpackage, sequenced after the root build because its `file:..` dep resolves against `dist/`. It runs the whole list past the first failure, so one invocation surfaces every failure instead of one per remote round trip.
+`npm run gates` on a tree that touches code before it is handed back or lands, and before every push — eleven steps, exactly what CI runs, in CI's order: both audits (`npm audit --audit-level=high`, full tree and `--omit=dev`), test, typecheck, lint, build, pack, the benchmark gate, then the `mcp/` subpackage, sequenced after the root build because its `file:..` dep resolves against `dist/`. It runs the whole list past the first failure, so one invocation surfaces every failure instead of one per remote round trip.
 
 While iterating, the four fast gates are enough — `npm test` · `npm run typecheck` · `npm run lint` · `npm run build`, with only affected tests until confident. They are not enough to push on. The audit gate is time-dependent, not diff-dependent: a newly published advisory against an unchanged dependency turns a green tree red with no commit at all, so there is no diff to key a conditional on. That is how `main` went red for 47 days and 27 pushes behind four green local gates — [docs/learning/defect-register.md](docs/learning/defect-register.md).
 
